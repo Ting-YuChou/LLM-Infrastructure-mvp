@@ -1,0 +1,204 @@
+# Docker Compose for LLM Infrastructure
+# Complete stack: Training, Serving, Registry, Monitoring
+
+version: '3.8'
+
+# ============================================================================
+# Services
+# ============================================================================
+
+services:
+
+  # ==========================================================================
+  # vLLM Inference Server
+  # ==========================================================================
+  vllm-server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.serving
+    image: llm-serving:latest
+    container_name: vllm-server
+    runtime: nvidia
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - MODEL_NAME=/workspace/models/aligned/checkpoint-final
+      - PORT=8000
+      - TENSOR_PARALLEL_SIZE=1
+      - GPU_MEMORY_UTILIZATION=0.9
+    ports:
+      - "8000:8000"  # vLLM API
+      - "9090:9090"  # Prometheus metrics
+    volumes:
+      - ./models:/workspace/models:ro  # Read-only model access
+      - ./config:/workspace/config:ro
+      - ./outputs/logs:/workspace/outputs/logs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - llm-network
+    restart: unless-stopped
+
+  # ==========================================================================
+  # MLflow Model Registry
+  # ==========================================================================
+  mlflow-server:
+    image: ghcr.io/mlflow/mlflow:v2.9.2
+    container_name: mlflow-server
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:///mlflow/mlflow.db
+      --default-artifact-root /mlflow/artifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+      - ./models:/mlflow/models
+    networks:
+      - llm-network
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Prometheus Monitoring
+  # ==========================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./k8s/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - llm-network
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Grafana Dashboards
+  # ==========================================================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./k8s/monitoring/grafana-dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./k8s/monitoring/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+    networks:
+      - llm-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Redis (for caching and rate limiting)
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - llm-network
+    restart: unless-stopped
+
+  # ==========================================================================
+  # PostgreSQL (for MLflow backend)
+  # ==========================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    environment:
+      - POSTGRES_USER=mlflow
+      - POSTGRES_PASSWORD=mlflow
+      - POSTGRES_DB=mlflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - llm-network
+    restart: unless-stopped
+
+# ============================================================================
+# Networks
+# ============================================================================
+
+networks:
+  llm-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# ============================================================================
+# Volumes (Persistent Storage)
+# ============================================================================
+
+volumes:
+  mlflow-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  redis-data:
+    driver: local
+  postgres-data:
+    driver: local
+
+# ============================================================================
+# Usage Instructions:
+#
+# Start all services:
+#   docker-compose up -d
+#
+# Start specific service:
+#   docker-compose up -d vllm-server
+#
+# View logs:
+#   docker-compose logs -f vllm-server
+#
+# Stop all services:
+#   docker-compose down
+#
+# Stop and remove volumes:
+#   docker-compose down -v
+#
+# Scale vLLM servers:
+#   docker-compose up -d --scale vllm-server=3
+#
+# Access services:
+#   - vLLM API: http://localhost:8000
+#   - MLflow UI: http://localhost:5000
+#   - Prometheus: http://localhost:9091
+#   - Grafana: http://localhost:3000 (admin/admin)
+#
+# Health checks:
+#   docker-compose ps
+#   curl http://localhost:8000/health
+# ============================================================================

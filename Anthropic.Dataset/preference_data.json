@@ -1,0 +1,302 @@
+[
+  {
+    "id": 0,
+    "prompt": "How do I optimize GPU memory in PyTorch?",
+    "chosen": "Use half-precision (FP16/BF16) training with torch.cuda.amp, enable gradient accumulation to use smaller effective batch sizes, clear cache with torch.cuda.empty_cache() periodically, use gradient checkpointing for large models, and monitor memory with torch.cuda.memory_summary(). Consider using mixed precision training which can reduce memory usage by 50% while maintaining accuracy.",
+    "rejected": "Just buy a bigger GPU, or restart your computer. Maybe try closing some tabs in your browser."
+  },
+  {
+    "id": 1,
+    "prompt": "Explain the difference between Docker and a VM.",
+    "chosen": "Docker containers share the host OS kernel and isolate only the application layer, making them lightweight and fast to start (seconds). VMs include a full OS copy with its own kernel, providing stronger isolation but requiring more resources and taking minutes to boot. Containers are ideal for microservices and horizontal scaling, while VMs are better for running different operating systems or requiring hardware-level isolation.",
+    "rejected": "Docker is like a VM but newer. They're basically the same thing, just use Docker because it's more modern."
+  },
+  {
+    "id": 2,
+    "prompt": "What's the best way to handle secrets in Kubernetes?",
+    "chosen": "Use external secret management systems like HashiCorp Vault, AWS Secrets Manager, or Azure Key Vault integrated via the Secrets Store CSI driver. Enable encryption at rest for etcd, use RBAC to limit secret access, avoid committing secrets to Git, implement secret rotation policies, and consider using sealed secrets for GitOps workflows. Never hardcode secrets in manifests or environment variables.",
+    "rejected": "Just put them in a ConfigMap or hardcode them in your deployment YAML. It's fine as long as you don't share the file."
+  },
+  {
+    "id": 3,
+    "prompt": "How do I prevent overfitting in my neural network?",
+    "chosen": "Implement regularization techniques like L1/L2 regularization or dropout (0.2-0.5), use data augmentation to expand your training set, apply early stopping by monitoring validation loss, use cross-validation to assess generalization, reduce model complexity if it's too large for your dataset, collect more training data if possible, and use batch normalization. Monitor the gap between training and validation metrics.",
+    "rejected": "Just train for fewer epochs. If that doesn't work, make your model smaller or get lucky with different hyperparameters."
+  },
+  {
+    "id": 4,
+    "prompt": "What's the difference between git merge and git rebase?",
+    "chosen": "git merge creates a new merge commit combining two branches, preserving complete history and branch structure. git rebase moves or replays commits from one branch onto another, creating a linear history without merge commits. Merge is safer and preserves context; rebase creates cleaner history but rewrites commits (never rebase public branches). Use merge for feature integration, rebase for cleaning local branches before pushing.",
+    "rejected": "They both combine branches. Just use whichever one works. Merge is probably safer so just always use that."
+  },
+  {
+    "id": 5,
+    "prompt": "How can I speed up my Python code?",
+    "chosen": "Profile your code first using cProfile or line_profiler to identify bottlenecks. Use NumPy/Pandas for vectorized operations instead of loops, implement caching with functools.lru_cache, use list comprehensions instead of map/filter, leverage multiprocessing for CPU-bound tasks, use asyncio for I/O-bound operations, consider Numba JIT compilation for numerical code, and replace Python loops with compiled libraries. Optimize algorithms before micro-optimizations.",
+    "rejected": "Just add more RAM or use a faster computer. You could also try using PyPy or rewriting everything in C++."
+  },
+  {
+    "id": 6,
+    "prompt": "What is the purpose of the attention mechanism in transformers?",
+    "chosen": "Attention allows the model to weigh the importance of different input tokens when processing each position. Self-attention computes relationships between all token pairs, enabling the model to capture long-range dependencies without recurrence. The mechanism uses queries, keys, and values to compute attention scores via scaled dot-product: softmax(QK^T/√d_k)V. This parallelizable architecture is more efficient than RNNs and better captures context.",
+    "rejected": "It helps the model pay attention to important words. It's like highlighting text but automatic."
+  },
+  {
+    "id": 7,
+    "prompt": "How do I debug a memory leak in a Docker container?",
+    "chosen": "Use docker stats to monitor memory usage over time, exec into the container and use tools like top, htop, or ps to identify processes. For Python apps, use memory_profiler or tracemalloc; for Node.js, use --inspect and Chrome DevTools. Check application logs for unusual patterns, implement health checks that monitor memory, set memory limits with --memory flag to prevent system impact, and use tools like valgrind for C/C++ applications. Consider heap dumps for detailed analysis.",
+    "rejected": "Just restart the container periodically. Set up a cron job to restart it every hour or when memory gets high."
+  },
+  {
+    "id": 8,
+    "prompt": "What's the difference between supervised and unsupervised learning?",
+    "chosen": "Supervised learning trains on labeled data where each input has a known output, learning to map inputs to outputs. Common tasks include classification and regression. Unsupervised learning works with unlabeled data, discovering patterns, structures, or clusters without predefined outputs. Examples include k-means clustering, dimensionality reduction (PCA), and anomaly detection. Semi-supervised learning combines both approaches.",
+    "rejected": "Supervised learning has a teacher watching, unsupervised doesn't. One is harder than the other but both can solve the same problems."
+  },
+  {
+    "id": 9,
+    "prompt": "How do I implement a REST API in Python?",
+    "chosen": "Use Flask or FastAPI frameworks. With FastAPI: install with pip, create an app instance, define endpoints using decorators (@app.get, @app.post), use Pydantic models for request/response validation, implement proper HTTP status codes, add error handling, use dependency injection for database connections, enable CORS if needed, and document with automatic OpenAPI/Swagger. Example: @app.get('/items/{item_id}') async def read_item(item_id: int). Deploy with Uvicorn or Gunicorn.",
+    "rejected": "Just use Flask and make some functions that return JSON. Add @app.route and you're done. Don't worry about validation or error handling at first."
+  },
+  {
+    "id": 10,
+    "prompt": "What are the best practices for writing Dockerfiles?",
+    "chosen": "Use specific base image tags (not :latest), minimize layers by combining RUN commands with &&, leverage build cache by ordering commands from least to most frequently changed, use .dockerignore to exclude unnecessary files, run as non-root user, use multi-stage builds to reduce final image size, don't install unnecessary packages, use COPY instead of ADD unless extracting archives, and set proper WORKDIR. Example: combine apt-get update && apt-get install in one RUN command and clean cache in the same layer.",
+    "rejected": "Just start with FROM ubuntu, install everything you need with RUN commands, COPY your app, and set CMD. Use :latest for the base image to always get updates."
+  },
+  {
+    "id": 11,
+    "prompt": "How do I handle class imbalance in machine learning?",
+    "chosen": "Techniques include: resampling (oversample minority class with SMOTE or undersample majority class), use class weights in loss functions to penalize minority class errors more, try ensemble methods like balanced random forest, use appropriate metrics (F1, precision-recall, AUC-ROC instead of accuracy), generate synthetic samples, use anomaly detection approaches for extreme imbalance, and consider changing the problem formulation. Choose based on dataset size and imbalance ratio.",
+    "rejected": "Just duplicate the minority class samples until you have the same number as the majority class. Or delete some majority samples."
+  },
+  {
+    "id": 12,
+    "prompt": "What is the difference between a coroutine and a thread?",
+    "chosen": "Coroutines are cooperative multitasking units that explicitly yield control, running in a single thread with low overhead. They're ideal for I/O-bound concurrency. Threads are preemptively scheduled by the OS, can run on multiple CPU cores, have higher overhead, and are better for CPU-bound parallelism. Coroutines (async/await) avoid race conditions and context switching costs but can't utilize multiple cores without processes. Use asyncio for I/O, threading for simple concurrency, multiprocessing for CPU-bound tasks.",
+    "rejected": "They're basically the same thing, both let you run code in parallel. Coroutines are just the new Python way of doing threads."
+  },
+  {
+    "id": 13,
+    "prompt": "How do I optimize a SQL query that's running slowly?",
+    "chosen": "Analyze with EXPLAIN/EXPLAIN ANALYZE to understand the execution plan. Add indexes on WHERE, JOIN, and ORDER BY columns, avoid SELECT *, use appropriate JOIN types, filter early with WHERE clauses, denormalize if needed, use query result caching, partition large tables, update table statistics, avoid functions on indexed columns in WHERE clauses, and consider materialized views. Monitor slow query logs and use database-specific optimization tools.",
+    "rejected": "Add indexes to every column and increase your database server RAM. If that doesn't work, just cache everything in Redis."
+  },
+  {
+    "id": 14,
+    "prompt": "What's the difference between TCP and UDP protocols?",
+    "chosen": "TCP is connection-oriented, guarantees delivery through acknowledgments and retransmission, maintains packet order, includes flow control and congestion control, and has higher overhead. UDP is connectionless, doesn't guarantee delivery or order, has minimal overhead, and is faster with lower latency. Use TCP for reliability (HTTP, email, file transfer); use UDP for speed when some loss is acceptable (video streaming, gaming, DNS, VoIP).",
+    "rejected": "TCP is slower but more reliable. UDP is faster but loses data. Just use TCP for everything important and UDP for video games."
+  },
+  {
+    "id": 15,
+    "prompt": "How do I implement authentication in a web application?",
+    "chosen": "Use established libraries/frameworks rather than rolling your own. Implement JWT or session-based auth: hash passwords with bcrypt/argon2, use HTTPS only, implement refresh tokens, add rate limiting for login attempts, use secure httpOnly cookies for tokens, implement CSRF protection, add MFA for sensitive operations, validate tokens on every request, set appropriate token expiration, and store tokens securely. Follow OWASP guidelines and consider OAuth2/OpenID Connect for third-party integration.",
+    "rejected": "Just check username and password against the database. Store passwords in plain text or use MD5 hash. Create a simple token and send it in the URL."
+  },
+  {
+    "id": 16,
+    "prompt": "What is gradient descent and how does it work?",
+    "chosen": "Gradient descent is an iterative optimization algorithm that minimizes a loss function by moving in the direction of steepest descent. It calculates partial derivatives of the loss with respect to each parameter (the gradient), then updates parameters: θ = θ - α∇J(θ), where α is the learning rate. Variants include batch GD (full dataset), stochastic GD (single sample), and mini-batch GD (small batches). Adam and RMSprop add adaptive learning rates.",
+    "rejected": "It's how neural networks learn. The algorithm tries different values until it finds one that works well. It goes down a hill to find the minimum."
+  },
+  {
+    "id": 17,
+    "prompt": "How do I set up a CI/CD pipeline?",
+    "chosen": "Choose a platform (GitHub Actions, GitLab CI, Jenkins). Define stages: build, test, deploy. Automate testing (unit, integration, e2e), use containerization for consistency, implement automated deployment to staging, add manual approval for production, use infrastructure-as-code (Terraform), implement blue-green or canary deployments, add monitoring and rollback capabilities, secure secrets with vault services, and use semantic versioning. Example workflow: commit → build → test → deploy staging → approve → deploy production.",
+    "rejected": "Install Jenkins and create a pipeline that runs your tests and deploys when they pass. Just use shell scripts to do everything."
+  },
+  {
+    "id": 18,
+    "prompt": "What's the difference between deep learning and machine learning?",
+    "chosen": "Machine learning encompasses all algorithms that learn from data, including linear regression, decision trees, SVMs, and neural networks. Deep learning is a subset using neural networks with multiple hidden layers (deep networks) that automatically learn hierarchical feature representations. ML often requires manual feature engineering; DL learns features automatically. DL excels with large datasets and complex patterns (vision, NLP) but requires more data and computation. Traditional ML is interpretable and works well with smaller datasets.",
+    "rejected": "Deep learning uses neural networks with more layers. Machine learning is simpler algorithms. Deep learning is always better but needs more data."
+  },
+  {
+    "id": 19,
+    "prompt": "How do I deploy a machine learning model to production?",
+    "chosen": "Package the model (pickle, ONNX, TorchScript), create a REST API with FastAPI/Flask, containerize with Docker, implement input validation and preprocessing, add monitoring and logging, set up A/B testing infrastructure, implement model versioning, use serving platforms like TensorFlow Serving or TorchServe, add caching for predictions, implement batch prediction for efficiency, use load balancers, monitor model drift and performance metrics, and plan for model updates. Consider managed services like SageMaker or Vertex AI.",
+    "rejected": "Save your model with pickle, load it in a Python script, and run the script on a server. Maybe wrap it in Flask if you need an API."
+  },
+  {
+    "id": 20,
+    "prompt": "What is the difference between SQL and NoSQL databases?",
+    "chosen": "SQL databases are relational with fixed schemas, ACID transactions, vertical scaling, and SQL query language (PostgreSQL, MySQL). NoSQL databases are non-relational with flexible schemas, eventual consistency (often), horizontal scaling, and varied query languages. NoSQL types: document (MongoDB), key-value (Redis), column-family (Cassandra), graph (Neo4j). Choose SQL for complex queries, relationships, ACID requirements; NoSQL for scalability, flexibility, high write throughput, or unstructured data.",
+    "rejected": "SQL is old and structured. NoSQL is new and faster. Use NoSQL for modern apps and SQL for legacy systems. MongoDB is always better than MySQL."
+  },
+  {
+    "id": 21,
+    "prompt": "How do I handle errors in asynchronous Python code?",
+    "chosen": "Use try-except blocks around await statements, handle exceptions in async functions, use asyncio.gather with return_exceptions=True to collect errors without stopping, implement timeouts with asyncio.wait_for, create custom exception hierarchies, log exceptions properly, use contextlib.asynccontextmanager for resource cleanup, add retry logic with exponential backoff, and ensure all tasks are awaited or cancelled. Example: try: result = await async_func(); except SpecificError as e: handle_error(e); finally: cleanup().",
+    "rejected": "Just put try-except around everything. Use asyncio.create_task and forget about the tasks, the errors will show up in logs eventually."
+  },
+  {
+    "id": 22,
+    "prompt": "What is the purpose of batch normalization?",
+    "chosen": "Batch normalization normalizes layer inputs by adjusting and scaling activations within mini-batches, reducing internal covariate shift. It calculates batch mean and variance, normalizes: (x - μ) / σ, then applies learnable scale (γ) and shift (β) parameters. Benefits: enables higher learning rates, faster training, reduced sensitivity to initialization, acts as regularization, and allows deeper networks. It's typically applied before activation functions in CNNs.",
+    "rejected": "It normalizes the data in batches to make training faster. Just add it between layers and your model will train better."
+  },
+  {
+    "id": 23,
+    "prompt": "How do I optimize Docker image size?",
+    "chosen": "Use minimal base images (alpine, distroless), employ multi-stage builds to separate build and runtime dependencies, minimize layers by combining commands, remove package manager caches in the same RUN statement, use .dockerignore extensively, don't include development dependencies in production images, use specific COPY commands instead of COPY ., compress artifacts, and audit with dive or docker-slim. Example: python:3.11-slim (45MB) vs python:3.11 (340MB).",
+    "rejected": "Use Alpine Linux as base image and delete files you don't need. Run docker image prune occasionally to clean up old images."
+  },
+  {
+    "id": 24,
+    "prompt": "What is transfer learning and when should I use it?",
+    "chosen": "Transfer learning adapts a pre-trained model to a new task by leveraging learned features. Freeze early layers (general features) and fine-tune later layers on your dataset. Use when: you have limited labeled data, tasks are related, training from scratch is too expensive. Common in computer vision (ImageNet models) and NLP (BERT, GPT). Approaches: feature extraction (freeze all), fine-tuning (train some layers), or full fine-tuning. Start with high learning rates for new layers, low for pre-trained ones.",
+    "rejected": "Just download a pre-trained model like BERT or ResNet and run it on your data. It will work better than training from scratch because it already knows things."
+  },
+  {
+    "id": 25,
+    "prompt": "How do I manage environment variables in Docker?",
+    "chosen": "Use multiple approaches: ARG for build-time variables, ENV in Dockerfile for defaults, --env-file with docker run, docker-compose .env files, Kubernetes ConfigMaps/Secrets, or secret management tools like Vault. Never commit sensitive values to version control. Use .env.example templates, validate required variables at startup, use different env files per environment (dev, staging, prod), and consider tools like direnv or dotenv libraries. Layer variables: defaults in Dockerfile, overrides at runtime.",
+    "rejected": "Put all your environment variables in the Dockerfile with ENV commands. Or use -e flags when running docker run with all your variables."
+  },
+  {
+    "id": 26,
+    "prompt": "What's the difference between horizontal and vertical scaling?",
+    "chosen": "Horizontal scaling (scaling out) adds more machines to distribute load across multiple nodes, offering better fault tolerance, theoretically unlimited capacity, and requiring distributed system design (load balancers, shared state). Vertical scaling (scaling up) increases resources (CPU, RAM) on existing machines, simpler to implement but has hardware limits and single points of failure. Cloud makes horizontal scaling easier. Use horizontal for stateless services; vertical for databases until sharding is needed. Most modern systems use both.",
+    "rejected": "Horizontal means adding more servers. Vertical means making servers bigger. Horizontal is always better because you can add infinite servers."
+  },
+  {
+    "id": 27,
+    "prompt": "How do I implement rate limiting in an API?",
+    "chosen": "Use algorithms like token bucket, leaky bucket, or sliding window. Implement with middleware (Flask-Limiter, express-rate-limit) or API gateways (Kong, AWS API Gateway). Store counters in Redis for distributed systems. Return 429 status with Retry-After header. Implement per-user, per-IP, or per-endpoint limits. Consider tiered limits for different user types. Add rate limit headers (X-RateLimit-Limit, X-RateLimit-Remaining). Monitor and adjust based on usage patterns. Example: 100 requests per hour per API key.",
+    "rejected": "Count requests in a dictionary and block users if they go over a limit. Reset the counter every hour with a cron job."
+  },
+  {
+    "id": 28,
+    "prompt": "What is the difference between a list and a tuple in Python?",
+    "chosen": "Lists are mutable (can be modified: append, remove, sort) and use square brackets [1,2,3]. Tuples are immutable (cannot be changed after creation) and use parentheses (1,2,3). Lists are slower and use more memory due to mutability. Tuples can be dictionary keys and set members. Use lists for homogeneous collections that change; tuples for heterogeneous data, return values, and immutable sequences. Tuples convey intent: data shouldn't change.",
+    "rejected": "Lists use brackets [] and tuples use parentheses (). Lists can be changed and tuples can't. That's the only difference, use whichever you prefer."
+  },
+  {
+    "id": 29,
+    "prompt": "How do I debug performance issues in a web application?",
+    "chosen": "Use profiling tools: browser DevTools (Network, Performance tabs), server-side APM (New Relic, Datadog), database query analyzers. Measure: page load time, TTFB, API response times, database query duration. Optimize: enable caching, use CDNs, minimize bundle size, lazy load components, optimize images, add database indexes, reduce N+1 queries, implement pagination. Monitor with real-user monitoring and synthetic tests. Use lighthouse for web vitals. Profile critical paths first.",
+    "rejected": "Use console.log to see how long things take. Add some caching and make your images smaller. If it's still slow, upgrade your server."
+  },
+  {
+    "id": 30,
+    "prompt": "What is a webhook and how does it work?",
+    "chosen": "A webhook is an HTTP callback that sends real-time data from one application to another when an event occurs. The source app makes a POST request to a configured URL endpoint with event data. Implementation: expose an endpoint, validate the request (signatures, tokens), process payload asynchronously, return 200 quickly, implement retry logic for failures, secure with HTTPS and authentication. Common uses: GitHub pushes, payment notifications, CI/CD triggers. Webhooks enable event-driven architectures without polling.",
+    "rejected": "It's like an API but backward - the server calls your application instead of you calling the server. Just make an endpoint that receives POST requests."
+  },
+  {
+    "id": 31,
+    "prompt": "How do I handle database migrations in production?",
+    "chosen": "Use migration tools (Alembic, Flyway, Liquibase). Follow process: create migration in dev, test thoroughly, backup production database, use transactions when possible, apply during low-traffic windows, implement backward-compatible changes (add column first, then use it), test rollback procedures, use blue-green deployment for zero downtime, monitor query performance post-migration, avoid large data changes in migrations. For schema changes: expand (add new), migrate (dual write), contract (remove old).",
+    "rejected": "Just run the ALTER TABLE commands directly on production. Make a backup first. Do it late at night when nobody's using the site."
+  },
+  {
+    "id": 32,
+    "prompt": "What is the difference between authentication and authorization?",
+    "chosen": "Authentication verifies identity (who you are) using credentials like passwords, tokens, biometrics, or MFA. Authorization determines permissions (what you can do) based on roles or policies after authentication. Example: logging in is authentication; accessing admin panel is authorization. Implement authentication first, then check authorization for each resource. Use protocols like OAuth 2.0 (authorization framework) with OpenID Connect (authentication layer). Authentication answers 'are you who you claim?'; authorization answers 'are you allowed?'",
+    "rejected": "Authentication is logging in with username/password. Authorization is checking if you're an admin. They both make sure users have access to things they should."
+  },
+  {
+    "id": 33,
+    "prompt": "How do I implement logging in a distributed system?",
+    "chosen": "Use structured logging (JSON format) with consistent fields across services. Implement correlation IDs to trace requests across services. Use centralized log aggregation (ELK stack, Splunk, CloudWatch). Include context: timestamp, service name, trace ID, log level, message. Use appropriate log levels (DEBUG, INFO, WARN, ERROR). Avoid logging sensitive data. Implement log sampling for high-volume services. Use async logging to avoid blocking. Add distributed tracing with OpenTelemetry or Jaeger for request flows.",
+    "rejected": "Print to stdout in each service and save all the logs to files. Set up a script to grep through log files when you need to find something."
+  },
+  {
+    "id": 34,
+    "prompt": "What is a deadlock and how do I prevent it?",
+    "chosen": "A deadlock occurs when two or more processes wait for resources held by each other, creating a circular dependency. Prevention strategies: acquire locks in consistent order across all code paths, use timeouts when acquiring locks, implement deadlock detection and recovery, use lock hierarchies, minimize lock scope and duration, prefer lock-free data structures, use database transaction isolation levels appropriately. In databases: keep transactions short, access tables in consistent order. Tools like threading.RLock and database deadlock detection help.",
+    "rejected": "It's when code gets stuck waiting. Just add time.sleep() or restart the program when it happens. Use bigger timeouts to avoid the problem."
+  },
+  {
+    "id": 35,
+    "prompt": "How do I secure a REST API?",
+    "chosen": "Implement: HTTPS only, authentication (JWT, OAuth2), authorization with RBAC, input validation and sanitization, rate limiting, CORS configuration, SQL injection prevention (parameterized queries), XSS protection, CSRF tokens for state-changing operations, API versioning, security headers (HSTS, CSP), request size limits, audit logging, regular dependency updates, and security testing. Use API keys for service-to-service, tokens for users. Validate all inputs, sanitize outputs. Follow OWASP API Security Top 10.",
+    "rejected": "Use HTTPS and require an API key in headers. That should be enough. Maybe add some rate limiting if you're worried about abuse."
+  },
+  {
+    "id": 36,
+    "prompt": "What is the purpose of Docker Compose?",
+    "chosen": "Docker Compose defines and runs multi-container applications using YAML configuration. It manages: service definitions, networks, volumes, environment variables, dependencies. Features: build and start all services with one command (docker-compose up), service discovery via hostnames, automatic network creation, volume management, environment isolation. Ideal for development environments, testing, and local orchestration. Production typically uses Kubernetes/ECS, but Compose can work with Docker Swarm. Simplifies complex setups with reproducible configurations.",
+    "rejected": "It lets you run multiple Docker containers at once instead of starting them individually. Write a YAML file and use docker-compose up to start everything."
+  },
+  {
+    "id": 37,
+    "prompt": "How do I handle file uploads securely?",
+    "chosen": "Validate file type (extension and MIME type), limit file size, scan for malware, generate unique filenames (UUID) to prevent overwrites, store outside web root or use object storage (S3), validate file content matches type, strip metadata (EXIF), implement rate limiting, check for path traversal attempts, use virus scanning (ClamAV), validate image dimensions if applicable, serve uploads from different domain, implement access controls, and use signed URLs for temporary access. Never trust client-provided filenames or types.",
+    "rejected": "Check the file extension to make sure it's allowed, save it to your uploads folder, and make sure the folder has the right permissions."
+  },
+  {
+    "id": 38,
+    "prompt": "What is the difference between GET and POST requests?",
+    "chosen": "GET retrieves data, is idempotent, caches responses, sends parameters in URL (limited length ~2KB), visible in browser history/logs, should not modify server state, can be bookmarked. POST submits data, non-idempotent, sends data in request body (unlimited size), not cached by default, data not visible in URL, used for form submissions and creating resources. Use GET for retrieval, POST for submissions. PUT for updates, DELETE for removal. Follow REST conventions.",
+    "rejected": "GET is for getting data from URLs. POST is for sending data to the server. GET shows data in the URL, POST hides it."
+  },
+  {
+    "id": 39,
+    "prompt": "How do I implement caching in a web application?",
+    "chosen": "Multiple layers: browser caching (Cache-Control headers), CDN caching (for static assets), application caching (Redis, Memcached), database query caching. Strategies: cache-aside (lazy loading), write-through, write-back. Set appropriate TTL based on data volatility. Use cache keys thoughtfully, implement cache invalidation strategies, monitor hit/miss rates. For APIs: use ETags and conditional requests. Consider cache stampede prevention. Example: cache frequently accessed data with 5-minute TTL, invalidate on updates.",
+    "rejected": "Put Redis in front of your database and cache everything. Use a really long TTL like 24 hours to reduce database load."
+  },
+  {
+    "id": 40,
+    "prompt": "What is microservices architecture?",
+    "chosen": "Microservices decompose applications into small, independent services, each handling specific business capabilities. Services communicate via APIs (REST, gRPC), can use different technologies, are independently deployable and scalable. Benefits: team autonomy, technology flexibility, fault isolation, easier scaling. Challenges: distributed system complexity, data consistency, service discovery, monitoring, network latency. Requires: API gateways, service mesh, distributed tracing, container orchestration. Use for large teams and complex domains; monoliths are simpler for small applications.",
+    "rejected": "Split your app into multiple small services instead of one big application. Each service does one thing. Connect them with REST APIs and you have microservices."
+  },
+  {
+    "id": 41,
+    "prompt": "How do I monitor a Kubernetes cluster?",
+    "chosen": "Use multiple tools: Prometheus for metrics collection, Grafana for visualization, metrics-server for resource metrics, ELK/Loki for logs, Jaeger for distributed tracing. Monitor: node resources (CPU, memory, disk), pod health and restarts, service latency and errors, cluster events, API server performance. Set up alerts for: pod crashes, resource exhaustion, unhealthy nodes, failed deployments. Use kube-state-metrics for cluster state. Implement dashboards for different stakeholders. Consider managed solutions like Datadog or New Relic.",
+    "rejected": "Install Prometheus and Grafana. Point Prometheus at your cluster and create some dashboards in Grafana. Check kubectl get pods occasionally."
+  },
+  {
+    "id": 42,
+    "prompt": "What is the difference between a CNN and an RNN?",
+    "chosen": "CNNs (Convolutional Neural Networks) use convolutional layers with filters to detect spatial patterns, excel at grid-structured data like images, process inputs in parallel. RNNs (Recurrent Neural Networks) have loops allowing information persistence, process sequences step-by-step, maintain hidden state, ideal for time series and text. CNNs capture local patterns through convolutions and pooling; RNNs capture temporal dependencies through recurrence. Use CNNs for spatial data, RNNs for sequential data. Transformers now often replace RNNs for NLP.",
+    "rejected": "CNNs are for images and RNNs are for text. CNNs have convolutional layers and RNNs have recurrent layers. That's the main difference."
+  },
+  {
+    "id": 43,
+    "prompt": "How do I implement blue-green deployment?",
+    "chosen": "Maintain two identical production environments: blue (current) and green (new). Deploy new version to green, run tests, switch traffic (update load balancer/DNS), monitor metrics, keep blue as instant rollback option. In Kubernetes: use Services with label selectors, deploy green Deployment, verify health, update Service selector, maintain blue for quick rollback. Benefits: zero downtime, instant rollback, full testing in production environment. Trade-off: requires double infrastructure. Use with canary or feature flags for gradual rollout.",
+    "rejected": "Set up two servers, one blue and one green. Deploy to green while blue is running. Switch a load balancer to point to green when ready. Keep blue running for a while in case you need to switch back."
+  },
+  {
+    "id": 44,
+    "prompt": "What is the purpose of a reverse proxy?",
+    "chosen": "A reverse proxy sits between clients and backend servers, forwarding requests. Functions: load balancing across servers, SSL/TLS termination, caching responses, compression, request routing, security (hiding backend topology, rate limiting, WAF), static content serving. Common tools: Nginx, HAProxy, Traefik. Benefits: centralized SSL management, improved security, better performance through caching, enables zero-downtime deployments. Different from forward proxy (client-side) which serves client requests to internet.",
+    "rejected": "It's a proxy that works backward. Instead of protecting clients, it protects servers. Nginx is the most popular one, it forwards requests to your backend."
+  },
+  {
+    "id": 45,
+    "prompt": "How do I optimize database queries?",
+    "chosen": "Analyze with EXPLAIN to understand execution plans. Add appropriate indexes (B-tree, hash, composite), but avoid over-indexing. Write efficient queries: use WHERE filtering early, avoid SELECT *, use JOIN appropriately, limit result sets, avoid N+1 queries (use eager loading), denormalize when needed, use query caching, partition large tables, maintain statistics, avoid wildcard prefix in LIKE. Monitor slow query logs, use connection pooling, and consider read replicas for scale. Optimize schema design first.",
+    "rejected": "Add indexes to columns you search on. Use LIMIT to get fewer results. If it's still slow, add more indexes or cache the results in memory."
+  },
+  {
+    "id": 46,
+    "prompt": "What is the difference between LSTM and GRU?",
+    "chosen": "Both are RNN variants solving vanishing gradients. LSTM has three gates (input, forget, output) and separate cell state, providing fine-grained control with more parameters (~4x weights). GRU has two gates (reset, update), fewer parameters, simpler architecture, faster training. LSTM: better for complex patterns and longer sequences. GRU: faster, often similar performance, less prone to overfitting. GRU is preferred when computational efficiency matters and datasets are smaller. Both outperform vanilla RNNs on sequential tasks.",
+    "rejected": "LSTM has more gates and is more complex. GRU is simpler and faster. They both solve the same problem in RNNs. Just use LSTM for important projects and GRU when you need speed."
+  },
+  {
+    "id": 47,
+    "prompt": "How do I implement graceful shutdown in a web server?",
+    "chosen": "Catch termination signals (SIGTERM, SIGINT), stop accepting new requests, complete in-flight requests with timeout, close database connections and other resources, flush logs and metrics. In Node.js: process.on('SIGTERM'), server.close(), cleanup. In Python: signal handlers, graceful shutdown on exception. In containers: handle SIGTERM within 30s default grace period. Implement health check endpoints showing readiness. For Kubernetes: use preStop hooks, configure terminationGracePeriodSeconds. Drain connections from load balancers first.",
+    "rejected": "Just handle SIGTERM and call sys.exit() or process.exit(). The system will clean up everything else automatically when the process ends."
+  },
+  {
+    "id": 48,
+    "prompt": "What is the purpose of a message queue?",
+    "chosen": "Message queues enable asynchronous communication between services, decoupling producers from consumers. Benefits: load leveling (handle traffic spikes), fault tolerance (retry failed messages), scalability (multiple consumers), temporal decoupling (services needn't be online simultaneously). Use cases: background jobs, event-driven architectures, service integration. Common tools: RabbitMQ (AMQP), Apache Kafka (streaming), AWS SQS (managed). Patterns: point-to-point (queue), publish-subscribe (topics). Ensure message persistence, implement dead letter queues, monitor queue depth.",
+    "rejected": "It's a queue for messages between services. Producer puts messages in, consumer takes them out. Use it when you don't need immediate responses. RabbitMQ is the most popular one."
+  },
+  {
+    "id": 49,
+    "prompt": "How do I handle timezone issues in applications?",
+    "chosen": "Store all timestamps in UTC in databases, convert to user's timezone only for display. Use timezone-aware datetime objects (Python: datetime.timezone, JavaScript: moment-timezone, date-fns-tz). Never use naive datetimes. Include timezone in API responses (ISO 8601: 2024-01-01T10:00:00Z). Account for DST transitions, use IANA timezone database, validate user timezone input, consider storing user timezone preference. For distributed systems: agree on UTC everywhere. Test across timezones and DST boundaries.",
+    "rejected": "Just use UTC everywhere and don't worry about timezones. Or save the timezone offset with each timestamp and do the math when displaying dates."
+  }
+]

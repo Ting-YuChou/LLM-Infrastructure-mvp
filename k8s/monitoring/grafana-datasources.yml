@@ -1,0 +1,44 @@
+# Grafana Datasources Configuration
+# Automatically provisions Prometheus as a datasource
+
+apiVersion: 1
+
+datasources:
+  # Prometheus datasource
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s
+      queryTimeout: 60s
+      
+      # Enable query suggestions
+      customQueryParameters: ''
+      
+      # Exemplars configuration
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: tempo
+    
+    version: 1
+  
+  # Loki for logs (optional)
+  # - name: Loki
+  #   type: loki
+  #   access: proxy
+  #   url: http://loki:3100
+  #   editable: true
+  #   version: 1
+  
+  # Tempo for traces (optional)
+  # - name: Tempo
+  #   type: tempo
+  #   access: proxy
+  #   url: http://tempo:3200
+  #   editable: true
+  #   uid: tempo
+  #   version: 1

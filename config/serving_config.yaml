@@ -1,0 +1,324 @@
+# vLLM Inference Server Configuration
+# High-performance LLM serving with PagedAttention and continuous batching
+
+# ============================================================================
+# Model Configuration
+# ============================================================================
+model:
+  # Model path (HuggingFace ID or local path)
+  name: "/workspace/models/aligned/checkpoint-final"
+  
+  # Model revision/version
+  revision: null
+  
+  # Tokenizer path (defaults to model path if null)
+  tokenizer: null
+  
+  # Trust remote code (for custom model architectures)
+  trust_remote_code: false
+  
+  # Download directory
+  download_dir: "/workspace/models/cache"
+  
+  # Model data type (auto, float16, bfloat16, float32)
+  dtype: "auto"  # Auto-detect best precision
+  
+  # Quantization (optional: awq, gptq, squeezellm)
+  quantization: null
+  
+  # Max model length (override model's default max)
+  max_model_len: null
+
+# ============================================================================
+# GPU & Memory Configuration
+# ============================================================================
+gpu:
+  # Tensor parallel size (number of GPUs to split model across)
+  tensor_parallel_size: 1
+  
+  # Pipeline parallel size (for very large models)
+  pipeline_parallel_size: 1
+  
+  # GPU memory utilization (0.0 to 1.0)
+  # Recommended: 0.85-0.95
+  # Lower if experiencing OOM errors
+  gpu_memory_utilization: 0.90
+  
+  # Swap space (CPU RAM to offload KV cache)
+  # Useful when running out of GPU memory
+  swap_space: 4  # GB of CPU RAM for swapping
+  
+  # Enable CUDA graphs for faster execution
+  enforce_eager: false  # Set true to disable CUDA graphs (for debugging)
+  
+  # Maximum number of sequences in a batch
+  max_num_seqs: 256
+  
+  # Maximum number of tokens in a batch
+  max_num_batched_tokens: 8192
+
+# ============================================================================
+# PagedAttention Configuration
+# ============================================================================
+paged_attention:
+  # Block size for paged attention (tokens per block)
+  # Typical values: 8, 16, 32
+  # Smaller = less fragmentation, more overhead
+  block_size: 16
+  
+  # Enable prefix caching (cache and reuse common prompts)
+  enable_prefix_caching: true
+  
+  # Maximum number of cached prefixes
+  max_num_prefix_cache_blocks: 512
+
+# ============================================================================
+# Batching & Scheduling
+# ============================================================================
+batching:
+  # Scheduling policy
+  # Options: "fcfs" (first-come-first-serve), "priority"
+  scheduling_policy: "fcfs"
+  
+  # Maximum waiting time for batching (seconds)
+  max_waiting_time: 0.1
+  
+  # Delay factor for scheduling
+  delay_factor: 0.0
+  
+  # Enable chunked prefill (process long prompts in chunks)
+  enable_chunked_prefill: false
+
+# ============================================================================
+# Generation Configuration
+# ============================================================================
+generation:
+  # Default sampling parameters (can be overridden per request)
+  default_temperature: 0.7
+  default_top_p: 0.9
+  default_top_k: -1  # -1 disables top-k
+  default_max_tokens: 512
+  
+  # Presence and frequency penalties
+  default_presence_penalty: 0.0
+  default_frequency_penalty: 0.0
+  
+  # Repetition penalty
+  default_repetition_penalty: 1.0
+  
+  # Length penalty
+  default_length_penalty: 1.0
+  
+  # Stop sequences
+  default_stop_sequences: []
+  
+  # Ignore EOS token (continue generation even after EOS)
+  ignore_eos: false
+  
+  # Skip special tokens in output
+  skip_special_tokens: true
+
+# ============================================================================
+# Server Configuration
+# ============================================================================
+server:
+  # Host address
+  host: "0.0.0.0"
+  
+  # Port number
+  port: 8000
+  
+  # OpenAI API compatibility
+  # Enables /v1/completions and /v1/chat/completions endpoints
+  enable_openai_api: true
+  
+  # API key authentication (optional)
+  api_key: null  # Set to enable authentication
+  
+  # CORS (Cross-Origin Resource Sharing)
+  cors_allowed_origins:
+    - "*"
+  
+  # Request timeout (seconds)
+  timeout: 300
+  
+  # Max concurrent requests
+  max_concurrent_requests: 1000
+  
+  # Enable streaming responses
+  enable_streaming: true
+
+# ============================================================================
+# Monitoring & Metrics
+# ============================================================================
+monitoring:
+  # Enable Prometheus metrics endpoint
+  enable_metrics: true
+  metrics_port: 9090
+  
+  # Metrics to track:
+  # - vllm_num_requests_running
+  # - vllm_num_requests_waiting
+  # - vllm_gpu_cache_usage_perc
+  # - vllm_num_preemptions
+  # - vllm_time_to_first_token
+  # - vllm_time_per_output_token
+  
+  # Enable detailed logging
+  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  
+  # Log file path
+  log_file: "/workspace/outputs/logs/vllm_server.log"
+  
+  # Request logging
+  log_requests: true
+  
+  # OpenTelemetry integration
+  opentelemetry:
+    enabled: false
+    endpoint: "http://localhost:4318"
+    service_name: "vllm-server"
+
+# ============================================================================
+# Performance Optimization
+# ============================================================================
+optimization:
+  # Worker utilization target
+  # System will try to keep workers busy
+  worker_utilization_target: 0.8
+  
+  # Use V2 block manager (more efficient)
+  use_v2_block_manager: true
+  
+  # Disable log stats (reduces overhead)
+  disable_log_stats: false
+  
+  # Disable custom all reduce (for debugging)
+  disable_custom_all_reduce: false
+
+# ============================================================================
+# Multi-GPU Configuration (for tensor_parallel_size > 1)
+# ============================================================================
+distributed:
+  # Distributed init method
+  # Options: "auto", "tcp://host:port", "file://path"
+  distributed_init_method: "auto"
+  
+  # Ray configuration (if using Ray for distribution)
+  ray:
+    enabled: false
+    num_cpus: null
+    num_gpus: null
+    object_store_memory: null
+
+# ============================================================================
+# Safety & Limits
+# ============================================================================
+safety:
+  # Maximum prompt length (tokens)
+  max_prompt_length: 4096
+  
+  # Maximum total sequence length (prompt + generation)
+  max_total_length: 8192
+  
+  # Maximum number of sequences per request
+  max_sequences_per_request: 1
+  
+  # Request rate limiting
+  rate_limit:
+    enabled: false
+    requests_per_minute: 100
+    tokens_per_minute: 100000
+  
+  # Content filtering
+  content_filter:
+    enabled: false
+    toxic_threshold: 0.5
+
+# ============================================================================
+# Engine Arguments (Advanced)
+# ============================================================================
+engine:
+  # Seed for random number generation
+  seed: 0
+  
+  # Maximum number of log probs to return
+  max_logprobs: 5
+  
+  # Disable log probabilities (faster)
+  disable_log_stats: false
+  
+  # Tokenizer mode
+  # Options: "auto", "slow"
+  tokenizer_mode: "auto"
+  
+  # Tokenizer revision
+  tokenizer_revision: null
+  
+  # Maximum number of parallel decoding sequences
+  max_parallel_loading_workers: null
+
+# ============================================================================
+# Health Check Configuration
+# ============================================================================
+health:
+  # Enable health check endpoint
+  enable_health_check: true
+  
+  # Health check path
+  health_check_path: "/health"
+  
+  # Readiness check path
+  readiness_check_path: "/ready"
+  
+  # Liveness check path
+  liveness_check_path: "/alive"
+
+# ============================================================================
+# Model Loading
+# ============================================================================
+loading:
+  # Load format for model weights
+  # Options: "auto", "pt", "safetensors", "npcache", "dummy"
+  load_format: "auto"
+  
+  # CPU offloading (for very large models)
+  cpu_offload_gb: 0  # GB to offload to CPU
+  
+  # Enable lora adapters
+  enable_lora: false
+  max_loras: 1
+  max_lora_rank: 16
+  lora_dtype: "auto"
+
+# ============================================================================
+# Speculative Decoding (Advanced)
+# ============================================================================
+speculative_decoding:
+  enabled: false
+  
+  # Draft model for speculation
+  draft_model: null
+  
+  # Number of speculative tokens
+  num_speculative_tokens: 5
+  
+  # Speculation mode
+  speculation_mode: "draft_model"  # or "medusa"
+
+# ============================================================================
+# Development & Debugging
+# ============================================================================
+debug:
+  # Verbose logging
+  verbose: false
+  
+  # Profile execution (for performance analysis)
+  profile: false
+  profile_output: "/workspace/outputs/logs/profile.json"
+  
+  # Disable GPU warmup
+  disable_warmup: false
+  
+  # Test mode (no actual inference)
+  test_mode: false

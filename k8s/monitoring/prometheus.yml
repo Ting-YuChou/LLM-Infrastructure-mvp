@@ -1,0 +1,175 @@
+# Prometheus Configuration for LLM Infrastructure
+# Scrapes metrics from all services
+
+global:
+  # How frequently to scrape targets
+  scrape_interval: 15s
+  
+  # How long to wait before timing out
+  scrape_timeout: 10s
+  
+  # How frequently to evaluate rules
+  evaluation_interval: 15s
+  
+  # Labels to add to all time series and alerts
+  external_labels:
+    cluster: 'llm-infrastructure'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - localhost:9093
+      timeout: 10s
+
+# Rule files for alerts
+rule_files:
+  - 'alerts.yml'
+
+# Scrape configurations
+scrape_configs:
+  
+  # ==========================================================================
+  # Prometheus itself
+  # ==========================================================================
+  - job_name: 'prometheus'
+    static_configs:
+      - targets:
+          - localhost:9090
+        labels:
+          service: 'prometheus'
+  
+  # ==========================================================================
+  # vLLM Inference Servers
+  # ==========================================================================
+  - job_name: 'vllm-servers'
+    
+    # Service discovery for Kubernetes
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - llm-inference
+    
+    # Keep only pods with prometheus.io/scrape annotation
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      
+      - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+        target_label: __address__
+      
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: namespace
+      
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: pod
+      
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        action: replace
+        target_label: app
+    
+    # Static configuration for non-Kubernetes deployments
+    static_configs:
+      - targets:
+          - 'vllm-server:9090'
+        labels:
+          service: 'vllm'
+          environment: 'production'
+  
+  # ==========================================================================
+  # API Gateway
+  # ==========================================================================
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets:
+          - 'api-gateway:9091'
+        labels:
+          service: 'gateway'
+  
+  # ==========================================================================
+  # MLflow Registry
+  # ==========================================================================
+  - job_name: 'mlflow'
+    static_configs:
+      - targets:
+          - 'mlflow-server:9092'
+        labels:
+          service: 'mlflow'
+  
+  # ==========================================================================
+  # Node Exporter (System Metrics)
+  # ==========================================================================
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets:
+          - 'node-exporter:9100'
+        labels:
+          service: 'node-exporter'
+  
+  # ==========================================================================
+  # NVIDIA GPU Metrics (DCGM Exporter)
+  # ==========================================================================
+  - job_name: 'dcgm-exporter'
+    static_configs:
+      - targets:
+          - 'dcgm-exporter:9400'
+        labels:
+          service: 'dcgm'
+  
+  # ==========================================================================
+  # Redis
+  # ==========================================================================
+  - job_name: 'redis'
+    static_configs:
+      - targets:
+          - 'redis-exporter:9121'
+        labels:
+          service: 'redis'
+  
+  # ==========================================================================
+  # PostgreSQL
+  # ==========================================================================
+  - job_name: 'postgres'
+    static_configs:
+      - targets:
+          - 'postgres-exporter:9187'
+        labels:
+          service: 'postgres'
+
+# =============================================================================
+# Remote Write (for long-term storage)
+# =============================================================================
+# remote_write:
+#   - url: 'https://prometheus-remote-storage:9091/api/v1/write'
+#     queue_config:
+#       capacity: 10000
+#       max_shards: 200
+#       min_shards: 1
+#       max_samples_per_send: 1000
+#       batch_send_deadline: 5s
+#       min_backoff: 30ms
+#       max_backoff: 100ms
+
+# =============================================================================
+# Storage
+# =============================================================================
+storage:
+  tsdb:
+    path: /prometheus
+    retention:
+      time: 30d
+      size: 50GB

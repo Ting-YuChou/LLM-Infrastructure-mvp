@@ -1,0 +1,857 @@
+[
+  {
+    "id": 0,
+    "prompt": "Explain the difference between a virtual machine and a Docker container.",
+    "completion": "A VM virtualizes the whole hardware stack, including the OS kernel, while a Docker container shares the host OS kernel and only virtualizes the user space processes. This makes containers lighter and faster to start, with lower resource overhead. VMs provide stronger isolation but require more resources."
+  },
+  {
+    "id": 1,
+    "prompt": "What is the purpose of a Dockerfile?",
+    "completion": "A Dockerfile is a text document containing instructions to build a Docker image. It specifies the base image, dependencies, environment variables, files to copy, and commands to run. Each instruction creates a layer in the image, enabling efficient caching and version control of containerized applications."
+  },
+  {
+    "id": 2,
+    "prompt": "How do you handle exceptions in Python?",
+    "completion": "Use try-except blocks to handle exceptions. Place code that might raise an exception in the try block, and handle specific exceptions in except blocks. You can also use else for code that runs if no exception occurs, and finally for cleanup code that always executes. Example: try: x = 1/0; except ZeroDivisionError: print('Division by zero'); finally: print('Cleanup')."
+  },
+  {
+    "id": 3,
+    "prompt": "What is the difference between supervised and unsupervised learning?",
+    "completion": "Supervised learning uses labeled data to train models, where inputs have corresponding correct outputs. The model learns to map inputs to outputs. Unsupervised learning works with unlabeled data, finding patterns, clusters, or structures without predefined labels. Examples: classification (supervised) vs. clustering (unsupervised)."
+  },
+  {
+    "id": 4,
+    "prompt": "Explain what a GPU is and why it's important for deep learning.",
+    "completion": "A GPU (Graphics Processing Unit) is a specialized processor designed for parallel computation. It's crucial for deep learning because neural network training involves massive matrix operations that can be parallelized. GPUs have thousands of cores that can process many operations simultaneously, accelerating training by 10-100x compared to CPUs."
+  },
+  {
+    "id": 5,
+    "prompt": "What is the difference between git pull and git fetch?",
+    "completion": "git fetch downloads commits, files, and refs from a remote repository into your local repo but doesn't merge them into your working branch. git pull does a fetch followed by an automatic merge, updating your current branch with the remote changes. fetch is safer as it lets you review changes before merging."
+  },
+  {
+    "id": 6,
+    "prompt": "What is a REST API?",
+    "completion": "REST (Representational State Transfer) is an architectural style for designing networked applications. A REST API uses HTTP requests to perform CRUD operations (Create, Read, Update, Delete) on resources. It follows principles like statelessness, client-server architecture, and uniform interface, typically using JSON for data exchange."
+  },
+  {
+    "id": 7,
+    "prompt": "Explain the concept of overfitting in machine learning.",
+    "completion": "Overfitting occurs when a model learns the training data too well, including its noise and outliers, resulting in poor generalization to new data. The model performs excellently on training data but poorly on validation/test data. Solutions include regularization, dropout, early stopping, cross-validation, and using more training data."
+  },
+  {
+    "id": 8,
+    "prompt": "What is the difference between a list and a tuple in Python?",
+    "completion": "Lists are mutable (can be modified after creation) and use square brackets []. Tuples are immutable (cannot be changed after creation) and use parentheses (). Lists have methods like append() and remove(), while tuples have fewer methods. Tuples are faster and use less memory, making them suitable for fixed collections."
+  },
+  {
+    "id": 9,
+    "prompt": "What is Kubernetes and what problem does it solve?",
+    "completion": "Kubernetes is an open-source container orchestration platform that automates deployment, scaling, and management of containerized applications. It solves problems like service discovery, load balancing, storage orchestration, automated rollouts/rollbacks, self-healing, and secret management across clusters of machines."
+  },
+  {
+    "id": 10,
+    "prompt": "Explain what a neural network is.",
+    "completion": "A neural network is a computational model inspired by biological neurons. It consists of interconnected layers of nodes (neurons) that process information. Each connection has a weight, and each neuron applies an activation function to its inputs. Through training, the network adjusts weights to learn patterns and make predictions."
+  },
+  {
+    "id": 11,
+    "prompt": "What is the difference between TCP and UDP?",
+    "completion": "TCP (Transmission Control Protocol) is connection-oriented, guarantees delivery, maintains order, and includes error checking, making it reliable but slower. UDP (User Datagram Protocol) is connectionless, doesn't guarantee delivery or order, has minimal overhead, making it faster but less reliable. TCP is used for web browsing, email; UDP for video streaming, gaming."
+  },
+  {
+    "id": 12,
+    "prompt": "What is a microservice architecture?",
+    "completion": "Microservices architecture breaks an application into small, independent services that communicate via APIs. Each service handles a specific business function, can be developed and deployed independently, and may use different technologies. Benefits include scalability, resilience, and easier maintenance, but it adds complexity in orchestration and monitoring."
+  },
+  {
+    "id": 13,
+    "prompt": "Explain the concept of gradient descent.",
+    "completion": "Gradient descent is an optimization algorithm that minimizes a loss function by iteratively adjusting model parameters in the direction of steepest descent. It calculates the gradient (partial derivatives) of the loss with respect to parameters and updates them: θ = θ - α∇J(θ), where α is the learning rate."
+  },
+  {
+    "id": 14,
+    "prompt": "What is the purpose of Docker Compose?",
+    "completion": "Docker Compose is a tool for defining and running multi-container Docker applications. Using a YAML file, you specify services, networks, and volumes. With a single command (docker-compose up), you can start all containers. It simplifies development environments and ensures consistency across team members."
+  },
+  {
+    "id": 15,
+    "prompt": "What is the difference between SQL and NoSQL databases?",
+    "completion": "SQL databases are relational, use structured schemas, support ACID transactions, and use SQL for queries (e.g., MySQL, PostgreSQL). NoSQL databases are non-relational, have flexible schemas, scale horizontally, and include types like document (MongoDB), key-value (Redis), column-family (Cassandra), and graph databases."
+  },
+  {
+    "id": 16,
+    "prompt": "What is a webhook?",
+    "completion": "A webhook is an HTTP callback that sends real-time data from one application to another when a specific event occurs. Instead of polling for updates, the source application pushes data to a configured URL endpoint. Webhooks enable event-driven architectures and are commonly used for notifications, CI/CD pipelines, and integrations."
+  },
+  {
+    "id": 17,
+    "prompt": "Explain what backpropagation is in neural networks.",
+    "completion": "Backpropagation is an algorithm for training neural networks by calculating gradients of the loss function with respect to weights. It uses the chain rule to propagate errors backward through the network, from output to input layers. These gradients are then used by optimization algorithms like gradient descent to update weights."
+  },
+  {
+    "id": 18,
+    "prompt": "What is the difference between a process and a thread?",
+    "completion": "A process is an independent program in execution with its own memory space. A thread is a lightweight unit of execution within a process that shares the process's memory and resources. Multiple threads can run concurrently within a process, enabling parallel execution with lower overhead than multiple processes."
+  },
+  {
+    "id": 19,
+    "prompt": "What is CI/CD?",
+    "completion": "CI/CD stands for Continuous Integration and Continuous Delivery/Deployment. CI involves automatically building and testing code when developers commit changes. CD automates deployment to production (Continuous Deployment) or to a staging environment ready for manual release (Continuous Delivery). This enables faster, more reliable software releases."
+  },
+  {
+    "id": 20,
+    "prompt": "Explain the concept of attention mechanism in transformers.",
+    "completion": "The attention mechanism allows models to focus on relevant parts of the input when processing each element. In transformers, self-attention computes attention scores between all pairs of tokens, determining how much each token should attend to others. This enables capturing long-range dependencies without recurrence, making transformers highly effective for NLP tasks."
+  },
+  {
+    "id": 21,
+    "prompt": "What is the difference between deep learning and machine learning?",
+    "completion": "Machine learning is a broader field encompassing algorithms that learn from data, including linear regression, decision trees, and SVMs. Deep learning is a subset of ML using neural networks with multiple layers to automatically learn hierarchical feature representations. Deep learning excels with large datasets and complex patterns but requires more computational resources."
+  },
+  {
+    "id": 22,
+    "prompt": "What is a Docker volume?",
+    "completion": "A Docker volume is a persistent data storage mechanism that exists outside the container filesystem. Volumes persist data even when containers are deleted, can be shared among containers, and are managed by Docker. They're preferred over bind mounts for production use and are essential for databases and stateful applications."
+  },
+  {
+    "id": 23,
+    "prompt": "Explain what an API gateway is.",
+    "completion": "An API gateway is a server that acts as a single entry point for client requests to multiple backend services. It handles request routing, composition, authentication, rate limiting, load balancing, caching, and monitoring. In microservices architectures, it simplifies client interactions and provides a unified interface."
+  },
+  {
+    "id": 24,
+    "prompt": "What is the difference between synchronous and asynchronous programming?",
+    "completion": "Synchronous programming executes tasks sequentially, blocking until each operation completes before moving to the next. Asynchronous programming allows operations to run concurrently without blocking, using callbacks, promises, or async/await. Async is better for I/O-bound tasks, improving responsiveness and resource utilization."
+  },
+  {
+    "id": 25,
+    "prompt": "What is transfer learning in machine learning?",
+    "completion": "Transfer learning reuses a pre-trained model developed for one task as the starting point for a different but related task. Instead of training from scratch, you leverage learned features from large datasets. This reduces training time, data requirements, and often improves performance, especially when you have limited data."
+  },
+  {
+    "id": 26,
+    "prompt": "Explain what a load balancer does.",
+    "completion": "A load balancer distributes incoming network traffic across multiple servers to ensure no single server is overwhelmed. It improves application availability, reliability, and scalability by directing requests to healthy servers, performing health checks, and using algorithms like round-robin, least connections, or IP hash for distribution."
+  },
+  {
+    "id": 27,
+    "prompt": "What is the difference between a compiler and an interpreter?",
+    "completion": "A compiler translates entire source code into machine code before execution, creating an executable file. An interpreter executes code line-by-line at runtime without creating a separate executable. Compiled programs (C, C++) run faster, while interpreted languages (Python, JavaScript) offer more flexibility and easier debugging."
+  },
+  {
+    "id": 28,
+    "prompt": "What is a convolutional neural network (CNN)?",
+    "completion": "A CNN is a deep learning architecture specialized for processing grid-like data such as images. It uses convolutional layers with filters to detect features, pooling layers to reduce dimensions, and fully connected layers for classification. CNNs automatically learn hierarchical features from raw pixels, making them excellent for computer vision tasks."
+  },
+  {
+    "id": 29,
+    "prompt": "Explain what containerization is.",
+    "completion": "Containerization packages an application with its dependencies, libraries, and configuration into a standardized unit called a container. Containers isolate applications from the underlying infrastructure, ensuring consistency across development, testing, and production environments. Unlike VMs, containers share the host OS kernel, making them lightweight and portable."
+  },
+  {
+    "id": 30,
+    "prompt": "What is the purpose of a reverse proxy?",
+    "completion": "A reverse proxy sits in front of web servers and forwards client requests to backend servers. It provides benefits like load balancing, SSL termination, caching, compression, and security by hiding backend server details. Examples include Nginx and HAProxy. It differs from a forward proxy which serves client requests."
+  },
+  {
+    "id": 31,
+    "prompt": "What is batch normalization?",
+    "completion": "Batch normalization normalizes layer inputs by adjusting and scaling activations within a mini-batch. It reduces internal covariate shift, allowing higher learning rates, faster training, and acting as regularization. The technique calculates mean and variance for each batch and normalizes using learnable scale and shift parameters."
+  },
+  {
+    "id": 32,
+    "prompt": "Explain the difference between horizontal and vertical scaling.",
+    "completion": "Vertical scaling (scaling up) adds more resources (CPU, RAM) to a single server, increasing its capacity. Horizontal scaling (scaling out) adds more servers to distribute the load. Horizontal scaling offers better fault tolerance and unlimited scalability but requires load balancing and distributed system design."
+  },
+  {
+    "id": 33,
+    "prompt": "What is a recurrent neural network (RNN)?",
+    "completion": "An RNN is a neural network architecture designed for sequential data. It has connections that loop back, allowing information to persist across time steps. Each hidden state depends on the current input and previous hidden state. RNNs are used for time series, text, and speech, but suffer from vanishing gradients for long sequences."
+  },
+  {
+    "id": 34,
+    "prompt": "What is the difference between authentication and authorization?",
+    "completion": "Authentication verifies who you are (identity verification), typically through credentials like username/password, tokens, or biometrics. Authorization determines what you're allowed to do (access control), defining permissions and privileges after authentication. Example: logging in is authentication; accessing admin features is authorization."
+  },
+  {
+    "id": 35,
+    "prompt": "Explain what a message queue is.",
+    "completion": "A message queue is a form of asynchronous service-to-service communication used in distributed systems. Producers send messages to a queue, and consumers retrieve and process them. This decouples services, enables load leveling, provides fault tolerance, and handles traffic spikes. Examples include RabbitMQ, Apache Kafka, and AWS SQS."
+  },
+  {
+    "id": 36,
+    "prompt": "What is dropout in neural networks?",
+    "completion": "Dropout is a regularization technique that randomly deactivates a percentage of neurons during training. Each training iteration uses a different subset of the network, preventing co-adaptation and reducing overfitting. At inference, all neurons are active but outputs are scaled. Typical dropout rates are 0.2-0.5."
+  },
+  {
+    "id": 37,
+    "prompt": "What is the difference between GET and POST HTTP methods?",
+    "completion": "GET requests retrieve data from a server, with parameters in the URL. They're idempotent, cacheable, and shouldn't modify server state. POST requests send data in the request body to create/update resources. They're not idempotent or cached by default, and can handle larger data payloads. GET is for retrieval, POST for submission."
+  },
+  {
+    "id": 38,
+    "prompt": "Explain what a learning rate is in machine learning.",
+    "completion": "The learning rate is a hyperparameter controlling how much model weights are adjusted during training. It determines the step size in gradient descent. Too high causes instability and overshooting minima; too low results in slow convergence. Typical values range from 0.001 to 0.1. Techniques like learning rate scheduling can optimize training."
+  },
+  {
+    "id": 39,
+    "prompt": "What is Infrastructure as Code (IaC)?",
+    "completion": "IaC manages and provisions infrastructure through code rather than manual processes. Tools like Terraform, CloudFormation, and Ansible define infrastructure in declarative or imperative files. Benefits include version control, reproducibility, automation, reduced human error, and faster deployment. IaC treats infrastructure with the same rigor as application code."
+  },
+  {
+    "id": 40,
+    "prompt": "What is an encoder-decoder architecture?",
+    "completion": "An encoder-decoder architecture consists of two components: an encoder that processes input and creates a compressed representation (context vector), and a decoder that generates output from this representation. Common in sequence-to-sequence tasks like machine translation, the encoder captures input meaning while the decoder produces the target sequence."
+  },
+  {
+    "id": 41,
+    "prompt": "Explain what caching is and why it's important.",
+    "completion": "Caching stores frequently accessed data in a fast-access layer (memory) to reduce retrieval time and backend load. It improves application performance, reduces latency, lowers database queries, and decreases costs. Common strategies include time-based expiration, LRU eviction, and write-through/write-back policies. Examples: Redis, Memcached, CDN caching."
+  },
+  {
+    "id": 42,
+    "prompt": "What is the difference between supervised and reinforcement learning?",
+    "completion": "Supervised learning uses labeled input-output pairs to train models, with a clear correct answer for each input. Reinforcement learning trains agents through interaction with an environment, receiving rewards or penalties for actions. RL learns optimal policies through trial and error without explicit labels, suitable for sequential decision-making tasks."
+  },
+  {
+    "id": 43,
+    "prompt": "What is a service mesh?",
+    "completion": "A service mesh is an infrastructure layer managing service-to-service communication in microservices architectures. It handles traffic management, security, observability, and reliability through sidecar proxies deployed alongside services. Examples like Istio and Linkerd provide features like load balancing, circuit breaking, mutual TLS, and distributed tracing."
+  },
+  {
+    "id": 44,
+    "prompt": "Explain what embeddings are in NLP.",
+    "completion": "Embeddings are dense vector representations of words, sentences, or documents in a continuous vector space. They capture semantic relationships where similar items have similar vectors. Word embeddings like Word2Vec and GloVe map words to vectors; contextual embeddings like BERT generate dynamic representations based on context. Embeddings enable neural networks to process text effectively."
+  },
+  {
+    "id": 45,
+    "prompt": "What is the difference between LSTM and GRU?",
+    "completion": "LSTM (Long Short-Term Memory) and GRU (Gated Recurrent Unit) are RNN variants addressing vanishing gradients. LSTM has three gates (input, forget, output) and a cell state, offering more control but more parameters. GRU has two gates (reset, update) and is simpler with fewer parameters. GRU trains faster; LSTM may perform better on complex tasks."
+  },
+  {
+    "id": 46,
+    "prompt": "What is blue-green deployment?",
+    "completion": "Blue-green deployment runs two identical production environments: blue (current version) and green (new version). Traffic is routed to blue while green is updated. After testing green, traffic switches instantly. If issues arise, you can quickly rollback to blue. This strategy minimizes downtime and risk during deployments."
+  },
+  {
+    "id": 47,
+    "prompt": "Explain what a discriminator is in GANs.",
+    "completion": "In Generative Adversarial Networks (GANs), the discriminator is a neural network that distinguishes real data from fake data generated by the generator. It outputs a probability that an input is real. The discriminator and generator engage in adversarial training: the discriminator learns to detect fakes while the generator improves at creating realistic samples."
+  },
+  {
+    "id": 48,
+    "prompt": "What is the purpose of a namespace in Kubernetes?",
+    "completion": "Namespaces in Kubernetes provide virtual clusters within a physical cluster, enabling resource isolation and organization. They allow multiple teams to share a cluster while keeping resources separate, apply resource quotas, and manage access controls. Common namespaces include default, kube-system, and kube-public."
+  },
+  {
+    "id": 49,
+    "prompt": "What is the difference between L1 and L2 regularization?",
+    "completion": "L1 regularization (Lasso) adds the absolute value of coefficients to the loss function, encouraging sparsity by driving some weights to exactly zero, performing feature selection. L2 regularization (Ridge) adds the squared value of coefficients, penalizing large weights but keeping all features. L1 is useful for feature selection; L2 generally performs better for prediction."
+  },
+  {
+    "id": 50,
+    "prompt": "Explain what tokenization is in NLP.",
+    "completion": "Tokenization is the process of breaking text into smaller units called tokens (words, subwords, or characters). It's the first step in NLP processing. Methods include whitespace splitting, WordPiece, Byte-Pair Encoding (BPE), and SentencePiece. Tokenization handles unknown words, reduces vocabulary size, and prepares text for model input."
+  },
+  {
+    "id": 51,
+    "prompt": "What is a confusion matrix?",
+    "completion": "A confusion matrix is a table showing the performance of a classification model. It displays true positives, true negatives, false positives, and false negatives. From it, you can calculate metrics like accuracy, precision, recall, and F1-score. It's particularly useful for understanding model errors and class-specific performance in multi-class problems."
+  },
+  {
+    "id": 52,
+    "prompt": "What is the difference between Docker and Kubernetes?",
+    "completion": "Docker is a containerization platform that packages applications and dependencies into containers. Kubernetes is a container orchestration system that manages, scales, and deploys containers across clusters. Docker creates containers; Kubernetes orchestrates them. You can use Docker to build containers and Kubernetes to run them at scale."
+  },
+  {
+    "id": 53,
+    "prompt": "Explain what cross-validation is.",
+    "completion": "Cross-validation is a technique for assessing model performance by dividing data into k folds. The model trains on k-1 folds and tests on the remaining fold, repeating k times. Results are averaged to get robust performance estimates. K-fold cross-validation reduces overfitting to a particular train-test split and maximizes data usage."
+  },
+  {
+    "id": 54,
+    "prompt": "What is a pod in Kubernetes?",
+    "completion": "A pod is the smallest deployable unit in Kubernetes, representing one or more containers that share network and storage. Containers in a pod are scheduled together on the same node and can communicate via localhost. Pods are ephemeral; when they die, they're replaced with new instances. They're typically managed by higher-level controllers like Deployments."
+  },
+  {
+    "id": 55,
+    "prompt": "What is the difference between accuracy and precision?",
+    "completion": "Accuracy measures the proportion of correct predictions (TP+TN)/(TP+TN+FP+FN). Precision measures the proportion of true positives among positive predictions: TP/(TP+FP). Accuracy shows overall correctness; precision indicates reliability of positive predictions. In imbalanced datasets, high accuracy can be misleading, making precision and recall more informative."
+  },
+  {
+    "id": 56,
+    "prompt": "Explain what fine-tuning is in deep learning.",
+    "completion": "Fine-tuning adapts a pre-trained model to a specific task by continuing training on task-specific data. Typically, early layers (general features) are frozen or trained with lower learning rates, while later layers are updated more. This leverages learned representations while adapting to new domains, requiring less data and computation than training from scratch."
+  },
+  {
+    "id": 57,
+    "prompt": "What is the purpose of Docker networking?",
+    "completion": "Docker networking enables containers to communicate with each other and external networks. Docker provides network drivers including bridge (default, isolated network), host (share host networking), overlay (multi-host communication), and none (no networking). Networks enable service discovery, isolation, and secure communication between containers."
+  },
+  {
+    "id": 58,
+    "prompt": "What is beam search in sequence generation?",
+    "completion": "Beam search is a heuristic search algorithm for sequence generation that explores multiple hypotheses simultaneously. Instead of greedily selecting the top token, it maintains k best candidates (beam width) at each step, expanding and pruning based on cumulative probability. It balances exploration and exploitation, often producing better results than greedy decoding."
+  },
+  {
+    "id": 59,
+    "prompt": "Explain what a deployment in Kubernetes is.",
+    "completion": "A Deployment in Kubernetes is a controller that manages ReplicaSets to maintain a desired number of pod replicas. It enables declarative updates, rolling updates, rollbacks, scaling, and ensures high availability. Deployments automatically create and manage ReplicaSets, handling pod lifecycle and maintaining the specified state."
+  },
+  {
+    "id": 60,
+    "prompt": "What is the difference between recall and F1-score?",
+    "completion": "Recall (sensitivity) measures the proportion of actual positives correctly identified: TP/(TP+FN). F1-score is the harmonic mean of precision and recall: 2*(precision*recall)/(precision+recall). Recall focuses on minimizing false negatives; F1-score balances precision and recall, useful when you need a single metric considering both."
+  },
+  {
+    "id": 61,
+    "prompt": "What is model quantization?",
+    "completion": "Quantization reduces model size and inference time by converting weights and activations from floating-point to lower-precision formats (e.g., int8). This decreases memory footprint and speeds up computation with minimal accuracy loss. Techniques include post-training quantization and quantization-aware training. It's essential for deploying models on edge devices."
+  },
+  {
+    "id": 62,
+    "prompt": "Explain what a StatefulSet is in Kubernetes.",
+    "completion": "A StatefulSet manages stateful applications requiring stable network identities, persistent storage, and ordered deployment/scaling. Unlike Deployments, StatefulSets maintain pod identity across rescheduling, provide ordered startup/shutdown, and use persistent volume claims. They're ideal for databases, distributed systems, and applications requiring stable hostnames."
+  },
+  {
+    "id": 63,
+    "prompt": "What is the purpose of batch size in training neural networks?",
+    "completion": "Batch size determines how many samples are processed before updating model weights. Larger batches provide more stable gradients and better GPU utilization but require more memory and may converge to sharper minima. Smaller batches add noise, improving generalization but with less stable updates. Typical values: 16-512, depending on task and hardware."
+  },
+  {
+    "id": 64,
+    "prompt": "What is a ConfigMap in Kubernetes?",
+    "completion": "A ConfigMap stores non-sensitive configuration data as key-value pairs, separate from container images. It allows you to externalize configuration, making applications portable across environments. ConfigMaps can be consumed as environment variables, command-line arguments, or configuration files in volumes. They complement Secrets for sensitive data."
+  },
+  {
+    "id": 65,
+    "prompt": "Explain what data augmentation is.",
+    "completion": "Data augmentation artificially expands training datasets by applying transformations that preserve labels. For images: rotation, flipping, cropping, color jittering. For text: synonym replacement, back-translation. This improves model generalization, reduces overfitting, and increases robustness. It's especially valuable when labeled data is limited."
+  },
+  {
+    "id": 66,
+    "prompt": "What is the difference between epoch and iteration in training?",
+    "completion": "An epoch is one complete pass through the entire training dataset. An iteration is one batch processed and one weight update performed. Number of iterations per epoch = dataset_size / batch_size. For example, with 1000 samples and batch size 100, one epoch contains 10 iterations."
+  },
+  {
+    "id": 67,
+    "prompt": "What is a Kubernetes Service?",
+    "completion": "A Service in Kubernetes is an abstraction that defines a logical set of pods and a policy to access them. It provides stable networking and load balancing, as pod IPs are ephemeral. Service types include ClusterIP (internal), NodePort (external via node port), LoadBalancer (cloud load balancer), and ExternalName (DNS)."
+  },
+  {
+    "id": 68,
+    "prompt": "Explain what temperature is in language model sampling.",
+    "completion": "Temperature is a parameter controlling randomness in sampling. It scales logits before applying softmax: higher temperature (>1) increases randomness and diversity, making output more creative; lower temperature (<1) makes output more deterministic and focused on high-probability tokens. Temperature of 1 preserves original probability distribution; 0 is equivalent to greedy decoding."
+  },
+  {
+    "id": 69,
+    "prompt": "What is early stopping in machine learning?",
+    "completion": "Early stopping halts training when validation performance stops improving, preventing overfitting. Monitor validation loss; if it doesn't improve for a specified number of epochs (patience), stop training and restore the best model. This saves computation and finds the optimal point before the model starts overfitting to training data."
+  },
+  {
+    "id": 70,
+    "prompt": "What is a DaemonSet in Kubernetes?",
+    "completion": "A DaemonSet ensures a copy of a pod runs on all (or selected) nodes in a cluster. As nodes are added, pods are automatically added to them. When nodes are removed, those pods are garbage collected. DaemonSets are used for node-level services like log collectors, monitoring agents, and network plugins."
+  },
+  {
+    "id": 71,
+    "prompt": "Explain what model distillation is.",
+    "completion": "Knowledge distillation trains a smaller student model to mimic a larger teacher model. The student learns from the teacher's soft predictions (probabilities) rather than just hard labels, capturing richer information. This compresses models while retaining performance, enabling deployment on resource-constrained devices. Temperature scaling of teacher outputs helps transfer knowledge."
+  },
+  {
+    "id": 72,
+    "prompt": "What is the difference between parameters and hyperparameters?",
+    "completion": "Parameters are learned from data during training (e.g., weights, biases in neural networks). Hyperparameters are set before training and control the learning process (e.g., learning rate, batch size, number of layers, regularization strength). Hyperparameters are tuned through experimentation; parameters are optimized by the training algorithm."
+  },
+  {
+    "id": 73,
+    "prompt": "What is a Secret in Kubernetes?",
+    "completion": "Secrets store sensitive information like passwords, tokens, and SSH keys. They're similar to ConfigMaps but specifically for confidential data. Secrets can be base64-encoded and encrypted at rest. They're consumed as environment variables or mounted as files. Best practice: use external secret management systems for production environments."
+  },
+  {
+    "id": 74,
+    "prompt": "Explain what residual connections are in neural networks.",
+    "completion": "Residual connections (skip connections) add the input of a layer to its output, creating shortcuts that allow gradients to flow directly through the network. Introduced in ResNets, they address vanishing gradients in deep networks, enabling training of very deep architectures. The connection performs: output = F(x) + x, where F is the layer transformation."
+  },
+  {
+    "id": 75,
+    "prompt": "What is a Persistent Volume in Kubernetes?",
+    "completion": "A Persistent Volume (PV) is a piece of storage in a cluster provisioned by an administrator or dynamically using Storage Classes. A PersistentVolumeClaim (PVC) is a user's request for storage. PVs have a lifecycle independent of pods, ensuring data persists beyond pod lifetime. They support various backends: NFS, cloud storage, local disks."
+  },
+  {
+    "id": 76,
+    "prompt": "What is the purpose of activation functions in neural networks?",
+    "completion": "Activation functions introduce non-linearity, enabling neural networks to learn complex patterns. Without them, multiple layers would collapse to a linear transformation. Common functions: ReLU (max(0,x)), Sigmoid (1/(1+e^-x)), Tanh, Leaky ReLU. ReLU is most popular for hidden layers; sigmoid/softmax for output layers in classification."
+  },
+  {
+    "id": 77,
+    "prompt": "Explain what a Helm chart is.",
+    "completion": "Helm is a package manager for Kubernetes. A Helm chart is a collection of files describing Kubernetes resources. Charts enable templating, versioning, and dependency management for Kubernetes applications. They contain Chart.yaml (metadata), values.yaml (configuration), and templates directory. Helm simplifies deploying and managing complex applications."
+  },
+  {
+    "id": 78,
+    "prompt": "What is gradient clipping?",
+    "completion": "Gradient clipping prevents exploding gradients by limiting the magnitude of gradients during backpropagation. If the gradient norm exceeds a threshold, it's scaled down. This stabilizes training, especially in RNNs and deep networks. Methods include clipping by value (element-wise) or by norm (scaling entire gradient vector)."
+  },
+  {
+    "id": 79,
+    "prompt": "What is an Ingress in Kubernetes?",
+    "completion": "Ingress manages external HTTP/HTTPS access to services in a cluster. It provides load balancing, SSL termination, and name-based virtual hosting. An Ingress controller (like Nginx, Traefik) implements the Ingress rules. Ingress enables routing to multiple services through a single entry point, reducing the need for multiple LoadBalancers."
+  },
+  {
+    "id": 80,
+    "prompt": "Explain what positional encoding is in transformers.",
+    "completion": "Positional encoding adds information about token positions to input embeddings, as transformers lack inherent sequence order. Sinusoidal functions of different frequencies encode positions: PE(pos, 2i) = sin(pos/10000^(2i/d)), PE(pos, 2i+1) = cos(pos/10000^(2i/d)). This allows the model to understand token order without recurrence."
+  },
+  {
+    "id": 81,
+    "prompt": "What is the difference between mini-batch and stochastic gradient descent?",
+    "completion": "Stochastic Gradient Descent (SGD) updates weights after each sample, providing noisy but frequent updates. Mini-batch GD updates after a small batch of samples, balancing noise and computational efficiency. Batch GD uses the entire dataset per update. Mini-batch (16-512 samples) is most common, offering stable gradients and efficient GPU utilization."
+  },
+  {
+    "id": 82,
+    "prompt": "What is a rolling update in Kubernetes?",
+    "completion": "A rolling update gradually replaces old pod instances with new ones, ensuring zero downtime. Kubernetes creates new pods with updated specifications before terminating old ones. You can control the update rate with maxSurge (extra pods) and maxUnavailable (pods down). If issues occur, you can pause or rollback the update."
+  },
+  {
+    "id": 83,
+    "prompt": "Explain what the vanishing gradient problem is.",
+    "completion": "The vanishing gradient problem occurs when gradients become extremely small during backpropagation through deep networks, preventing weight updates in early layers. This happens with activation functions like sigmoid/tanh that squash inputs. Solutions include ReLU activations, residual connections, batch normalization, and LSTM/GRU for recurrent networks."
+  },
+  {
+    "id": 84,
+    "prompt": "What is label smoothing?",
+    "completion": "Label smoothing is a regularization technique that replaces hard labels (0 or 1) with soft labels (e.g., 0.1 or 0.9). Instead of absolute certainty, it assigns a small probability to incorrect classes. This prevents overconfidence, improves calibration, and acts as regularization. Typical smoothing: ε=0.1, so labels become (1-ε) for correct class."
+  },
+  {
+    "id": 85,
+    "prompt": "What is a readiness probe in Kubernetes?",
+    "completion": "A readiness probe determines if a container is ready to accept traffic. Kubernetes removes pods failing readiness checks from service endpoints. This prevents routing to pods that are starting up or experiencing temporary issues. Probes can be HTTP requests, TCP connections, or command executions. They differ from liveness probes, which restart unhealthy containers."
+  },
+  {
+    "id": 86,
+    "prompt": "Explain what sequence-to-sequence models are.",
+    "completion": "Sequence-to-sequence (seq2seq) models map input sequences to output sequences of potentially different lengths. They consist of an encoder (processes input) and decoder (generates output). Common in machine translation, text summarization, and chatbots. Modern implementations use attention mechanisms or transformers to handle long sequences and capture dependencies."
+  },
+  {
+    "id": 87,
+    "prompt": "What is the purpose of a liveness probe in Kubernetes?",
+    "completion": "A liveness probe determines if a container is running properly. If the probe fails, Kubernetes kills and restarts the container. This handles cases where the application is running but deadlocked or unresponsive. Probes can check HTTP endpoints, TCP sockets, or execute commands. Use carefully to avoid restart loops."
+  },
+  {
+    "id": 88,
+    "prompt": "What is the difference between softmax and sigmoid?",
+    "completion": "Sigmoid outputs values between 0 and 1 independently for each class, suitable for multi-label classification where multiple classes can be true. Softmax converts logits into a probability distribution summing to 1, used for multi-class classification where exactly one class is correct. Sigmoid: σ(x)=1/(1+e^-x); Softmax: e^xi/Σe^xj."
+  },
+  {
+    "id": 89,
+    "prompt": "What is a HorizontalPodAutoscaler in Kubernetes?",
+    "completion": "HorizontalPodAutoscaler (HPA) automatically scales the number of pods based on observed metrics like CPU, memory, or custom metrics. It adjusts replica count to maintain target metric values. HPA queries the metrics server, compares current vs. target metrics, and scales up/down accordingly. This ensures efficient resource usage and handles varying loads."
+  },
+  {
+    "id": 90,
+    "prompt": "Explain what mixed precision training is.",
+    "completion": "Mixed precision training uses both 16-bit (FP16/BF16) and 32-bit (FP32) floating-point types to accelerate training while maintaining accuracy. Computations use FP16 for speed and memory efficiency; gradients are scaled to prevent underflow; master weights remain in FP32 for precision. This can reduce training time by 2-3x on modern GPUs."
+  },
+  {
+    "id": 91,
+    "prompt": "What is the purpose of a Resource Quota in Kubernetes?",
+    "completion": "Resource Quotas limit aggregate resource consumption per namespace. They restrict the total amount of CPU, memory, storage, and number of objects (pods, services) that can be created. Quotas prevent resource monopolization, enable multi-tenancy, and enforce usage limits. Combined with LimitRanges, they provide fine-grained resource management."
+  },
+  {
+    "id": 92,
+    "prompt": "What is teacher forcing in sequence generation?",
+    "completion": "Teacher forcing uses ground truth from the previous time step as input to the next step during training, rather than the model's own predictions. This speeds up training and provides stable gradients. However, it can cause exposure bias where the model never learns to correct its own mistakes, as it never sees them during training."
+  },
+  {
+    "id": 93,
+    "prompt": "Explain what a Network Policy is in Kubernetes.",
+    "completion": "Network Policies are specifications for controlling traffic flow between pods and network endpoints. They define ingress (incoming) and egress (outgoing) rules based on pod selectors, namespaces, and IP blocks. Network Policies require a compatible network plugin (Calico, Cilium) to enforce rules. They provide micro-segmentation and security isolation."
+  },
+  {
+    "id": 94,
+    "prompt": "What is curriculum learning?",
+    "completion": "Curriculum learning trains models by presenting examples in a meaningful order, from easy to hard, mimicking human learning. Starting with simpler examples helps the model build foundational knowledge before tackling complex cases. This can improve convergence, final performance, and training stability. The curriculum can be predefined or adaptive based on model performance."
+  },
+  {
+    "id": 95,
+    "prompt": "What is a Custom Resource Definition (CRD) in Kubernetes?",
+    "completion": "CRDs extend Kubernetes API by allowing you to define custom resources and controllers. They enable creating new object types specific to your application, managed like native Kubernetes resources. CRDs consist of a definition (schema) and typically a controller implementing the desired behavior. They're fundamental to operators and custom automation."
+  },
+  {
+    "id": 96,
+    "prompt": "Explain what multi-task learning is.",
+    "completion": "Multi-task learning trains a single model on multiple related tasks simultaneously, sharing representations across tasks. Tasks share some layers while having task-specific heads. This improves generalization through inductive transfer, reduces overfitting, and is more efficient than training separate models. Tasks should be related for optimal benefit; conflicting tasks can hurt performance."
+  },
+  {
+    "id": 97,
+    "prompt": "What is a Kubernetes Operator?",
+    "completion": "An Operator is a method of packaging, deploying, and managing Kubernetes applications using custom resources and controllers. It encodes operational knowledge, automating tasks like upgrades, backups, and scaling. Operators watch custom resources and reconcile actual state with desired state. They extend Kubernetes to manage complex, stateful applications like databases."
+  },
+  {
+    "id": 98,
+    "prompt": "What is the purpose of layer normalization?",
+    "completion": "Layer normalization normalizes inputs across features for each sample independently, computing mean and variance over the feature dimension. Unlike batch normalization (across batch), it's effective for RNNs and transformers, works with varying batch sizes, and doesn't depend on batch statistics. It stabilizes training and accelerates convergence."
+  },
+  {
+    "id": 99,
+    "prompt": "Explain what a Kubernetes Job is.",
+    "completion": "A Job creates one or more pods and ensures a specified number successfully complete. Jobs are used for batch processing, data processing pipelines, or one-time tasks. They retry failed pods, track completions, and clean up after completion. CronJobs extend Jobs to run on schedules, similar to cron tasks."
+  },
+  {
+    "id": 100,
+    "prompt": "What is perplexity in language modeling?",
+    "completion": "Perplexity measures how well a language model predicts a sample. It's the exponentiation of the average negative log-likelihood: PPL = exp(-1/N * Σlog P(wi)). Lower perplexity indicates better prediction. A perplexity of k means the model is as uncertain as if choosing uniformly from k possibilities. It's widely used for evaluating language models."
+  },
+  {
+    "id": 101,
+    "prompt": "What is model pruning?",
+    "completion": "Pruning removes unnecessary weights or neurons from neural networks to reduce model size and computation. Techniques include magnitude-based pruning (removing small weights), structured pruning (removing entire channels/layers), and iterative pruning with fine-tuning. Pruning can reduce model size by 90%+ with minimal accuracy loss, enabling deployment on resource-constrained devices."
+  },
+  {
+    "id": 102,
+    "prompt": "What is a taint in Kubernetes?",
+    "completion": "Taints are applied to nodes to repel pods unless they have matching tolerations. They consist of key, value, and effect (NoSchedule, PreferNoSchedule, NoExecute). Taints enable dedicating nodes to specific workloads, isolating workloads, or evicting pods from nodes. Pods specify tolerations to overcome taints and schedule on tainted nodes."
+  },
+  {
+    "id": 103,
+    "prompt": "Explain what self-supervised learning is.",
+    "completion": "Self-supervised learning creates supervision from the data itself without manual labels. It generates pretext tasks from unlabeled data (e.g., predicting masked words, next sentence, image rotations). The model learns useful representations through these tasks, which transfer to downstream supervised tasks. It's powerful for leveraging large unlabeled datasets."
+  },
+  {
+    "id": 104,
+    "prompt": "What is a PodDisruptionBudget in Kubernetes?",
+    "completion": "PodDisruptionBudget (PDB) limits the number of pods that can be voluntarily disrupted (e.g., during node drains, upgrades). It specifies minAvailable or maxUnavailable pods, ensuring availability during maintenance. PDBs apply only to voluntary disruptions, not pod failures. They're essential for maintaining service availability during cluster operations."
+  },
+  {
+    "id": 105,
+    "prompt": "What is the difference between zero-shot and few-shot learning?",
+    "completion": "Zero-shot learning performs tasks without any task-specific training examples, relying on pre-trained knowledge and natural language instructions. Few-shot learning uses a small number of examples (typically 1-10) to adapt to new tasks. Both leverage pre-trained models; zero-shot requires stronger generalization, while few-shot benefits from in-context learning or rapid adaptation."
+  },
+  {
+    "id": 106,
+    "prompt": "What is an affinity rule in Kubernetes?",
+    "completion": "Affinity rules influence pod scheduling based on labels. Node affinity schedules pods to specific nodes (similar to nodeSelector but more expressive). Pod affinity/anti-affinity schedules pods near or away from other pods, useful for co-locating or separating services. Rules can be required (hard) or preferred (soft), offering flexibility in scheduling constraints."
+  },
+  {
+    "id": 107,
+    "prompt": "Explain what contrastive learning is.",
+    "completion": "Contrastive learning learns representations by contrasting similar (positive) and dissimilar (negative) pairs. The model pulls positive pairs closer and pushes negative pairs apart in embedding space. Common in self-supervised learning (SimCLR, MoCo), it learns meaningful features without labels. Positive pairs might be augmented versions of the same image; negatives are different samples."
+  },
+  {
+    "id": 108,
+    "prompt": "What is a ServiceAccount in Kubernetes?",
+    "completion": "ServiceAccounts provide identity for processes running in pods. Each namespace has a default ServiceAccount, and you can create custom ones. They're used with RBAC to control pod permissions for accessing the Kubernetes API. ServiceAccounts receive an API token mounted as a secret, enabling authenticated API requests from within pods."
+  },
+  {
+    "id": 109,
+    "prompt": "What is knowledge graph embedding?",
+    "completion": "Knowledge graph embeddings map entities and relations from knowledge graphs into continuous vector spaces, preserving graph structure. Techniques like TransE, DistMult, and ComplEx learn embeddings where operations represent relations. These embeddings enable link prediction, entity classification, and question answering. They're crucial for reasoning over large-scale knowledge bases."
+  },
+  {
+    "id": 110,
+    "prompt": "Explain what a LimitRange is in Kubernetes.",
+    "completion": "LimitRange constrains resource allocation per pod or container in a namespace. It sets default, minimum, and maximum CPU/memory requests and limits. LimitRanges prevent resource monopolization by single pods, ensure pods specify resources, and provide defaults when not specified. They work alongside ResourceQuotas for comprehensive resource management."
+  },
+  {
+    "id": 111,
+    "prompt": "What is the difference between online and offline learning?",
+    "completion": "Online learning updates models incrementally as new data arrives, adapting continuously to changing patterns. It's suitable for streaming data and real-time applications. Offline (batch) learning trains on the entire dataset at once, requiring retraining for updates. Online learning is adaptive but can be unstable; offline learning is stable but less flexible."
+  },
+  {
+    "id": 112,
+    "prompt": "What is admission control in Kubernetes?",
+    "completion": "Admission controllers intercept API requests before persisting objects, enforcing policies and modifying resources. They validate or mutate requests. Built-in controllers include NamespaceLifecycle, ResourceQuota, PodSecurityPolicy. ValidatingWebhooks and MutatingWebhooks enable custom admission logic. Admission control provides governance, security, and automated configuration management."
+  },
+  {
+    "id": 113,
+    "prompt": "Explain what catastrophic forgetting is.",
+    "completion": "Catastrophic forgetting occurs when neural networks trained sequentially on multiple tasks forget previously learned tasks when learning new ones. New task optimization overwrites weights important for old tasks. Solutions include rehearsal (replaying old data), elastic weight consolidation (protecting important weights), and progressive neural networks (adding capacity for new tasks)."
+  },
+  {
+    "id": 114,
+    "prompt": "What is a container runtime in Kubernetes?",
+    "completion": "Container runtime is the software responsible for running containers. Kubernetes supports runtimes implementing the Container Runtime Interface (CRI). Common runtimes include containerd, CRI-O, and Docker (via dockershim, deprecated). The runtime pulls images, creates containers, manages container lifecycle, and provides isolation. It's the lowest layer in the Kubernetes stack."
+  },
+  {
+    "id": 115,
+    "prompt": "What is adversarial training?",
+    "completion": "Adversarial training improves model robustness by augmenting training data with adversarial examples—inputs crafted to cause misclassification. The model learns to correctly classify both clean and adversarial samples. This defense against adversarial attacks also acts as regularization, improving generalization. Techniques include FGSM, PGD, and certified defenses."
+  },
+  {
+    "id": 116,
+    "prompt": "Explain what etcd is in Kubernetes.",
+    "completion": "etcd is a distributed key-value store used as Kubernetes' backing store for all cluster data. It stores cluster state, configuration, metadata, and secrets. etcd provides consistency, reliability, and watch capabilities. High availability requires running multiple etcd instances with proper backup strategies. It's critical infrastructure; etcd failure means cluster failure."
+  },
+  {
+    "id": 117,
+    "prompt": "What is neural architecture search (NAS)?",
+    "completion": "NAS automates the design of neural network architectures using algorithms to search the architecture space. Methods include reinforcement learning, evolutionary algorithms, and differentiable search. NAS has discovered state-of-the-art architectures like EfficientNet and NASNet. However, it's computationally expensive, often requiring thousands of GPU-hours."
+  },
+  {
+    "id": 118,
+    "prompt": "What is a Kubernetes controller?",
+    "completion": "Controllers are control loops that watch cluster state and make changes to move current state toward desired state. They run continuously, reconciling differences. Examples: Deployment controller manages ReplicaSets, ReplicaSet controller maintains pod replicas. Controllers enable declarative configuration and self-healing. Custom controllers extend Kubernetes functionality."
+  },
+  {
+    "id": 119,
+    "prompt": "Explain what ROUGE scores are.",
+    "completion": "ROUGE (Recall-Oriented Understudy for Gisting Evaluation) measures overlap between generated and reference summaries. ROUGE-N measures n-gram overlap; ROUGE-L measures longest common subsequence; ROUGE-W uses weighted LCS. Higher scores indicate better summaries. While useful, ROUGE has limitations: it doesn't capture semantics and may not correlate with human judgment."
+  },
+  {
+    "id": 120,
+    "prompt": "What is the control plane in Kubernetes?",
+    "completion": "The control plane manages the cluster, making global decisions and responding to events. Components include API server (frontend), etcd (state storage), scheduler (pod placement), and controller manager (runs controllers). The control plane maintains desired state, schedules workloads, and coordinates cluster operations. It runs on master nodes."
+  },
+  {
+    "id": 121,
+    "prompt": "What is meta-learning?",
+    "completion": "Meta-learning (learning to learn) trains models to quickly adapt to new tasks with minimal data. Instead of learning a specific task, models learn learning strategies applicable across tasks. Approaches include MAML (model-agnostic meta-learning), which finds initialization points enabling fast fine-tuning, and metric-based methods learning similarity metrics."
+  },
+  {
+    "id": 122,
+    "prompt": "What is the kubelet in Kubernetes?",
+    "completion": "The kubelet is an agent running on each node, responsible for ensuring containers are running in pods. It receives pod specifications from the API server, manages container lifecycle via the container runtime, reports node and pod status, and runs health checks. The kubelet is the primary node agent executing control plane instructions."
+  },
+  {
+    "id": 123,
+    "prompt": "Explain what BLEU score is.",
+    "completion": "BLEU (Bilingual Evaluation Understudy) measures machine translation quality by comparing n-gram overlap between generated and reference translations. It computes precision for n-grams (typically 1-4) and applies a brevity penalty for short outputs. Scores range 0-1 (or 0-100). While widely used, BLEU has limitations: it emphasizes precision, may miss semantic equivalence."
+  },
+  {
+    "id": 124,
+    "prompt": "What is kube-proxy in Kubernetes?",
+    "completion": "kube-proxy is a network proxy running on each node, implementing Kubernetes Service abstraction. It maintains network rules for service-to-pod communication, handles load balancing, and enables service discovery. It can use iptables, ipvs, or userspace modes. kube-proxy ensures traffic to service IPs reaches appropriate backend pods."
+  },
+  {
+    "id": 125,
+    "prompt": "What is prompt engineering?",
+    "completion": "Prompt engineering designs input prompts to effectively elicit desired outputs from language models. Techniques include few-shot examples, chain-of-thought prompting, instruction tuning, and role-playing. Good prompts are clear, specific, and provide context. Prompt engineering is crucial for leveraging LLMs without fine-tuning, maximizing performance through careful input design."
+  },
+  {
+    "id": 126,
+    "prompt": "Explain what a Kubernetes scheduler is.",
+    "completion": "The scheduler assigns newly created pods to nodes based on resource requirements, constraints, and policies. It considers factors like resource availability, affinity rules, taints/tolerations, and pod priorities. The scheduler makes optimal placement decisions to balance load and meet requirements. Custom schedulers can be implemented for specific needs."
+  },
+  {
+    "id": 127,
+    "prompt": "What is retrieval-augmented generation (RAG)?",
+    "completion": "RAG enhances language model generation by retrieving relevant documents from an external knowledge base and incorporating them into the generation context. A retriever finds relevant passages; a generator produces output conditioned on retrieved information. This grounds generation in factual knowledge, reduces hallucinations, and enables updating knowledge without retraining."
+  },
+  {
+    "id": 128,
+    "prompt": "What is a Kubernetes node?",
+    "completion": "A node is a worker machine (physical or virtual) in Kubernetes that runs containerized workloads. Each node contains the kubelet, kube-proxy, and container runtime. Nodes are managed by the control plane, which schedules pods on them. Node resources (CPU, memory) determine pod capacity. Nodes report status and can be cordoned or drained."
+  },
+  {
+    "id": 129,
+    "prompt": "Explain what chain-of-thought prompting is.",
+    "completion": "Chain-of-thought prompting encourages language models to generate intermediate reasoning steps before answering. By including examples showing step-by-step reasoning in the prompt, models learn to decompose complex problems. This improves performance on arithmetic, logical reasoning, and multi-step tasks. Few-shot CoT provides examples; zero-shot CoT uses prompts like 'Let's think step by step.'"
+  },
+  {
+    "id": 130,
+    "prompt": "What is a Kubernetes cluster?",
+    "completion": "A Kubernetes cluster is a set of machines (nodes) running containerized applications managed by Kubernetes. It consists of a control plane (managing cluster state) and worker nodes (running workloads). Clusters provide orchestration, scaling, self-healing, and load balancing. They can span multiple zones/regions for high availability."
+  },
+  {
+    "id": 131,
+    "prompt": "What is instruction tuning?",
+    "completion": "Instruction tuning fine-tunes language models on datasets of instructions and corresponding outputs. Models learn to follow diverse natural language instructions without task-specific training. This improves zero-shot and few-shot performance across tasks. Datasets like FLAN, InstructGPT use human-written or generated instruction-response pairs. Instruction tuning bridges pre-training and deployment."
+  },
+  {
+    "id": 132,
+    "prompt": "What is kubectl?",
+    "completion": "kubectl is the command-line interface for interacting with Kubernetes clusters. It communicates with the API server to create, inspect, update, and delete cluster resources. Common commands: kubectl get (list resources), kubectl apply (create/update from YAML), kubectl describe (detailed info), kubectl logs (view logs). It's the primary tool for cluster management."
+  },
+  {
+    "id": 133,
+    "prompt": "Explain what parameter-efficient fine-tuning (PEFT) is.",
+    "completion": "PEFT techniques fine-tune large models by updating only a small subset of parameters, reducing memory and computation. Methods include LoRA (low-rank adaptation), prefix tuning, and adapter layers. PEFT achieves comparable performance to full fine-tuning while training only 0.1-1% of parameters. This enables fine-tuning on consumer hardware and maintaining multiple task-specific models."
+  },
+  {
+    "id": 134,
+    "prompt": "What is a Kubernetes manifest?",
+    "completion": "A manifest is a YAML or JSON file describing Kubernetes resources (pods, services, deployments). It specifies the desired state declaratively, including metadata, specifications, and configurations. Manifests are applied using kubectl and stored in version control. They enable infrastructure-as-code, reproducibility, and GitOps workflows."
+  },
+  {
+    "id": 135,
+    "prompt": "What is reinforcement learning from human feedback (RLHF)?",
+    "completion": "RLHF aligns language models with human preferences by training a reward model on human feedback and using reinforcement learning to optimize the policy. Humans rank model outputs; a reward model learns to predict rankings; PPO or similar algorithms fine-tune the model to maximize reward. RLHF is key to ChatGPT's helpfulness and safety."
+  },
+  {
+    "id": 136,
+    "prompt": "What is a Kubernetes label?",
+    "completion": "Labels are key-value pairs attached to Kubernetes objects for identification and organization. They enable grouping, selecting, and filtering resources. Selectors use labels to target resources for operations. Labels are semantic, user-defined, and don't enforce uniqueness. Common uses: environment=production, app=nginx, tier=frontend."
+  },
+  {
+    "id": 137,
+    "prompt": "Explain what direct preference optimization (DPO) is.",
+    "completion": "DPO is an alignment method that directly optimizes language model policy using preference data, without training a separate reward model. It reformulates the RLHF objective into a classification problem on preference pairs, simplifying training and improving stability. DPO is more efficient than traditional RLHF while achieving similar alignment results."
+  },
+  {
+    "id": 138,
+    "prompt": "What is a Kubernetes annotation?",
+    "completion": "Annotations are key-value pairs attached to objects for storing non-identifying metadata. Unlike labels, they're not used for selection but for storing build info, timestamps, client libraries, or tool-specific data. They can contain larger values and structured data. Annotations provide context without affecting cluster operations."
+  },
+  {
+    "id": 139,
+    "prompt": "What is low-rank adaptation (LoRA)?",
+    "completion": "LoRA is a PEFT technique that freezes pre-trained weights and injects trainable low-rank matrices into transformer layers. It decomposes weight updates as ΔW = AB where A and B are low-rank. This drastically reduces trainable parameters (10-10,000x fewer) while maintaining performance. LoRA enables efficient fine-tuning and easy model switching."
+  },
+  {
+    "id": 140,
+    "prompt": "What is a Kubernetes namespace selector?",
+    "completion": "Namespace selectors filter resources based on namespace labels. They're used in Network Policies, PodDisruptionBudgets, and other resources to target namespaces matching label criteria. This enables cross-namespace policies and dynamic resource management based on namespace characteristics, supporting multi-tenancy and environment isolation."
+  },
+  {
+    "id": 141,
+    "prompt": "Explain what constitutional AI is.",
+    "completion": "Constitutional AI trains models to be helpful, harmless, and honest by using a constitution—a set of principles guiding behavior. Instead of relying solely on human feedback, the model critiques and revises its own outputs according to constitutional principles. This combines supervised learning and RLHF with self-improvement, improving scalability and consistency of alignment."
+  },
+  {
+    "id": 142,
+    "prompt": "What is a Kubernetes context?",
+    "completion": "A context in kubectl combines cluster, user, and namespace information into a named configuration. It determines which cluster kubectl commands target. Users can switch contexts to manage multiple clusters or namespaces. Contexts are defined in kubeconfig files (~/.kube/config) and managed with kubectl config commands."
+  },
+  {
+    "id": 143,
+    "prompt": "What is the difference between PPO and DPO?",
+    "completion": "PPO (Proximal Policy Optimization) is an RL algorithm used in RLHF that requires a trained reward model and iteratively updates the policy. DPO directly optimizes preferences without a reward model or RL, reformulating alignment as classification. DPO is simpler, more stable, and computationally cheaper, while PPO is more general and flexible for complex reward functions."
+  },
+  {
+    "id": 144,
+    "prompt": "What is a Kubernetes finalizer?",
+    "completion": "Finalizers are keys that tell Kubernetes to wait for specific conditions before deleting a resource. They prevent deletion until custom cleanup is completed. Controllers add finalizers, perform cleanup when deletion is requested, then remove the finalizer. This ensures proper resource cleanup, cascading deletions, and maintains data integrity."
+  },
+  {
+    "id": 145,
+    "prompt": "Explain what model merging is.",
+    "completion": "Model merging combines multiple fine-tuned models into a single model that retains capabilities from all sources. Techniques include weight averaging, task arithmetic (adding/subtracting weight differences), and TIES-merging. This enables multi-task models without retraining, combines specialized models, and can improve generalization. It's useful for efficient multi-capability systems."
+  },
+  {
+    "id": 146,
+    "prompt": "What is the Kubernetes API server?",
+    "completion": "The API server is the front end of the Kubernetes control plane, exposing the Kubernetes API. All operations go through it—kubectl, controllers, and other components. It validates and processes REST requests, updates etcd, and provides authentication, authorization, and admission control. The API server is stateless and horizontally scalable."
+  },
+  {
+    "id": 147,
+    "prompt": "What is speculative decoding?",
+    "completion": "Speculative decoding accelerates inference by using a small, fast draft model to generate candidate tokens, which a larger target model verifies in parallel. Accepted tokens are kept; rejected positions are re-generated by the target model. This reduces latency without changing output distribution, achieving 2-3x speedup for autoregressive generation."
+  },
+  {
+    "id": 148,
+    "prompt": "What is a Kubernetes controller manager?",
+    "completion": "The controller manager runs core controllers as a single process. It includes node controller (monitoring nodes), replication controller (maintaining pod counts), endpoints controller (populating service endpoints), and service account controller (creating default accounts). It watches cluster state and makes changes to match desired state."
+  },
+  {
+    "id": 149,
+    "prompt": "Explain what mixture of experts (MoE) is.",
+    "completion": "MoE is a neural architecture with multiple expert networks and a gating mechanism that routes inputs to relevant experts. Only a subset of experts process each input, enabling larger model capacity with constant computation. This improves parameter efficiency and specialization. Modern LLMs like GPT-4 and Mixtral use sparse MoE for scaling."
+  },
+  {
+    "id": 150,
+    "prompt": "What is init container in Kubernetes?",
+    "completion": "Init containers run before app containers in a pod, performing initialization tasks like waiting for services, downloading data, or setting up configurations. They run sequentially to completion. If an init container fails, Kubernetes restarts the pod. This separates initialization logic from application code, enabling reusable initialization patterns."
+  },
+  {
+    "id": 151,
+    "prompt": "What is flash attention?",
+    "completion": "Flash Attention is an optimized attention algorithm that reduces memory usage and speeds up transformer training/inference. It reorganizes attention computation to minimize memory reads/writes between GPU memory hierarchies (HBM and SRAM). Flash Attention achieves exact attention results while being 2-4x faster and using less memory, enabling longer context lengths."
+  },
+  {
+    "id": 152,
+    "prompt": "What is a sidecar container in Kubernetes?",
+    "completion": "A sidecar is a container running alongside the main application container in a pod, extending or enhancing its functionality. Common uses include logging agents, monitoring exporters, service mesh proxies, and configuration synchronization. Sidecars share the pod's network and storage, enabling tight integration while maintaining separation of concerns."
+  },
+  {
+    "id": 153,
+    "prompt": "Explain what grouped query attention (GQA) is.",
+    "completion": "GQA is an attention variant between multi-head attention (MHA) and multi-query attention (MQA). While MHA has separate key-value heads for each query head and MQA shares one key-value across all queries, GQA groups queries sharing key-value heads. This balances quality and efficiency, reducing KV cache size while maintaining performance better than MQA."
+  },
+  {
+    "id": 154,
+    "prompt": "What is a Kubernetes endpoint?",
+    "completion": "Endpoints represent the set of IP addresses and ports for pods backing a service. The endpoints controller automatically creates and updates Endpoints objects when pods matching a service selector change. Services use endpoints to route traffic. EndpointSlices provide a more scalable alternative for large-scale deployments."
+  },
+  {
+    "id": 155,
+    "prompt": "What is rotary position embedding (RoPE)?",
+    "completion": "RoPE encodes position information by rotating embeddings in complex space, enabling models to understand relative positions. It rotates query and key vectors by angles proportional to their positions, naturally encoding distance. RoPE offers better extrapolation to longer sequences than learned positional embeddings and is used in models like LLaMA and GPT-NeoX."
+  },
+  {
+    "id": 156,
+    "prompt": "What is a headless service in Kubernetes?",
+    "completion": "A headless service (ClusterIP: None) doesn't allocate a cluster IP or load balance. DNS returns pod IPs directly, enabling clients to discover and connect to individual pods. This is useful for stateful applications, databases, and when custom load balancing is needed. It provides service discovery without proxying."
+  },
+  {
+    "id": 157,
+    "prompt": "Explain what sliding window attention is.",
+    "completion": "Sliding window attention restricts each token to attend only to a fixed-size window of surrounding tokens, rather than the full sequence. This reduces computational complexity from O(n²) to O(n*w) where w is window size. It's used in models like Longformer and Mistral for efficient long-context processing while maintaining local context."
+  },
+  {
+    "id": 158,
+    "prompt": "What is a Kubernetes mutating webhook?",
+    "completion": "Mutating webhooks intercept API requests and can modify objects before they're persisted. They're part of admission control, enabling automatic injection of sidecars, setting defaults, adding labels, or enforcing policies. The webhook server receives admission review requests and returns patches. They enable dynamic, policy-driven configuration management."
+  },
+  {
+    "id": 159,
+    "prompt": "What is KV cache in transformer inference?",
+    "completion": "KV cache stores previously computed key and value tensors during autoregressive generation, avoiding redundant computation. Each new token only computes attention for itself using cached KV pairs from previous tokens. This dramatically speeds up generation but increases memory usage, especially for long sequences. Optimizations like multi-query attention reduce KV cache size."
+  },
+  {
+    "id": 160,
+    "prompt": "What is a validating webhook in Kubernetes?",
+    "completion": "Validating webhooks validate API requests according to custom logic, accepting or rejecting them. Unlike mutating webhooks, they don't modify objects. They enforce policies, check business rules, and prevent invalid configurations. The webhook receives admission review requests and returns allow/deny decisions with reasons. They provide extensible validation beyond built-in checks."
+  },
+  {
+    "id": 161,
+    "prompt": "Explain what continuous batching is in LLM inference.",
+    "completion": "Continuous batching dynamically adds/removes sequences from a batch as they complete, rather than waiting for all sequences to finish. This maximizes GPU utilization by continuously processing new requests. Systems like vLLM and Text Generation Inference use continuous batching to achieve higher throughput and lower latency than traditional static batching."
+  },
+  {
+    "id": 162,
+    "prompt": "What is a Kubernetes owner reference?",
+    "completion": "Owner references establish parent-child relationships between resources, enabling garbage collection. When an owner is deleted, dependent resources are automatically cleaned up (cascading deletion). Owner references contain API version, kind, name, and UID of the owner. This mechanism ensures proper cleanup of related resources and prevents orphaned objects."
+  },
+  {
+    "id": 163,
+    "prompt": "What is PagedAttention?",
+    "completion": "PagedAttention is a memory management technique for KV cache in LLM inference. It stores KV pairs in non-contiguous memory pages like virtual memory in operating systems, reducing fragmentation and enabling higher batch sizes. Used in vLLM, PagedAttention increases throughput by 2-4x compared to traditional contiguous memory allocation by better utilizing GPU memory."
+  },
+  {
+    "id": 164,
+    "prompt": "What is a lease in Kubernetes?",
+    "completion": "Leases are a coordination primitive for distributed systems, representing time-limited exclusive access. They're used for leader election in controllers and node heartbeats. A lease holder periodically renews the lease; if renewal stops, the lease expires and can be acquired by others. This enables high-availability and coordination without polling."
+  },
+  {
+    "id": 165,
+    "prompt": "Explain what tensor parallelism is.",
+    "completion": "Tensor parallelism partitions individual layers across multiple GPUs, splitting weight matrices and distributing computation. Each GPU computes a portion of the layer's output, requiring communication for aggregation. This enables training/inference of models larger than single-GPU memory. Megatron-LM popularized this technique, enabling efficient scaling of massive transformers."
+  },
+  {
+    "id": 166,
+    "prompt": "What is a field selector in Kubernetes?",
+    "completion": "Field selectors query resources based on field values (e.g., metadata.name, status.phase). Unlike label selectors which use user-defined labels, field selectors use actual resource fields. Example: kubectl get pods --field-selector=status.phase=Running. Support varies by resource type; not all fields are selectable for all resources."
+  },
+  {
+    "id": 167,
+    "prompt": "What is pipeline parallelism in deep learning?",
+    "completion": "Pipeline parallelism splits a model into stages across devices, with each stage processing different micro-batches simultaneously. Forward passes cascade through stages; gradients flow backward. This enables training models larger than single-device memory while maintaining high utilization. GPipe and PipeDream are notable implementations handling scheduling and gradient consistency."
+  },
+  {
+    "id": 168,
+    "prompt": "What is a garbage collection policy in Kubernetes?",
+    "completion": "Garbage collection automatically deletes dependent objects when owners are deleted. Policies include Foreground (dependents deleted before owner), Background (owner deleted immediately, dependents asynchronously), and Orphan (dependents remain). These policies control cascading deletion behavior, ensuring proper cleanup or preserving resources as needed."
+  },
+  {
+    "id": 169,
+    "prompt": "Explain what sequence parallelism is.",
+    "completion": "Sequence parallelism partitions the sequence dimension across devices during training. It complements tensor and pipeline parallelism, useful for extremely long sequences. Activations for different sequence chunks are computed on different GPUs, reducing per-device memory. Communication is required for operations needing full sequence (like layer norm). This enables training with context lengths beyond single-GPU capacity."
+  },
+  {
+    "id": 49,
+    "prompt": "What is the difference between L1 and L2 regularization?",
+    "completion": "L1 regularization (Lasso) adds the absolute value of coefficients to the loss function, encouraging sparsity by driving some weights to exactly zero, performing feature selection. L2 regularization (Ridge) adds the squared value of coefficients, penalizing large weights but keeping all features. L1 is useful for feature selection; L2 generally performs better for prediction."
+  }
+]

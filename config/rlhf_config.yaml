@@ -1,0 +1,375 @@
+# Reinforcement Learning from Human Feedback (RLHF) Configuration
+# This config defines parameters for PPO/DPO alignment training
+
+# ============================================================================
+# Model Configuration
+# ============================================================================
+model:
+  # Policy model (the model we're optimizing)
+  policy:
+    name: "/workspace/models/sft/checkpoint-final"  # SFT model path
+    cache_dir: "/workspace/models/sft"
+    precision: "fp16"
+    gradient_checkpointing: true
+  
+  # Reference model (frozen copy for KL penalty)
+  reference:
+    name: "/workspace/models/sft/checkpoint-final"  # Same as policy initially
+    cache_dir: "/workspace/models/sft"
+    frozen: true  # Don't update reference model
+  
+  # Reward model
+  reward:
+    name: "/workspace/models/reward/checkpoint-final"
+    cache_dir: "/workspace/models/reward"
+    frozen: true  # Reward model stays fixed
+  
+  # Value model (optional, for PPO)
+  value:
+    name: "/workspace/models/sft/checkpoint-final"  # Initialize from SFT
+    cache_dir: "/workspace/models/sft"
+
+# ============================================================================
+# Data Configuration
+# ============================================================================
+data:
+  # Prompts for RL training
+  prompt_file: "/workspace/data/prompts/rl_prompts.json"
+  
+  # Expected JSON format:
+  # {"prompt": "instruction/question here"}
+  prompt_key: "prompt"
+  
+  # Number of prompts to sample per batch
+  batch_size: 128
+  
+  # Maximum prompt length
+  max_prompt_length: 512
+  
+  # Maximum generation length
+  max_response_length: 1024
+  
+  # Data loading
+  num_proc: 8
+  shuffle: true
+
+# ============================================================================
+# RLHF Algorithm Configuration
+# ============================================================================
+algorithm:
+  # Algorithm type: "ppo" or "dpo"
+  type: "ppo"
+  
+  # PPO-specific parameters
+  ppo:
+    # Number of PPO epochs per batch
+    num_epochs: 4
+    
+    # Clip range for policy ratio
+    clip_range: 0.2
+    
+    # Clip range for value function
+    value_clip_range: 0.2
+    
+    # Coefficient for value loss
+    value_loss_coef: 0.1
+    
+    # Entropy bonus coefficient (encourages exploration)
+    entropy_coef: 0.01
+    
+    # GAE (Generalized Advantage Estimation) lambda
+    gae_lambda: 0.95
+    
+    # Discount factor
+    gamma: 0.99
+    
+    # Target KL divergence (from reference model)
+    target_kl: 0.1
+    
+    # KL penalty coefficient (adaptive)
+    kl_coef: 0.05
+    init_kl_coef: 0.05
+    
+    # Mini-batch size for PPO updates
+    mini_batch_size: 32
+  
+  # DPO-specific parameters (alternative to PPO)
+  dpo:
+    # Beta parameter for DPO loss
+    beta: 0.1
+    
+    # Label smoothing
+    label_smoothing: 0.0
+    
+    # Loss type: "sigmoid" or "hinge"
+    loss_type: "sigmoid"
+
+# ============================================================================
+# Generation Configuration
+# ============================================================================
+generation:
+  # Sampling parameters during RL rollouts
+  temperature: 0.7
+  top_p: 0.9
+  top_k: 50
+  
+  # Do sampling (vs greedy decoding)
+  do_sample: true
+  
+  # Number of sequences to generate per prompt
+  num_return_sequences: 1
+  
+  # Repetition penalty
+  repetition_penalty: 1.0
+  
+  # Length penalty
+  length_penalty: 1.0
+  
+  # Early stopping
+  early_stopping: false
+
+# ============================================================================
+# Training Configuration
+# ============================================================================
+training:
+  # Output directory
+  output_dir: "/workspace/models/aligned"
+  
+  # Total number of training steps
+  total_steps: 10000
+  
+  # Learning rate for policy
+  policy_learning_rate: 1.0e-6
+  
+  # Learning rate for value function
+  value_learning_rate: 5.0e-6
+  
+  # Learning rate scheduler
+  lr_scheduler_type: "cosine"
+  warmup_steps: 100
+  
+  # Optimizer
+  optimizer: "adamw"
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  
+  # Batch size per device
+  per_device_batch_size: 4
+  
+  # Gradient accumulation
+  gradient_accumulation_steps: 8
+  
+  # Evaluation and logging
+  logging_steps: 10
+  eval_steps: 100
+  save_steps: 500
+  
+  # Checkpoint management
+  save_total_limit: 3
+  
+  # Mixed precision
+  fp16: true
+  
+  # Performance
+  dataloader_num_workers: 4
+
+# ============================================================================
+# Reward Configuration
+# ============================================================================
+reward:
+  # Reward normalization
+  normalize_rewards: true
+  
+  # Reward clipping
+  clip_rewards: true
+  clip_range: [-10, 10]
+  
+  # Advantage normalization
+  normalize_advantages: true
+  
+  # Reward shaping (optional additional rewards)
+  length_penalty: 0.0  # Penalty/bonus per token
+  
+  # Safety rewards (optional)
+  safety_reward_enabled: false
+  safety_reward_weight: 0.1
+
+# ============================================================================
+# Verl-Specific Configuration
+# ============================================================================
+verl:
+  # Ray configuration for distributed training
+  ray:
+    num_workers: 4  # Number of rollout workers
+    num_gpus_per_worker: 0.25  # Fractional GPU allocation
+    
+  # Actor (policy) configuration
+  actor:
+    num_instances: 2
+    gpus_per_instance: 1
+  
+  # Critic (value) configuration  
+  critic:
+    num_instances: 1
+    gpus_per_instance: 1
+  
+  # Reward model serving
+  reward_model:
+    num_instances: 1
+    gpus_per_instance: 1
+  
+  # vLLM configuration for generation
+  vllm:
+    tensor_parallel_size: 1
+    gpu_memory_utilization: 0.8
+    max_num_batched_tokens: 8192
+
+# ============================================================================
+# Hardware Configuration
+# ============================================================================
+hardware:
+  # Number of GPUs
+  num_gpus: 4
+  gpu_ids: [0, 1, 2, 3]
+  
+  # Distributed backend
+  distributed_backend: "nccl"  # or "gloo" for CPU
+  
+  # DeepSpeed configuration
+  deepspeed:
+    enabled: true
+    stage: 2  # ZeRO Stage 2
+    config_file: null  # Path to custom DeepSpeed config
+
+# ============================================================================
+# Experiment Tracking
+# ============================================================================
+tracking:
+  # Weights & Biases
+  wandb_enabled: true
+  wandb_project: "llm-rlhf-training"
+  wandb_run_name: "llama2-7b-rlhf-ppo"
+  
+  # TensorBoard
+  tensorboard_enabled: true
+  tensorboard_dir: "/workspace/outputs/tensorboard/rlhf"
+  
+  # MLflow
+  mlflow_enabled: true
+  mlflow_tracking_uri: "http://localhost:5000"
+  mlflow_experiment_name: "rlhf-training"
+  
+  # Additional metrics to track
+  custom_metrics:
+    - "reward/mean"
+    - "reward/std"
+    - "kl_divergence"
+    - "policy_loss"
+    - "value_loss"
+    - "entropy"
+    - "approx_kl"
+    - "clipfrac"
+
+# ============================================================================
+# Model Registry
+# ============================================================================
+registry:
+  auto_register: true
+  model_name: "llama2-7b-rlhf"
+  
+  tags:
+    task: "rlhf-alignment"
+    base_model: "llama2-7b"
+    algorithm: "ppo"
+    training_type: "rlhf"
+
+# ============================================================================
+# Evaluation Configuration
+# ============================================================================
+evaluation:
+  # Evaluation prompts
+  eval_prompts_file: "/workspace/data/prompts/eval_prompts.json"
+  
+  # Number of prompts to evaluate
+  num_eval_prompts: 100
+  
+  # Generation for evaluation
+  eval_generation:
+    temperature: 0.7
+    top_p: 0.9
+    max_new_tokens: 512
+  
+  # Compute metrics
+  metrics:
+    - "reward/mean"
+    - "reward/std"
+    - "response_length/mean"
+    - "kl_divergence"
+  
+  # Human evaluation samples
+  save_samples: true
+  num_samples_to_save: 20
+
+# ============================================================================
+# Safety & Constraints
+# ============================================================================
+safety:
+  # KL divergence constraints (prevent policy from drifting too far)
+  max_kl_divergence: 0.5
+  
+  # Reward constraints
+  max_reward_delta: 5.0  # Max change in reward per step
+  
+  # Early stopping
+  early_stopping:
+    enabled: true
+    patience: 5
+    metric: "reward/mean"
+    mode: "max"
+  
+  # Safety filters (optional)
+  content_filtering:
+    enabled: false
+    toxic_threshold: 0.5
+
+# ============================================================================
+# Debugging & Development
+# ============================================================================
+debug:
+  enabled: false
+  max_train_samples: 100
+  max_eval_samples: 20
+  verbose: true
+  
+  # Save intermediate outputs
+  save_generations: true
+  save_rewards: true
+  
+  # Gradient checking
+  check_gradients: false
+
+# ============================================================================
+# Advanced Settings
+# ============================================================================
+advanced:
+  # Reference model update frequency
+  # Update reference model every N steps to prevent KL drift
+  reference_update_freq: 0  # 0 = never update (standard)
+  
+  # Adaptive KL penalty
+  adaptive_kl:
+    enabled: true
+    target_kl: 0.1
+    kl_coef_min: 0.01
+    kl_coef_max: 0.5
+  
+  # Experience replay
+  experience_replay:
+    enabled: false
+    buffer_size: 10000
+    
+  # Curriculum learning
+  curriculum:
+    enabled: false
+    start_difficulty: 0.3
+    end_difficulty: 1.0

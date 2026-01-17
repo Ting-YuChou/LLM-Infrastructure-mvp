@@ -1,0 +1,252 @@
+# Reward Model Training Configuration
+# For training a reward model from human preference data
+
+# ============================================================================
+# Model Configuration
+# ============================================================================
+model:
+  # Base model to train reward model from (usually same as SFT model)
+  name: "/workspace/models/sft/checkpoint-final"
+  
+  # Cache directory
+  cache_dir: "/workspace/models/sft"
+  
+  # Model precision
+  precision: "fp16"
+  
+  # Freeze base model layers (train only reward head)
+  freeze_base: false  # Set true to only train reward head
+  
+  # Number of layers to freeze (from bottom)
+  num_frozen_layers: 0  # 0 = train all layers
+
+# ============================================================================
+# Data Configuration
+# ============================================================================
+data:
+  # Training preference data
+  train_file: "/workspace/data/preferences/train.json"
+  
+  # Validation preference data
+  val_file: "/workspace/data/preferences/val.json"
+  
+  # Maximum sequence length
+  max_length: 512
+  
+  # Expected JSON format:
+  # [
+  #   {
+  #     "prompt": "question or instruction",
+  #     "chosen": "preferred response",
+  #     "rejected": "less preferred response"
+  #   }
+  # ]
+  
+  # Data preprocessing
+  num_proc: 8
+  streaming: false
+
+# ============================================================================
+# Training Configuration
+# ============================================================================
+training:
+  # Output directory
+  output_dir: "/workspace/models/reward"
+  
+  # Number of training epochs
+  num_train_epochs: 3
+  
+  # Batch sizes
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 4
+  
+  # Gradient accumulation (effective batch size = batch_size * grad_accum)
+  gradient_accumulation_steps: 4
+  
+  # Learning rate
+  learning_rate: 1.0e-5
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.1  # Warmup for first 10% of training
+  
+  # Optimizer
+  optimizer: "adamw_torch"
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  
+  # Logging and checkpointing
+  logging_steps: 10
+  eval_steps: 100
+  save_steps: 500
+  
+  # Checkpoint management
+  save_total_limit: 3
+  save_strategy: "steps"
+  evaluation_strategy: "steps"
+  
+  # Mixed precision
+  fp16: true
+  
+  # Performance
+  dataloader_num_workers: 4
+  dataloader_pin_memory: true
+
+# ============================================================================
+# Loss Configuration
+# ============================================================================
+loss:
+  # Loss type for preference learning
+  # Options: "sigmoid", "hinge", "cross_entropy"
+  type: "sigmoid"
+  
+  # Margin for hinge loss (if using hinge)
+  margin: 1.0
+  
+  # Temperature for scaling logits
+  temperature: 1.0
+
+# ============================================================================
+# Reward Model Architecture
+# ============================================================================
+architecture:
+  # Pooling strategy for sequence representation
+  # Options: "last", "mean", "max", "first"
+  pooling: "last"  # Use last token hidden state
+  
+  # Reward head configuration
+  reward_head:
+    # Hidden layers before final scalar output
+    hidden_layers: []  # Empty = direct linear projection
+    
+    # Dropout
+    dropout: 0.0
+    
+    # Activation function
+    activation: "tanh"  # Options: "tanh", "relu", "gelu", "none"
+    
+    # Initialize with small weights
+    init_std: 0.01
+
+# ============================================================================
+# Hardware Configuration
+# ============================================================================
+hardware:
+  # Number of GPUs
+  num_gpus: 1
+  gpu_ids: [0]
+  
+  # DeepSpeed configuration
+  deepspeed:
+    enabled: false
+    stage: 0
+
+# ============================================================================
+# Experiment Tracking
+# ============================================================================
+tracking:
+  # Weights & Biases
+  wandb_enabled: true
+  wandb_project: "llm-reward-training"
+  wandb_run_name: "llama2-7b-reward"
+  
+  # TensorBoard
+  tensorboard_enabled: true
+  tensorboard_dir: "/workspace/outputs/tensorboard/reward"
+  
+  # MLflow
+  mlflow_enabled: true
+  mlflow_tracking_uri: "http://localhost:5000"
+  mlflow_experiment_name: "reward-training"
+
+# ============================================================================
+# Model Registry
+# ============================================================================
+registry:
+  # Auto-register to MLflow
+  auto_register: true
+  
+  # Model name in registry
+  model_name: "llama2-7b-reward"
+  
+  # Tags
+  tags:
+    task: "reward-modeling"
+    base_model: "llama2-7b"
+    training_type: "preference"
+
+# ============================================================================
+# Evaluation Configuration
+# ============================================================================
+evaluation:
+  # Metrics to track
+  metrics:
+    - "accuracy"  # How often chosen > rejected
+    - "margin"    # Average reward difference
+    - "loss"
+  
+  # Compute reward distribution statistics
+  compute_statistics: true
+  
+  # Save example predictions
+  save_examples: true
+  num_examples: 20
+
+# ============================================================================
+# Safety & Constraints
+# ============================================================================
+safety:
+  # Early stopping
+  early_stopping:
+    enabled: true
+    patience: 3
+    metric: "eval_accuracy"
+    mode: "max"
+  
+  # Gradient clipping
+  max_grad_norm: 1.0
+  
+  # Detect gradient anomalies
+  detect_anomaly: false
+
+# ============================================================================
+# Data Augmentation (Optional)
+# ============================================================================
+augmentation:
+  # Shuffle chosen/rejected with probability
+  # This creates additional training signal
+  enabled: false
+  swap_probability: 0.0
+  
+  # Add noise to rewards during training
+  reward_noise:
+    enabled: false
+    std: 0.0
+
+# ============================================================================
+# Advanced Settings
+# ============================================================================
+advanced:
+  # Normalize rewards during training
+  normalize_rewards: false
+  
+  # Reward clipping
+  clip_rewards: false
+  clip_range: [-10, 10]
+  
+  # Use ensemble of reward models
+  ensemble:
+    enabled: false
+    num_models: 3
+  
+  # Calibration
+  calibration:
+    enabled: false
+    method: "temperature_scaling"  # or "platt_scaling"
+
+# ============================================================================
+# Debugging
+# ============================================================================
+debug:
+  enabled: false
+  max_train_samples: 100
+  max_eval_samples: 20
+  verbose: true

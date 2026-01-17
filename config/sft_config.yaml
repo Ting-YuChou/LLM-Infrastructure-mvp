@@ -1,0 +1,230 @@
+# Supervised Fine-Tuning (SFT) Configuration
+# This config defines parameters for instruction fine-tuning
+
+# ============================================================================
+# Model Configuration
+# ============================================================================
+model:
+  # Base model to fine-tune (HuggingFace model ID or local path)
+  name: "meta-llama/Llama-2-7b-hf"
+  
+  # Local cache directory for downloaded models
+  cache_dir: "/workspace/models/base"
+  
+  # Model precision (fp16, bf16, fp32)
+  precision: "fp16"
+  
+  # Enable gradient checkpointing (saves memory at cost of compute)
+  gradient_checkpointing: true
+  
+  # Flash Attention 2 for faster training (requires flash-attn package)
+  use_flash_attention: true
+
+# ============================================================================
+# Data Configuration
+# ============================================================================
+data:
+  # Training dataset path (JSON/JSONL format)
+  train_file: "/workspace/data/sft/train.json"
+  
+  # Validation dataset path
+  val_file: "/workspace/data/sft/val.json"
+  
+  # Maximum sequence length (longer sequences truncated)
+  max_length: 2048
+  
+  # Input/output format
+  # Expected JSON format:
+  # {"prompt": "instruction here", "completion": "expected response"}
+  prompt_key: "prompt"
+  completion_key: "completion"
+  
+  # Data preprocessing
+  num_proc: 8  # Number of CPU processes for data loading
+  streaming: false  # Set true for very large datasets
+
+# ============================================================================
+# Training Configuration
+# ============================================================================
+training:
+  # Output directory for checkpoints and logs
+  output_dir: "/workspace/models/sft"
+  
+  # Number of training epochs
+  num_train_epochs: 3
+  
+  # Batch sizes (adjust based on GPU memory)
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 4
+  
+  # Gradient accumulation steps (effective batch size = batch_size * grad_accum)
+  # Effective batch size = 4 * 8 = 32
+  gradient_accumulation_steps: 8
+  
+  # Learning rate and scheduler
+  learning_rate: 2.0e-5
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.03  # Warmup for first 3% of steps
+  
+  # Optimizer settings
+  optimizer: "adamw_torch"
+  weight_decay: 0.01
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  adam_epsilon: 1.0e-8
+  max_grad_norm: 1.0  # Gradient clipping
+  
+  # Logging and evaluation
+  logging_steps: 10
+  eval_steps: 500
+  save_steps: 500
+  
+  # Checkpoint management
+  save_total_limit: 3  # Keep only last 3 checkpoints
+  save_strategy: "steps"
+  evaluation_strategy: "steps"
+  
+  # Mixed precision training
+  fp16: true
+  fp16_opt_level: "O1"
+  
+  # Performance optimization
+  dataloader_num_workers: 4
+  dataloader_pin_memory: true
+  
+  # Resume from checkpoint (set path if resuming)
+  resume_from_checkpoint: null
+  
+  # Distributed training settings
+  local_rank: -1  # Set by DeepSpeed launcher
+  deepspeed: null  # Path to DeepSpeed config if using
+
+# ============================================================================
+# LoRA (Low-Rank Adaptation) Configuration - Optional
+# Enable for parameter-efficient fine-tuning
+# ============================================================================
+lora:
+  enabled: false  # Set true to use LoRA instead of full fine-tuning
+  
+  # LoRA hyperparameters
+  r: 8  # LoRA rank
+  alpha: 16  # LoRA scaling
+  dropout: 0.05
+  
+  # Modules to apply LoRA (typical for LLaMA)
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+  
+  # LoRA bias settings
+  bias: "none"  # Options: none, all, lora_only
+
+# ============================================================================
+# Hardware Configuration
+# ============================================================================
+hardware:
+  # Number of GPUs to use (1 for single GPU, >1 for distributed)
+  num_gpus: 1
+  
+  # GPU device IDs (e.g., [0, 1, 2, 3])
+  gpu_ids: [0]
+  
+  # DeepSpeed stage (0, 1, 2, 3) - higher stages save more memory
+  # Stage 0: Disabled
+  # Stage 1: Optimizer state partitioning
+  # Stage 2: Optimizer + Gradient partitioning  
+  # Stage 3: Optimizer + Gradient + Parameter partitioning
+  deepspeed_stage: 0
+
+# ============================================================================
+# Experiment Tracking
+# ============================================================================
+tracking:
+  # Enable Weights & Biases logging
+  wandb_enabled: true
+  wandb_project: "llm-sft-training"
+  wandb_run_name: "llama2-7b-sft"
+  
+  # Enable TensorBoard logging
+  tensorboard_enabled: true
+  tensorboard_dir: "/workspace/outputs/tensorboard/sft"
+  
+  # Enable MLflow tracking
+  mlflow_enabled: true
+  mlflow_tracking_uri: "http://localhost:5000"
+  mlflow_experiment_name: "sft-training"
+
+# ============================================================================
+# Model Registry
+# ============================================================================
+registry:
+  # Auto-register best model to MLflow
+  auto_register: true
+  
+  # Model name in registry
+  model_name: "llama2-7b-sft"
+  
+  # Tags to add to registered model
+  tags:
+    task: "instruction-following"
+    base_model: "llama2-7b"
+    training_type: "sft"
+
+# ============================================================================
+# Evaluation Configuration
+# ============================================================================
+evaluation:
+  # Metrics to compute during evaluation
+  metrics:
+    - "loss"
+    - "perplexity"
+  
+  # Generate samples during evaluation
+  generate_samples: true
+  num_samples: 5
+  
+  # Generation parameters for sample outputs
+  generation:
+    max_new_tokens: 256
+    temperature: 0.7
+    top_p: 0.9
+    do_sample: true
+
+# ============================================================================
+# Safety & Constraints
+# ============================================================================
+safety:
+  # Maximum gradient norm (prevents exploding gradients)
+  max_grad_norm: 1.0
+  
+  # Early stopping configuration
+  early_stopping:
+    enabled: true
+    patience: 3  # Stop if no improvement for 3 evaluations
+    metric: "eval_loss"
+    mode: "min"  # Minimize loss
+  
+  # Memory limits
+  max_memory_per_gpu: "80GB"  # For A100 GPUs
+  
+  # Timeout settings
+  max_training_time_hours: 24  # Kill training after 24 hours
+
+# ============================================================================
+# Debugging & Development
+# ============================================================================
+debug:
+  # Run in debug mode (reduced dataset, frequent logging)
+  enabled: false
+  
+  # Use small subset of data for quick testing
+  max_train_samples: 1000
+  max_eval_samples: 100
+  
+  # Verbose logging
+  verbose: true
+  
+  # Detect anomalies (performance cost)
+  detect_anomaly: false
