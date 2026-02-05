@@ -51,7 +51,7 @@ class RLHFConfig:
     value_loss_coef: float = 0.1
     entropy_coef: float = 0.01
     gae_lambda: float = 0.95
-    gamma: float = 0.99
+    gamma: float = 1.0  # Standard for RLHF (no discounting within response)
     
     # Generation
     max_prompt_length: int = 512
@@ -104,92 +104,10 @@ class PromptDataset(Dataset):
         }
 
 
-class PPOBuffer:
-    """
-    Experience replay buffer for PPO
-    
-    Stores trajectories: (states, actions, rewards, values, log_probs)
-    """
-    
-    def __init__(self):
-        self.states = []
-        self.actions = []
-        self.rewards = []
-        self.values = []
-        self.log_probs = []
-        self.advantages = []
-        self.returns = []
-    
-    def add(
-        self,
-        state: torch.Tensor,
-        action: torch.Tensor,
-        reward: float,
-        value: float,
-        log_prob: float
-    ):
-        """Add experience to buffer"""
-        self.states.append(state)
-        self.actions.append(action)
-        self.rewards.append(reward)
-        self.values.append(value)
-        self.log_probs.append(log_prob)
-    
-    def compute_advantages(self, gamma: float = 0.99, gae_lambda: float = 0.95):
-        """
-        Compute Generalized Advantage Estimation (GAE)
-        
-        Args:
-            gamma: Discount factor
-            gae_lambda: GAE lambda parameter
-        """
-        advantages = []
-        gae = 0
-        
-        # Reverse iteration for GAE computation
-        for i in reversed(range(len(self.rewards))):
-            if i == len(self.rewards) - 1:
-                next_value = 0
-            else:
-                next_value = self.values[i + 1]
-            
-            # TD error: reward + gamma * next_value - current_value
-            delta = self.rewards[i] + gamma * next_value - self.values[i]
-            
-            # GAE accumulation
-            gae = delta + gamma * gae_lambda * gae
-            advantages.insert(0, gae)
-        
-        self.advantages = advantages
-        
-        # Compute returns: advantages + values
-        self.returns = [adv + val for adv, val in zip(self.advantages, self.values)]
-    
-    def get_batch(self) -> Dict[str, torch.Tensor]:
-        """Get all experiences as tensors"""
-        return {
-            'states': torch.stack(self.states),
-            'actions': torch.stack(self.actions),
-            'old_log_probs': torch.tensor(self.log_probs),
-            'advantages': torch.tensor(self.advantages),
-            'returns': torch.tensor(self.returns),
-        }
-    
-    def clear(self):
-        """Clear buffer"""
-        self.states.clear()
-        self.actions.clear()
-        self.rewards.clear()
-        self.values.clear()
-        self.log_probs.clear()
-        self.advantages.clear()
-        self.returns.clear()
-
-
 class ValueHead(nn.Module):
     """
     Value function head for PPO
-    Estimates state value V(s)
+    Estimates state value V(s) for each token position (per-token values)
     """
     
     def __init__(self, hidden_size: int):
@@ -199,17 +117,16 @@ class ValueHead(nn.Module):
     
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass
+        Forward pass - outputs value for each token position
         
         Args:
             hidden_states: [batch_size, seq_len, hidden_size]
             
         Returns:
-            values: [batch_size, 1]
+            values: [batch_size, seq_len] - per-token value estimates
         """
-        # Use last token hidden state
-        last_hidden = hidden_states[:, -1, :]
-        values = self.value_head(last_hidden)
+        # Apply value head to each token position
+        values = self.value_head(hidden_states).squeeze(-1)  # [batch_size, seq_len]
         return values
 
 
@@ -309,13 +226,13 @@ class RLHFTrainer:
         Generate response from policy model
         
         Args:
-            prompt_ids: Prompt token IDs
-            attention_mask: Attention mask
+            prompt_ids: Prompt token IDs [batch_size, prompt_len]
+            attention_mask: Attention mask [batch_size, prompt_len]
             
         Returns:
             response_ids: Generated token IDs [batch_size, response_len]
-            log_probs: Log probabilities of generated tokens [batch_size, response_len]
-            values: Value estimates [batch_size]
+            log_probs: Per-token log probabilities [batch_size, response_len]
+            values: Per-token value estimates [batch_size, response_len]
         """
         batch_size = prompt_ids.shape[0]
         prompt_length = prompt_ids.shape[1]
@@ -358,7 +275,7 @@ class RLHFTrainer:
         else:
             log_probs = torch.zeros(batch_size, response_length, device=self.device)
         
-        # Compute value estimates using value head
+        # Compute per-token value estimates using value head
         # We need to get hidden states from the full sequence
         full_ids = outputs.sequences
         with torch.no_grad():
@@ -367,9 +284,26 @@ class RLHFTrainer:
                 output_hidden_states=True,
                 return_dict=True
             )
-            # Get last hidden state
+            # Get last hidden state for all positions
             hidden_states = model_outputs.hidden_states[-1]  # [batch_size, seq_len, hidden_size]
-            values = self.value_head(hidden_states).squeeze(-1)  # [batch_size]
+            
+            # Apply value head to get per-token values
+            all_values = self.value_head(hidden_states)  # [batch_size, seq_len]
+            
+            # Extract values for response positions only
+            # The value at position t estimates V(s_t), which is the value before generating token t+1
+            # For response tokens, we want values from positions [prompt_length-1, seq_len-2]
+            # because the value at position i predicts the value of state after seeing tokens 0..i
+            values = all_values[:, prompt_length-1:-1]  # [batch_size, response_len]
+            
+            # Handle case where response_len doesn't match
+            if values.shape[1] != response_length:
+                # Pad or truncate to match response_length
+                if values.shape[1] < response_length:
+                    padding = torch.zeros(batch_size, response_length - values.shape[1], device=self.device)
+                    values = torch.cat([values, padding], dim=1)
+                else:
+                    values = values[:, :response_length]
         
         return response_ids, log_probs, values
     
@@ -380,14 +314,14 @@ class RLHFTrainer:
         response_ids: torch.Tensor
     ) -> torch.Tensor:
         """
-        Compute reward using reward model
+        Compute scalar reward using reward model
         
         Args:
-            prompt_ids: Prompt token IDs
-            response_ids: Response token IDs
+            prompt_ids: Prompt token IDs [batch_size, prompt_len]
+            response_ids: Response token IDs [batch_size, response_len]
             
         Returns:
-            rewards: Scalar rewards
+            rewards: Scalar rewards [batch_size]
         """
         # Combine prompt and response
         full_ids = torch.cat([prompt_ids, response_ids], dim=1)
@@ -401,55 +335,180 @@ class RLHFTrainer:
         
         return rewards
     
-    def compute_kl_penalty(
+    def compute_rewards_per_token(
+        self,
+        rm_scores: torch.Tensor,
+        kl_per_token: torch.Tensor,
+        response_mask: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Combine RM scores and KL penalty into per-token rewards
+        
+        Per-token reward structure:
+        - All tokens: -kl_coef * kl_per_token (KL penalty)
+        - Last valid token: += rm_score (RM reward only at end)
+        
+        Args:
+            rm_scores: Scalar RM scores [batch_size]
+            kl_per_token: Per-token KL penalty [batch_size, response_len]
+            response_mask: Mask for valid tokens [batch_size, response_len]
+            
+        Returns:
+            rewards: Per-token rewards [batch_size, response_len]
+        """
+        batch_size, response_len = kl_per_token.shape
+        
+        # Start with KL penalty as negative reward (we want to minimize KL)
+        rewards = -self.kl_coef * kl_per_token  # [batch_size, response_len]
+        
+        # Find the last valid token index for each sample
+        # response_mask: 1 for valid tokens, 0 for padding
+        # Sum the mask to get the number of valid tokens, then subtract 1 for 0-indexed
+        valid_lengths = response_mask.sum(dim=-1).long()  # [batch_size]
+        last_valid_indices = (valid_lengths - 1).clamp(min=0)  # [batch_size]
+        
+        # Add RM score to the last valid token position
+        # Create a one-hot mask for last valid positions
+        batch_indices = torch.arange(batch_size, device=rewards.device)
+        rewards[batch_indices, last_valid_indices] += rm_scores
+        
+        return rewards
+    
+    @torch.no_grad()
+    def compute_kl_penalty_per_token(
         self,
         prompt_ids: torch.Tensor,
         response_ids: torch.Tensor
     ) -> torch.Tensor:
         """
-        Compute KL divergence from reference model
+        Compute per-token KL divergence from reference model
         
-        KL(policy || reference)
+        KL(policy || reference) for each token in the response
         
         Args:
-            prompt_ids: Prompt token IDs
-            response_ids: Response token IDs
+            prompt_ids: Prompt token IDs [batch_size, prompt_len]
+            response_ids: Response token IDs [batch_size, response_len]
             
         Returns:
-            kl_divergence: KL penalty
+            kl_per_token: Per-token KL penalty [batch_size, response_len]
         """
         full_ids = torch.cat([prompt_ids, response_ids], dim=1)
+        prompt_length = prompt_ids.shape[1]
         
         # Policy model logits
         policy_outputs = self.policy_model(full_ids)
         policy_logits = policy_outputs.logits
         
         # Reference model logits
-        with torch.no_grad():
-            ref_outputs = self.ref_model(full_ids)
-            ref_logits = ref_outputs.logits
+        ref_outputs = self.ref_model(full_ids)
+        ref_logits = ref_outputs.logits
         
-        # Compute KL divergence
-        policy_log_probs = F.log_softmax(policy_logits, dim=-1)
-        ref_log_probs = F.log_softmax(ref_logits, dim=-1)
+        # Get logits for response positions only
+        # Logits at position i predict token at position i+1
+        # So for response tokens, we need logits from positions [prompt_length-1, seq_len-2]
+        policy_logits_response = policy_logits[:, prompt_length-1:-1, :]  # [batch_size, response_len, vocab_size]
+        ref_logits_response = ref_logits[:, prompt_length-1:-1, :]  # [batch_size, response_len, vocab_size]
         
-        kl_div = F.kl_div(
-            policy_log_probs,
-            ref_log_probs,
-            reduction='batchmean',
-            log_target=True
-        )
+        # Compute log probabilities
+        policy_log_probs = F.log_softmax(policy_logits_response, dim=-1)
+        ref_log_probs = F.log_softmax(ref_logits_response, dim=-1)
         
-        return kl_div
+        # Get log probs for the actual response tokens
+        # response_ids: [batch_size, response_len]
+        response_ids_expanded = response_ids.unsqueeze(-1)  # [batch_size, response_len, 1]
+        
+        policy_token_log_probs = policy_log_probs.gather(-1, response_ids_expanded).squeeze(-1)  # [batch_size, response_len]
+        ref_token_log_probs = ref_log_probs.gather(-1, response_ids_expanded).squeeze(-1)  # [batch_size, response_len]
+        
+        # Per-token KL: log(policy/ref) = log_policy - log_ref
+        # This is the simple KL estimator: E[log(p/q)] where we use the sampled token
+        kl_per_token = policy_token_log_probs - ref_token_log_probs  # [batch_size, response_len]
+        
+        return kl_per_token
     
-    def compute_log_probs_and_entropy(
+    def compute_gae_per_token(
+        self,
+        rewards: torch.Tensor,
+        values: torch.Tensor,
+        response_mask: torch.Tensor,
+        gamma: float = 1.0,
+        gae_lambda: float = 0.95
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Compute Generalized Advantage Estimation (GAE) per token within each response
+        
+        This computes advantages by iterating backward through each response's tokens,
+        treating each token position as a timestep in the MDP.
+        
+        Args:
+            rewards: Per-token rewards [batch_size, response_len]
+            values: Per-token value estimates [batch_size, response_len]
+            response_mask: Mask for valid tokens [batch_size, response_len]
+            gamma: Discount factor (default 1.0 for RLHF)
+            gae_lambda: GAE lambda parameter
+            
+        Returns:
+            advantages: Per-token advantages [batch_size, response_len]
+            returns: Per-token returns [batch_size, response_len]
+        """
+        batch_size, response_len = rewards.shape
+        device = rewards.device
+        
+        # Initialize advantages tensor
+        advantages = torch.zeros_like(rewards)
+        
+        # We need to iterate backward through each response
+        # For the last token in each sequence, next_value = 0 (terminal state)
+        # For earlier tokens, next_value = values[:, t+1]
+        
+        # Get the last valid index for each sample to handle padding correctly
+        valid_lengths = response_mask.sum(dim=-1).long()  # [batch_size]
+        
+        # Initialize GAE accumulator
+        gae = torch.zeros(batch_size, device=device)
+        
+        # Iterate backward through response positions
+        for t in reversed(range(response_len)):
+            # Check if this position is valid for each sample
+            is_valid = response_mask[:, t]  # [batch_size]
+            
+            # Determine if this is the last valid token for each sample
+            is_last_token = (t == (valid_lengths - 1))  # [batch_size]
+            
+            # Get next value (0 for last token or padding, values[:, t+1] otherwise)
+            if t == response_len - 1:
+                next_value = torch.zeros(batch_size, device=device)
+            else:
+                next_value = values[:, t + 1]
+                # Zero out next_value for positions where t is the last valid token
+                next_value = next_value * (~is_last_token).float()
+            
+            # TD error: delta = r_t + gamma * V(s_{t+1}) - V(s_t)
+            delta = rewards[:, t] + gamma * next_value - values[:, t]
+            
+            # GAE accumulation: A_t = delta_t + gamma * lambda * A_{t+1}
+            # Reset GAE to 0 for positions after the last valid token
+            gae = delta + gamma * gae_lambda * gae * (~is_last_token).float()
+            
+            # Apply mask: set advantage to 0 for padding tokens
+            advantages[:, t] = gae * is_valid
+        
+        # Compute returns: returns = advantages + values
+        returns = advantages + values
+        
+        # Apply mask to returns as well
+        returns = returns * response_mask
+        
+        return advantages, returns
+    
+    def compute_log_probs_and_entropy_per_token(
         self,
         input_ids: torch.Tensor,
         response_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Compute log probabilities and entropy for given sequences
+        Compute per-token log probabilities, entropy, and values for given sequences
         
         Args:
             input_ids: Full input sequence (prompt + response) [batch_size, seq_len]
@@ -457,9 +516,9 @@ class RLHFTrainer:
             attention_mask: Attention mask [batch_size, seq_len]
             
         Returns:
-            log_probs: Log probabilities for response tokens [batch_size, response_len]
-            entropy: Entropy of the distribution [batch_size]
-            values: Value estimates [batch_size]
+            log_probs: Per-token log probabilities [batch_size, response_len]
+            entropy: Per-token entropy [batch_size, response_len]
+            values: Per-token value estimates [batch_size, response_len]
         """
         batch_size = input_ids.shape[0]
         prompt_length = input_ids.shape[1] - response_ids.shape[1]
@@ -485,25 +544,27 @@ class RLHFTrainer:
         response_ids_expanded = response_ids.unsqueeze(-1)  # [batch_size, response_len, 1]
         log_probs = log_probs_all.gather(-1, response_ids_expanded).squeeze(-1)  # [batch_size, response_len]
         
-        # Compute entropy: -sum(p * log(p))
+        # Compute per-token entropy: -sum(p * log(p))
         probs = F.softmax(logits, dim=-1)  # [batch_size, response_len, vocab_size]
-        entropy_per_token = -torch.sum(probs * log_probs_all, dim=-1)  # [batch_size, response_len]
+        entropy = -torch.sum(probs * log_probs_all, dim=-1)  # [batch_size, response_len]
         
-        # Create mask for valid (non-padding) tokens in response
-        pad_token_id = self.tokenizer.pad_token_id
-        response_mask = (response_ids != pad_token_id).float()  # [batch_size, response_len]
-        
-        # Masked mean entropy
-        entropy = (entropy_per_token * response_mask).sum(dim=-1) / (response_mask.sum(dim=-1) + 1e-8)  # [batch_size]
-        
-        # Sum log probs over response (masked)
-        log_probs_sum = (log_probs * response_mask).sum(dim=-1)  # [batch_size]
-        
-        # Compute values from hidden states
+        # Compute per-token values from hidden states
         hidden_states = outputs.hidden_states[-1]  # [batch_size, seq_len, hidden_size]
-        values = self.value_head(hidden_states).squeeze(-1)  # [batch_size]
+        all_values = self.value_head(hidden_states)  # [batch_size, seq_len]
         
-        return log_probs_sum, entropy, values
+        # Extract values for response positions
+        # Value at position t estimates V(s_t) before generating token t+1
+        values = all_values[:, prompt_length-1:-1]  # [batch_size, response_len]
+        
+        # Handle case where dimensions don't match
+        if values.shape[1] != response_length:
+            if values.shape[1] < response_length:
+                padding = torch.zeros(batch_size, response_length - values.shape[1], device=values.device)
+                values = torch.cat([values, padding], dim=1)
+            else:
+                values = values[:, :response_length]
+        
+        return log_probs, entropy, values
     
     def ppo_update(
         self,
@@ -511,17 +572,18 @@ class RLHFTrainer:
         num_ppo_epochs: int = 4
     ) -> Dict[str, float]:
         """
-        PPO policy update with multiple epochs over the batch
+        PPO policy update with multiple epochs over the batch (per-token version)
         
         Args:
             batch: Batch of experiences containing:
                 - input_ids: Full sequences (prompt + response) [batch_size, seq_len]
                 - response_ids: Response tokens only [batch_size, response_len]
                 - attention_mask: Attention mask [batch_size, seq_len]
-                - old_log_probs: Log probs from rollout [batch_size]
-                - old_values: Value estimates from rollout [batch_size]
-                - advantages: Computed advantages [batch_size]
-                - returns: Computed returns [batch_size]
+                - response_mask: Mask for valid response tokens [batch_size, response_len]
+                - old_log_probs: Per-token log probs from rollout [batch_size, response_len]
+                - old_values: Per-token value estimates from rollout [batch_size, response_len]
+                - advantages: Per-token computed advantages [batch_size, response_len]
+                - returns: Per-token computed returns [batch_size, response_len]
             num_ppo_epochs: Number of PPO epochs per batch
             
         Returns:
@@ -533,13 +595,20 @@ class RLHFTrainer:
         if attention_mask is not None:
             attention_mask = attention_mask.to(self.device)
         
+        response_mask = batch['response_mask'].to(self.device)
         old_log_probs = batch['old_log_probs'].to(self.device).detach()
         old_values = batch['old_values'].to(self.device).detach()
         advantages = batch['advantages'].to(self.device).detach()
         returns = batch['returns'].to(self.device).detach()
         
-        # Normalize advantages
-        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+        # Normalize advantages (only over valid tokens)
+        valid_advantages = advantages[response_mask.bool()]
+        if valid_advantages.numel() > 0:
+            adv_mean = valid_advantages.mean()
+            adv_std = valid_advantages.std() + 1e-8
+            advantages = (advantages - adv_mean) / adv_std
+            # Apply mask again to ensure padding positions are 0
+            advantages = advantages * response_mask
         
         # Track metrics across PPO epochs
         total_policy_loss = 0.0
@@ -549,26 +618,28 @@ class RLHFTrainer:
         total_clip_frac = 0.0
         
         for ppo_epoch in range(num_ppo_epochs):
-            # Compute new log probs, entropy, and values
-            new_log_probs, entropy, values = self.compute_log_probs_and_entropy(
+            # Compute new per-token log probs, entropy, and values
+            new_log_probs, entropy, values = self.compute_log_probs_and_entropy_per_token(
                 input_ids, response_ids, attention_mask
             )
             
-            # Compute ratio: exp(new_log_prob - old_log_prob)
-            ratio = torch.exp(new_log_probs - old_log_probs)
+            # Compute per-token ratio: exp(new_log_prob - old_log_prob)
+            ratio = torch.exp(new_log_probs - old_log_probs)  # [batch_size, response_len]
             
-            # Clipped surrogate objective
-            surr1 = ratio * advantages
+            # Clipped surrogate objective (per-token)
+            surr1 = ratio * advantages  # [batch_size, response_len]
             surr2 = torch.clamp(
                 ratio, 
                 1.0 - self.config.clip_range, 
                 1.0 + self.config.clip_range
             ) * advantages
             
-            # Policy loss (negative because we want to maximize)
-            policy_loss = -torch.min(surr1, surr2).mean()
+            # Policy loss: masked mean over valid tokens
+            policy_loss_per_token = -torch.min(surr1, surr2)
+            num_valid_tokens = response_mask.sum() + 1e-8
+            policy_loss = (policy_loss_per_token * response_mask).sum() / num_valid_tokens
             
-            # Value loss with clipping (optional but recommended)
+            # Value loss with clipping (per-token, masked)
             values_clipped = old_values + torch.clamp(
                 values - old_values,
                 -self.config.clip_range,
@@ -576,10 +647,11 @@ class RLHFTrainer:
             )
             value_loss_unclipped = (values - returns) ** 2
             value_loss_clipped = (values_clipped - returns) ** 2
-            value_loss = 0.5 * torch.max(value_loss_unclipped, value_loss_clipped).mean()
+            value_loss_per_token = 0.5 * torch.max(value_loss_unclipped, value_loss_clipped)
+            value_loss = (value_loss_per_token * response_mask).sum() / num_valid_tokens
             
-            # Entropy bonus (mean over batch)
-            entropy_bonus = entropy.mean()
+            # Entropy bonus: masked mean over valid tokens
+            entropy_bonus = (entropy * response_mask).sum() / num_valid_tokens
             
             # Total loss
             loss = (
@@ -601,10 +673,12 @@ class RLHFTrainer:
             self.policy_optimizer.step()
             self.value_optimizer.step()
             
-            # Compute metrics
+            # Compute metrics (masked)
             with torch.no_grad():
-                approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
-                clip_frac = ((ratio - 1.0).abs() > self.config.clip_range).float().mean()
+                approx_kl_per_token = (ratio - 1) - torch.log(ratio)
+                approx_kl = (approx_kl_per_token * response_mask).sum() / num_valid_tokens
+                clip_frac_per_token = ((ratio - 1.0).abs() > self.config.clip_range).float()
+                clip_frac = (clip_frac_per_token * response_mask).sum() / num_valid_tokens
             
             total_policy_loss += policy_loss.item()
             total_value_loss += value_loss.item()
@@ -625,27 +699,28 @@ class RLHFTrainer:
     
     def train(self, prompts_file: str):
         """
-        Main training loop
+        Main training loop with per-token RLHF
+        
+        This implements the industry-standard per-token value and GAE computation,
+        where advantages and returns are computed for each token within a response.
         
         Args:
             prompts_file: Path to prompts JSON file
         """
-        logger.info("Starting RLHF training")
+        logger.info("Starting RLHF training (per-token version)")
         logger.info(f"Config: num_epochs={self.config.num_epochs}, num_steps={self.config.num_steps}")
         logger.info(f"Batch size: {self.config.batch_size}, Learning rate: {self.config.learning_rate}")
+        logger.info(f"Gamma: {self.config.gamma}, GAE Lambda: {self.config.gae_lambda}")
         
         # Create dataset
         dataset = PromptDataset(prompts_file, self.tokenizer, self.config.max_prompt_length)
         dataloader = DataLoader(dataset, batch_size=self.config.batch_size, shuffle=True)
         
-        # Initialize PPO buffer
-        ppo_buffer = PPOBuffer()
-        rollout_batch_size = 4  # Number of experiences to collect before PPO update
-        
         # Training metrics
         global_step = 0
-        total_episodes = 0
         running_reward = 0.0
+        running_kl = 0.0
+        num_batches = 0
         
         for epoch in range(self.config.num_epochs):
             logger.info(f"Epoch {epoch + 1}/{self.config.num_epochs}")
@@ -655,102 +730,100 @@ class RLHFTrainer:
                     break
                 
                 prompt_ids = batch['input_ids'].to(self.device)
-                attention_mask = batch['attention_mask'].to(self.device)
+                prompt_attention_mask = batch['attention_mask'].to(self.device)
                 batch_size = prompt_ids.shape[0]
                 
                 # ==================== Rollout Phase ====================
-                # Generate responses and collect experiences
+                # Generate responses and get per-token log_probs and values
                 with torch.no_grad():
-                    response_ids, log_probs, values = self.generate_response(prompt_ids, attention_mask)
-                    
-                    # Compute rewards from reward model
-                    rewards = self.compute_reward(prompt_ids, response_ids)
-                    
-                    # Compute KL penalty
-                    kl_penalty = self.compute_kl_penalty(prompt_ids, response_ids)
-                    
-                    # Adjusted reward = reward - kl_coef * kl_penalty
-                    # KL penalty is per-batch, rewards is per-sample
-                    adjusted_rewards = rewards - self.kl_coef * kl_penalty
-                
-                # Store experiences in buffer
-                # For simplicity, we treat each response as one "step"
-                # Sum log probs over response tokens for each sample
-                pad_token_id = self.tokenizer.pad_token_id
-                response_mask = (response_ids != pad_token_id).float()
-                log_probs_sum = (log_probs * response_mask).sum(dim=-1)  # [batch_size]
-                
-                for i in range(batch_size):
-                    ppo_buffer.add(
-                        state=prompt_ids[i],
-                        action=response_ids[i],
-                        reward=adjusted_rewards[i].item() if adjusted_rewards.dim() > 0 else adjusted_rewards.item(),
-                        value=values[i].item(),
-                        log_prob=log_probs_sum[i].item()
+                    response_ids, old_log_probs, old_values = self.generate_response(
+                        prompt_ids, prompt_attention_mask
                     )
-                
-                total_episodes += batch_size
-                running_reward += rewards.sum().item()
-                
-                # ==================== PPO Update Phase ====================
-                # Update policy when buffer has enough experiences
-                if len(ppo_buffer.rewards) >= rollout_batch_size:
-                    # Compute advantages using GAE
-                    ppo_buffer.compute_advantages(
+                    # response_ids: [batch_size, response_len]
+                    # old_log_probs: [batch_size, response_len] (per-token)
+                    # old_values: [batch_size, response_len] (per-token)
+                    
+                    # Create response mask for valid (non-padding) tokens
+                    pad_token_id = self.tokenizer.pad_token_id
+                    response_mask = (response_ids != pad_token_id).float()  # [batch_size, response_len]
+                    
+                    # Compute per-token KL penalty
+                    kl_per_token = self.compute_kl_penalty_per_token(prompt_ids, response_ids)
+                    # kl_per_token: [batch_size, response_len]
+                    
+                    # Compute scalar RM scores
+                    rm_scores = self.compute_reward(prompt_ids, response_ids)
+                    # rm_scores: [batch_size]
+                    
+                    # Combine into per-token rewards
+                    # rewards = -kl_coef * kl_per_token + rm_score (at last valid token)
+                    rewards = self.compute_rewards_per_token(rm_scores, kl_per_token, response_mask)
+                    # rewards: [batch_size, response_len]
+                    
+                    # Compute per-token GAE advantages and returns
+                    advantages, returns = self.compute_gae_per_token(
+                        rewards=rewards,
+                        values=old_values,
+                        response_mask=response_mask,
                         gamma=self.config.gamma,
                         gae_lambda=self.config.gae_lambda
                     )
-                    
-                    # Create batch for PPO update
-                    # We need to reconstruct full sequences
-                    buffer_size = len(ppo_buffer.states)
-                    
-                    # Stack states and actions
-                    states_batch = torch.stack(ppo_buffer.states)  # [buffer_size, prompt_len]
-                    actions_batch = torch.stack(ppo_buffer.actions)  # [buffer_size, response_len]
-                    
-                    # Create full input_ids (prompt + response)
-                    input_ids_batch = torch.cat([states_batch, actions_batch], dim=1)
-                    
-                    # Create attention mask
-                    attention_mask_batch = (input_ids_batch != self.tokenizer.pad_token_id).long()
-                    
-                    # Create PPO batch
-                    ppo_batch = {
-                        'input_ids': input_ids_batch,
-                        'response_ids': actions_batch,
-                        'attention_mask': attention_mask_batch,
-                        'old_log_probs': torch.tensor(ppo_buffer.log_probs, dtype=torch.float32),
-                        'old_values': torch.tensor(ppo_buffer.values, dtype=torch.float32),
-                        'advantages': torch.tensor(ppo_buffer.advantages, dtype=torch.float32),
-                        'returns': torch.tensor(ppo_buffer.returns, dtype=torch.float32),
-                    }
-                    
-                    # PPO update
-                    metrics = self.ppo_update(ppo_batch, num_ppo_epochs=self.config.num_epochs)
-                    
-                    # Clear buffer
-                    ppo_buffer.clear()
-                    
-                    # Log metrics
-                    avg_reward = running_reward / total_episodes if total_episodes > 0 else 0
+                    # advantages: [batch_size, response_len]
+                    # returns: [batch_size, response_len]
+                
+                # ==================== PPO Update Phase ====================
+                # Create full input_ids (prompt + response)
+                input_ids = torch.cat([prompt_ids, response_ids], dim=1)
+                
+                # Create full attention mask
+                full_attention_mask = (input_ids != pad_token_id).long()
+                
+                # Create PPO batch with per-token data
+                ppo_batch = {
+                    'input_ids': input_ids,
+                    'response_ids': response_ids,
+                    'attention_mask': full_attention_mask,
+                    'response_mask': response_mask,
+                    'old_log_probs': old_log_probs,
+                    'old_values': old_values,
+                    'advantages': advantages,
+                    'returns': returns,
+                }
+                
+                # PPO update
+                metrics = self.ppo_update(ppo_batch, num_ppo_epochs=self.config.num_epochs)
+                
+                # ==================== Logging and Metrics ====================
+                # Compute mean KL for this batch (over valid tokens)
+                with torch.no_grad():
+                    mean_kl = (kl_per_token * response_mask).sum() / (response_mask.sum() + 1e-8)
+                    mean_reward = rm_scores.mean()
+                
+                running_reward += mean_reward.item()
+                running_kl += mean_kl.item()
+                num_batches += 1
+                
+                # Log metrics
+                if global_step % 10 == 0 or global_step == 0:
+                    avg_reward = running_reward / num_batches if num_batches > 0 else 0
+                    avg_kl = running_kl / num_batches if num_batches > 0 else 0
                     logger.info(
                         f"Step {global_step}: "
                         f"reward={avg_reward:.3f}, "
-                        f"kl={kl_penalty.item():.4f}, "
+                        f"kl={avg_kl:.4f}, "
                         f"policy_loss={metrics['policy_loss']:.4f}, "
                         f"value_loss={metrics['value_loss']:.4f}, "
                         f"entropy={metrics['entropy']:.4f}, "
                         f"clip_frac={metrics['clip_frac']:.3f}, "
                         f"kl_coef={self.kl_coef:.4f}"
                     )
-                    
                     # Reset running metrics
                     running_reward = 0.0
-                    total_episodes = 0
+                    running_kl = 0.0
+                    num_batches = 0
                 
                 # ==================== Adaptive KL Coefficient ====================
-                current_kl = kl_penalty.item()
+                current_kl = mean_kl.item()
                 if current_kl > self.config.target_kl * 1.5:
                     self.kl_coef = min(self.kl_coef * 1.5, 1.0)  # Cap at 1.0
                 elif current_kl < self.config.target_kl / 1.5:
