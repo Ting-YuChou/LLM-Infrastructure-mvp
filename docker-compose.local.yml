@@ -1,0 +1,54 @@
+services:
+  mock-llm:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.mock-serving
+    environment:
+      MOCK_MODEL_NAME: mock-llm-local
+      MOCK_RESPONSE_TOKENS: 96
+      MOCK_RESPONSE_DELAY_MS: 25
+      PORT: 8000
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.gateway
+    environment:
+      JWT_SECRET: local-dev-secret
+      RATE_LIMIT_ENABLED: "false"
+      REDIS_HOST: redis
+      VLLM_BACKEND_URL: http://mock-llm:8000
+      DEFAULT_COMPLETION_MODEL: mock-llm-local
+    command: ["python", "-m", "src.api.gateway", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      mock-llm:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped

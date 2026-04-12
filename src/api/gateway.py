@@ -28,6 +28,22 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _get_env_bool(name: str, default: bool) -> bool:
+    """Parse boolean environment variables safely."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _get_env_int(name: str, default: int) -> int:
+    """Parse integer environment variables safely."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return int(value)
+
+
 # ============================================================================
 # Configuration
 # ============================================================================
@@ -41,9 +57,9 @@ class GatewayConfig:
     JWT_EXPIRATION_HOURS = 24
     
     # Rate Limiting
-    RATE_LIMIT_ENABLED = True
-    RATE_LIMIT_REQUESTS_PER_MINUTE = 60
-    RATE_LIMIT_REQUESTS_PER_HOUR = 1000
+    RATE_LIMIT_ENABLED = _get_env_bool("RATE_LIMIT_ENABLED", True)
+    RATE_LIMIT_REQUESTS_PER_MINUTE = _get_env_int("RATE_LIMIT_REQUESTS_PER_MINUTE", 60)
+    RATE_LIMIT_REQUESTS_PER_HOUR = _get_env_int("RATE_LIMIT_REQUESTS_PER_HOUR", 1000)
     
     # Redis for distributed rate limiting
     REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
@@ -52,6 +68,7 @@ class GatewayConfig:
     
     # Backend services
     VLLM_BACKEND_URL = os.getenv("VLLM_BACKEND_URL", "http://localhost:8000")
+    DEFAULT_COMPLETION_MODEL = os.getenv("DEFAULT_COMPLETION_MODEL")
     
     # CORS
     CORS_ORIGINS = ["*"]  # Configure for production
@@ -79,6 +96,7 @@ class TokenResponse(BaseModel):
 
 class CompletionRequest(BaseModel):
     """Completion request model"""
+    model: Optional[str] = None
     prompt: str
     max_tokens: int = Field(default=256, ge=1, le=2048)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
@@ -470,9 +488,13 @@ class APIGateway:
             
             # Forward request to vLLM backend
             try:
+                payload = request.model_dump(exclude_none=True)
+                if "model" not in payload and self.config.DEFAULT_COMPLETION_MODEL:
+                    payload["model"] = self.config.DEFAULT_COMPLETION_MODEL
+
                 response = await self.http_client.post(
                     f"{self.config.VLLM_BACKEND_URL}/v1/completions",
-                    json=request.dict(),
+                    json=payload,
                     timeout=300.0
                 )
                 
