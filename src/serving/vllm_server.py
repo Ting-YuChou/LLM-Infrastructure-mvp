@@ -6,7 +6,9 @@ High-performance LLM serving with PagedAttention and continuous batching
 from __future__ import annotations
 
 import inspect
+import json
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -16,6 +18,19 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import uvicorn
+
+try:
+    from src.monitoring.metrics import (
+        add_metrics_endpoint,
+        finish_request_tracking,
+        start_request_tracking,
+    )
+except ModuleNotFoundError:
+    from monitoring.metrics import (  # type: ignore[no-redef]
+        add_metrics_endpoint,
+        finish_request_tracking,
+        start_request_tracking,
+    )
 
 try:
     from vllm import SamplingParams
@@ -389,8 +404,16 @@ class VLLMInferenceEngine:
         if self.engine is None:
             raise RuntimeError("Engine not initialized")
         
+        previous_text = ""
         async for request_output in self.engine.generate(prompt, sampling_params, request_id=None):
-            yield request_output.outputs[0].text
+            current_text = request_output.outputs[0].text
+            if current_text.startswith(previous_text):
+                delta = current_text[len(previous_text):]
+            else:
+                delta = current_text
+            previous_text = current_text
+            if delta:
+                yield delta
 
 
 # ============================================================================
@@ -414,6 +437,7 @@ class VLLMServer:
             version="1.0.0"
         )
         self.engine = VLLMInferenceEngine(config)
+        add_metrics_endpoint(self.app)
         
         # Add CORS middleware
         self.app.add_middleware(
@@ -456,8 +480,6 @@ class VLLMServer:
             
             Generates text completion from a prompt
             """
-            import time
-            
             # Create sampling parameters
             sampling_params = SamplingParams(
                 temperature=request.temperature,
@@ -468,43 +490,77 @@ class VLLMServer:
                 frequency_penalty=request.frequency_penalty,
                 stop=request.stop or [],
             )
-            
+
+            model_name = request.model or self.config.model_name
+
             # Handle streaming
             if request.stream:
+                if not isinstance(request.prompt, str):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Streaming completions support a single prompt per request.",
+                    )
+                request_start = start_request_tracking(model_name)
                 return StreamingResponse(
-                    self._stream_completion(request.prompt, sampling_params),
+                    self._stream_completion(
+                        prompt=request.prompt,
+                        sampling_params=sampling_params,
+                        model_name=model_name,
+                        request_start=request_start,
+                    ),
                     media_type="text/event-stream"
                 )
-            
+
+            request_start = start_request_tracking(model_name)
             # Non-streaming generation
             prompts = [request.prompt] if isinstance(request.prompt, str) else request.prompt
-            
-            # Generate for all prompts
-            outputs = []
-            for i, prompt in enumerate(prompts):
-                text = await self.engine.generate(prompt, sampling_params)
-                outputs.append(
-                    CompletionChoice(
-                        text=text,
-                        index=i,
-                        finish_reason="stop"
+
+            try:
+                # Generate for all prompts
+                outputs = []
+                for i, prompt in enumerate(prompts):
+                    text = await self.engine.generate(prompt, sampling_params)
+                    outputs.append(
+                        CompletionChoice(
+                            text=text,
+                            index=i,
+                            finish_reason="stop"
+                        )
                     )
+
+                prompt_tokens = sum(self._estimate_tokens(prompt) for prompt in prompts)
+                completion_tokens = sum(self._estimate_tokens(choice.text) for choice in outputs)
+
+                # Build response
+                response = CompletionResponse(
+                    id=f"cmpl-{int(time.time())}",
+                    created=int(time.time()),
+                    model=model_name,
+                    choices=outputs,
+                    usage={
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": completion_tokens,
+                        "total_tokens": prompt_tokens + completion_tokens
+                    }
                 )
-            
-            # Build response
-            response = CompletionResponse(
-                id=f"cmpl-{int(time.time())}",
-                created=int(time.time()),
-                model=self.config.model_name,
-                choices=outputs,
-                usage={
-                    "prompt_tokens": len(prompts[0].split()),  # Rough estimate
-                    "completion_tokens": sum(len(c.text.split()) for c in outputs),
-                    "total_tokens": len(prompts[0].split()) + sum(len(c.text.split()) for c in outputs)
-                }
-            )
-            
-            return response
+
+                finish_request_tracking(
+                    model_name=model_name,
+                    endpoint="/v1/completions",
+                    start_time=request_start,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                )
+                return response
+            except Exception as exc:
+                finish_request_tracking(
+                    model_name=model_name,
+                    endpoint="/v1/completions",
+                    start_time=request_start,
+                    status="error",
+                    error_type=type(exc).__name__,
+                )
+                raise
         
         @self.app.post("/v1/chat/completions")
         async def create_chat_completion(request: ChatCompletionRequest):
@@ -523,33 +579,67 @@ class VLLMServer:
                 max_tokens=request.max_tokens,
                 stop=request.stop or [],
             )
-            
-            # Generate
-            text = await self.engine.generate(prompt, sampling_params)
-            
-            # Build response
-            import time
-            response = {
-                "id": f"chatcmpl-{int(time.time())}",
-                "object": "chat.completion",
-                "created": int(time.time()),
-                "model": self.config.model_name,
-                "choices": [{
-                    "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": text
-                    },
-                    "finish_reason": "stop"
-                }],
-                "usage": {
-                    "prompt_tokens": len(prompt.split()),
-                    "completion_tokens": len(text.split()),
-                    "total_tokens": len(prompt.split()) + len(text.split())
+
+            model_name = request.model or self.config.model_name
+
+            if request.stream:
+                request_start = start_request_tracking(model_name)
+                return StreamingResponse(
+                    self._stream_chat_completion(
+                        prompt=prompt,
+                        sampling_params=sampling_params,
+                        model_name=model_name,
+                        request_start=request_start,
+                    ),
+                    media_type="text/event-stream",
+                )
+
+            request_start = start_request_tracking(model_name)
+
+            try:
+                # Generate
+                text = await self.engine.generate(prompt, sampling_params)
+                prompt_tokens = self._estimate_tokens(prompt)
+                completion_tokens = self._estimate_tokens(text)
+
+                # Build response
+                response = {
+                    "id": f"chatcmpl-{int(time.time())}",
+                    "object": "chat.completion",
+                    "created": int(time.time()),
+                    "model": model_name,
+                    "choices": [{
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": text
+                        },
+                        "finish_reason": "stop"
+                    }],
+                    "usage": {
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": completion_tokens,
+                        "total_tokens": prompt_tokens + completion_tokens
+                    }
                 }
-            }
-            
-            return JSONResponse(content=response)
+
+                finish_request_tracking(
+                    model_name=model_name,
+                    endpoint="/v1/chat/completions",
+                    start_time=request_start,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                )
+                return JSONResponse(content=response)
+            except Exception as exc:
+                finish_request_tracking(
+                    model_name=model_name,
+                    endpoint="/v1/chat/completions",
+                    start_time=request_start,
+                    status="error",
+                    error_type=type(exc).__name__,
+                )
+                raise
     
     def _format_chat_prompt(self, messages: List[ChatMessage]) -> str:
         """
@@ -575,7 +665,21 @@ class VLLMServer:
         prompt_parts.append("Assistant:")
         return "\n\n".join(prompt_parts)
     
-    async def _stream_completion(self, prompt: str, sampling_params: SamplingParams):
+    def _estimate_tokens(self, text: str) -> int:
+        """Estimate token count for metrics and mock usage reporting."""
+        return max(1, len(text.split())) if text else 0
+
+    def _format_sse_payload(self, payload: Dict[str, Any]) -> str:
+        """Serialize one Server-Sent Event payload as JSON."""
+        return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    async def _stream_completion(
+        self,
+        prompt: str,
+        sampling_params: SamplingParams,
+        model_name: str,
+        request_start: float,
+    ):
         """
         Stream completion chunks
         
@@ -586,19 +690,130 @@ class VLLMServer:
         Yields:
             SSE-formatted completion chunks
         """
-        async for text in self.engine.stream_generate(prompt, sampling_params):
-            # Format as Server-Sent Event
-            chunk = {
-                "choices": [{
-                    "text": text,
-                    "index": 0,
-                    "finish_reason": None
-                }]
-            }
-            yield f"data: {chunk}\n\n"
-        
-        # Final chunk
-        yield "data: [DONE]\n\n"
+        completion_id = f"cmpl-{int(time.time() * 1000)}"
+        created = int(time.time())
+        prompt_tokens = self._estimate_tokens(prompt)
+        completion_text = ""
+
+        try:
+            async for text in self.engine.stream_generate(prompt, sampling_params):
+                completion_text += text
+                chunk = {
+                    "id": completion_id,
+                    "object": "text_completion",
+                    "created": created,
+                    "model": model_name,
+                    "choices": [{
+                        "text": text,
+                        "index": 0,
+                        "logprobs": None,
+                        "finish_reason": None
+                    }]
+                }
+                yield self._format_sse_payload(chunk)
+
+            yield self._format_sse_payload(
+                {
+                    "id": completion_id,
+                    "object": "text_completion",
+                    "created": created,
+                    "model": model_name,
+                    "choices": [{
+                        "text": "",
+                        "index": 0,
+                        "logprobs": None,
+                        "finish_reason": "stop",
+                    }],
+                }
+            )
+            yield "data: [DONE]\n\n"
+            finish_request_tracking(
+                model_name=model_name,
+                endpoint="/v1/completions",
+                start_time=request_start,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=self._estimate_tokens(completion_text),
+            )
+        except Exception as exc:
+            finish_request_tracking(
+                model_name=model_name,
+                endpoint="/v1/completions",
+                start_time=request_start,
+                status="error",
+                prompt_tokens=prompt_tokens,
+                completion_tokens=self._estimate_tokens(completion_text),
+                error_type=type(exc).__name__,
+            )
+            raise
+
+    async def _stream_chat_completion(
+        self,
+        prompt: str,
+        sampling_params: SamplingParams,
+        model_name: str,
+        request_start: float,
+    ):
+        """Stream chat completion chunks using JSON SSE payloads."""
+        completion_id = f"chatcmpl-{int(time.time() * 1000)}"
+        created = int(time.time())
+        prompt_tokens = self._estimate_tokens(prompt)
+        completion_text = ""
+        sent_role = False
+
+        try:
+            async for text in self.engine.stream_generate(prompt, sampling_params):
+                completion_text += text
+                delta: Dict[str, str] = {"content": text}
+                if not sent_role:
+                    delta["role"] = "assistant"
+                    sent_role = True
+
+                yield self._format_sse_payload(
+                    {
+                        "id": completion_id,
+                        "object": "chat.completion.chunk",
+                        "created": created,
+                        "model": model_name,
+                        "choices": [{
+                            "index": 0,
+                            "delta": delta,
+                            "finish_reason": None,
+                        }],
+                    }
+                )
+
+            yield self._format_sse_payload(
+                {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model_name,
+                    "choices": [{
+                        "index": 0,
+                        "delta": {},
+                        "finish_reason": "stop",
+                    }],
+                }
+            )
+            yield "data: [DONE]\n\n"
+            finish_request_tracking(
+                model_name=model_name,
+                endpoint="/v1/chat/completions",
+                start_time=request_start,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=self._estimate_tokens(completion_text),
+            )
+        except Exception as exc:
+            finish_request_tracking(
+                model_name=model_name,
+                endpoint="/v1/chat/completions",
+                start_time=request_start,
+                status="error",
+                prompt_tokens=prompt_tokens,
+                completion_tokens=self._estimate_tokens(completion_text),
+                error_type=type(exc).__name__,
+            )
+            raise
     
     def run(self):
         """Start the server"""

@@ -209,25 +209,50 @@ python -m src.training.rlhf_trainer \
 
 ## 🚢 Serving & Deployment
 
-### Local Development (Docker Compose)
+### Local Development on Mac / CPU-only
 
 ```bash
-# Start all services
-docker-compose up -d
+# Start mock serving, gateway, redis, Prometheus, and Grafana
+docker compose -f docker-compose.local.yml up -d --build
 
-# View logs
-docker-compose logs -f vllm-server
+# View gateway logs
+docker compose -f docker-compose.local.yml logs -f api-gateway
 
 # Stop services
-docker-compose down
+docker compose -f docker-compose.local.yml down
+```
+
+**Service Ports**:
+- Mock LLM API: `http://localhost:8000`
+- API Gateway: `http://localhost:8080`
+- Prometheus: `http://localhost:9091`
+- Grafana: `http://localhost:3000` (admin/admin)
+
+### GPU Development on Linux + NVIDIA
+
+```bash
+# Start vLLM, gateway, redis, Prometheus, and Grafana
+docker compose -f docker-compose.gpu.yml up -d --build
+
+# View vLLM logs
+docker compose -f docker-compose.gpu.yml logs -f vllm-server
+
+# Stop services
+docker compose -f docker-compose.gpu.yml down
 ```
 
 **Service Ports**:
 - vLLM API: `http://localhost:8000`
 - API Gateway: `http://localhost:8080`
-- MLflow UI: `http://localhost:5000`
 - Prometheus: `http://localhost:9091`
 - Grafana: `http://localhost:3000` (admin/admin)
+
+### Full GPU Stack
+
+```bash
+# Start the default GPU-oriented compose stack (includes MLflow)
+docker compose up -d --build
+```
 
 ### Production Deployment (Kubernetes)
 
@@ -238,6 +263,8 @@ kubectl apply -f k8s/deployments/vllm-deployment.yaml
 # Deploy monitoring
 kubectl apply -f k8s/monitoring/
 ```
+
+The provided Kubernetes manifest now scrapes `/metrics` from the main vLLM HTTP port and keeps HPA on CPU/memory metrics only. Prometheus Adapter and custom-metric autoscaling are intentionally not included in this repository yet.
 
 ### Start Inference Server
 
@@ -250,6 +277,10 @@ python -m src.serving.vllm_server \
 # Or use API Gateway
 python -m src.api.gateway --host 0.0.0.0 --port 8080
 ```
+
+Both the vLLM server and the API gateway expose Prometheus metrics on their main HTTP ports:
+- vLLM metrics: `http://localhost:8000/metrics`
+- API Gateway metrics: `http://localhost:8080/metrics`
 
 ### API Usage Example
 
@@ -318,6 +349,26 @@ pytest tests/integration/
 pytest --cov=src tests/
 ```
 
+### Benchmarking and Load Testing
+
+```bash
+# Benchmark through the API gateway
+python scripts/benchmark.py \
+    --endpoint http://localhost:8080 \
+    --username local \
+    --password local \
+    --sweep concurrent=1,4,8 \
+    --sweep max_tokens=64,256 \
+    --output-dir outputs/benchmarks/local-gateway
+
+# Locust load test through the API gateway
+locust -f scripts/load_test.py --host=http://localhost:8080
+
+# Optional: target a specific backend model directly
+LOAD_TEST_MODEL=/workspace/models/aligned/checkpoint-final \
+locust -f scripts/load_test.py --host=http://localhost:8080
+```
+
 ### Code Style
 
 ```bash
@@ -369,13 +420,17 @@ registry.transition_model_stage(
 
 ### Prometheus Metrics
 
-Metrics endpoint: `http://localhost:9090/metrics`
+Prometheus UI: `http://localhost:9091`
+
+Service metrics endpoints:
+- vLLM server: `http://localhost:8000/metrics`
+- API gateway: `http://localhost:8080/metrics`
 
 Key metrics:
 - `llm_requests_total`: Total number of requests
 - `llm_request_duration_seconds`: Request latency
 - `llm_tokens_processed_total`: Number of tokens processed
-- `llm_gpu_utilization_percent`: GPU utilization
+- `llm_active_requests`: In-flight requests
 
 ## 🤝 Contributing
 

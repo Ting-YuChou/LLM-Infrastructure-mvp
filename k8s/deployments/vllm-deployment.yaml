@@ -60,7 +60,7 @@ spec:
         version: v1
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "9090"
+        prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
     spec:
       # Node selection
@@ -93,9 +93,6 @@ spec:
         ports:
         - name: http
           containerPort: 8000
-          protocol: TCP
-        - name: metrics
-          containerPort: 9090
           protocol: TCP
         
         # Resource requests and limits
@@ -196,10 +193,6 @@ spec:
     port: 80
     targetPort: 8000
     protocol: TCP
-  - name: metrics
-    port: 9090
-    targetPort: 9090
-    protocol: TCP
   sessionAffinity: ClientIP  # Sticky sessions
   sessionAffinityConfig:
     clientIP:
@@ -261,24 +254,6 @@ spec:
       target:
         type: Utilization
         averageUtilization: 80
-  
-  # Custom metric: GPU utilization
-  - type: Pods
-    pods:
-      metric:
-        name: llm_gpu_utilization_percent
-      target:
-        type: AverageValue
-        averageValue: "75"
-  
-  # Custom metric: Request queue size
-  - type: Pods
-    pods:
-      metric:
-        name: llm_request_queue_size
-      target:
-        type: AverageValue
-        averageValue: "10"
   
   behavior:
     scaleDown:
@@ -363,8 +338,6 @@ spec:
     ports:
     - protocol: TCP
       port: 8000
-    - protocol: TCP
-      port: 9090
   egress:
   - to:
     - namespaceSelector: {}
@@ -392,7 +365,7 @@ spec:
     matchLabels:
       app: vllm
   endpoints:
-  - port: metrics
+  - port: http
     interval: 30s
     path: /metrics
 

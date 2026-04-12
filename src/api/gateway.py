@@ -13,12 +13,25 @@ from functools import wraps
 from fastapi import FastAPI, HTTPException, Depends, Header, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 import jwt
 import redis
 from collections import defaultdict
 import httpx
+
+try:
+    from src.monitoring.metrics import (
+        add_metrics_endpoint,
+        finish_request_tracking,
+        start_request_tracking,
+    )
+except ModuleNotFoundError:
+    from monitoring.metrics import (  # type: ignore[no-redef]
+        add_metrics_endpoint,
+        finish_request_tracking,
+        start_request_tracking,
+    )
 
 # Configure logging
 logging.basicConfig(
@@ -321,6 +334,7 @@ class APIGateway:
             description="Authentication, rate limiting, and request routing",
             version="1.0.0"
         )
+        add_metrics_endpoint(self.app)
         
         # Initialize auth manager
         self.auth_manager = AuthManager(
@@ -357,6 +371,39 @@ class APIGateway:
         self._setup_routes()
         
         logger.info("API Gateway initialized")
+
+    def _estimate_tokens(self, text: str) -> int:
+        """Estimate token counts when the backend does not provide usage."""
+        return max(1, len(text.split())) if text else 0
+
+    async def _proxy_streaming_completion(
+        self,
+        backend_response: httpx.Response,
+        model_name: str,
+        request_start: float,
+        prompt_tokens: int,
+    ):
+        """Proxy backend SSE bytes while recording gateway metrics."""
+        status = "success"
+        error_type: Optional[str] = None
+
+        try:
+            async for chunk in backend_response.aiter_raw():
+                yield chunk
+        except Exception as exc:
+            status = "error"
+            error_type = type(exc).__name__
+            raise
+        finally:
+            await backend_response.aclose()
+            finish_request_tracking(
+                model_name=model_name,
+                endpoint="/v1/completions",
+                start_time=request_start,
+                status=status,
+                prompt_tokens=prompt_tokens,
+                error_type=error_type,
+            )
     
     def _setup_middleware(self):
         """Configure middleware"""
@@ -485,13 +532,62 @@ class APIGateway:
             """
             # Check rate limit
             self._check_rate_limit(user)
-            
-            # Forward request to vLLM backend
-            try:
-                payload = request.model_dump(exclude_none=True)
-                if "model" not in payload and self.config.DEFAULT_COMPLETION_MODEL:
-                    payload["model"] = self.config.DEFAULT_COMPLETION_MODEL
 
+            # Forward request to vLLM backend
+            payload = request.model_dump(exclude_none=True)
+            if "model" not in payload and self.config.DEFAULT_COMPLETION_MODEL:
+                payload["model"] = self.config.DEFAULT_COMPLETION_MODEL
+
+            model_name = payload.get("model") or "gateway"
+            prompt_tokens = self._estimate_tokens(request.prompt)
+            request_start: Optional[float] = None
+
+            try:
+                if request.stream:
+                    request_start = start_request_tracking(model_name)
+                    backend_request = self.http_client.build_request(
+                        "POST",
+                        f"{self.config.VLLM_BACKEND_URL}/v1/completions",
+                        json=payload,
+                    )
+                    backend_response = await self.http_client.send(
+                        backend_request,
+                        stream=True,
+                    )
+
+                    if backend_response.status_code != 200:
+                        backend_error = (await backend_response.aread()).decode(
+                            "utf-8",
+                            errors="replace",
+                        )
+                        await backend_response.aclose()
+                        finish_request_tracking(
+                            model_name=model_name,
+                            endpoint="/v1/completions",
+                            start_time=request_start,
+                            status="error",
+                            prompt_tokens=prompt_tokens,
+                            error_type="HTTPException",
+                        )
+                        raise HTTPException(
+                            status_code=backend_response.status_code,
+                            detail=f"Backend error: {backend_error}",
+                        )
+
+                    return StreamingResponse(
+                        self._proxy_streaming_completion(
+                            backend_response=backend_response,
+                            model_name=model_name,
+                            request_start=request_start,
+                            prompt_tokens=prompt_tokens,
+                        ),
+                        media_type=backend_response.headers.get(
+                            "content-type",
+                            "text/event-stream",
+                        ),
+                    )
+
+                request_start = start_request_tracking(model_name)
                 response = await self.http_client.post(
                     f"{self.config.VLLM_BACKEND_URL}/v1/completions",
                     json=payload,
@@ -505,21 +601,55 @@ class APIGateway:
                     )
                 
                 result = response.json()
+                usage = result.get("usage", {})
+                completion_tokens = usage.get("completion_tokens", 0)
                 
                 # Transform response
-                return CompletionResponse(
+                gateway_response = CompletionResponse(
                     id=result.get("id", "unknown"),
                     model=result.get("model", "unknown"),
                     text=result["choices"][0]["text"],
                     usage=UsageInfo(
-                        prompt_tokens=result["usage"]["prompt_tokens"],
-                        completion_tokens=result["usage"]["completion_tokens"],
-                        total_tokens=result["usage"]["total_tokens"]
+                        prompt_tokens=usage.get("prompt_tokens", prompt_tokens),
+                        completion_tokens=completion_tokens,
+                        total_tokens=usage.get(
+                            "total_tokens",
+                            prompt_tokens + completion_tokens,
+                        )
                     ),
                     created_at=datetime.utcnow().isoformat()
                 )
+                finish_request_tracking(
+                    model_name=model_name,
+                    endpoint="/v1/completions",
+                    start_time=request_start,
+                    prompt_tokens=gateway_response.usage.prompt_tokens,
+                    completion_tokens=gateway_response.usage.completion_tokens,
+                )
+                return gateway_response
+
+            except HTTPException as exc:
+                if request_start is not None and not request.stream:
+                    finish_request_tracking(
+                        model_name=model_name,
+                        endpoint="/v1/completions",
+                        start_time=request_start,
+                        status="error",
+                        prompt_tokens=prompt_tokens,
+                        error_type=type(exc).__name__,
+                    )
+                raise
                 
             except httpx.RequestError as e:
+                if request_start is not None:
+                    finish_request_tracking(
+                        model_name=model_name,
+                        endpoint="/v1/completions",
+                        start_time=request_start,
+                        status="error",
+                        prompt_tokens=prompt_tokens,
+                        error_type=type(e).__name__,
+                    )
                 logger.error(f"Backend request failed: {e}")
                 raise HTTPException(status_code=503, detail="Backend service unavailable")
         
