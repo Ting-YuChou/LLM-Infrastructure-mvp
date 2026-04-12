@@ -1,0 +1,39 @@
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/workspace
+ENV CUDA_HOME=/usr/local/cuda
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
+ENV PATH=/usr/local/cuda/bin:${PATH}
+
+WORKDIR /workspace
+
+RUN apt-get update && apt-get install -y \
+    python3.10 \
+    python3-pip \
+    python3.10-dev \
+    python3.10-venv \
+    build-essential \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 && \
+    update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
+
+COPY docker/requirements.serving.txt /tmp/requirements.serving.txt
+
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir \
+      torch==2.1.0 \
+      torchvision==0.16.0 \
+      torchaudio==2.1.0 \
+      --index-url https://download.pytorch.org/whl/cu118 && \
+    pip install --no-cache-dir -r /tmp/requirements.serving.txt
+
+COPY src /workspace/src
+COPY config /workspace/config
+
+CMD ["python", "-m", "src.serving.vllm_server", "--config", "/workspace/config/serving_config.yaml"]

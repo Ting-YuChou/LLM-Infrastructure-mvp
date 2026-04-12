@@ -1,0 +1,63 @@
+services:
+  vllm-server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.serving
+    gpus: all
+    environment:
+      CUDA_VISIBLE_DEVICES: "0"
+    command:
+      - python
+      - -m
+      - src.serving.vllm_server
+      - --config
+      - /workspace/config/serving_config.yaml
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/workspace/models:ro
+      - ./config:/workspace/config:ro
+      - ./outputs:/workspace/outputs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.gateway
+    environment:
+      JWT_SECRET: local-dev-secret
+      RATE_LIMIT_ENABLED: "false"
+      REDIS_HOST: redis
+      VLLM_BACKEND_URL: http://vllm-server:8000
+      DEFAULT_COMPLETION_MODEL: /workspace/models/aligned/checkpoint-final
+    command: ["python", "-m", "src.api.gateway", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      vllm-server:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped

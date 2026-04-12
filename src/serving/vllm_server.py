@@ -3,21 +3,30 @@ vLLM Inference Server
 High-performance LLM serving with PagedAttention and continuous batching
 """
 
-import os
-import yaml
-import logging
-import asyncio
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass
+from __future__ import annotations
 
-from vllm import LLM, SamplingParams
-from vllm.engine.arg_utils import AsyncEngineArgs
-from vllm.engine.async_llm_engine import AsyncLLMEngine
+import inspect
+import logging
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
+import yaml
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import uvicorn
+
+try:
+    from vllm import SamplingParams
+    from vllm.engine.arg_utils import AsyncEngineArgs
+    from vllm.engine.async_llm_engine import AsyncLLMEngine
+    VLLM_IMPORT_ERROR = None
+except ModuleNotFoundError as exc:
+    SamplingParams = Any  # type: ignore[assignment]
+    AsyncEngineArgs = None  # type: ignore[assignment]
+    AsyncLLMEngine = None  # type: ignore[assignment]
+    VLLM_IMPORT_ERROR = exc
 
 # Configure logging
 logging.basicConfig(
@@ -33,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 class CompletionRequest(BaseModel):
     """Request model for /v1/completions endpoint"""
-    model: str
+    model: Optional[str] = None
     prompt: str | List[str]
     max_tokens: int = Field(default=512, ge=1, le=4096)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
@@ -45,16 +54,17 @@ class CompletionRequest(BaseModel):
     frequency_penalty: float = Field(default=0.0, ge=-2.0, le=2.0)
     stop: Optional[List[str]] = None
     
-    class Config:
-        schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "model": "llama2-7b",
                 "prompt": "Explain quantum computing",
                 "max_tokens": 256,
                 "temperature": 0.7,
-                "stream": False
+                "stream": False,
             }
         }
+    }
 
 
 class ChatMessage(BaseModel):
@@ -65,7 +75,7 @@ class ChatMessage(BaseModel):
 
 class ChatCompletionRequest(BaseModel):
     """Request model for /v1/chat/completions endpoint"""
-    model: str
+    model: Optional[str] = None
     messages: List[ChatMessage]
     max_tokens: int = Field(default=512, ge=1, le=4096)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
@@ -100,30 +110,196 @@ class CompletionResponse(BaseModel):
 class VLLMServerConfig:
     """Configuration for vLLM server"""
     model_name: str
+    tokenizer: Optional[str] = None
+    tokenizer_mode: str = "auto"
+    tokenizer_revision: Optional[str] = None
+    trust_remote_code: bool = False
+    download_dir: Optional[str] = None
+    dtype: str = "auto"
+    quantization: Optional[str] = None
+    max_model_len: Optional[int] = None
+    load_format: str = "auto"
+    cpu_offload_gb: float = 0.0
+    enable_lora: bool = False
+    max_loras: int = 1
+    max_lora_rank: int = 16
+    lora_dtype: str = "auto"
     host: str = "0.0.0.0"
     port: int = 8000
     tensor_parallel_size: int = 1
+    pipeline_parallel_size: int = 1
     gpu_memory_utilization: float = 0.9
+    swap_space: float = 4.0
+    enforce_eager: bool = False
     max_num_seqs: int = 256
     max_num_batched_tokens: int = 8192
+    block_size: int = 16
     enable_prefix_caching: bool = True
+    scheduling_policy: str = "fcfs"
+    enable_chunked_prefill: bool = False
+    disable_log_stats: bool = False
+    disable_custom_all_reduce: bool = False
+    seed: int = 0
+    max_logprobs: int = 5
+    max_parallel_loading_workers: Optional[int] = None
+    distributed_init_method: str = "auto"
     
     @classmethod
     def from_yaml(cls, config_path: str) -> 'VLLMServerConfig':
         """Load configuration from YAML file"""
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
-        
+
+        model_config = config.get('model', {})
+        server_config = config.get('server', {})
+        gpu_config = config.get('gpu', {})
+        paged_attention_config = config.get('paged_attention', {})
+        batching_config = config.get('batching', {})
+        optimization_config = config.get('optimization', {})
+        distributed_config = config.get('distributed', {})
+        engine_config = config.get('engine', {})
+        loading_config = config.get('loading', {})
+
         return cls(
-            model_name=config['model']['name'],
-            host=config['server']['host'],
-            port=config['server']['port'],
-            tensor_parallel_size=config['gpu']['tensor_parallel_size'],
-            gpu_memory_utilization=config['gpu']['gpu_memory_utilization'],
-            max_num_seqs=config['gpu']['max_num_seqs'],
-            max_num_batched_tokens=config['gpu']['max_num_batched_tokens'],
-            enable_prefix_caching=config['paged_attention'].get('enable_prefix_caching', True),
+            model_name=model_config['name'],
+            tokenizer=model_config.get('tokenizer'),
+            tokenizer_mode=engine_config.get('tokenizer_mode', 'auto'),
+            tokenizer_revision=engine_config.get('tokenizer_revision'),
+            trust_remote_code=model_config.get('trust_remote_code', False),
+            download_dir=model_config.get('download_dir'),
+            dtype=model_config.get('dtype', 'auto'),
+            quantization=model_config.get('quantization'),
+            max_model_len=model_config.get('max_model_len'),
+            load_format=loading_config.get('load_format', 'auto'),
+            cpu_offload_gb=loading_config.get('cpu_offload_gb', 0.0),
+            enable_lora=loading_config.get('enable_lora', False),
+            max_loras=loading_config.get('max_loras', 1),
+            max_lora_rank=loading_config.get('max_lora_rank', 16),
+            lora_dtype=loading_config.get('lora_dtype', 'auto'),
+            host=server_config.get('host', '0.0.0.0'),
+            port=server_config.get('port', 8000),
+            tensor_parallel_size=gpu_config.get('tensor_parallel_size', 1),
+            pipeline_parallel_size=gpu_config.get('pipeline_parallel_size', 1),
+            gpu_memory_utilization=gpu_config.get('gpu_memory_utilization', 0.9),
+            swap_space=gpu_config.get('swap_space', 4.0),
+            enforce_eager=gpu_config.get('enforce_eager', False),
+            max_num_seqs=gpu_config.get('max_num_seqs', 256),
+            max_num_batched_tokens=gpu_config.get('max_num_batched_tokens', 8192),
+            block_size=paged_attention_config.get('block_size', 16),
+            enable_prefix_caching=paged_attention_config.get('enable_prefix_caching', True),
+            scheduling_policy=batching_config.get('scheduling_policy', 'fcfs'),
+            enable_chunked_prefill=batching_config.get('enable_chunked_prefill', False),
+            disable_log_stats=engine_config.get(
+                'disable_log_stats',
+                optimization_config.get('disable_log_stats', False),
+            ),
+            disable_custom_all_reduce=optimization_config.get('disable_custom_all_reduce', False),
+            seed=engine_config.get('seed', 0),
+            max_logprobs=engine_config.get('max_logprobs', 5),
+            max_parallel_loading_workers=engine_config.get('max_parallel_loading_workers'),
+            distributed_init_method=distributed_config.get('distributed_init_method', 'auto'),
         )
+
+    def to_async_engine_kwargs(self) -> Dict[str, Any]:
+        """Translate config into desired AsyncEngineArgs kwargs."""
+        engine_kwargs = {
+            "model": self.model_name,
+            "tokenizer": self.tokenizer,
+            "tokenizer_mode": self.tokenizer_mode,
+            "tokenizer_revision": self.tokenizer_revision,
+            "trust_remote_code": self.trust_remote_code,
+            "download_dir": self.download_dir,
+            "dtype": self.dtype,
+            "quantization": self.quantization,
+            "max_model_len": self.max_model_len,
+            "load_format": self.load_format,
+            "cpu_offload_gb": self.cpu_offload_gb,
+            "enable_lora": self.enable_lora,
+            "max_loras": self.max_loras,
+            "max_lora_rank": self.max_lora_rank,
+            "lora_dtype": self.lora_dtype,
+            "tensor_parallel_size": self.tensor_parallel_size,
+            "pipeline_parallel_size": self.pipeline_parallel_size,
+            "gpu_memory_utilization": self.gpu_memory_utilization,
+            "swap_space": self.swap_space,
+            "enforce_eager": self.enforce_eager,
+            "max_num_seqs": self.max_num_seqs,
+            "max_num_batched_tokens": self.max_num_batched_tokens,
+            "block_size": self.block_size,
+            "enable_prefix_caching": self.enable_prefix_caching,
+            "scheduling_policy": self.scheduling_policy,
+            "enable_chunked_prefill": self.enable_chunked_prefill,
+            "disable_log_stats": self.disable_log_stats,
+            "disable_custom_all_reduce": self.disable_custom_all_reduce,
+            "seed": self.seed,
+            "max_logprobs": self.max_logprobs,
+            "max_parallel_loading_workers": self.max_parallel_loading_workers,
+            "distributed_init_method": self.distributed_init_method,
+        }
+        return {key: value for key, value in engine_kwargs.items() if value is not None}
+
+    def build_async_engine_kwargs(self, engine_args_cls: Any | None = None) -> Dict[str, Any]:
+        """
+        Filter desired engine kwargs against the installed AsyncEngineArgs signature.
+
+        This keeps the config forward-compatible while avoiding runtime failures
+        when a pinned vLLM version does not support newer options yet.
+        """
+        desired_kwargs = self.to_async_engine_kwargs()
+        target_cls = engine_args_cls or AsyncEngineArgs
+        if target_cls is None:
+            return desired_kwargs
+
+        supported_kwargs = _get_supported_async_engine_arg_names(target_cls)
+        if supported_kwargs is None:
+            logger.warning(
+                "Could not inspect AsyncEngineArgs signature; applying desired "
+                "engine kwargs without compatibility filtering."
+            )
+            return desired_kwargs
+
+        unsupported_kwargs = sorted(set(desired_kwargs) - supported_kwargs)
+        if unsupported_kwargs:
+            logger.warning(
+                "Skipping unsupported AsyncEngineArgs kwargs for this vLLM "
+                "version: %s",
+                ", ".join(unsupported_kwargs),
+            )
+
+        return {
+            key: value
+            for key, value in desired_kwargs.items()
+            if key in supported_kwargs
+        }
+
+
+def _get_supported_async_engine_arg_names(engine_args_cls: Any) -> Optional[set[str]]:
+    """Return supported AsyncEngineArgs parameter names for runtime filtering."""
+    try:
+        signature = inspect.signature(engine_args_cls)
+    except (TypeError, ValueError):
+        try:
+            signature = inspect.signature(engine_args_cls.__init__)
+        except (AttributeError, TypeError, ValueError):
+            return None
+
+    parameter_names = set()
+    has_var_kwargs = False
+    for name, parameter in signature.parameters.items():
+        if name == "self":
+            continue
+        if parameter.kind == inspect.Parameter.VAR_KEYWORD:
+            has_var_kwargs = True
+            continue
+        if parameter.kind in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+        ):
+            parameter_names.add(name)
+
+    if has_var_kwargs:
+        return None
+    return parameter_names
 
 
 # ============================================================================
@@ -149,16 +325,19 @@ class VLLMInferenceEngine:
     
     async def initialize(self):
         """Initialize the async engine"""
+        if VLLM_IMPORT_ERROR is not None or AsyncEngineArgs is None or AsyncLLMEngine is None:
+            raise RuntimeError(
+                "vLLM is not installed. Install it before starting the serving "
+                "stack."
+            ) from VLLM_IMPORT_ERROR
+
         # Configure engine arguments
-        engine_args = AsyncEngineArgs(
-            model=self.config.model_name,
-            tensor_parallel_size=self.config.tensor_parallel_size,
-            gpu_memory_utilization=self.config.gpu_memory_utilization,
-            max_num_seqs=self.config.max_num_seqs,
-            max_num_batched_tokens=self.config.max_num_batched_tokens,
-            enable_prefix_caching=self.config.enable_prefix_caching,
-            trust_remote_code=False,
+        engine_kwargs = self.config.build_async_engine_kwargs(AsyncEngineArgs)
+        logger.info(
+            "Applying AsyncEngineArgs settings: %s",
+            ", ".join(sorted(engine_kwargs)),
         )
+        engine_args = AsyncEngineArgs(**engine_kwargs)
         
         # Create engine
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)

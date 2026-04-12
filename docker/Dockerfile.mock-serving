@@ -1,0 +1,14 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/workspace
+
+WORKDIR /workspace
+
+COPY docker/requirements.mock-serving.txt /tmp/requirements.mock-serving.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.mock-serving.txt
+
+COPY src /workspace/src
+
+CMD ["python", "-m", "src.serving.mock_server"]
