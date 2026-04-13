@@ -26,6 +26,7 @@ venv/
 ENV/
 env/
 .venv
+.venv-host-check/
 
 # IDEs
 .vscode/

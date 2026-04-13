@@ -5,9 +5,10 @@ Tests Prometheus metrics collection and tracking
 
 import pytest
 import time
-from prometheus_client import REGISTRY
 import sys
 from pathlib import Path
+
+pytest_plugins = ("pytest_asyncio.plugin",)
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
@@ -20,6 +21,7 @@ from monitoring.metrics import (
     track_request_metrics,
     track_tokens,
     track_training_metrics,
+    registry as metrics_registry,
 )
 
 
@@ -219,7 +221,7 @@ class TestMetricsExport:
         from prometheus_client import generate_latest
         
         # Generate metrics
-        metrics_output = generate_latest(REGISTRY)
+        metrics_output = generate_latest(metrics_registry)
         
         # Check output is bytes
         assert isinstance(metrics_output, bytes)
