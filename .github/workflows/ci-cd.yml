@@ -131,6 +131,7 @@ jobs:
     needs: [lint, test]
     
     strategy:
+      fail-fast: false
       matrix:
         image: [base, serving, gateway, mock-serving]
     
