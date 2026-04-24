@@ -43,6 +43,7 @@ services:
       dockerfile: docker/Dockerfile.gateway
     environment:
       JWT_SECRET: local-dev-secret
+      AUTH_USERS: "local:local,loadtest:loadtest123"
       RATE_LIMIT_ENABLED: "false"
       REDIS_HOST: redis
       VLLM_BACKEND_URL: http://vllm-server:8000

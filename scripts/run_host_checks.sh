@@ -54,8 +54,8 @@ PYTHONPATH="${ROOT_DIR}" "${VENV_DIR}/bin/python" -c \
 
 echo
 echo "[3/4] gateway route smoke"
-PYTHONPATH="${ROOT_DIR}/src" "${VENV_DIR}/bin/python" -c \
-  "from api.gateway import APIGateway; app = APIGateway().app; print(sorted(route.path for route in app.routes if route.path in {'/health', '/metrics', '/auth/token', '/v1/completions'}))"
+JWT_SECRET=host-check-secret AUTH_USERS=local:local PYTHONPATH="${ROOT_DIR}/src" "${VENV_DIR}/bin/python" -c \
+  "from api.gateway import APIGateway; app = APIGateway().app; print(sorted(route.path for route in app.routes if route.path in {'/health', '/metrics', '/auth/token', '/v1/completions', '/v1/chat/completions'}))"
 
 echo
 echo "[4/4] targeted pytest"

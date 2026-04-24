@@ -160,9 +160,9 @@ spec:
         - /bin/bash
         - -c
         - |
-          if [ ! -d "/workspace/models/$(MODEL_NAME)" ]; then
+          if [ ! -d "/workspace/models/${MODEL_NAME}" ]; then
             echo "Downloading model..."
-            python -c "from transformers import AutoModel; AutoModel.from_pretrained('$(MODEL_NAME)', cache_dir='/workspace/models')"
+            python -c "from transformers import AutoModel; AutoModel.from_pretrained('${MODEL_NAME}', cache_dir='/workspace/models')"
           else
             echo "Model already cached"
           fi

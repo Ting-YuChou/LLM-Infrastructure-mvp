@@ -15,14 +15,47 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 from api.gateway import APIGateway, GatewayConfig
 
 
+def make_test_config(rate_limit_enabled: bool = False) -> GatewayConfig:
+    """Create an explicit auth config for gateway tests."""
+    config = GatewayConfig()
+    config.JWT_SECRET = "test-secret"
+    config.AUTH_USERS = {"testuser": "testpass"}
+    config.DEV_AUTH_ENABLED = False
+    config.RATE_LIMIT_ENABLED = rate_limit_enabled
+    return config
+
+
+class FakeBackendResponse:
+    """Minimal async-httpx response stand-in for gateway tests."""
+
+    def __init__(self, payload, status_code: int = 200):
+        self.payload = payload
+        self.status_code = status_code
+        self.text = str(payload)
+
+    def json(self):
+        return self.payload
+
+
+class FakeBackendClient:
+    """Capture proxied backend requests without a network service."""
+
+    def __init__(self, payload):
+        self.payload = payload
+        self.requests = []
+
+    async def post(self, url, json, timeout):
+        self.requests.append({"url": url, "json": json, "timeout": timeout})
+        return FakeBackendResponse(self.payload)
+
+
 class TestAPIGateway:
     """Integration tests for API Gateway"""
     
     @pytest.fixture
     def gateway(self):
         """Create test gateway instance"""
-        config = GatewayConfig()
-        config.RATE_LIMIT_ENABLED = False  # Disable for easier testing
+        config = make_test_config(rate_limit_enabled=False)
         gateway = APIGateway(config=config)
         return gateway
     
@@ -67,6 +100,15 @@ class TestAPIGateway:
             }
         )
         
+        assert response.status_code == 401
+
+    def test_get_token_rejects_wrong_password(self, client):
+        """Test token generation with invalid configured credentials."""
+        response = client.post(
+            "/auth/token",
+            json={"username": "testuser", "password": "wrongpass"}
+        )
+
         assert response.status_code == 401
     
     def test_protected_endpoint_without_auth(self, client):
@@ -126,6 +168,49 @@ class TestAPIGateway:
         assert "models" in data
         assert len(data["models"]) > 0
 
+    def test_chat_completion_is_proxied(self, gateway):
+        """Test chat completions are routed to the backend chat endpoint."""
+        gateway.config.DEFAULT_COMPLETION_MODEL = "default-chat-model"
+        gateway.http_client = FakeBackendClient(
+            {
+                "id": "chatcmpl-test",
+                "object": "chat.completion",
+                "created": 123,
+                "model": "default-chat-model",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "hello"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 3,
+                    "completion_tokens": 1,
+                    "total_tokens": 4,
+                },
+            }
+        )
+        client = TestClient(gateway.app)
+        token = client.post(
+            "/auth/token",
+            json={"username": "testuser", "password": "testpass"},
+        ).json()["access_token"]
+
+        response = client.post(
+            "/v1/chat/completions",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "messages": [{"role": "user", "content": "say hello"}],
+                "max_tokens": 16,
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["choices"][0]["message"]["content"] == "hello"
+        assert gateway.http_client.requests[0]["url"].endswith("/v1/chat/completions")
+        assert gateway.http_client.requests[0]["json"]["model"] == "default-chat-model"
+
 
 class TestRateLimiting:
     """Test rate limiting functionality"""
@@ -133,8 +218,7 @@ class TestRateLimiting:
     @pytest.fixture
     def gateway_with_limits(self):
         """Create gateway with strict rate limits"""
-        config = GatewayConfig()
-        config.RATE_LIMIT_ENABLED = True
+        config = make_test_config(rate_limit_enabled=True)
         config.RATE_LIMIT_REQUESTS_PER_MINUTE = 5
         config.RATE_LIMIT_REQUESTS_PER_HOUR = 100
         gateway = APIGateway(config=config)
@@ -169,14 +253,21 @@ class TestCORS:
     @pytest.fixture
     def client(self):
         """Create test client"""
-        gateway = APIGateway()
+        gateway = APIGateway(config=make_test_config())
         return TestClient(gateway.app)
     
     def test_cors_headers(self, client):
-        """Test CORS headers are present"""
-        response = client.options("/health")
+        """Test CORS headers are present for real browser preflight."""
+        response = client.options(
+            "/health",
+            headers={
+                "Origin": "http://example.com",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
         
         # Check CORS headers
+        assert response.status_code == 200
         assert "access-control-allow-origin" in response.headers
 
 
@@ -186,7 +277,7 @@ class TestErrorHandling:
     @pytest.fixture
     def client(self):
         """Create test client"""
-        gateway = APIGateway()
+        gateway = APIGateway(config=make_test_config())
         return TestClient(gateway.app)
     
     def test_404_error(self, client):
@@ -210,7 +301,7 @@ class TestRequestLogging:
     @pytest.fixture
     def client(self):
         """Create test client"""
-        gateway = APIGateway()
+        gateway = APIGateway(config=make_test_config())
         return TestClient(gateway.app)
     
     def test_request_is_logged(self, client, caplog):
@@ -237,7 +328,7 @@ class TestUsageTracking:
     @pytest.fixture
     def client(self):
         """Create test client"""
-        gateway = APIGateway()
+        gateway = APIGateway(config=make_test_config())
         return TestClient(gateway.app)
     
     def test_get_usage(self, client):

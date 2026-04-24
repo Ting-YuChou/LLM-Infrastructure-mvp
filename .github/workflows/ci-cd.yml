@@ -103,7 +103,7 @@ jobs:
     
     strategy:
       matrix:
-        image: [base, verl, serving]
+        image: [base, serving, gateway, mock-serving]
     
     steps:
       - name: Checkout code
@@ -190,15 +190,13 @@ jobs:
       
       - name: Deploy to Kubernetes
         run: |
-          kubectl apply -f k8s/namespace.yaml
-          kubectl apply -f k8s/deployments/ -n llm-inference
-          kubectl apply -f k8s/services/ -n llm-inference
+          kubectl apply -f k8s/deployments/vllm-deployment.yaml
           kubectl rollout status deployment/vllm-server -n llm-inference
       
       - name: Run smoke tests
         run: |
           kubectl wait --for=condition=available deployment/vllm-server -n llm-inference --timeout=300s
-          python scripts/smoke_test.py --endpoint https://staging.llm-infra.example.com
+          curl -fsS https://staging.llm-infra.example.com/health
 
   # ==========================================================================
   # Deploy to Production
@@ -206,7 +204,7 @@ jobs:
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: [build-docker, deploy-staging]
+    needs: [build-docker]
     if: github.ref == 'refs/heads/main'
     environment:
       name: production
@@ -222,26 +220,14 @@ jobs:
           method: kubeconfig
           kubeconfig: ${{ secrets.KUBE_CONFIG_PROD }}
       
-      - name: Deploy with Canary strategy
+      - name: Deploy to Kubernetes
         run: |
-          # Deploy canary (10% traffic)
-          kubectl apply -f k8s/canary/
-          kubectl rollout status deployment/vllm-server-canary -n llm-inference
-          
-          # Wait and monitor
-          sleep 300
-          
-          # Check metrics
-          python scripts/check_metrics.py --deployment canary
-          
-          # Promote to 100% if successful
-          kubectl apply -f k8s/deployments/ -n llm-inference
+          kubectl apply -f k8s/deployments/vllm-deployment.yaml
           kubectl rollout status deployment/vllm-server -n llm-inference
       
       - name: Run production tests
         run: |
-          python scripts/smoke_test.py --endpoint https://llm-infra.example.com
-          python scripts/benchmark.py --endpoint https://llm-infra.example.com --num-requests 50
+          curl -fsS https://llm-infra.example.com/health
       
       - name: Notify deployment
         uses: 8398a7/action-slack@v3

@@ -275,6 +275,7 @@ python -m src.serving.vllm_server \
     --model /path/to/model
 
 # Or use API Gateway
+JWT_SECRET=change-me AUTH_USERS=local:local \
 python -m src.api.gateway --host 0.0.0.0 --port 8080
 ```
 
@@ -287,10 +288,11 @@ Both the vLLM server and the API gateway expose Prometheus metrics on their main
 ```python
 import requests
 
+# The Docker Compose stacks configure AUTH_USERS=local:local,loadtest:loadtest123.
 # Get authentication token
 response = requests.post("http://localhost:8080/auth/token", json={
-    "username": "user",
-    "password": "pass"
+    "username": "local",
+    "password": "local"
 })
 token = response.json()["access_token"]
 

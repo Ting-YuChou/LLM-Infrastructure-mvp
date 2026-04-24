@@ -57,6 +57,35 @@ def _get_env_int(name: str, default: int) -> int:
     return int(value)
 
 
+def _get_env_list(name: str, default: List[str]) -> List[str]:
+    """Parse comma-delimited list environment variables."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    values = [item.strip() for item in value.split(",") if item.strip()]
+    return values or default
+
+
+def _get_env_users(name: str = "AUTH_USERS") -> Dict[str, str]:
+    """Parse comma-delimited username:password pairs."""
+    value = os.getenv(name)
+    if not value:
+        return {}
+
+    users: Dict[str, str] = {}
+    for pair in value.split(","):
+        if not pair.strip():
+            continue
+        if ":" not in pair:
+            raise ValueError(f"{name} entries must use username:password format")
+        username, password = pair.split(":", 1)
+        username = username.strip()
+        password = password.strip()
+        if username and password:
+            users[username] = password
+    return users
+
+
 # ============================================================================
 # Configuration
 # ============================================================================
@@ -65,9 +94,11 @@ class GatewayConfig:
     """API Gateway configuration"""
     
     # JWT Settings
-    JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
+    JWT_SECRET = os.getenv("JWT_SECRET")
     JWT_ALGORITHM = "HS256"
     JWT_EXPIRATION_HOURS = 24
+    AUTH_USERS = _get_env_users()
+    DEV_AUTH_ENABLED = _get_env_bool("DEV_AUTH_ENABLED", False)
     
     # Rate Limiting
     RATE_LIMIT_ENABLED = _get_env_bool("RATE_LIMIT_ENABLED", True)
@@ -84,10 +115,10 @@ class GatewayConfig:
     DEFAULT_COMPLETION_MODEL = os.getenv("DEFAULT_COMPLETION_MODEL")
     
     # CORS
-    CORS_ORIGINS = ["*"]  # Configure for production
+    CORS_ORIGINS = _get_env_list("CORS_ORIGINS", ["*"])  # Configure for production
     
     # Security
-    ALLOWED_HOSTS = ["*"]  # Configure for production
+    ALLOWED_HOSTS = _get_env_list("ALLOWED_HOSTS", ["*"])  # Configure for production
 
 
 # ============================================================================
@@ -115,6 +146,23 @@ class CompletionRequest(BaseModel):
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     top_p: float = Field(default=0.9, ge=0.0, le=1.0)
     stream: bool = False
+
+
+class ChatMessage(BaseModel):
+    """Chat message model for OpenAI-compatible chat requests."""
+    role: str = Field(..., pattern="^(system|user|assistant)$")
+    content: str
+
+
+class ChatCompletionRequest(BaseModel):
+    """Chat completion request model."""
+    model: Optional[str] = None
+    messages: List[ChatMessage]
+    max_tokens: int = Field(default=256, ge=1, le=4096)
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    top_p: float = Field(default=0.9, ge=0.0, le=1.0)
+    stream: bool = False
+    stop: Optional[List[str]] = None
 
 
 class UsageInfo(BaseModel):
@@ -327,6 +375,13 @@ class APIGateway:
             config: Gateway configuration
         """
         self.config = config
+
+        if not self.config.JWT_SECRET:
+            raise RuntimeError(
+                "JWT_SECRET must be set. Configure AUTH_USERS for static "
+                "credentials, or set DEV_AUTH_ENABLED=true only for local "
+                "development."
+            )
         
         # Initialize FastAPI app
         self.app = FastAPI(
@@ -376,10 +431,25 @@ class APIGateway:
         """Estimate token counts when the backend does not provide usage."""
         return max(1, len(text.split())) if text else 0
 
-    async def _proxy_streaming_completion(
+    def _estimate_chat_tokens(self, messages: List[ChatMessage]) -> int:
+        """Estimate chat prompt tokens when backend usage is unavailable."""
+        return sum(self._estimate_tokens(message.content) + 1 for message in messages)
+
+    def _validate_credentials(self, username: str, password: str) -> bool:
+        """Validate token credentials against configured auth mode."""
+        if not username or not password:
+            return False
+
+        if self.config.AUTH_USERS:
+            return self.config.AUTH_USERS.get(username) == password
+
+        return self.config.DEV_AUTH_ENABLED
+
+    async def _proxy_streaming_response(
         self,
         backend_response: httpx.Response,
         model_name: str,
+        endpoint: str,
         request_start: float,
         prompt_tokens: int,
     ):
@@ -398,7 +468,7 @@ class APIGateway:
             await backend_response.aclose()
             finish_request_tracking(
                 model_name=model_name,
-                endpoint="/v1/completions",
+                endpoint=endpoint,
                 start_time=request_start,
                 status=status,
                 prompt_tokens=prompt_tokens,
@@ -502,11 +572,16 @@ class APIGateway:
             """
             Get API token
             
-            In production, validate username/password against database
+            Validates credentials against AUTH_USERS unless DEV_AUTH_ENABLED
+            is explicitly set for local-only development.
             """
-            # TODO: Implement proper authentication
-            # For now, accept any non-empty credentials
-            if not request.username or not request.password:
+            if not self.config.AUTH_USERS and not self.config.DEV_AUTH_ENABLED:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Authentication is not configured",
+                )
+
+            if not self._validate_credentials(request.username, request.password):
                 raise HTTPException(status_code=401, detail="Invalid credentials")
             
             # Create token
@@ -575,9 +650,10 @@ class APIGateway:
                         )
 
                     return StreamingResponse(
-                        self._proxy_streaming_completion(
+                        self._proxy_streaming_response(
                             backend_response=backend_response,
                             model_name=model_name,
+                            endpoint="/v1/completions",
                             request_start=request_start,
                             prompt_tokens=prompt_tokens,
                         ),
@@ -651,6 +727,123 @@ class APIGateway:
                         error_type=type(e).__name__,
                     )
                 logger.error(f"Backend request failed: {e}")
+                raise HTTPException(status_code=503, detail="Backend service unavailable")
+
+        @self.app.post("/v1/chat/completions")
+        async def create_chat_completion(
+            request: ChatCompletionRequest,
+            user: str = Depends(self._get_current_user)
+        ):
+            """
+            Create chat completion.
+
+            Proxies the backend OpenAI-compatible chat response without
+            reshaping the payload.
+            """
+            self._check_rate_limit(user)
+
+            payload = request.model_dump(exclude_none=True)
+            if "model" not in payload and self.config.DEFAULT_COMPLETION_MODEL:
+                payload["model"] = self.config.DEFAULT_COMPLETION_MODEL
+
+            model_name = payload.get("model") or "gateway"
+            prompt_tokens = self._estimate_chat_tokens(request.messages)
+            endpoint = "/v1/chat/completions"
+            request_start: Optional[float] = None
+
+            try:
+                if request.stream:
+                    request_start = start_request_tracking(model_name)
+                    backend_request = self.http_client.build_request(
+                        "POST",
+                        f"{self.config.VLLM_BACKEND_URL}{endpoint}",
+                        json=payload,
+                    )
+                    backend_response = await self.http_client.send(
+                        backend_request,
+                        stream=True,
+                    )
+
+                    if backend_response.status_code != 200:
+                        backend_error = (await backend_response.aread()).decode(
+                            "utf-8",
+                            errors="replace",
+                        )
+                        await backend_response.aclose()
+                        finish_request_tracking(
+                            model_name=model_name,
+                            endpoint=endpoint,
+                            start_time=request_start,
+                            status="error",
+                            prompt_tokens=prompt_tokens,
+                            error_type="HTTPException",
+                        )
+                        raise HTTPException(
+                            status_code=backend_response.status_code,
+                            detail=f"Backend error: {backend_error}",
+                        )
+
+                    return StreamingResponse(
+                        self._proxy_streaming_response(
+                            backend_response=backend_response,
+                            model_name=model_name,
+                            endpoint=endpoint,
+                            request_start=request_start,
+                            prompt_tokens=prompt_tokens,
+                        ),
+                        media_type=backend_response.headers.get(
+                            "content-type",
+                            "text/event-stream",
+                        ),
+                    )
+
+                request_start = start_request_tracking(model_name)
+                response = await self.http_client.post(
+                    f"{self.config.VLLM_BACKEND_URL}{endpoint}",
+                    json=payload,
+                    timeout=300.0,
+                )
+
+                if response.status_code != 200:
+                    raise HTTPException(
+                        status_code=response.status_code,
+                        detail=f"Backend error: {response.text}",
+                    )
+
+                result = response.json()
+                usage = result.get("usage", {})
+                finish_request_tracking(
+                    model_name=model_name,
+                    endpoint=endpoint,
+                    start_time=request_start,
+                    prompt_tokens=usage.get("prompt_tokens", prompt_tokens),
+                    completion_tokens=usage.get("completion_tokens", 0),
+                )
+                return JSONResponse(content=result)
+
+            except HTTPException as exc:
+                if request_start is not None and not request.stream:
+                    finish_request_tracking(
+                        model_name=model_name,
+                        endpoint=endpoint,
+                        start_time=request_start,
+                        status="error",
+                        prompt_tokens=prompt_tokens,
+                        error_type=type(exc).__name__,
+                    )
+                raise
+
+            except httpx.RequestError as e:
+                if request_start is not None:
+                    finish_request_tracking(
+                        model_name=model_name,
+                        endpoint=endpoint,
+                        start_time=request_start,
+                        status="error",
+                        prompt_tokens=prompt_tokens,
+                        error_type=type(e).__name__,
+                    )
+                logger.error(f"Backend chat request failed: {e}")
                 raise HTTPException(status_code=503, detail="Backend service unavailable")
         
         @self.app.get("/models")
