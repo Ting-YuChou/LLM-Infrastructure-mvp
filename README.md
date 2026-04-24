@@ -215,6 +215,12 @@ python -m src.training.rlhf_trainer \
 # Start mock serving, gateway, redis, Prometheus, and Grafana
 docker compose -f docker-compose.local.yml up -d --build
 
+# If localhost:3000 is already in use
+GRAFANA_PORT=3001 docker compose -f docker-compose.local.yml up -d --build
+
+# Verify gateway contract, streaming, usage, and metrics
+python scripts/compose_smoke_test.py --base-url http://localhost:8080
+
 # View gateway logs
 docker compose -f docker-compose.local.yml logs -f api-gateway
 
@@ -226,13 +232,16 @@ docker compose -f docker-compose.local.yml down
 - Mock LLM API: `http://localhost:8000`
 - API Gateway: `http://localhost:8080`
 - Prometheus: `http://localhost:9091`
-- Grafana: `http://localhost:3000` (admin/admin)
+- Grafana: `http://localhost:${GRAFANA_PORT:-3000}` (admin/admin)
 
 ### GPU Development on Linux + NVIDIA
 
 ```bash
 # Start vLLM, gateway, redis, Prometheus, and Grafana
 docker compose -f docker-compose.gpu.yml up -d --build
+
+# If localhost:3000 is already in use
+GRAFANA_PORT=3001 docker compose -f docker-compose.gpu.yml up -d --build
 
 # View vLLM logs
 docker compose -f docker-compose.gpu.yml logs -f vllm-server
@@ -245,7 +254,7 @@ docker compose -f docker-compose.gpu.yml down
 - vLLM API: `http://localhost:8000`
 - API Gateway: `http://localhost:8080`
 - Prometheus: `http://localhost:9091`
-- Grafana: `http://localhost:3000` (admin/admin)
+- Grafana: `http://localhost:${GRAFANA_PORT:-3000}` (admin/admin)
 
 ### Full GPU Stack
 
@@ -282,6 +291,12 @@ python -m src.api.gateway --host 0.0.0.0 --port 8080
 Both the vLLM server and the API gateway expose Prometheus metrics on their main HTTP ports:
 - vLLM metrics: `http://localhost:8000/metrics`
 - API Gateway metrics: `http://localhost:8080/metrics`
+
+The API gateway also provides production-serving controls:
+- `RATE_LIMIT_REQUESTS_PER_MINUTE` / `RATE_LIMIT_REQUESTS_PER_HOUR`: request quota.
+- `RATE_LIMIT_TOKENS_PER_MINUTE` / `RATE_LIMIT_TOKENS_PER_HOUR`: estimated prompt plus max-token quota before dispatch.
+- `/usage`: authenticated per-user totals split by model and endpoint.
+- Streaming metrics: `llm_time_to_first_token_seconds`, `llm_inter_token_latency_seconds`, and `llm_tokens_per_second`.
 
 ### API Usage Example
 

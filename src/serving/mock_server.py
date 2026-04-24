@@ -19,12 +19,16 @@ try:
     from src.monitoring.metrics import (
         add_metrics_endpoint,
         finish_request_tracking,
+        record_inter_token_latency,
+        record_time_to_first_token,
         start_request_tracking,
     )
 except ModuleNotFoundError:
     from monitoring.metrics import (  # type: ignore[no-redef]
         add_metrics_endpoint,
         finish_request_tracking,
+        record_inter_token_latency,
+        record_time_to_first_token,
         start_request_tracking,
     )
 
@@ -229,10 +233,19 @@ class MockLLMServer:
         completion_id = f"mock-cmpl-{int(time.time() * 1000)}"
         created = int(time.time())
         prompt_tokens = self._estimate_tokens(prompt)
+        first_token_seen = False
+        last_token_time: Optional[float] = None
 
         try:
             for chunk in self._chunk_text(text):
                 await self._apply_delay()
+                now = time.time()
+                if not first_token_seen:
+                    record_time_to_first_token(model_name, now - request_start)
+                    first_token_seen = True
+                elif last_token_time is not None:
+                    record_inter_token_latency(model_name, now - last_token_time)
+                last_token_time = now
                 payload = {
                     "id": completion_id,
                     "object": "text_completion",
@@ -292,10 +305,19 @@ class MockLLMServer:
         created = int(time.time())
         prompt_tokens = self._estimate_tokens(prompt)
         sent_role = False
+        first_token_seen = False
+        last_token_time: Optional[float] = None
 
         try:
             for chunk in self._chunk_text(text):
                 await self._apply_delay()
+                now = time.time()
+                if not first_token_seen:
+                    record_time_to_first_token(model_name, now - request_start)
+                    first_token_seen = True
+                elif last_token_time is not None:
+                    record_inter_token_latency(model_name, now - last_token_time)
+                last_token_time = now
                 delta = {"content": chunk}
                 if not sent_role:
                     delta["role"] = "assistant"

@@ -375,6 +375,23 @@ def track_tokens(model_name: str, prompt_tokens: int, completion_tokens: int):
     tokens_processed.labels(model=model_name, type='completion').inc(completion_tokens)
 
 
+def record_time_to_first_token(model_name: str, seconds: float):
+    """Record time to first streamed output token/chunk."""
+    time_to_first_token.labels(model=model_name).observe(max(0.0, seconds))
+
+
+def record_inter_token_latency(model_name: str, seconds: float):
+    """Record latency between streamed output token/chunk events."""
+    inter_token_latency.labels(model=model_name).observe(max(0.0, seconds))
+
+
+def update_tokens_per_second(model_name: str, total_tokens: int, duration: float):
+    """Update current token throughput gauge from a completed request."""
+    if total_tokens <= 0 or duration <= 0:
+        return
+    tokens_per_second.labels(model=model_name).set(total_tokens / duration)
+
+
 def start_request_tracking(model_name: str) -> float:
     """
     Mark a request as active and return the start timestamp.
@@ -429,6 +446,11 @@ def finish_request_tracking(
             model_name=model_name,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
+        )
+        update_tokens_per_second(
+            model_name=model_name,
+            total_tokens=prompt_tokens + completion_tokens,
+            duration=duration,
         )
 
 

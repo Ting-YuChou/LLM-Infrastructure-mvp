@@ -23,12 +23,16 @@ try:
     from src.monitoring.metrics import (
         add_metrics_endpoint,
         finish_request_tracking,
+        record_inter_token_latency,
+        record_time_to_first_token,
         start_request_tracking,
     )
 except ModuleNotFoundError:
     from monitoring.metrics import (  # type: ignore[no-redef]
         add_metrics_endpoint,
         finish_request_tracking,
+        record_inter_token_latency,
+        record_time_to_first_token,
         start_request_tracking,
     )
 
@@ -694,9 +698,18 @@ class VLLMServer:
         created = int(time.time())
         prompt_tokens = self._estimate_tokens(prompt)
         completion_text = ""
+        first_token_seen = False
+        last_token_time: Optional[float] = None
 
         try:
             async for text in self.engine.stream_generate(prompt, sampling_params):
+                now = time.time()
+                if not first_token_seen:
+                    record_time_to_first_token(model_name, now - request_start)
+                    first_token_seen = True
+                elif last_token_time is not None:
+                    record_inter_token_latency(model_name, now - last_token_time)
+                last_token_time = now
                 completion_text += text
                 chunk = {
                     "id": completion_id,
@@ -759,9 +772,18 @@ class VLLMServer:
         prompt_tokens = self._estimate_tokens(prompt)
         completion_text = ""
         sent_role = False
+        first_token_seen = False
+        last_token_time: Optional[float] = None
 
         try:
             async for text in self.engine.stream_generate(prompt, sampling_params):
+                now = time.time()
+                if not first_token_seen:
+                    record_time_to_first_token(model_name, now - request_start)
+                    first_token_seen = True
+                elif last_token_time is not None:
+                    record_inter_token_latency(model_name, now - last_token_time)
+                last_token_time = now
                 completion_text += text
                 delta: Dict[str, str] = {"content": text}
                 if not sent_role:

@@ -82,7 +82,7 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
     ports:
-      - "3000:3000"
+      - "${GRAFANA_PORT:-3000}:3000"
     volumes:
       - grafana-data:/var/lib/grafana
       - ./k8s/monitoring/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
