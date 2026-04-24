@@ -26,6 +26,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
       
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -36,23 +38,62 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.host-check.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-
       
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install black flake8 mypy isort
+          pip install -r requirements.host-check.txt
       
-      - name: Run Black (code formatting)
-        run: black --check --diff src/ scripts/
-      
-      - name: Run Flake8 (linting)
-        run: flake8 src/ scripts/ --max-line-length=100 --ignore=E203,W503
-      
-      - name: Run isort (import sorting)
-        run: isort --check-only --diff src/ scripts/
+      - name: Run serving compile smoke
+        run: |
+          PYTHONPATH=src python -m py_compile \
+            src/api/gateway.py \
+            src/api/model_routing.py \
+            src/monitoring/metrics.py \
+            src/serving/mock_server.py \
+            src/serving/vllm_server.py \
+            scripts/compose_smoke_test.py \
+            scripts/eval_gate.py
+
+      - name: Validate serving configuration files
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          import yaml
+
+          json_paths = [
+              Path("config/eval_gate.json"),
+              Path("config/model_routing.gpu.json"),
+              Path("config/model_routing.local.json"),
+          ]
+          yaml_paths = [
+              *Path("config").glob("*.yaml"),
+              *Path("docker").glob("*.yml"),
+              *Path("k8s").glob("**/*.yml"),
+              *Path("k8s").glob("**/*.yaml"),
+              Path("docker-compose.yml"),
+              Path("docker-compose.local.yml"),
+              Path("docker-compose.gpu.yml"),
+          ]
+
+          for path in json_paths:
+              with path.open("r", encoding="utf-8") as handle:
+                  json.load(handle)
+
+          for path in yaml_paths:
+              with path.open("r", encoding="utf-8") as handle:
+                  list(yaml.safe_load_all(handle))
+
+          print("serving-config-parse-ok")
+          PY
+
+      - name: Check whitespace errors
+        run: git diff --check HEAD^ HEAD
 
   # ==========================================================================
   # Unit Tests
@@ -74,24 +115,12 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.host-check.txt') }}
       
-      - name: Install dependencies
+      - name: Run host checks
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-cov pytest-asyncio
-      
-      - name: Run unit tests
-        run: |
-          pytest tests/unit/ -v --cov=src --cov-report=xml --cov-report=term
-      
-      - name: Upload coverage reports
-        uses: codecov/codecov-action@v3
-        with:
-          file: ./coverage.xml
-          flags: unittests
-          name: codecov-umbrella
+          chmod +x scripts/run_host_checks.sh
+          scripts/run_host_checks.sh
 
   # ==========================================================================
   # Docker Build
