@@ -50,7 +50,7 @@ PYTHONPATH="${ROOT_DIR}/src" "${VENV_DIR}/bin/python" -c \
 echo
 echo "[2/4] load test import smoke"
 PYTHONPATH="${ROOT_DIR}" "${VENV_DIR}/bin/python" -c \
-  "import scripts.load_test as lt; import scripts.compose_smoke_test as st; print('load-and-smoke-import-ok')"
+  "import scripts.load_test as lt; import scripts.compose_smoke_test as st; import scripts.eval_gate as eg; print('load-smoke-eval-import-ok')"
 
 echo
 echo "[3/4] gateway route smoke"
@@ -64,4 +64,6 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH="${ROOT_DIR}/src" \
   -p pytest_asyncio.plugin \
   "${ROOT_DIR}/tests/unit/test_vllm_server_config.py" \
   "${ROOT_DIR}/tests/unit/test_metrics.py" \
+  "${ROOT_DIR}/tests/unit/test_model_routing.py" \
+  "${ROOT_DIR}/tests/unit/test_eval_gate.py" \
   "${ROOT_DIR}/tests/integration/test_api_gateway.py"

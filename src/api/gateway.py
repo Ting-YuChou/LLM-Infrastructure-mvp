@@ -9,9 +9,8 @@ import logging
 import json
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timedelta
-from functools import wraps
 
-from fastapi import FastAPI, HTTPException, Depends, Header, Request, Response
+from fastapi import FastAPI, HTTPException, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -22,6 +21,7 @@ from collections import defaultdict
 import httpx
 
 try:
+    from src.api.model_routing import ModelRouter, ResolvedRoute, UnknownModelRoute
     from src.monitoring.metrics import (
         add_metrics_endpoint,
         finish_request_tracking,
@@ -30,6 +30,11 @@ try:
         start_request_tracking,
     )
 except ModuleNotFoundError:
+    from api.model_routing import (  # type: ignore[no-redef]
+        ModelRouter,
+        ResolvedRoute,
+        UnknownModelRoute,
+    )
     from monitoring.metrics import (  # type: ignore[no-redef]
         add_metrics_endpoint,
         finish_request_tracking,
@@ -120,6 +125,8 @@ class GatewayConfig:
     # Backend services
     VLLM_BACKEND_URL = os.getenv("VLLM_BACKEND_URL", "http://localhost:8000")
     DEFAULT_COMPLETION_MODEL = os.getenv("DEFAULT_COMPLETION_MODEL")
+    MODEL_ROUTING_CONFIG = os.getenv("MODEL_ROUTING_CONFIG")
+    ROUTING_CANARY_SALT = os.getenv("ROUTING_CANARY_SALT", "default")
     
     # CORS
     CORS_ORIGINS = _get_env_list("CORS_ORIGINS", ["*"])  # Configure for production
@@ -596,6 +603,7 @@ class APIGateway:
             tokens_per_hour=config.RATE_LIMIT_TOKENS_PER_HOUR,
         )
         self.usage_tracker = UsageTracker(redis_client=redis_client)
+        self.model_router = self._build_model_router()
         
         # HTTP client for backend requests
         self.http_client = httpx.AsyncClient(timeout=300.0)
@@ -609,6 +617,23 @@ class APIGateway:
     def _estimate_tokens(self, text: str) -> int:
         """Estimate token counts when the backend does not provide usage."""
         return max(1, len(text.split())) if text else 0
+
+    def _build_model_router(self) -> ModelRouter:
+        """Build the gateway model router from manifest or legacy backend config."""
+        if self.config.MODEL_ROUTING_CONFIG:
+            router = ModelRouter.from_file(
+                self.config.MODEL_ROUTING_CONFIG,
+                fallback_backend_url=self.config.VLLM_BACKEND_URL,
+                canary_salt=self.config.ROUTING_CANARY_SALT,
+            )
+            logger.info("Loaded model routing manifest: %s", self.config.MODEL_ROUTING_CONFIG)
+            return router
+
+        return ModelRouter.from_static(
+            backend_url=self.config.VLLM_BACKEND_URL,
+            default_model=self.config.DEFAULT_COMPLETION_MODEL,
+            canary_salt=self.config.ROUTING_CANARY_SALT,
+        )
 
     def _estimate_chat_tokens(self, messages: List[ChatMessage]) -> int:
         """Estimate chat prompt tokens when backend usage is unavailable."""
@@ -642,6 +667,22 @@ class APIGateway:
             return self.config.AUTH_USERS.get(username) == password
 
         return self.config.DEV_AUTH_ENABLED
+
+    def _resolve_model_route(
+        self,
+        requested_model: Optional[str],
+        user_id: str,
+        endpoint: str,
+    ) -> ResolvedRoute:
+        """Resolve a requested logical model into a concrete backend target."""
+        try:
+            return self.model_router.resolve(
+                requested_model=requested_model,
+                user_id=user_id,
+                endpoint=endpoint,
+            )
+        except UnknownModelRoute as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     async def _proxy_streaming_response(
         self,
@@ -861,11 +902,15 @@ class APIGateway:
             
             Requires authentication and respects rate limits
             """
+            endpoint = "/v1/completions"
             payload = request.model_dump(exclude_none=True)
-            if "model" not in payload and self.config.DEFAULT_COMPLETION_MODEL:
-                payload["model"] = self.config.DEFAULT_COMPLETION_MODEL
+            route = self._resolve_model_route(request.model, user, endpoint)
+            if route.target.model:
+                payload["model"] = route.target.model
+            else:
+                payload.pop("model", None)
 
-            model_name = payload.get("model") or "gateway"
+            model_name = route.target.model or "gateway"
             prompt_tokens = self._estimate_tokens(request.prompt)
             estimated_tokens = self._estimate_completion_request_tokens(
                 prompt_tokens=prompt_tokens,
@@ -879,7 +924,7 @@ class APIGateway:
                     request_start = start_request_tracking(model_name)
                     backend_request = self.http_client.build_request(
                         "POST",
-                        f"{self.config.VLLM_BACKEND_URL}/v1/completions",
+                        f"{route.target.backend_url}{endpoint}",
                         json=payload,
                     )
                     backend_response = await self.http_client.send(
@@ -895,7 +940,7 @@ class APIGateway:
                         await backend_response.aclose()
                         finish_request_tracking(
                             model_name=model_name,
-                            endpoint="/v1/completions",
+                            endpoint=endpoint,
                             start_time=request_start,
                             status="error",
                             prompt_tokens=prompt_tokens,
@@ -910,7 +955,7 @@ class APIGateway:
                         self._proxy_streaming_response(
                             backend_response=backend_response,
                             model_name=model_name,
-                            endpoint="/v1/completions",
+                            endpoint=endpoint,
                             request_start=request_start,
                             prompt_tokens=prompt_tokens,
                             user_id=user,
@@ -923,7 +968,7 @@ class APIGateway:
 
                 request_start = start_request_tracking(model_name)
                 response = await self.http_client.post(
-                    f"{self.config.VLLM_BACKEND_URL}/v1/completions",
+                    f"{route.target.backend_url}{endpoint}",
                     json=payload,
                     timeout=300.0
                 )
@@ -943,7 +988,7 @@ class APIGateway:
                 )
                 finish_request_tracking(
                     model_name=model_name,
-                    endpoint="/v1/completions",
+                    endpoint=endpoint,
                     start_time=request_start,
                     prompt_tokens=actual_prompt_tokens,
                     completion_tokens=actual_completion_tokens,
@@ -951,7 +996,7 @@ class APIGateway:
                 self.usage_tracker.record_usage(
                     user_id=user,
                     model_name=model_name,
-                    endpoint="/v1/completions",
+                    endpoint=endpoint,
                     prompt_tokens=actual_prompt_tokens,
                     completion_tokens=actual_completion_tokens,
                 )
@@ -961,7 +1006,7 @@ class APIGateway:
                 if request_start is not None and not request.stream:
                     finish_request_tracking(
                         model_name=model_name,
-                        endpoint="/v1/completions",
+                        endpoint=endpoint,
                         start_time=request_start,
                         status="error",
                         prompt_tokens=prompt_tokens,
@@ -973,7 +1018,7 @@ class APIGateway:
                 if request_start is not None:
                     finish_request_tracking(
                         model_name=model_name,
-                        endpoint="/v1/completions",
+                        endpoint=endpoint,
                         start_time=request_start,
                         status="error",
                         prompt_tokens=prompt_tokens,
@@ -993,18 +1038,21 @@ class APIGateway:
             Proxies the backend OpenAI-compatible chat response without
             reshaping the payload.
             """
+            endpoint = "/v1/chat/completions"
             payload = request.model_dump(exclude_none=True)
-            if "model" not in payload and self.config.DEFAULT_COMPLETION_MODEL:
-                payload["model"] = self.config.DEFAULT_COMPLETION_MODEL
+            route = self._resolve_model_route(request.model, user, endpoint)
+            if route.target.model:
+                payload["model"] = route.target.model
+            else:
+                payload.pop("model", None)
 
-            model_name = payload.get("model") or "gateway"
+            model_name = route.target.model or "gateway"
             prompt_tokens = self._estimate_chat_tokens(request.messages)
             estimated_tokens = self._estimate_completion_request_tokens(
                 prompt_tokens=prompt_tokens,
                 max_tokens=request.max_tokens,
             )
             self._check_rate_limit(user, estimated_tokens)
-            endpoint = "/v1/chat/completions"
             request_start: Optional[float] = None
 
             try:
@@ -1012,7 +1060,7 @@ class APIGateway:
                     request_start = start_request_tracking(model_name)
                     backend_request = self.http_client.build_request(
                         "POST",
-                        f"{self.config.VLLM_BACKEND_URL}{endpoint}",
+                        f"{route.target.backend_url}{endpoint}",
                         json=payload,
                     )
                     backend_response = await self.http_client.send(
@@ -1056,7 +1104,7 @@ class APIGateway:
 
                 request_start = start_request_tracking(model_name)
                 response = await self.http_client.post(
-                    f"{self.config.VLLM_BACKEND_URL}{endpoint}",
+                    f"{route.target.backend_url}{endpoint}",
                     json=payload,
                     timeout=300.0,
                 )
@@ -1115,12 +1163,7 @@ class APIGateway:
         @self.app.get("/models")
         async def list_models(user: str = Depends(self._get_current_user)):
             """List available models"""
-            return {
-                "models": [
-                    {"id": "llama2-7b", "type": "completion"},
-                    {"id": "llama2-13b", "type": "completion"},
-                ]
-            }
+            return {"models": self.model_router.list_models()}
         
         @self.app.get("/usage")
         async def get_usage(user: str = Depends(self._get_current_user)):

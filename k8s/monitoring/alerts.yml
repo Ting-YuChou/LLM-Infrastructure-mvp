@@ -1,0 +1,46 @@
+groups:
+  - name: llm-serving-reliability
+    rules:
+      - alert: LLMGatewayHighErrorRate
+        expr: |
+          sum(rate(llm_requests_total{status="error"}[5m]))
+          /
+          clamp_min(sum(rate(llm_requests_total[5m])), 1)
+          > 0.05
+        for: 10m
+        labels:
+          severity: page
+          service: api-gateway
+        annotations:
+          summary: "LLM serving error rate is above 5%"
+          description: "Gateway or backend errors are above the production serving budget."
+
+      - alert: LLMHighTimeToFirstToken
+        expr: histogram_quantile(0.95, sum(rate(llm_time_to_first_token_seconds_bucket[5m])) by (le, model)) > 2
+        for: 10m
+        labels:
+          severity: warn
+          service: serving
+        annotations:
+          summary: "LLM TTFT p95 is above 2 seconds"
+          description: "Streaming time-to-first-token latency has exceeded the interactive serving target."
+
+      - alert: LLMQueueBacklog
+        expr: max(llm_request_queue_size) > 20
+        for: 5m
+        labels:
+          severity: warn
+          service: serving
+        annotations:
+          summary: "LLM request queue backlog is high"
+          description: "The request queue is backing up and should trigger scale-out or admission control."
+
+      - alert: LLMNoTrafficMetrics
+        expr: absent(llm_requests_total)
+        for: 5m
+        labels:
+          severity: warn
+          service: monitoring
+        annotations:
+          summary: "LLM request metrics are missing"
+          description: "Prometheus is not seeing llm_requests_total from the gateway or serving backend."

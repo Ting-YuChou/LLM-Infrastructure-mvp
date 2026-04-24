@@ -48,9 +48,12 @@ services:
       REDIS_HOST: redis
       VLLM_BACKEND_URL: http://vllm-server:8000
       DEFAULT_COMPLETION_MODEL: /workspace/models/aligned/checkpoint-final
+      MODEL_ROUTING_CONFIG: /workspace/config/model_routing.gpu.json
     command: ["python", "-m", "src.api.gateway", "--host", "0.0.0.0", "--port", "8080"]
     ports:
       - "8080:8080"
+    volumes:
+      - ./config:/workspace/config:ro
     depends_on:
       vllm-server:
         condition: service_healthy
@@ -73,6 +76,7 @@ services:
       - "9091:9090"
     volumes:
       - ./docker/prometheus.gpu.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus-data:/prometheus
     restart: unless-stopped
 

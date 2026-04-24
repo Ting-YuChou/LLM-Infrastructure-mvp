@@ -24,6 +24,9 @@ def make_test_config(rate_limit_enabled: bool = False) -> GatewayConfig:
     config.RATE_LIMIT_ENABLED = rate_limit_enabled
     config.RATE_LIMIT_TOKENS_PER_MINUTE = 100000
     config.RATE_LIMIT_TOKENS_PER_HOUR = 1000000
+    config.DEFAULT_COMPLETION_MODEL = "test-model"
+    config.MODEL_ROUTING_CONFIG = None
+    config.ROUTING_CANARY_SALT = "test"
     return config
 
 
@@ -210,8 +213,11 @@ class TestAPIGateway:
         assert "models" in data
         assert len(data["models"]) > 0
 
-    def test_completion_preserves_openai_schema_and_records_usage(self, gateway):
+    def test_completion_preserves_openai_schema_and_records_usage(self):
         """Test completions keep backend OpenAI schema and update usage."""
+        config = make_test_config()
+        config.DEFAULT_COMPLETION_MODEL = "default-completion-model"
+        gateway = APIGateway(config=config)
         gateway.config.DEFAULT_COMPLETION_MODEL = "default-completion-model"
         gateway.http_client = FakeBackendClient(
             {
@@ -257,8 +263,11 @@ class TestAPIGateway:
         assert usage["completion_tokens"] == 3
         assert usage["total_tokens"] == 5
 
-    def test_chat_completion_is_proxied(self, gateway):
+    def test_chat_completion_is_proxied(self):
         """Test chat completions are routed to the backend chat endpoint."""
+        config = make_test_config()
+        config.DEFAULT_COMPLETION_MODEL = "default-chat-model"
+        gateway = APIGateway(config=config)
         gateway.config.DEFAULT_COMPLETION_MODEL = "default-chat-model"
         gateway.http_client = FakeBackendClient(
             {
@@ -327,6 +336,103 @@ class TestAPIGateway:
         metrics = client.get("/metrics").text
         assert "llm_time_to_first_token_seconds_count" in metrics
         assert "llm_inter_token_latency_seconds_count" in metrics
+
+    def test_manifest_routing_applies_backend_and_model(self, tmp_path):
+        """Test gateway routes logical models through manifest targets."""
+        manifest_path = tmp_path / "routing.json"
+        manifest_path.write_text(
+            """
+            {
+              "default_model": "logical-prod",
+              "routes": {
+                "logical-prod": {
+                  "targets": [
+                    {
+                      "name": "canary",
+                      "backend_url": "http://canary-backend:8000",
+                      "model": "physical-canary",
+                      "weight": 100,
+                      "stage": "Staging",
+                      "version": "2"
+                    }
+                  ]
+                }
+              }
+            }
+            """,
+            encoding="utf-8",
+        )
+        config = make_test_config()
+        config.MODEL_ROUTING_CONFIG = str(manifest_path)
+        gateway = APIGateway(config=config)
+        gateway.http_client = FakeBackendClient(
+            {
+                "id": "cmpl-test",
+                "object": "text_completion",
+                "created": 123,
+                "model": "physical-canary",
+                "choices": [{"text": "ok", "index": 0, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            }
+        )
+        client = TestClient(gateway.app)
+        headers = get_auth_headers(client)
+
+        response = client.post(
+            "/v1/completions",
+            headers=headers,
+            json={"prompt": "hello", "max_tokens": 4},
+        )
+
+        assert response.status_code == 200
+        assert gateway.http_client.requests[0]["url"] == (
+            "http://canary-backend:8000/v1/completions"
+        )
+        assert gateway.http_client.requests[0]["json"]["model"] == "physical-canary"
+
+        models = client.get("/models", headers=headers).json()["models"]
+        assert models[0]["id"] == "logical-prod"
+        assert models[0]["targets"][0]["stage"] == "Staging"
+
+    def test_manifest_routing_rejects_unknown_model(self, tmp_path):
+        """Test strict manifest routing fails closed for unmapped models."""
+        manifest_path = tmp_path / "routing.json"
+        manifest_path.write_text(
+            """
+            {
+              "default_model": "known",
+              "allow_passthrough": false,
+              "routes": {
+                "known": {
+                  "targets": [
+                    {
+                      "name": "stable",
+                      "backend_url": "http://backend:8000",
+                      "model": "known",
+                      "weight": 100
+                    }
+                  ]
+                }
+              }
+            }
+            """,
+            encoding="utf-8",
+        )
+        config = make_test_config()
+        config.MODEL_ROUTING_CONFIG = str(manifest_path)
+        gateway = APIGateway(config=config)
+        gateway.http_client = FakeBackendClient({})
+        client = TestClient(gateway.app)
+        headers = get_auth_headers(client)
+
+        response = client.post(
+            "/v1/completions",
+            headers=headers,
+            json={"model": "unknown", "prompt": "hello", "max_tokens": 4},
+        )
+
+        assert response.status_code == 404
+        assert gateway.http_client.requests == []
 
 
 class TestRateLimiting:

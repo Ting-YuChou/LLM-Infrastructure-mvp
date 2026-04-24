@@ -273,7 +273,7 @@ kubectl apply -f k8s/deployments/vllm-deployment.yaml
 kubectl apply -f k8s/monitoring/
 ```
 
-The provided Kubernetes manifest now scrapes `/metrics` from the main vLLM HTTP port and keeps HPA on CPU/memory metrics only. Prometheus Adapter and custom-metric autoscaling are intentionally not included in this repository yet.
+The provided Kubernetes manifest scrapes `/metrics` from the main vLLM HTTP port and keeps the default HPA on CPU/memory metrics only. Queue/GPU/custom-metric autoscaling is provided separately as an optional KEDA manifest in `k8s/autoscaling/vllm-keda-scaledobject.yaml`.
 
 ### Start Inference Server
 
@@ -295,8 +295,34 @@ Both the vLLM server and the API gateway expose Prometheus metrics on their main
 The API gateway also provides production-serving controls:
 - `RATE_LIMIT_REQUESTS_PER_MINUTE` / `RATE_LIMIT_REQUESTS_PER_HOUR`: request quota.
 - `RATE_LIMIT_TOKENS_PER_MINUTE` / `RATE_LIMIT_TOKENS_PER_HOUR`: estimated prompt plus max-token quota before dispatch.
+- `MODEL_ROUTING_CONFIG`: JSON route manifest for registry-driven stable/canary model routing.
 - `/usage`: authenticated per-user totals split by model and endpoint.
 - Streaming metrics: `llm_time_to_first_token_seconds`, `llm_inter_token_latency_seconds`, and `llm_tokens_per_second`.
+
+### Platformization Controls
+
+Priority order for production platform hardening:
+
+1. Registry-driven routing: configure logical model names in `config/model_routing.local.json` or `config/model_routing.gpu.json`. Each logical model can route to weighted `stable` and `canary` targets with separate backend URLs and physical model IDs.
+2. Canary and rollback: raise the canary target `weight` to shift deterministic per-user traffic; set it back to `0` for immediate rollback without changing client-facing model names.
+3. Eval gate: block promotion unless candidate metrics pass absolute thresholds and baseline regression guards.
+4. Alerting: Prometheus loads `docker/alerts.yml` locally and `k8s/monitoring/alerts.yml` in Kubernetes-style deployments.
+5. Autoscaling: `k8s/autoscaling/vllm-keda-scaledobject.yaml` is an optional KEDA template for queue, GPU utilization, and active-request based scaling.
+
+Example eval gate:
+
+```bash
+python scripts/eval_gate.py \
+    --metrics outputs/evals/candidate.json \
+    --baseline outputs/evals/production.json \
+    --config config/eval_gate.json
+```
+
+Optional KEDA scale-out manifest:
+
+```bash
+kubectl apply -f k8s/autoscaling/vllm-keda-scaledobject.yaml
+```
 
 ### API Usage Example
 
