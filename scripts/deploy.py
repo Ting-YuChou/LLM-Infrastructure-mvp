@@ -122,7 +122,7 @@ class DeploymentManager:
         """
         logger.info(f"Building Docker images with tag: {tag}")
         
-        images = ["base", "verl", "serving"]
+        images = ["base", "serving", "gateway"]
         
         for image in images:
             logger.info(f"Building {image}...")
@@ -155,7 +155,7 @@ class DeploymentManager:
         """
         logger.info(f"Pushing images to {registry}...")
         
-        images = ["base", "verl", "serving"]
+        images = ["base", "serving", "gateway"]
         
         for image in images:
             local_tag = f"llm-{image}:{tag}"

@@ -1,0 +1,12 @@
+{
+  "thresholds": [
+    "win_rate>=0.55",
+    "toxicity<=0.02",
+    "latency_p95_ms<=1500",
+    "error_rate<=0.01"
+  ],
+  "min_delta": {
+    "win_rate": 0.0,
+    "latency_p95_ms": -250.0
+  }
+}

@@ -375,6 +375,85 @@ def track_tokens(model_name: str, prompt_tokens: int, completion_tokens: int):
     tokens_processed.labels(model=model_name, type='completion').inc(completion_tokens)
 
 
+def record_time_to_first_token(model_name: str, seconds: float):
+    """Record time to first streamed output token/chunk."""
+    time_to_first_token.labels(model=model_name).observe(max(0.0, seconds))
+
+
+def record_inter_token_latency(model_name: str, seconds: float):
+    """Record latency between streamed output token/chunk events."""
+    inter_token_latency.labels(model=model_name).observe(max(0.0, seconds))
+
+
+def update_tokens_per_second(model_name: str, total_tokens: int, duration: float):
+    """Update current token throughput gauge from a completed request."""
+    if total_tokens <= 0 or duration <= 0:
+        return
+    tokens_per_second.labels(model=model_name).set(total_tokens / duration)
+
+
+def start_request_tracking(model_name: str) -> float:
+    """
+    Mark a request as active and return the start timestamp.
+
+    Args:
+        model_name: Name of the model/service handling the request
+
+    Returns:
+        Start time as a Unix timestamp
+    """
+    active_requests.labels(model=model_name).inc()
+    request_queue_size.labels(model=model_name).set(0)
+    return time.time()
+
+
+def finish_request_tracking(
+    model_name: str,
+    endpoint: str,
+    start_time: float,
+    status: str = "success",
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    error_type: Optional[str] = None,
+):
+    """
+    Record request completion metrics and clear active-request state.
+
+    Args:
+        model_name: Name of the model/service handling the request
+        endpoint: Request endpoint label
+        start_time: Timestamp returned by start_request_tracking
+        status: success or error
+        prompt_tokens: Prompt tokens processed for the request
+        completion_tokens: Completion tokens processed for the request
+        error_type: Optional exception name for error accounting
+    """
+    duration = max(0.0, time.time() - start_time)
+    request_duration.labels(model=model_name, endpoint=endpoint).observe(duration)
+    request_counter.labels(
+        model=model_name,
+        endpoint=endpoint,
+        status=status,
+    ).inc()
+    active_requests.labels(model=model_name).dec()
+    request_queue_size.labels(model=model_name).set(0)
+
+    if error_type:
+        error_counter.labels(model=model_name, error_type=error_type).inc()
+
+    if prompt_tokens or completion_tokens:
+        track_tokens(
+            model_name=model_name,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        )
+        update_tokens_per_second(
+            model_name=model_name,
+            total_tokens=prompt_tokens + completion_tokens,
+            duration=duration,
+        )
+
+
 def track_training_metrics(
     model_name: str,
     stage: str,

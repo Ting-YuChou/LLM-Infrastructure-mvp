@@ -43,13 +43,17 @@ services:
       dockerfile: docker/Dockerfile.gateway
     environment:
       JWT_SECRET: local-dev-secret
+      AUTH_USERS: "local:local,loadtest:loadtest123"
       RATE_LIMIT_ENABLED: "false"
       REDIS_HOST: redis
       VLLM_BACKEND_URL: http://vllm-server:8000
       DEFAULT_COMPLETION_MODEL: /workspace/models/aligned/checkpoint-final
+      MODEL_ROUTING_CONFIG: /workspace/config/model_routing.gpu.json
     command: ["python", "-m", "src.api.gateway", "--host", "0.0.0.0", "--port", "8080"]
     ports:
       - "8080:8080"
+    volumes:
+      - ./config:/workspace/config:ro
     depends_on:
       vllm-server:
         condition: service_healthy
@@ -61,3 +65,35 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./docker/prometheus.gpu.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./k8s/monitoring/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:

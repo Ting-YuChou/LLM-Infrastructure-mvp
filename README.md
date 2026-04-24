@@ -209,25 +209,59 @@ python -m src.training.rlhf_trainer \
 
 ## 🚢 Serving & Deployment
 
-### Local Development (Docker Compose)
+### Local Development on Mac / CPU-only
 
 ```bash
-# Start all services
-docker-compose up -d
+# Start mock serving, gateway, redis, Prometheus, and Grafana
+docker compose -f docker-compose.local.yml up -d --build
 
-# View logs
-docker-compose logs -f vllm-server
+# If localhost:3000 is already in use
+GRAFANA_PORT=3001 docker compose -f docker-compose.local.yml up -d --build
+
+# Verify gateway contract, streaming, usage, and metrics
+python scripts/compose_smoke_test.py --base-url http://localhost:8080
+
+# View gateway logs
+docker compose -f docker-compose.local.yml logs -f api-gateway
 
 # Stop services
-docker-compose down
+docker compose -f docker-compose.local.yml down
+```
+
+**Service Ports**:
+- Mock LLM API: `http://localhost:8000`
+- API Gateway: `http://localhost:8080`
+- Prometheus: `http://localhost:9091`
+- Grafana: `http://localhost:${GRAFANA_PORT:-3000}` (admin/admin)
+
+### GPU Development on Linux + NVIDIA
+
+```bash
+# Start vLLM, gateway, redis, Prometheus, and Grafana
+docker compose -f docker-compose.gpu.yml up -d --build
+
+# If localhost:3000 is already in use
+GRAFANA_PORT=3001 docker compose -f docker-compose.gpu.yml up -d --build
+
+# View vLLM logs
+docker compose -f docker-compose.gpu.yml logs -f vllm-server
+
+# Stop services
+docker compose -f docker-compose.gpu.yml down
 ```
 
 **Service Ports**:
 - vLLM API: `http://localhost:8000`
 - API Gateway: `http://localhost:8080`
-- MLflow UI: `http://localhost:5000`
 - Prometheus: `http://localhost:9091`
-- Grafana: `http://localhost:3000` (admin/admin)
+- Grafana: `http://localhost:${GRAFANA_PORT:-3000}` (admin/admin)
+
+### Full GPU Stack
+
+```bash
+# Start the default GPU-oriented compose stack (includes MLflow)
+docker compose up -d --build
+```
 
 ### Production Deployment (Kubernetes)
 
@@ -239,6 +273,8 @@ kubectl apply -f k8s/deployments/vllm-deployment.yaml
 kubectl apply -f k8s/monitoring/
 ```
 
+The provided Kubernetes manifest scrapes `/metrics` from the main vLLM HTTP port and keeps the default HPA on CPU/memory metrics only. Queue/GPU/custom-metric autoscaling is provided separately as an optional KEDA manifest in `k8s/autoscaling/vllm-keda-scaledobject.yaml`.
+
 ### Start Inference Server
 
 ```bash
@@ -248,7 +284,44 @@ python -m src.serving.vllm_server \
     --model /path/to/model
 
 # Or use API Gateway
+JWT_SECRET=change-me AUTH_USERS=local:local \
 python -m src.api.gateway --host 0.0.0.0 --port 8080
+```
+
+Both the vLLM server and the API gateway expose Prometheus metrics on their main HTTP ports:
+- vLLM metrics: `http://localhost:8000/metrics`
+- API Gateway metrics: `http://localhost:8080/metrics`
+
+The API gateway also provides production-serving controls:
+- `RATE_LIMIT_REQUESTS_PER_MINUTE` / `RATE_LIMIT_REQUESTS_PER_HOUR`: request quota.
+- `RATE_LIMIT_TOKENS_PER_MINUTE` / `RATE_LIMIT_TOKENS_PER_HOUR`: estimated prompt plus max-token quota before dispatch.
+- `MODEL_ROUTING_CONFIG`: JSON route manifest for registry-driven stable/canary model routing.
+- `/usage`: authenticated per-user totals split by model and endpoint.
+- Streaming metrics: `llm_time_to_first_token_seconds`, `llm_inter_token_latency_seconds`, and `llm_tokens_per_second`.
+
+### Platformization Controls
+
+Priority order for production platform hardening:
+
+1. Registry-driven routing: configure logical model names in `config/model_routing.local.json` or `config/model_routing.gpu.json`. Each logical model can route to weighted `stable` and `canary` targets with separate backend URLs and physical model IDs.
+2. Canary and rollback: raise the canary target `weight` to shift deterministic per-user traffic; set it back to `0` for immediate rollback without changing client-facing model names.
+3. Eval gate: block promotion unless candidate metrics pass absolute thresholds and baseline regression guards.
+4. Alerting: Prometheus loads `docker/alerts.yml` locally and `k8s/monitoring/alerts.yml` in Kubernetes-style deployments.
+5. Autoscaling: `k8s/autoscaling/vllm-keda-scaledobject.yaml` is an optional KEDA template for queue, GPU utilization, and active-request based scaling.
+
+Example eval gate:
+
+```bash
+python scripts/eval_gate.py \
+    --metrics outputs/evals/candidate.json \
+    --baseline outputs/evals/production.json \
+    --config config/eval_gate.json
+```
+
+Optional KEDA scale-out manifest:
+
+```bash
+kubectl apply -f k8s/autoscaling/vllm-keda-scaledobject.yaml
 ```
 
 ### API Usage Example
@@ -256,10 +329,11 @@ python -m src.api.gateway --host 0.0.0.0 --port 8080
 ```python
 import requests
 
+# The Docker Compose stacks configure AUTH_USERS=local:local,loadtest:loadtest123.
 # Get authentication token
 response = requests.post("http://localhost:8080/auth/token", json={
-    "username": "user",
-    "password": "pass"
+    "username": "local",
+    "password": "local"
 })
 token = response.json()["access_token"]
 
@@ -318,6 +392,26 @@ pytest tests/integration/
 pytest --cov=src tests/
 ```
 
+### Benchmarking and Load Testing
+
+```bash
+# Benchmark through the API gateway
+python scripts/benchmark.py \
+    --endpoint http://localhost:8080 \
+    --username local \
+    --password local \
+    --sweep concurrent=1,4,8 \
+    --sweep max_tokens=64,256 \
+    --output-dir outputs/benchmarks/local-gateway
+
+# Locust load test through the API gateway
+locust -f scripts/load_test.py --host=http://localhost:8080
+
+# Optional: target a specific backend model directly
+LOAD_TEST_MODEL=/workspace/models/aligned/checkpoint-final \
+locust -f scripts/load_test.py --host=http://localhost:8080
+```
+
 ### Code Style
 
 ```bash
@@ -369,13 +463,17 @@ registry.transition_model_stage(
 
 ### Prometheus Metrics
 
-Metrics endpoint: `http://localhost:9090/metrics`
+Prometheus UI: `http://localhost:9091`
+
+Service metrics endpoints:
+- vLLM server: `http://localhost:8000/metrics`
+- API gateway: `http://localhost:8080/metrics`
 
 Key metrics:
 - `llm_requests_total`: Total number of requests
 - `llm_request_duration_seconds`: Request latency
 - `llm_tokens_processed_total`: Number of tokens processed
-- `llm_gpu_utilization_percent`: GPU utilization
+- `llm_active_requests`: In-flight requests
 
 ## 🤝 Contributing
 

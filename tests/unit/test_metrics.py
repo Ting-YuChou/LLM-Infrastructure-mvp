@@ -5,9 +5,10 @@ Tests Prometheus metrics collection and tracking
 
 import pytest
 import time
-from prometheus_client import REGISTRY
 import sys
 from pathlib import Path
+
+pytest_plugins = ("pytest_asyncio.plugin",)
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
@@ -17,9 +18,14 @@ from monitoring.metrics import (
     request_duration,
     active_requests,
     tokens_processed,
+    tokens_per_second,
     track_request_metrics,
     track_tokens,
     track_training_metrics,
+    record_inter_token_latency,
+    record_time_to_first_token,
+    registry as metrics_registry,
+    update_tokens_per_second,
 )
 
 
@@ -98,6 +104,14 @@ class TestMetricsCollection:
         
         assert new_prompt == initial_prompt + 100
         assert new_completion == initial_completion + 50
+
+    def test_streaming_latency_and_tps_metrics_export(self):
+        """Test streaming latency helpers and TPS gauge are exported."""
+        record_time_to_first_token("stream-test-model", 0.05)
+        record_inter_token_latency("stream-test-model", 0.02)
+        update_tokens_per_second("stream-test-model", total_tokens=50, duration=2.0)
+
+        assert tokens_per_second.labels(model="stream-test-model")._value.get() == 25.0
 
 
 class TestRequestTracking:
@@ -219,7 +233,7 @@ class TestMetricsExport:
         from prometheus_client import generate_latest
         
         # Generate metrics
-        metrics_output = generate_latest(REGISTRY)
+        metrics_output = generate_latest(metrics_registry)
         
         # Check output is bytes
         assert isinstance(metrics_output, bytes)

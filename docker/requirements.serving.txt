@@ -5,9 +5,12 @@ sentencepiece==0.1.99
 protobuf==3.20.3
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
-pydantic==2.5.3
+# vLLM 0.2.7 pins Pydantic 1.10.13. Keep this serving image
+# isolated from the gateway image, which uses Pydantic 2.
+pydantic==1.10.13
 pyyaml==6.0.1
 httpx==0.26.0
 safetensors==0.4.1
 ninja==1.11.1.1
 vllm==0.2.7
+prometheus-client==0.19.0

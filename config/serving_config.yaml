@@ -154,7 +154,8 @@ server:
 monitoring:
   # Enable Prometheus metrics endpoint
   enable_metrics: true
-  metrics_port: 9090
+  # Metrics are served from the main FastAPI port at /metrics.
+  metrics_port: 8000
   
   # Metrics to track:
   # - vllm_num_requests_running
