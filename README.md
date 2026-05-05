@@ -271,9 +271,15 @@ kubectl apply -f k8s/deployments/vllm-deployment.yaml
 
 # Deploy monitoring
 kubectl apply -f k8s/monitoring/
+
+# Install Prometheus Adapter if you use the HPA custom metrics in the manifest
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm upgrade --install prometheus-adapter prometheus-community/prometheus-adapter \
+  --namespace monitoring --create-namespace \
+  -f k8s/autoscaling/prometheus-adapter-values.yaml
 ```
 
-The provided Kubernetes manifest scrapes `/metrics` from the main vLLM HTTP port and keeps the default HPA on CPU/memory metrics only. Queue/GPU/custom-metric autoscaling is provided separately as an optional KEDA manifest in `k8s/autoscaling/vllm-keda-scaledobject.yaml`.
+The provided Kubernetes manifest scrapes `/metrics` from the main vLLM HTTP port. Its HPA uses queue depth first (`llm_request_queue_size`), GPU saturation second (`llm_gpu_utilization_percent`), and CPU/memory as backup signals. Queue/GPU/custom-metric autoscaling is also available as an optional KEDA manifest in `k8s/autoscaling/vllm-keda-scaledobject.yaml`; do not run the KEDA ScaledObject and the manifest HPA against the same Deployment at the same time.
 
 ### Start Inference Server
 
@@ -281,7 +287,12 @@ The provided Kubernetes manifest scrapes `/metrics` from the main vLLM HTTP port
 # Run directly
 python -m src.serving.vllm_server \
     --config config/serving_config.yaml \
-    --model /path/to/model
+    --model /path/to/awq-model
+
+# AWQ serving uses vLLM weight quantization, typically 4-bit weights with
+# FP16/BF16 activations. It is not the same thing as FP8 quantization.
+QUANTIZATION=awq DTYPE=float16 MODEL_NAME=/path/to/awq-model \
+python -m src.serving.vllm_server --config config/serving_config.yaml
 
 # Or use API Gateway
 JWT_SECRET=change-me AUTH_USERS=local:local \

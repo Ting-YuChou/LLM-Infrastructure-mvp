@@ -5,8 +5,9 @@
 # Model Configuration
 # ============================================================================
 model:
-  # Model path (HuggingFace ID or local path)
-  name: "/workspace/models/aligned/checkpoint-final"
+  # AWQ model path (HuggingFace ID or local path). This must point to
+  # weights that were already quantized in an AWQ format supported by vLLM.
+  name: "/workspace/models/awq/checkpoint-final"
   
   # Model revision/version
   revision: null
@@ -20,11 +21,13 @@ model:
   # Download directory
   download_dir: "/workspace/models/cache"
   
-  # Model data type (auto, float16, bfloat16, float32)
-  dtype: "auto"  # Auto-detect best precision
+  # Activation/compute data type (auto, float16, bfloat16, float32)
+  # AWQ usually stores weights in 4-bit and computes with FP16/BF16 activations.
+  dtype: "float16"
   
-  # Quantization (optional: awq, gptq, squeezellm)
-  quantization: null
+  # Weight quantization backend (optional: awq, gptq, squeezellm)
+  # AWQ is typically 4-bit weight quantization, not FP8.
+  quantization: "awq"
   
   # Max model length (override model's default max)
   max_model_len: null
@@ -142,7 +145,8 @@ server:
   # Request timeout (seconds)
   timeout: 300
   
-  # Max concurrent requests
+  # Max concurrent requests admitted to the vLLM engine. Additional requests
+  # wait in the server-side queue and are exported as llm_request_queue_size.
   max_concurrent_requests: 1000
   
   # Enable streaming responses
@@ -156,14 +160,16 @@ monitoring:
   enable_metrics: true
   # Metrics are served from the main FastAPI port at /metrics.
   metrics_port: 8000
+  gpu_metrics_interval: 15
   
   # Metrics to track:
-  # - vllm_num_requests_running
-  # - vllm_num_requests_waiting
-  # - vllm_gpu_cache_usage_perc
-  # - vllm_num_preemptions
-  # - vllm_time_to_first_token
-  # - vllm_time_per_output_token
+  # - llm_requests_total
+  # - llm_request_duration_seconds
+  # - llm_active_requests
+  # - llm_request_queue_size
+  # - llm_tokens_processed_total
+  # - llm_gpu_utilization_percent
+  # - llm_gpu_memory_used_bytes
   
   # Enable detailed logging
   log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR

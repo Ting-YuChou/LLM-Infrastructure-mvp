@@ -8,8 +8,6 @@ import time
 import sys
 from pathlib import Path
 
-pytest_plugins = ("pytest_asyncio.plugin",)
-
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
@@ -17,6 +15,8 @@ from monitoring.metrics import (
     request_counter,
     request_duration,
     active_requests,
+    request_queue_size,
+    gpu_utilization,
     tokens_processed,
     tokens_per_second,
     track_request_metrics,
@@ -241,6 +241,16 @@ class TestMetricsExport:
         # Check contains some expected metric names
         output_str = metrics_output.decode('utf-8')
         assert 'llm_requests_total' in output_str or 'prometheus_' in output_str
+        assert 'llm_request_queue_size' in output_str
+        assert 'llm_gpu_utilization_percent' in output_str
+
+    def test_queue_and_gpu_metrics_can_be_set(self):
+        """Test autoscaling metrics used by Kubernetes HPA."""
+        request_queue_size.labels(model="test-model").set(7)
+        gpu_utilization.labels(gpu_id="0", model="test-model").set(82)
+
+        assert request_queue_size.labels(model="test-model")._value.get() == 7
+        assert gpu_utilization.labels(gpu_id="0", model="test-model")._value.get() == 82
 
 
 class TestMetricsLabels:

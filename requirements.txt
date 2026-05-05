@@ -4,24 +4,25 @@
 # ============================================================================
 # Core Deep Learning Frameworks
 # ============================================================================
-torch==2.1.0
-torchvision==0.16.0
-torchaudio==2.1.0
-transformers==4.36.0
+torch==2.10.0
+torchvision==0.25.0
+torchaudio==2.10.0
+transformers==4.57.6
 datasets==2.16.0
-tokenizers==0.15.0
-accelerate==0.25.0
-sentencepiece==0.1.99
-protobuf==3.20.3
+tokenizers==0.22.2
+accelerate==1.13.0
+sentencepiece==0.2.1
+protobuf==5.29.6
 
 # ============================================================================
 # Training & Optimization
 # ============================================================================
 # DeepSpeed for distributed training
-deepspeed==0.12.6
+deepspeed==0.15.1
 
-# Flash Attention for efficient attention computation
-flash-attn==2.5.0
+# Flash Attention is optional for training workloads and should be installed
+# after torch in a CUDA build environment:
+#   pip install flash-attn==2.8.3 --no-build-isolation
 
 # Verl for RLHF training (install from source)
 # Note: Run `pip install git+https://github.com/volcengine/verl.git`
@@ -30,20 +31,20 @@ flash-attn==2.5.0
 # Inference & Serving
 # ============================================================================
 # vLLM for high-performance inference
-vllm==0.2.7
+vllm==0.19.1
 
 # FastAPI for API server
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-pydantic==2.5.3
+fastapi==0.136.1
+uvicorn[standard]==0.46.0
+pydantic==2.13.3
 
 # Ray for distributed computing
-ray[default]==2.9.0
+ray[default]==2.54.0
 
 # ============================================================================
 # Model Registry & Experiment Tracking
 # ============================================================================
-mlflow==2.9.2
+mlflow==3.11.1
 boto3==1.34.0  # For S3 artifact storage
 
 # ============================================================================
@@ -59,10 +60,10 @@ wandb==0.16.1
 # ============================================================================
 # Data Processing
 # ============================================================================
-numpy==1.24.3
+numpy==1.26.4
 pandas==2.0.3
 scipy==1.11.4
-scikit-learn==1.3.2
+scikit-learn==1.5.0
 pyarrow==14.0.2
 jsonlines==4.0.0
 
@@ -70,16 +71,16 @@ jsonlines==4.0.0
 # Utilities
 # ============================================================================
 pyyaml==6.0.1
-tqdm==4.66.1
+tqdm==4.66.3
 click==8.1.7
-python-dotenv==1.0.0
-requests==2.31.0
+python-dotenv==1.2.2
+requests==2.33.0
 httpx==0.26.0
 
 # ============================================================================
 # Testing & Quality Assurance
 # ============================================================================
-pytest==7.4.3
+pytest==9.0.3
 pytest-asyncio==0.23.3
 pytest-cov==4.1.0
 pytest-mock==3.12.0
@@ -88,7 +89,7 @@ locust==2.20.0  # Load testing
 # ============================================================================
 # Code Quality
 # ============================================================================
-black==24.1.1
+black==26.3.1
 flake8==7.0.0
 mypy==1.8.0
 isort==5.13.2
@@ -102,8 +103,8 @@ docker==7.0.0
 # ============================================================================
 # Additional ML Utilities
 # ============================================================================
-huggingface-hub==0.20.2
-safetensors==0.4.1
+huggingface-hub==0.36.2
+safetensors==0.7.0
 ninja==1.11.1.1  # For building CUDA extensions
 
 # ============================================================================
@@ -115,15 +116,15 @@ psycopg2-binary==2.9.9
 # ============================================================================
 # Deployment & CI/CD
 # ============================================================================
-ansible==9.1.0
+ansible==12.2.0
 fabric==3.2.2
 
 # ============================================================================
 # Security & Authentication
 # ============================================================================
-cryptography==42.0.0
-pyjwt==2.8.0
-python-multipart==0.0.6
+cryptography==46.0.7
+pyjwt==2.12.0
+python-multipart==0.0.26
 
 # ============================================================================
 # Optional: GPU Utilities

@@ -36,4 +36,8 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
 COPY src /workspace/src
 COPY config /workspace/config
 
+RUN mkdir -p /workspace/models /workspace/outputs/logs
+
+EXPOSE 8000
+
 CMD ["python", "-m", "src.serving.vllm_server", "--config", "/workspace/config/serving_config.yaml"]

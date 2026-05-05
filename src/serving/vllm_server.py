@@ -5,10 +5,14 @@ High-performance LLM serving with PagedAttention and continuous batching
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 import logging
+import os
 import time
+import uuid
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -20,21 +24,11 @@ from pydantic import BaseModel, Field
 import uvicorn
 
 try:
-    from src.monitoring.metrics import (
-        add_metrics_endpoint,
-        finish_request_tracking,
-        record_inter_token_latency,
-        record_time_to_first_token,
-        start_request_tracking,
-    )
-except ModuleNotFoundError:
-    from monitoring.metrics import (  # type: ignore[no-redef]
-        add_metrics_endpoint,
-        finish_request_tracking,
-        record_inter_token_latency,
-        record_time_to_first_token,
-        start_request_tracking,
-    )
+    from src.monitoring import metrics as monitoring_metrics
+except ModuleNotFoundError as exc:
+    if exc.name not in {"src", "src.monitoring"}:
+        raise
+    from monitoring import metrics as monitoring_metrics  # type: ignore[no-redef]
 
 try:
     from vllm import SamplingParams
@@ -53,6 +47,38 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def _optional_str(value: Any) -> Optional[str]:
+    """Normalize empty YAML/env values to None."""
+    if value is None:
+        return None
+    value = str(value).strip()
+    if not value or value.lower() in {"none", "null"}:
+        return None
+    return value
+
+
+def _optional_int(value: Any) -> Optional[int]:
+    value = _optional_str(value)
+    return int(value) if value is not None else None
+
+
+def _optional_float(value: Any) -> Optional[float]:
+    value = _optional_str(value)
+    return float(value) if value is not None else None
+
+
+def _bool_value(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _env(name: str, default: Any = None) -> Any:
+    return os.getenv(name, default)
 
 
 # ============================================================================
@@ -129,6 +155,7 @@ class CompletionResponse(BaseModel):
 class VLLMServerConfig:
     """Configuration for vLLM server"""
     model_name: str
+    revision: Optional[str] = None
     tokenizer: Optional[str] = None
     tokenizer_mode: str = "auto"
     tokenizer_revision: Optional[str] = None
@@ -162,6 +189,10 @@ class VLLMServerConfig:
     max_logprobs: int = 5
     max_parallel_loading_workers: Optional[int] = None
     distributed_init_method: str = "auto"
+    max_concurrent_requests: int = 1000
+    enable_metrics: bool = True
+    metrics_port: int = 8000
+    gpu_metrics_interval: float = 15.0
     
     @classmethod
     def from_yaml(cls, config_path: str) -> 'VLLMServerConfig':
@@ -178,51 +209,116 @@ class VLLMServerConfig:
         distributed_config = config.get('distributed', {})
         engine_config = config.get('engine', {})
         loading_config = config.get('loading', {})
+        monitoring_config = config.get('monitoring', {})
 
         return cls(
-            model_name=model_config['name'],
-            tokenizer=model_config.get('tokenizer'),
-            tokenizer_mode=engine_config.get('tokenizer_mode', 'auto'),
-            tokenizer_revision=engine_config.get('tokenizer_revision'),
-            trust_remote_code=model_config.get('trust_remote_code', False),
-            download_dir=model_config.get('download_dir'),
-            dtype=model_config.get('dtype', 'auto'),
-            quantization=model_config.get('quantization'),
-            max_model_len=model_config.get('max_model_len'),
-            load_format=loading_config.get('load_format', 'auto'),
-            cpu_offload_gb=loading_config.get('cpu_offload_gb', 0.0),
-            enable_lora=loading_config.get('enable_lora', False),
-            max_loras=loading_config.get('max_loras', 1),
-            max_lora_rank=loading_config.get('max_lora_rank', 16),
-            lora_dtype=loading_config.get('lora_dtype', 'auto'),
-            host=server_config.get('host', '0.0.0.0'),
-            port=server_config.get('port', 8000),
-            tensor_parallel_size=gpu_config.get('tensor_parallel_size', 1),
-            pipeline_parallel_size=gpu_config.get('pipeline_parallel_size', 1),
-            gpu_memory_utilization=gpu_config.get('gpu_memory_utilization', 0.9),
-            swap_space=gpu_config.get('swap_space', 4.0),
-            enforce_eager=gpu_config.get('enforce_eager', False),
-            max_num_seqs=gpu_config.get('max_num_seqs', 256),
-            max_num_batched_tokens=gpu_config.get('max_num_batched_tokens', 8192),
-            block_size=paged_attention_config.get('block_size', 16),
-            enable_prefix_caching=paged_attention_config.get('enable_prefix_caching', True),
-            scheduling_policy=batching_config.get('scheduling_policy', 'fcfs'),
-            enable_chunked_prefill=batching_config.get('enable_chunked_prefill', False),
-            disable_log_stats=engine_config.get(
-                'disable_log_stats',
-                optimization_config.get('disable_log_stats', False),
+            model_name=_env('MODEL_NAME', model_config['name']),
+            revision=_optional_str(_env('MODEL_REVISION', model_config.get('revision'))),
+            tokenizer=_optional_str(_env('TOKENIZER', model_config.get('tokenizer'))),
+            tokenizer_mode=_env(
+                'TOKENIZER_MODE',
+                engine_config.get('tokenizer_mode', 'auto'),
             ),
-            disable_custom_all_reduce=optimization_config.get('disable_custom_all_reduce', False),
-            seed=engine_config.get('seed', 0),
-            max_logprobs=engine_config.get('max_logprobs', 5),
-            max_parallel_loading_workers=engine_config.get('max_parallel_loading_workers'),
-            distributed_init_method=distributed_config.get('distributed_init_method', 'auto'),
+            tokenizer_revision=_optional_str(
+                _env('TOKENIZER_REVISION', engine_config.get('tokenizer_revision'))
+            ),
+            trust_remote_code=_bool_value(
+                _env('TRUST_REMOTE_CODE', model_config.get('trust_remote_code')),
+                default=False,
+            ),
+            download_dir=_optional_str(_env('DOWNLOAD_DIR', model_config.get('download_dir'))),
+            dtype=_env('DTYPE', model_config.get('dtype', 'auto')),
+            quantization=_optional_str(_env('QUANTIZATION', model_config.get('quantization'))),
+            max_model_len=_optional_int(_env('MAX_MODEL_LEN', model_config.get('max_model_len'))),
+            load_format=_env('LOAD_FORMAT', loading_config.get('load_format', 'auto')),
+            cpu_offload_gb=float(_env('CPU_OFFLOAD_GB', loading_config.get('cpu_offload_gb', 0.0))),
+            enable_lora=_bool_value(
+                _env('ENABLE_LORA', loading_config.get('enable_lora')),
+                default=False,
+            ),
+            max_loras=int(_env('MAX_LORAS', loading_config.get('max_loras', 1))),
+            max_lora_rank=int(_env('MAX_LORA_RANK', loading_config.get('max_lora_rank', 16))),
+            lora_dtype=_env('LORA_DTYPE', loading_config.get('lora_dtype', 'auto')),
+            host=_env('HOST', server_config.get('host', '0.0.0.0')),
+            port=int(_env('PORT', server_config.get('port', 8000))),
+            tensor_parallel_size=int(
+                _env('TENSOR_PARALLEL_SIZE', gpu_config.get('tensor_parallel_size', 1))
+            ),
+            pipeline_parallel_size=int(
+                _env('PIPELINE_PARALLEL_SIZE', gpu_config.get('pipeline_parallel_size', 1))
+            ),
+            gpu_memory_utilization=float(
+                _env('GPU_MEMORY_UTILIZATION', gpu_config.get('gpu_memory_utilization', 0.9))
+            ),
+            swap_space=float(_env('SWAP_SPACE', gpu_config.get('swap_space', 4.0))),
+            enforce_eager=_bool_value(
+                _env('ENFORCE_EAGER', gpu_config.get('enforce_eager')),
+                default=False,
+            ),
+            max_num_seqs=int(_env('MAX_NUM_SEQS', gpu_config.get('max_num_seqs', 256))),
+            max_num_batched_tokens=int(
+                _env('MAX_NUM_BATCHED_TOKENS', gpu_config.get('max_num_batched_tokens', 8192))
+            ),
+            block_size=int(_env('BLOCK_SIZE', paged_attention_config.get('block_size', 16))),
+            enable_prefix_caching=_bool_value(
+                _env('ENABLE_PREFIX_CACHING', paged_attention_config.get('enable_prefix_caching')),
+                default=True,
+            ),
+            scheduling_policy=_env(
+                'SCHEDULING_POLICY',
+                batching_config.get('scheduling_policy', 'fcfs'),
+            ),
+            enable_chunked_prefill=_bool_value(
+                _env('ENABLE_CHUNKED_PREFILL', batching_config.get('enable_chunked_prefill')),
+                default=False,
+            ),
+            disable_log_stats=_bool_value(
+                _env(
+                    'DISABLE_LOG_STATS',
+                    engine_config.get(
+                        'disable_log_stats',
+                        optimization_config.get('disable_log_stats', False),
+                    ),
+                ),
+                default=False,
+            ),
+            disable_custom_all_reduce=_bool_value(
+                _env(
+                    'DISABLE_CUSTOM_ALL_REDUCE',
+                    optimization_config.get('disable_custom_all_reduce'),
+                ),
+                default=False,
+            ),
+            seed=int(_env('SEED', engine_config.get('seed', 0))),
+            max_logprobs=int(_env('MAX_LOGPROBS', engine_config.get('max_logprobs', 5))),
+            max_parallel_loading_workers=_optional_int(
+                _env(
+                    'MAX_PARALLEL_LOADING_WORKERS',
+                    engine_config.get('max_parallel_loading_workers'),
+                )
+            ),
+            distributed_init_method=_env(
+                'DISTRIBUTED_INIT_METHOD',
+                distributed_config.get('distributed_init_method', 'auto'),
+            ),
+            max_concurrent_requests=int(
+                _env('MAX_CONCURRENT_REQUESTS', server_config.get('max_concurrent_requests', 1000))
+            ),
+            enable_metrics=_bool_value(
+                _env('ENABLE_METRICS', monitoring_config.get('enable_metrics')),
+                default=True,
+            ),
+            metrics_port=int(_env('METRICS_PORT', monitoring_config.get('metrics_port', 8000))),
+            gpu_metrics_interval=float(
+                _env('GPU_METRICS_INTERVAL', monitoring_config.get('gpu_metrics_interval', 15.0))
+            ),
         )
 
     def to_async_engine_kwargs(self) -> Dict[str, Any]:
         """Translate config into desired AsyncEngineArgs kwargs."""
         engine_kwargs = {
             "model": self.model_name,
+            "revision": self.revision,
             "tokenizer": self.tokenizer,
             "tokenizer_mode": self.tokenizer_mode,
             "tokenizer_revision": self.tokenizer_revision,
@@ -339,6 +435,8 @@ class VLLMInferenceEngine:
         self.engine: Optional[AsyncLLMEngine] = None
         
         logger.info(f"Initializing vLLM engine for model: {config.model_name}")
+        logger.info(f"Quantization: {config.quantization or 'none'}")
+        logger.info(f"Dtype: {config.dtype}")
         logger.info(f"Tensor parallel size: {config.tensor_parallel_size}")
         logger.info(f"GPU memory utilization: {config.gpu_memory_utilization}")
     
@@ -365,7 +463,8 @@ class VLLMInferenceEngine:
     async def generate(
         self,
         prompt: str,
-        sampling_params: SamplingParams
+        sampling_params: SamplingParams,
+        request_id: Optional[str] = None,
     ) -> str:
         """
         Generate text from a single prompt
@@ -382,7 +481,11 @@ class VLLMInferenceEngine:
         
         # Generate
         results = []
-        async for request_output in self.engine.generate(prompt, sampling_params, request_id=None):
+        async for request_output in self.engine.generate(
+            prompt,
+            sampling_params,
+            request_id=request_id or str(uuid.uuid4()),
+        ):
             results.append(request_output)
         
         # Get final output
@@ -393,7 +496,8 @@ class VLLMInferenceEngine:
     async def stream_generate(
         self,
         prompt: str,
-        sampling_params: SamplingParams
+        sampling_params: SamplingParams,
+        request_id: Optional[str] = None,
     ):
         """
         Stream generate text from a prompt
@@ -409,7 +513,11 @@ class VLLMInferenceEngine:
             raise RuntimeError("Engine not initialized")
         
         previous_text = ""
-        async for request_output in self.engine.generate(prompt, sampling_params, request_id=None):
+        async for request_output in self.engine.generate(
+            prompt,
+            sampling_params,
+            request_id=request_id or str(uuid.uuid4()),
+        ):
             current_text = request_output.outputs[0].text
             if current_text.startswith(previous_text):
                 delta = current_text[len(previous_text):]
@@ -423,6 +531,61 @@ class VLLMInferenceEngine:
 # ============================================================================
 # FastAPI Server
 # ============================================================================
+
+class RequestAdmissionController:
+    """Bounded admission queue used for autoscaling metrics."""
+
+    def __init__(self, max_concurrent_requests: int, model_name: str):
+        self.model_name = model_name
+        self._semaphore = asyncio.Semaphore(max(1, max_concurrent_requests))
+        self._lock = asyncio.Lock()
+        self._queued_requests = 0
+        self._active_requests = 0
+        self._set_gauges()
+
+    def _set_gauges(self):
+        monitoring_metrics.request_queue_size.labels(model=self.model_name).set(
+            self._queued_requests
+        )
+        monitoring_metrics.active_requests.labels(model=self.model_name).set(
+            self._active_requests
+        )
+
+    @asynccontextmanager
+    async def admitted(self):
+        queued = False
+        acquired = False
+        active = False
+
+        async with self._lock:
+            self._queued_requests += 1
+            queued = True
+            self._set_gauges()
+
+        try:
+            await self._semaphore.acquire()
+            acquired = True
+            async with self._lock:
+                self._queued_requests -= 1
+                self._active_requests += 1
+                queued = False
+                active = True
+                self._set_gauges()
+            yield
+        finally:
+            if active:
+                self._semaphore.release()
+                async with self._lock:
+                    self._active_requests -= 1
+                    self._set_gauges()
+            elif acquired:
+                self._semaphore.release()
+
+            if queued:
+                async with self._lock:
+                    self._queued_requests -= 1
+                    self._set_gauges()
+
 
 class VLLMServer:
     """FastAPI server for vLLM inference"""
@@ -441,7 +604,11 @@ class VLLMServer:
             version="1.0.0"
         )
         self.engine = VLLMInferenceEngine(config)
-        add_metrics_endpoint(self.app)
+        self.admission = RequestAdmissionController(
+            config.max_concurrent_requests,
+            config.model_name,
+        )
+        self._gpu_metrics_task: Optional[asyncio.Task] = None
         
         # Add CORS middleware
         self.app.add_middleware(
@@ -451,6 +618,9 @@ class VLLMServer:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+
+        if config.enable_metrics:
+            monitoring_metrics.add_metrics_endpoint(self.app)
         
         # Register routes
         self._register_routes()
@@ -463,7 +633,19 @@ class VLLMServer:
         @self.app.on_event("startup")
         async def startup_event():
             """Initialize engine on startup"""
+            if self.config.enable_metrics and self.config.gpu_metrics_interval > 0:
+                self._gpu_metrics_task = asyncio.create_task(
+                    self._run_gpu_metrics_sampler()
+                )
             await self.engine.initialize()
+
+        @self.app.on_event("shutdown")
+        async def shutdown_event():
+            """Stop background metric samplers."""
+            if self._gpu_metrics_task is not None:
+                self._gpu_metrics_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await self._gpu_metrics_task
         
         @self.app.get("/health")
         async def health_check():
@@ -504,7 +686,7 @@ class VLLMServer:
                         status_code=400,
                         detail="Streaming completions support a single prompt per request.",
                     )
-                request_start = start_request_tracking(model_name)
+                request_start = time.time()
                 return StreamingResponse(
                     self._stream_completion(
                         prompt=request.prompt,
@@ -515,22 +697,29 @@ class VLLMServer:
                     media_type="text/event-stream"
                 )
 
-            request_start = start_request_tracking(model_name)
+            request_start = time.time()
             # Non-streaming generation
             prompts = [request.prompt] if isinstance(request.prompt, str) else request.prompt
+            prompt_tokens = 0
+            completion_tokens = 0
 
             try:
-                # Generate for all prompts
-                outputs = []
-                for i, prompt in enumerate(prompts):
-                    text = await self.engine.generate(prompt, sampling_params)
-                    outputs.append(
-                        CompletionChoice(
-                            text=text,
-                            index=i,
-                            finish_reason="stop"
+                async with self.admission.admitted():
+                    # Generate for all prompts in the request.
+                    outputs = []
+                    for i, prompt in enumerate(prompts):
+                        text = await self.engine.generate(
+                            prompt,
+                            sampling_params,
+                            request_id=f"cmpl-{uuid.uuid4()}-{i}",
                         )
-                    )
+                        outputs.append(
+                            CompletionChoice(
+                                text=text,
+                                index=i,
+                                finish_reason="stop"
+                            )
+                        )
 
                 prompt_tokens = sum(self._estimate_tokens(prompt) for prompt in prompts)
                 completion_tokens = sum(self._estimate_tokens(choice.text) for choice in outputs)
@@ -548,21 +737,25 @@ class VLLMServer:
                     }
                 )
 
-                finish_request_tracking(
-                    model_name=model_name,
+                self._record_request_metrics(
                     endpoint="/v1/completions",
-                    start_time=request_start,
+                    status="success",
+                    duration=time.time() - request_start,
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
                 )
                 return response
             except Exception as exc:
-                finish_request_tracking(
-                    model_name=model_name,
-                    endpoint="/v1/completions",
-                    start_time=request_start,
-                    status="error",
+                monitoring_metrics.error_counter.labels(
+                    model=model_name,
                     error_type=type(exc).__name__,
+                ).inc()
+                self._record_request_metrics(
+                    endpoint="/v1/completions",
+                    status="error",
+                    duration=time.time() - request_start,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
                 )
                 raise
         
@@ -587,7 +780,7 @@ class VLLMServer:
             model_name = request.model or self.config.model_name
 
             if request.stream:
-                request_start = start_request_tracking(model_name)
+                request_start = time.time()
                 return StreamingResponse(
                     self._stream_chat_completion(
                         prompt=prompt,
@@ -598,11 +791,18 @@ class VLLMServer:
                     media_type="text/event-stream",
                 )
 
-            request_start = start_request_tracking(model_name)
+            request_start = time.time()
+            prompt_tokens = 0
+            completion_tokens = 0
 
             try:
-                # Generate
-                text = await self.engine.generate(prompt, sampling_params)
+                async with self.admission.admitted():
+                    # Generate
+                    text = await self.engine.generate(
+                        prompt,
+                        sampling_params,
+                        request_id=f"chatcmpl-{uuid.uuid4()}",
+                    )
                 prompt_tokens = self._estimate_tokens(prompt)
                 completion_tokens = self._estimate_tokens(text)
 
@@ -627,21 +827,25 @@ class VLLMServer:
                     }
                 }
 
-                finish_request_tracking(
-                    model_name=model_name,
+                self._record_request_metrics(
                     endpoint="/v1/chat/completions",
-                    start_time=request_start,
+                    status="success",
+                    duration=time.time() - request_start,
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
                 )
                 return JSONResponse(content=response)
             except Exception as exc:
-                finish_request_tracking(
-                    model_name=model_name,
-                    endpoint="/v1/chat/completions",
-                    start_time=request_start,
-                    status="error",
+                monitoring_metrics.error_counter.labels(
+                    model=model_name,
                     error_type=type(exc).__name__,
+                ).inc()
+                self._record_request_metrics(
+                    endpoint="/v1/chat/completions",
+                    status="error",
+                    duration=time.time() - request_start,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
                 )
                 raise
     
@@ -677,6 +881,43 @@ class VLLMServer:
         """Serialize one Server-Sent Event payload as JSON."""
         return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
+    def _record_request_metrics(
+        self,
+        endpoint: str,
+        status: str,
+        duration: float,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+    ):
+        """Record request metrics without changing admission gauges."""
+        monitoring_metrics.request_duration.labels(
+            model=self.config.model_name,
+            endpoint=endpoint,
+        ).observe(max(0.0, duration))
+        monitoring_metrics.request_counter.labels(
+            model=self.config.model_name,
+            endpoint=endpoint,
+            status=status,
+        ).inc()
+
+        if prompt_tokens or completion_tokens:
+            monitoring_metrics.track_tokens(
+                model_name=self.config.model_name,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
+            monitoring_metrics.update_tokens_per_second(
+                model_name=self.config.model_name,
+                total_tokens=prompt_tokens + completion_tokens,
+                duration=duration,
+            )
+
+    async def _run_gpu_metrics_sampler(self):
+        """Periodically sample visible GPU utilization for Prometheus/HPA."""
+        while True:
+            monitoring_metrics.collect_gpu_metrics(self.config.model_name)
+            await asyncio.sleep(self.config.gpu_metrics_interval)
+
     async def _stream_completion(
         self,
         prompt: str,
@@ -702,28 +943,39 @@ class VLLMServer:
         last_token_time: Optional[float] = None
 
         try:
-            async for text in self.engine.stream_generate(prompt, sampling_params):
-                now = time.time()
-                if not first_token_seen:
-                    record_time_to_first_token(model_name, now - request_start)
-                    first_token_seen = True
-                elif last_token_time is not None:
-                    record_inter_token_latency(model_name, now - last_token_time)
-                last_token_time = now
-                completion_text += text
-                chunk = {
-                    "id": completion_id,
-                    "object": "text_completion",
-                    "created": created,
-                    "model": model_name,
-                    "choices": [{
-                        "text": text,
-                        "index": 0,
-                        "logprobs": None,
-                        "finish_reason": None
-                    }]
-                }
-                yield self._format_sse_payload(chunk)
+            async with self.admission.admitted():
+                async for text in self.engine.stream_generate(
+                    prompt,
+                    sampling_params,
+                    request_id=f"cmpl-stream-{uuid.uuid4()}",
+                ):
+                    now = time.time()
+                    if not first_token_seen:
+                        monitoring_metrics.record_time_to_first_token(
+                            model_name,
+                            now - request_start,
+                        )
+                        first_token_seen = True
+                    elif last_token_time is not None:
+                        monitoring_metrics.record_inter_token_latency(
+                            model_name,
+                            now - last_token_time,
+                        )
+                    last_token_time = now
+                    completion_text += text
+                    chunk = {
+                        "id": completion_id,
+                        "object": "text_completion",
+                        "created": created,
+                        "model": model_name,
+                        "choices": [{
+                            "text": text,
+                            "index": 0,
+                            "logprobs": None,
+                            "finish_reason": None
+                        }]
+                    }
+                    yield self._format_sse_payload(chunk)
 
             yield self._format_sse_payload(
                 {
@@ -740,22 +992,24 @@ class VLLMServer:
                 }
             )
             yield "data: [DONE]\n\n"
-            finish_request_tracking(
-                model_name=model_name,
+            self._record_request_metrics(
                 endpoint="/v1/completions",
-                start_time=request_start,
+                status="success",
+                duration=time.time() - request_start,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=self._estimate_tokens(completion_text),
             )
         except Exception as exc:
-            finish_request_tracking(
-                model_name=model_name,
+            monitoring_metrics.error_counter.labels(
+                model=model_name,
+                error_type=type(exc).__name__,
+            ).inc()
+            self._record_request_metrics(
                 endpoint="/v1/completions",
-                start_time=request_start,
                 status="error",
+                duration=time.time() - request_start,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=self._estimate_tokens(completion_text),
-                error_type=type(exc).__name__,
             )
             raise
 
@@ -776,33 +1030,44 @@ class VLLMServer:
         last_token_time: Optional[float] = None
 
         try:
-            async for text in self.engine.stream_generate(prompt, sampling_params):
-                now = time.time()
-                if not first_token_seen:
-                    record_time_to_first_token(model_name, now - request_start)
-                    first_token_seen = True
-                elif last_token_time is not None:
-                    record_inter_token_latency(model_name, now - last_token_time)
-                last_token_time = now
-                completion_text += text
-                delta: Dict[str, str] = {"content": text}
-                if not sent_role:
-                    delta["role"] = "assistant"
-                    sent_role = True
+            async with self.admission.admitted():
+                async for text in self.engine.stream_generate(
+                    prompt,
+                    sampling_params,
+                    request_id=f"chatcmpl-stream-{uuid.uuid4()}",
+                ):
+                    now = time.time()
+                    if not first_token_seen:
+                        monitoring_metrics.record_time_to_first_token(
+                            model_name,
+                            now - request_start,
+                        )
+                        first_token_seen = True
+                    elif last_token_time is not None:
+                        monitoring_metrics.record_inter_token_latency(
+                            model_name,
+                            now - last_token_time,
+                        )
+                    last_token_time = now
+                    completion_text += text
+                    delta: Dict[str, str] = {"content": text}
+                    if not sent_role:
+                        delta["role"] = "assistant"
+                        sent_role = True
 
-                yield self._format_sse_payload(
-                    {
-                        "id": completion_id,
-                        "object": "chat.completion.chunk",
-                        "created": created,
-                        "model": model_name,
-                        "choices": [{
-                            "index": 0,
-                            "delta": delta,
-                            "finish_reason": None,
-                        }],
-                    }
-                )
+                    yield self._format_sse_payload(
+                        {
+                            "id": completion_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": model_name,
+                            "choices": [{
+                                "index": 0,
+                                "delta": delta,
+                                "finish_reason": None,
+                            }],
+                        }
+                    )
 
             yield self._format_sse_payload(
                 {
@@ -818,22 +1083,24 @@ class VLLMServer:
                 }
             )
             yield "data: [DONE]\n\n"
-            finish_request_tracking(
-                model_name=model_name,
+            self._record_request_metrics(
                 endpoint="/v1/chat/completions",
-                start_time=request_start,
+                status="success",
+                duration=time.time() - request_start,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=self._estimate_tokens(completion_text),
             )
         except Exception as exc:
-            finish_request_tracking(
-                model_name=model_name,
+            monitoring_metrics.error_counter.labels(
+                model=model_name,
+                error_type=type(exc).__name__,
+            ).inc()
+            self._record_request_metrics(
                 endpoint="/v1/chat/completions",
-                start_time=request_start,
                 status="error",
+                duration=time.time() - request_start,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=self._estimate_tokens(completion_text),
-                error_type=type(exc).__name__,
             )
             raise
     

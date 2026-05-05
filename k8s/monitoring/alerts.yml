@@ -44,3 +44,35 @@ groups:
         annotations:
           summary: "LLM request metrics are missing"
           description: "Prometheus is not seeing llm_requests_total from the gateway or serving backend."
+
+  - name: llm-serving-saturation
+    rules:
+      - alert: LLMRequestQueueSustained
+        expr: avg by (namespace, pod) (llm_request_queue_size{namespace="llm-inference"}) > 10
+        for: 2m
+        labels:
+          severity: warning
+          service: serving
+        annotations:
+          summary: "vLLM request queue is sustained"
+          description: "Pod {{ $labels.pod }} has had more than 10 queued requests for at least 2 minutes."
+
+      - alert: LLMGPUUtilizationHigh
+        expr: avg by (namespace, pod) (llm_gpu_utilization_percent{namespace="llm-inference"}) > 90
+        for: 5m
+        labels:
+          severity: warning
+          service: serving
+        annotations:
+          summary: "vLLM GPU utilization is high"
+          description: "Pod {{ $labels.pod }} GPU utilization has been above 90% for at least 5 minutes."
+
+      - alert: LLMHPAReplicaLimitReached
+        expr: kube_horizontalpodautoscaler_status_current_replicas{namespace="llm-inference", horizontalpodautoscaler="vllm-hpa"} >= kube_horizontalpodautoscaler_spec_max_replicas{namespace="llm-inference", horizontalpodautoscaler="vllm-hpa"}
+        for: 5m
+        labels:
+          severity: critical
+          service: serving
+        annotations:
+          summary: "vLLM HPA is at max replicas"
+          description: "vLLM HPA has been at max replicas for at least 5 minutes; GPU nodepool capacity or maxReplicas may be too low."
