@@ -1,0 +1,4 @@
+# Transformers 5.0.0rc3 is the first fixed version reported for CVE-2026-1839,
+# but this MVP currently pins the vLLM/PyTorch/Transformers serving stack
+# together. Revisit when a stable Transformers 5.x upgrade is validated.
+CVE-2026-1839
