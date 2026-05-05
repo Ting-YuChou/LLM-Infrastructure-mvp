@@ -5,9 +5,9 @@ Simulates realistic user traffic patterns for LLM inference endpoints
 
 import random
 import time
-import os
-from typing import List, Dict
+from typing import Dict, List, Optional
 import json
+import os
 
 from locust import HttpUser, task, between, events
 from locust.runners import MasterRunner, WorkerRunner
@@ -39,8 +39,6 @@ SAMPLE_PROMPTS = [
     "How do vaccines work?",
     "Describe the structure of an atom.",
 ]
-
-DEFAULT_MODEL_NAME = os.getenv("MODEL_NAME", "default")
 
 
 # =============================================================================
@@ -91,6 +89,7 @@ class MetricsCollector:
 
 # Global metrics collector
 metrics_collector = MetricsCollector()
+REQUEST_MODEL = os.getenv("LOAD_TEST_MODEL")
 
 
 # =============================================================================
@@ -136,6 +135,44 @@ class LLMUser(HttpUser):
         except Exception as e:
             logger.error(f"Auth error: {e}")
             return ''
+
+    def _estimate_tokens(self, text: str) -> int:
+        """Approximate token usage from whitespace-delimited text."""
+        return max(1, len(text.split())) if text else 0
+
+    def _parse_stream_response(
+        self,
+        response,
+        prompt: str,
+        request_start: float,
+    ) -> tuple[int, int, Optional[float]]:
+        """Consume SSE events, extract completion text, and measure TTFT."""
+        ttft: Optional[float] = None
+        text_chunks: List[str] = []
+
+        for raw_line in response.iter_lines(decode_unicode=True):
+            if not raw_line:
+                continue
+            if not raw_line.startswith("data: "):
+                continue
+
+            event_payload = raw_line[6:].strip()
+            if event_payload == "[DONE]":
+                break
+
+            if ttft is None:
+                ttft = time.time() - request_start
+
+            event = json.loads(event_payload)
+            choice = (event.get("choices") or [{}])[0]
+            delta = choice.get("delta") or {}
+            text = choice.get("text") or delta.get("content") or ""
+            if text:
+                text_chunks.append(text)
+
+        prompt_tokens = self._estimate_tokens(prompt)
+        completion_tokens = self._estimate_tokens("".join(text_chunks))
+        return prompt_tokens, completion_tokens, ttft
     
     @task(10)
     def short_completion(self):
@@ -203,37 +240,44 @@ class LLMUser(HttpUser):
             headers['Authorization'] = f'Bearer {self.auth_token}'
         
         payload = {
-            "model": DEFAULT_MODEL_NAME,
             "prompt": prompt,
             "max_tokens": max_tokens,
             "temperature": 0.7,
             "stream": stream
         }
-        
-        start_time = time.time()
-        
+        if REQUEST_MODEL:
+            payload["model"] = REQUEST_MODEL
+
+        request_start = time.time()
         try:
             with self.client.post(
                 "/v1/completions",
                 json=payload,
                 headers=headers,
                 catch_response=True,
-                name=name
+                name=name,
+                stream=stream,
             ) as response:
                 
                 if response.status_code == 200:
-                    # Parse response
-                    data = response.json()
-                    
-                    # Extract token usage
-                    usage = data.get('usage', {})
-                    prompt_tokens = usage.get('prompt_tokens', 0)
-                    completion_tokens = usage.get('completion_tokens', 0)
+                    if stream:
+                        prompt_tokens, completion_tokens, ttft = self._parse_stream_response(
+                            response=response,
+                            prompt=prompt,
+                            request_start=request_start,
+                        )
+                    else:
+                        data = response.json()
+                        usage = data.get('usage', {})
+                        prompt_tokens = usage.get('prompt_tokens', self._estimate_tokens(prompt))
+                        completion_tokens = usage.get('completion_tokens', 0)
+                        ttft = None
                     
                     # Record metrics
                     metrics_collector.record_request(
                         prompt_tokens=prompt_tokens,
-                        completion_tokens=completion_tokens
+                        completion_tokens=completion_tokens,
+                        ttft=ttft,
                     )
                     
                     response.success()
@@ -253,7 +297,7 @@ class LLMUser(HttpUser):
             metrics_collector.record_error()
 
 
-class HighVolumeUser(HttpUser):
+class HighVolumeUser(LLMUser):
     """
     High-volume user for stress testing
     
@@ -268,13 +312,23 @@ class HighVolumeUser(HttpUser):
         prompt = random.choice(SAMPLE_PROMPTS)
         
         payload = {
-            "model": DEFAULT_MODEL_NAME,
             "prompt": prompt,
             "max_tokens": 64,
             "temperature": 0.7
         }
-        
-        self.client.post("/v1/completions", json=payload, name="/v1/completions [rapid]")
+        if REQUEST_MODEL:
+            payload["model"] = REQUEST_MODEL
+
+        headers = {}
+        if self.auth_token:
+            headers['Authorization'] = f'Bearer {self.auth_token}'
+
+        self.client.post(
+            "/v1/completions",
+            json=payload,
+            headers=headers,
+            name="/v1/completions [rapid]",
+        )
 
 
 # =============================================================================
@@ -332,11 +386,11 @@ def on_request(request_type, name, response_time, response_length, exception, **
 Run load test with Locust:
 
 # Start Locust web UI
-locust -f scripts/load_test.py --host=http://localhost:8000
+locust -f scripts/load_test.py --host=http://localhost:8080
 
 # Run headless (command-line mode)
 locust -f scripts/load_test.py \
-    --host=http://localhost:8000 \
+    --host=http://localhost:8080 \
     --users 100 \
     --spawn-rate 10 \
     --run-time 10m \
@@ -344,7 +398,7 @@ locust -f scripts/load_test.py \
 
 # Distributed load testing (master)
 locust -f scripts/load_test.py \
-    --host=http://localhost:8000 \
+    --host=http://localhost:8080 \
     --master
 
 # Distributed load testing (worker)
@@ -354,13 +408,17 @@ locust -f scripts/load_test.py \
 
 # Export results
 locust -f scripts/load_test.py \
-    --host=http://localhost:8000 \
+    --host=http://localhost:8080 \
     --users 50 \
     --spawn-rate 5 \
     --run-time 5m \
     --headless \
     --html=load_test_report.html \
     --csv=load_test_results
+
+# Send an explicit model field when hitting a backend that requires it
+LOAD_TEST_MODEL=/workspace/models/aligned/checkpoint-final \
+locust -f scripts/load_test.py --host=http://localhost:8080
 
 Parameters:
   --users: Total number of concurrent users

@@ -1,0 +1,28 @@
+{
+  "default_model": "mock-llm-local",
+  "allow_passthrough": false,
+  "routes": {
+    "mock-llm-local": {
+      "description": "Local stable/canary route for the mock serving stack.",
+      "targets": [
+        {
+          "name": "stable",
+          "backend_url": "http://mock-llm:8000",
+          "model": "mock-llm-local",
+          "weight": 100,
+          "stage": "Production",
+          "version": "stable"
+        },
+        {
+          "name": "canary",
+          "backend_url": "http://mock-llm:8000",
+          "model": "mock-llm-local-canary",
+          "weight": 0,
+          "stage": "Staging",
+          "version": "canary",
+          "enabled": true
+        }
+      ]
+    }
+  }
+}

@@ -15,14 +15,92 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 from api.gateway import APIGateway, GatewayConfig
 
 
+def make_test_config(rate_limit_enabled: bool = False) -> GatewayConfig:
+    """Create an explicit auth config for gateway tests."""
+    config = GatewayConfig()
+    config.JWT_SECRET = "test-secret"
+    config.AUTH_USERS = {"testuser": "testpass"}
+    config.DEV_AUTH_ENABLED = False
+    config.RATE_LIMIT_ENABLED = rate_limit_enabled
+    config.RATE_LIMIT_TOKENS_PER_MINUTE = 100000
+    config.RATE_LIMIT_TOKENS_PER_HOUR = 1000000
+    config.DEFAULT_COMPLETION_MODEL = "test-model"
+    config.MODEL_ROUTING_CONFIG = None
+    config.ROUTING_CANARY_SALT = "test"
+    return config
+
+
+def get_auth_headers(client: TestClient) -> dict:
+    token = client.post(
+        "/auth/token",
+        json={"username": "testuser", "password": "testpass"},
+    ).json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+class FakeBackendResponse:
+    """Minimal async-httpx response stand-in for gateway tests."""
+
+    def __init__(self, payload, status_code: int = 200):
+        self.payload = payload
+        self.status_code = status_code
+        self.text = str(payload)
+
+    def json(self):
+        return self.payload
+
+
+class FakeBackendClient:
+    """Capture proxied backend requests without a network service."""
+
+    def __init__(self, payload):
+        self.payload = payload
+        self.requests = []
+
+    async def post(self, url, json, timeout):
+        self.requests.append({"url": url, "json": json, "timeout": timeout})
+        return FakeBackendResponse(self.payload)
+
+
+class FakeStreamingBackendResponse:
+    """Minimal streaming response for SSE proxy tests."""
+
+    def __init__(self, chunks):
+        self.chunks = chunks
+        self.status_code = 200
+        self.headers = {"content-type": "text/event-stream"}
+        self.closed = False
+
+    async def aiter_raw(self):
+        for chunk in self.chunks:
+            yield chunk
+
+    async def aclose(self):
+        self.closed = True
+
+
+class FakeStreamingBackendClient:
+    """Capture streaming backend requests without a network service."""
+
+    def __init__(self, chunks):
+        self.chunks = chunks
+        self.requests = []
+
+    def build_request(self, method, url, json):
+        return {"method": method, "url": url, "json": json}
+
+    async def send(self, request, stream):
+        self.requests.append({**request, "stream": stream})
+        return FakeStreamingBackendResponse(self.chunks)
+
+
 class TestAPIGateway:
     """Integration tests for API Gateway"""
     
     @pytest.fixture
     def gateway(self):
         """Create test gateway instance"""
-        config = GatewayConfig()
-        config.RATE_LIMIT_ENABLED = False  # Disable for easier testing
+        config = make_test_config(rate_limit_enabled=False)
         gateway = APIGateway(config=config)
         return gateway
     
@@ -67,6 +145,15 @@ class TestAPIGateway:
             }
         )
         
+        assert response.status_code == 401
+
+    def test_get_token_rejects_wrong_password(self, client):
+        """Test token generation with invalid configured credentials."""
+        response = client.post(
+            "/auth/token",
+            json={"username": "testuser", "password": "wrongpass"}
+        )
+
         assert response.status_code == 401
     
     def test_protected_endpoint_without_auth(self, client):
@@ -126,6 +213,227 @@ class TestAPIGateway:
         assert "models" in data
         assert len(data["models"]) > 0
 
+    def test_completion_preserves_openai_schema_and_records_usage(self):
+        """Test completions keep backend OpenAI schema and update usage."""
+        config = make_test_config()
+        config.DEFAULT_COMPLETION_MODEL = "default-completion-model"
+        gateway = APIGateway(config=config)
+        gateway.config.DEFAULT_COMPLETION_MODEL = "default-completion-model"
+        gateway.http_client = FakeBackendClient(
+            {
+                "id": "cmpl-test",
+                "object": "text_completion",
+                "created": 123,
+                "model": "default-completion-model",
+                "choices": [
+                    {
+                        "text": "hello from backend",
+                        "index": 0,
+                        "logprobs": None,
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 2,
+                    "completion_tokens": 3,
+                    "total_tokens": 5,
+                },
+            }
+        )
+        client = TestClient(gateway.app)
+        headers = get_auth_headers(client)
+
+        response = client.post(
+            "/v1/completions",
+            headers=headers,
+            json={"prompt": "say hello", "max_tokens": 16},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["object"] == "text_completion"
+        assert data["choices"][0]["text"] == "hello from backend"
+        assert "created_at" not in data
+        assert gateway.http_client.requests[0]["json"]["model"] == "default-completion-model"
+
+        usage_response = client.get("/usage", headers=headers)
+        usage = usage_response.json()
+        assert usage["total_requests"] == 1
+        assert usage["prompt_tokens"] == 2
+        assert usage["completion_tokens"] == 3
+        assert usage["total_tokens"] == 5
+
+    def test_chat_completion_is_proxied(self):
+        """Test chat completions are routed to the backend chat endpoint."""
+        config = make_test_config()
+        config.DEFAULT_COMPLETION_MODEL = "default-chat-model"
+        gateway = APIGateway(config=config)
+        gateway.config.DEFAULT_COMPLETION_MODEL = "default-chat-model"
+        gateway.http_client = FakeBackendClient(
+            {
+                "id": "chatcmpl-test",
+                "object": "chat.completion",
+                "created": 123,
+                "model": "default-chat-model",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "hello"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 3,
+                    "completion_tokens": 1,
+                    "total_tokens": 4,
+                },
+            }
+        )
+        client = TestClient(gateway.app)
+        headers = get_auth_headers(client)
+
+        response = client.post(
+            "/v1/chat/completions",
+            headers=headers,
+            json={
+                "messages": [{"role": "user", "content": "say hello"}],
+                "max_tokens": 16,
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["choices"][0]["message"]["content"] == "hello"
+        assert gateway.http_client.requests[0]["url"].endswith("/v1/chat/completions")
+        assert gateway.http_client.requests[0]["json"]["model"] == "default-chat-model"
+
+        usage = client.get("/usage", headers=headers).json()
+        assert usage["models"]["default-chat-model"]["total_tokens"] == 4
+
+    def test_streaming_completion_records_usage_and_metrics(self, gateway):
+        """Test streaming proxy tracks usage and streaming latency metrics."""
+        gateway.http_client = FakeStreamingBackendClient(
+            [
+                b'data: {"choices":[{"text":"hello ","index":0,"finish_reason":null}]}\n\n',
+                b'data: {"choices":[{"text":"world","index":0,"finish_reason":null}]}\n\n',
+                b"data: [DONE]\n\n",
+            ]
+        )
+        client = TestClient(gateway.app)
+        headers = get_auth_headers(client)
+
+        response = client.post(
+            "/v1/completions",
+            headers=headers,
+            json={"prompt": "say hello", "max_tokens": 8, "stream": True},
+        )
+
+        assert response.status_code == 200
+        assert "data: [DONE]" in response.text
+        usage = client.get("/usage", headers=headers).json()
+        assert usage["total_requests"] == 1
+        assert usage["completion_tokens"] == 2
+
+        metrics = client.get("/metrics").text
+        assert "llm_time_to_first_token_seconds_count" in metrics
+        assert "llm_inter_token_latency_seconds_count" in metrics
+
+    def test_manifest_routing_applies_backend_and_model(self, tmp_path):
+        """Test gateway routes logical models through manifest targets."""
+        manifest_path = tmp_path / "routing.json"
+        manifest_path.write_text(
+            """
+            {
+              "default_model": "logical-prod",
+              "routes": {
+                "logical-prod": {
+                  "targets": [
+                    {
+                      "name": "canary",
+                      "backend_url": "http://canary-backend:8000",
+                      "model": "physical-canary",
+                      "weight": 100,
+                      "stage": "Staging",
+                      "version": "2"
+                    }
+                  ]
+                }
+              }
+            }
+            """,
+            encoding="utf-8",
+        )
+        config = make_test_config()
+        config.MODEL_ROUTING_CONFIG = str(manifest_path)
+        gateway = APIGateway(config=config)
+        gateway.http_client = FakeBackendClient(
+            {
+                "id": "cmpl-test",
+                "object": "text_completion",
+                "created": 123,
+                "model": "physical-canary",
+                "choices": [{"text": "ok", "index": 0, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            }
+        )
+        client = TestClient(gateway.app)
+        headers = get_auth_headers(client)
+
+        response = client.post(
+            "/v1/completions",
+            headers=headers,
+            json={"prompt": "hello", "max_tokens": 4},
+        )
+
+        assert response.status_code == 200
+        assert gateway.http_client.requests[0]["url"] == (
+            "http://canary-backend:8000/v1/completions"
+        )
+        assert gateway.http_client.requests[0]["json"]["model"] == "physical-canary"
+
+        models = client.get("/models", headers=headers).json()["models"]
+        assert models[0]["id"] == "logical-prod"
+        assert models[0]["targets"][0]["stage"] == "Staging"
+
+    def test_manifest_routing_rejects_unknown_model(self, tmp_path):
+        """Test strict manifest routing fails closed for unmapped models."""
+        manifest_path = tmp_path / "routing.json"
+        manifest_path.write_text(
+            """
+            {
+              "default_model": "known",
+              "allow_passthrough": false,
+              "routes": {
+                "known": {
+                  "targets": [
+                    {
+                      "name": "stable",
+                      "backend_url": "http://backend:8000",
+                      "model": "known",
+                      "weight": 100
+                    }
+                  ]
+                }
+              }
+            }
+            """,
+            encoding="utf-8",
+        )
+        config = make_test_config()
+        config.MODEL_ROUTING_CONFIG = str(manifest_path)
+        gateway = APIGateway(config=config)
+        gateway.http_client = FakeBackendClient({})
+        client = TestClient(gateway.app)
+        headers = get_auth_headers(client)
+
+        response = client.post(
+            "/v1/completions",
+            headers=headers,
+            json={"model": "unknown", "prompt": "hello", "max_tokens": 4},
+        )
+
+        assert response.status_code == 404
+        assert gateway.http_client.requests == []
+
 
 class TestRateLimiting:
     """Test rate limiting functionality"""
@@ -133,9 +441,8 @@ class TestRateLimiting:
     @pytest.fixture
     def gateway_with_limits(self):
         """Create gateway with strict rate limits"""
-        config = GatewayConfig()
-        config.RATE_LIMIT_ENABLED = True
-        config.RATE_LIMIT_REQUESTS_PER_MINUTE = 5
+        config = make_test_config(rate_limit_enabled=True)
+        config.RATE_LIMIT_REQUESTS_PER_MINUTE = 1
         config.RATE_LIMIT_REQUESTS_PER_HOUR = 100
         gateway = APIGateway(config=config)
         return gateway
@@ -145,22 +452,56 @@ class TestRateLimiting:
         """Create test client with rate limiting"""
         return TestClient(gateway_with_limits.app)
     
-    def test_rate_limit_enforcement(self, limited_client):
-        """Test that rate limits are enforced"""
-        # Get token
-        token_response = limited_client.post(
-            "/auth/token",
-            json={"username": "testuser", "password": "testpass"}
+    def test_request_limit_rejects_second_inference(self, gateway_with_limits):
+        """Test RPM is enforced before dispatching another inference."""
+        gateway_with_limits.http_client = FakeBackendClient(
+            {
+                "id": "cmpl-test",
+                "object": "text_completion",
+                "created": 123,
+                "model": "m",
+                "choices": [{"text": "ok", "index": 0, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+            }
         )
-        token = token_response.json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
-        
-        # Note: Actual rate limit testing would require mocking the backend
-        # and making multiple requests. This is a simplified test.
-        
-        # Make a request
-        response = limited_client.get("/models", headers=headers)
-        assert response.status_code == 200
+        client = TestClient(gateway_with_limits.app)
+        headers = get_auth_headers(client)
+
+        first = client.post(
+            "/v1/completions",
+            headers=headers,
+            json={"prompt": "hello", "max_tokens": 1},
+        )
+        second = client.post(
+            "/v1/completions",
+            headers=headers,
+            json={"prompt": "hello", "max_tokens": 1},
+        )
+
+        assert first.status_code == 200
+        assert second.status_code == 429
+        assert second.headers["x-ratelimit-remaining-minute"] == "0"
+        assert len(gateway_with_limits.http_client.requests) == 1
+
+    def test_token_limit_rejects_oversized_inference(self):
+        """Test TPM is enforced using estimated prompt + max_tokens."""
+        config = make_test_config(rate_limit_enabled=True)
+        config.RATE_LIMIT_REQUESTS_PER_MINUTE = 100
+        config.RATE_LIMIT_TOKENS_PER_MINUTE = 5
+        gateway = APIGateway(config=config)
+        gateway.http_client = FakeBackendClient({})
+        client = TestClient(gateway.app)
+        headers = get_auth_headers(client)
+
+        response = client.post(
+            "/v1/completions",
+            headers=headers,
+            json={"prompt": "hello world", "max_tokens": 16},
+        )
+
+        assert response.status_code == 429
+        assert response.headers["x-ratelimit-remaining-tokens-minute"] == "0"
+        assert gateway.http_client.requests == []
 
 
 class TestCORS:
@@ -169,14 +510,21 @@ class TestCORS:
     @pytest.fixture
     def client(self):
         """Create test client"""
-        gateway = APIGateway()
+        gateway = APIGateway(config=make_test_config())
         return TestClient(gateway.app)
     
     def test_cors_headers(self, client):
-        """Test CORS headers are present"""
-        response = client.options("/health")
+        """Test CORS headers are present for real browser preflight."""
+        response = client.options(
+            "/health",
+            headers={
+                "Origin": "http://example.com",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
         
         # Check CORS headers
+        assert response.status_code == 200
         assert "access-control-allow-origin" in response.headers
 
 
@@ -186,7 +534,7 @@ class TestErrorHandling:
     @pytest.fixture
     def client(self):
         """Create test client"""
-        gateway = APIGateway()
+        gateway = APIGateway(config=make_test_config())
         return TestClient(gateway.app)
     
     def test_404_error(self, client):
@@ -210,7 +558,7 @@ class TestRequestLogging:
     @pytest.fixture
     def client(self):
         """Create test client"""
-        gateway = APIGateway()
+        gateway = APIGateway(config=make_test_config())
         return TestClient(gateway.app)
     
     def test_request_is_logged(self, client, caplog):
@@ -237,7 +585,7 @@ class TestUsageTracking:
     @pytest.fixture
     def client(self):
         """Create test client"""
-        gateway = APIGateway()
+        gateway = APIGateway(config=make_test_config())
         return TestClient(gateway.app)
     
     def test_get_usage(self, client):

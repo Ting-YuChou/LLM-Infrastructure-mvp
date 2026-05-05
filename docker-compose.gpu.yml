@@ -3,19 +3,9 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.serving
-    image: llm-serving:latest
     gpus: all
     environment:
       CUDA_VISIBLE_DEVICES: "0"
-      MODEL_NAME: /workspace/models/awq/checkpoint-final
-      QUANTIZATION: awq
-      DTYPE: float16
-      TENSOR_PARALLEL_SIZE: "1"
-      GPU_MEMORY_UTILIZATION: "0.9"
-      MAX_CONCURRENT_REQUESTS: "512"
-      ENABLE_METRICS: "true"
-      METRICS_PORT: "8000"
-      GPU_METRICS_INTERVAL: "15"
     command:
       - python
       - -m
@@ -51,14 +41,13 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.gateway
-    image: llm-gateway:latest
     environment:
       JWT_SECRET: local-dev-secret
       AUTH_USERS: "local:local,loadtest:loadtest123"
       RATE_LIMIT_ENABLED: "false"
       REDIS_HOST: redis
       VLLM_BACKEND_URL: http://vllm-server:8000
-      DEFAULT_COMPLETION_MODEL: /workspace/models/awq/checkpoint-final
+      DEFAULT_COMPLETION_MODEL: /workspace/models/aligned/checkpoint-final
       MODEL_ROUTING_CONFIG: /workspace/config/model_routing.gpu.json
     command: ["python", "-m", "src.api.gateway", "--host", "0.0.0.0", "--port", "8080"]
     ports:
@@ -77,27 +66,12 @@ services:
       retries: 5
     restart: unless-stopped
 
-  mlflow-server:
-    image: ghcr.io/mlflow/mlflow:v2.9.2
-    command: >
-      mlflow server
-      --host 0.0.0.0
-      --port 5000
-      --backend-store-uri sqlite:///mlflow/mlflow.db
-      --default-artifact-root /mlflow/artifacts
-    ports:
-      - "5000:5000"
-    volumes:
-      - mlflow-data:/mlflow
-      - ./models:/mlflow/models
-    restart: unless-stopped
-
   prometheus:
     image: prom/prometheus:latest
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
-      - --storage.tsdb.retention.time=30d
+      - --storage.tsdb.retention.time=7d
     ports:
       - "9091:9090"
     volumes:
@@ -121,6 +95,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  mlflow-data:
   prometheus-data:
   grafana-data:

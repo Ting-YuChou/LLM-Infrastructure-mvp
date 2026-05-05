@@ -1,59 +1,43 @@
-FROM nvidia/cuda:12.9.1-cudnn-devel-ubuntu22.04
-
-LABEL maintainer="LLM Infrastructure Team"
-LABEL description="vLLM serving image with AWQ quantization support"
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONPATH=/workspace:$PYTHONPATH
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/workspace
 ENV CUDA_HOME=/usr/local/cuda
-ENV LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
-ENV PATH=$CUDA_HOME/bin:$PATH
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
+ENV PATH=/usr/local/cuda/bin:${PATH}
+
+WORKDIR /workspace
 
 RUN apt-get update && apt-get install -y \
     python3.10 \
     python3-pip \
     python3.10-dev \
+    python3.10-venv \
     build-essential \
-    curl \
     git \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 && \
     update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
 
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+COPY docker/requirements.serving.txt /tmp/requirements.serving.txt
 
-RUN pip install --no-cache-dir \
-    torch==2.10.0 \
-    torchvision==0.25.0 \
-    torchaudio==2.10.0 \
-    --index-url https://download.pytorch.org/whl/cu129
-
-RUN pip install --no-cache-dir \
-    vllm==0.19.1 \
-    fastapi==0.136.1 \
-    "uvicorn[standard]==0.46.0" \
-    pydantic==2.13.3 \
-    transformers==4.57.6 \
-    tokenizers==0.22.2 \
-    prometheus-client==0.19.0 \
-    nvidia-ml-py==12.535.133 \
-    pyyaml==6.0.1 \
-    huggingface-hub==0.36.2 \
-    safetensors==0.7.0 \
-    sentencepiece==0.1.99 \
-    protobuf==3.20.3 \
-    --extra-index-url https://download.pytorch.org/whl/cu129
-
-WORKDIR /workspace
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir \
+      torch==2.1.2 \
+      torchvision==0.16.2 \
+      torchaudio==2.1.2 \
+      --index-url https://download.pytorch.org/whl/cu118 && \
+    pip install --no-cache-dir -r /tmp/requirements.serving.txt
 
 COPY src /workspace/src
 COPY config /workspace/config
 
 RUN mkdir -p /workspace/models /workspace/outputs/logs
 
-EXPOSE 8000 9090
+EXPOSE 8000
 
 CMD ["python", "-m", "src.serving.vllm_server", "--config", "/workspace/config/serving_config.yaml"]

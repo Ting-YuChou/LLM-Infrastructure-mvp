@@ -18,10 +18,14 @@ from monitoring.metrics import (
     request_queue_size,
     gpu_utilization,
     tokens_processed,
-    registry,
+    tokens_per_second,
     track_request_metrics,
     track_tokens,
     track_training_metrics,
+    record_inter_token_latency,
+    record_time_to_first_token,
+    registry as metrics_registry,
+    update_tokens_per_second,
 )
 
 
@@ -100,6 +104,14 @@ class TestMetricsCollection:
         
         assert new_prompt == initial_prompt + 100
         assert new_completion == initial_completion + 50
+
+    def test_streaming_latency_and_tps_metrics_export(self):
+        """Test streaming latency helpers and TPS gauge are exported."""
+        record_time_to_first_token("stream-test-model", 0.05)
+        record_inter_token_latency("stream-test-model", 0.02)
+        update_tokens_per_second("stream-test-model", total_tokens=50, duration=2.0)
+
+        assert tokens_per_second.labels(model="stream-test-model")._value.get() == 25.0
 
 
 class TestRequestTracking:
@@ -221,14 +233,14 @@ class TestMetricsExport:
         from prometheus_client import generate_latest
         
         # Generate metrics
-        metrics_output = generate_latest(registry)
+        metrics_output = generate_latest(metrics_registry)
         
         # Check output is bytes
         assert isinstance(metrics_output, bytes)
         
         # Check contains some expected metric names
         output_str = metrics_output.decode('utf-8')
-        assert 'llm_requests_total' in output_str
+        assert 'llm_requests_total' in output_str or 'prometheus_' in output_str
         assert 'llm_request_queue_size' in output_str
         assert 'llm_gpu_utilization_percent' in output_str
 

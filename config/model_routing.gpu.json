@@ -1,0 +1,28 @@
+{
+  "default_model": "/workspace/models/aligned/checkpoint-final",
+  "allow_passthrough": false,
+  "routes": {
+    "/workspace/models/aligned/checkpoint-final": {
+      "description": "GPU serving route with a disabled canary target template.",
+      "targets": [
+        {
+          "name": "stable",
+          "backend_url": "http://vllm-server:8000",
+          "model": "/workspace/models/aligned/checkpoint-final",
+          "weight": 100,
+          "stage": "Production",
+          "version": "stable"
+        },
+        {
+          "name": "canary",
+          "backend_url": "http://vllm-server-canary:8000",
+          "model": "/workspace/models/aligned/checkpoint-canary",
+          "weight": 0,
+          "stage": "Staging",
+          "version": "canary",
+          "enabled": true
+        }
+      ]
+    }
+  }
+}

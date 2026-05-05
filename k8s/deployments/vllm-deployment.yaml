@@ -35,7 +35,7 @@ data:
   MAX_CONCURRENT_REQUESTS: "512"
   ENABLE_PREFIX_CACHING: "true"
   ENABLE_METRICS: "true"
-  METRICS_PORT: "9090"
+  METRICS_PORT: "8000"
   GPU_METRICS_INTERVAL: "15"
   LOG_LEVEL: "INFO"
 
@@ -71,7 +71,7 @@ spec:
         version: v1
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "9090"
+        prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
     spec:
       terminationGracePeriodSeconds: 120
@@ -132,9 +132,6 @@ spec:
         ports:
         - name: http
           containerPort: 8000
-          protocol: TCP
-        - name: metrics
-          containerPort: 9090
           protocol: TCP
         
         # Resource requests and limits
@@ -219,7 +216,7 @@ spec:
               if not os.path.isdir(model_name):
                   raise SystemExit(f"Local model path does not exist: {model_name}")
               print(f"Using local model path: {model_name}")
-          else:
+          else
               print(f"Downloading model snapshot: {model_name}")
               snapshot_download(repo_id=model_name, cache_dir="/workspace/models")
           PY
@@ -250,11 +247,10 @@ spec:
     port: 80
     targetPort: 8000
     protocol: TCP
-  - name: metrics
-    port: 9090
-    targetPort: 9090
-    protocol: TCP
-  sessionAffinity: None
+  sessionAffinity: ClientIP  # Sticky sessions
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
 
 ---
 
@@ -312,7 +308,7 @@ spec:
       target:
         type: Utilization
         averageUtilization: 85
-  
+
   # Custom metric: GPU utilization
   - type: Pods
     pods:
@@ -321,7 +317,7 @@ spec:
       target:
         type: AverageValue
         averageValue: "75"
-  
+
   # Custom metric: Request queue size
   - type: Pods
     pods:
@@ -414,8 +410,6 @@ spec:
     ports:
     - protocol: TCP
       port: 8000
-    - protocol: TCP
-      port: 9090
   egress:
   - to:
     - namespaceSelector: {}
@@ -443,7 +437,7 @@ spec:
     matchLabels:
       app: vllm
   endpoints:
-  - port: metrics
+  - port: http
     interval: 30s
     path: /metrics
 
