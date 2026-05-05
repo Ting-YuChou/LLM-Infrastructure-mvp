@@ -5,6 +5,7 @@ Simulates realistic user traffic patterns for LLM inference endpoints
 
 import random
 import time
+import os
 from typing import List, Dict
 import json
 
@@ -38,6 +39,8 @@ SAMPLE_PROMPTS = [
     "How do vaccines work?",
     "Describe the structure of an atom.",
 ]
+
+DEFAULT_MODEL_NAME = os.getenv("MODEL_NAME", "default")
 
 
 # =============================================================================
@@ -200,6 +203,7 @@ class LLMUser(HttpUser):
             headers['Authorization'] = f'Bearer {self.auth_token}'
         
         payload = {
+            "model": DEFAULT_MODEL_NAME,
             "prompt": prompt,
             "max_tokens": max_tokens,
             "temperature": 0.7,
@@ -264,6 +268,7 @@ class HighVolumeUser(HttpUser):
         prompt = random.choice(SAMPLE_PROMPTS)
         
         payload = {
+            "model": DEFAULT_MODEL_NAME,
             "prompt": prompt,
             "max_tokens": 64,
             "temperature": 0.7

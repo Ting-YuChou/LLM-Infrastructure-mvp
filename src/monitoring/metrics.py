@@ -5,7 +5,8 @@ Prometheus metrics for LLM infrastructure monitoring
 
 import time
 import logging
-from typing import Dict, Optional, Callable
+import os
+from typing import Dict, Optional, Callable, List
 from functools import wraps
 from contextlib import contextmanager
 
@@ -360,6 +361,55 @@ def track_gpu_metrics(gpu_id: int, model_name: str):
     except Exception as e:
         logger.error(f"Error tracking GPU metrics: {e}")
         yield
+
+
+def _visible_gpu_ids() -> List[int]:
+    """Return GPU indices visible inside the current container/process."""
+    visible_devices = os.getenv("CUDA_VISIBLE_DEVICES")
+    if not visible_devices or visible_devices.strip().lower() in {"all", "none"}:
+        return []
+
+    gpu_ids = []
+    for value in visible_devices.split(","):
+        value = value.strip()
+        if value.isdigit():
+            gpu_ids.append(int(value))
+    return gpu_ids
+
+
+def collect_gpu_metrics(model_name: str):
+    """
+    Collect a point-in-time NVML snapshot for all visible GPUs.
+
+    Kubernetes device-plugin containers commonly renumber assigned GPUs to
+    local indices, so falling back to NVML's device count is the most portable
+    behavior when CUDA_VISIBLE_DEVICES is not a simple numeric list.
+    """
+    try:
+        import pynvml
+
+        pynvml.nvmlInit()
+        gpu_ids = _visible_gpu_ids()
+        if not gpu_ids:
+            gpu_ids = list(range(pynvml.nvmlDeviceGetCount()))
+
+        for gpu_id in gpu_ids:
+            handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_id)
+            info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+            temp = pynvml.nvmlDeviceGetTemperature(
+                handle,
+                pynvml.NVML_TEMPERATURE_GPU,
+            )
+
+            gpu_memory_used.labels(gpu_id=str(gpu_id), model=model_name).set(info.used)
+            gpu_utilization.labels(gpu_id=str(gpu_id), model=model_name).set(util.gpu)
+            gpu_temperature.labels(gpu_id=str(gpu_id)).set(temp)
+
+    except ImportError:
+        logger.warning("pynvml not installed, GPU metrics disabled")
+    except Exception as e:
+        logger.error(f"Error collecting GPU metrics: {e}")
 
 
 def track_tokens(model_name: str, prompt_tokens: int, completion_tokens: int):

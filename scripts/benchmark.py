@@ -6,6 +6,7 @@ Comprehensive benchmarking for LLM inference systems
 import time
 import asyncio
 import statistics
+import os
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict
 from datetime import datetime
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 class BenchmarkConfig:
     """Benchmark configuration"""
     endpoint_url: str
+    model: str = "default"
     num_requests: int = 100
     concurrent_requests: int = 10
     max_tokens: int = 256
@@ -185,6 +187,7 @@ class InferenceBenchmark:
         
         # Prepare request
         payload = {
+            "model": self.config.model,
             "prompt": prompt,
             "max_tokens": self.config.max_tokens,
             "temperature": self.config.temperature,
@@ -394,6 +397,11 @@ def main():
         help="Inference endpoint URL"
     )
     parser.add_argument(
+        "--model",
+        default=os.getenv("MODEL_NAME", "default"),
+        help="Model name/path to send in the completion request"
+    )
+    parser.add_argument(
         "--num-requests",
         type=int,
         default=100,
@@ -435,6 +443,7 @@ def main():
     # Create benchmark config
     config = BenchmarkConfig(
         endpoint_url=args.endpoint,
+        model=args.model,
         num_requests=args.num_requests,
         concurrent_requests=args.concurrent,
         max_tokens=args.max_tokens,

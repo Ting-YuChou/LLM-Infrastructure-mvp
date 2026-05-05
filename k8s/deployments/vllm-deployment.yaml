@@ -7,6 +7,7 @@ metadata:
   name: llm-inference
   labels:
     app: llm-infrastructure
+    name: llm-inference
     
 ---
 
@@ -20,12 +21,22 @@ metadata:
   name: vllm-config
   namespace: llm-inference
 data:
-  MODEL_NAME: "meta-llama/Llama-2-7b-hf"
+  MODEL_NAME: "/workspace/models/awq/checkpoint-final"
+  QUANTIZATION: "awq"
+  DTYPE: "float16"
+  # Default mode is 1 GPU per pod with horizontal autoscaling.
+  # For tensor-parallel serving, set TENSOR_PARALLEL_SIZE and the GPU
+  # request/limit below to the same value, then ensure nodes have enough GPUs.
   TENSOR_PARALLEL_SIZE: "1"
+  PIPELINE_PARALLEL_SIZE: "1"
   GPU_MEMORY_UTILIZATION: "0.90"
   MAX_NUM_SEQS: "256"
   MAX_NUM_BATCHED_TOKENS: "8192"
+  MAX_CONCURRENT_REQUESTS: "512"
   ENABLE_PREFIX_CACHING: "true"
+  ENABLE_METRICS: "true"
+  METRICS_PORT: "9090"
+  GPU_METRICS_INTERVAL: "15"
   LOG_LEVEL: "INFO"
 
 ---
@@ -43,7 +54,7 @@ metadata:
     app: vllm
     version: v1
 spec:
-  replicas: 2  # Start with 2 replicas
+  replicas: 3  # Warm pool for faster spike absorption
   selector:
     matchLabels:
       app: vllm
@@ -63,15 +74,33 @@ spec:
         prometheus.io/port: "9090"
         prometheus.io/path: "/metrics"
     spec:
+      terminationGracePeriodSeconds: 120
       # Node selection
       nodeSelector:
-        nvidia.com/gpu: "true"  # Only schedule on GPU nodes
+        nvidia.com/gpu.present: "true"  # Customize to match your GPU node labels
       
       # Tolerations for GPU taints
       tolerations:
       - key: nvidia.com/gpu
         operator: Exists
         effect: NoSchedule
+
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: vllm
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: vllm
+              topologyKey: kubernetes.io/hostname
       
       # Container specifications
       containers:
@@ -84,10 +113,20 @@ spec:
         - configMapRef:
             name: vllm-config
         env:
-        - name: CUDA_VISIBLE_DEVICES
-          value: "0"
         - name: PYTHONUNBUFFERED
           value: "1"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
         
         # Ports
         ports:
@@ -103,11 +142,18 @@ spec:
           requests:
             memory: "16Gi"
             cpu: "4"
+            # For N-GPU tensor parallel serving, set this equal to
+            # TENSOR_PARALLEL_SIZE and schedule on nodes with >= N GPUs.
             nvidia.com/gpu: "1"
           limits:
             memory: "32Gi"
             cpu: "8"
             nvidia.com/gpu: "1"
+
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 20"]
         
         # Liveness probe (restart if unhealthy)
         livenessProbe:
@@ -163,12 +209,20 @@ spec:
         - /bin/bash
         - -c
         - |
-          if [ ! -d "/workspace/models/$(MODEL_NAME)" ]; then
-            echo "Downloading model..."
-            python -c "from transformers import AutoModel; AutoModel.from_pretrained('$(MODEL_NAME)', cache_dir='/workspace/models')"
-          else
-            echo "Model already cached"
-          fi
+          python - <<'PY'
+          import os
+          from huggingface_hub import snapshot_download
+
+          model_name = os.environ["MODEL_NAME"]
+
+          if os.path.isabs(model_name):
+              if not os.path.isdir(model_name):
+                  raise SystemExit(f"Local model path does not exist: {model_name}")
+              print(f"Using local model path: {model_name}")
+          else:
+              print(f"Downloading model snapshot: {model_name}")
+              snapshot_download(repo_id=model_name, cache_dir="/workspace/models")
+          PY
         volumeMounts:
         - name: model-cache
           mountPath: /workspace/models
@@ -200,10 +254,7 @@ spec:
     port: 9090
     targetPort: 9090
     protocol: TCP
-  sessionAffinity: ClientIP  # Sticky sessions
-  sessionAffinityConfig:
-    clientIP:
-      timeoutSeconds: 3600
+  sessionAffinity: None
 
 ---
 
@@ -243,8 +294,8 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: vllm-server
-  minReplicas: 2
-  maxReplicas: 10
+  minReplicas: 3
+  maxReplicas: 30
   metrics:
   # CPU-based scaling
   - type: Resource
@@ -252,7 +303,7 @@ spec:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: 70
+        averageUtilization: 80
   
   # Memory-based scaling
   - type: Resource
@@ -260,7 +311,7 @@ spec:
       name: memory
       target:
         type: Utilization
-        averageUtilization: 80
+        averageUtilization: 85
   
   # Custom metric: GPU utilization
   - type: Pods
@@ -278,24 +329,24 @@ spec:
         name: llm_request_queue_size
       target:
         type: AverageValue
-        averageValue: "10"
+        averageValue: "4"
   
   behavior:
     scaleDown:
-      stabilizationWindowSeconds: 300  # Wait 5 minutes before scaling down
+      stabilizationWindowSeconds: 600  # Keep warm capacity after spikes
       policies:
       - type: Percent
-        value: 50
+        value: 25
         periodSeconds: 60
     scaleUp:
-      stabilizationWindowSeconds: 60  # Wait 1 minute before scaling up
+      stabilizationWindowSeconds: 0  # React immediately to queue growth
       policies:
       - type: Percent
-        value: 100
-        periodSeconds: 30
+        value: 200
+        periodSeconds: 15
       - type: Pods
-        value: 2
-        periodSeconds: 30
+        value: 10
+        periodSeconds: 15
       selectPolicy: Max
 
 ---

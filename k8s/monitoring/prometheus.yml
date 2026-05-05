@@ -44,7 +44,7 @@ scrape_configs:
   # ==========================================================================
   # vLLM Inference Servers
   # ==========================================================================
-  - job_name: 'vllm-servers'
+  - job_name: 'kubernetes-annotated-pods'
     
     # Service discovery for Kubernetes
     kubernetes_sd_configs:
@@ -52,6 +52,7 @@ scrape_configs:
         namespaces:
           names:
             - llm-inference
+            - monitoring
     
     # Keep only pods with prometheus.io/scrape annotation
     relabel_configs:
@@ -81,14 +82,15 @@ scrape_configs:
       - source_labels: [__meta_kubernetes_pod_label_app]
         action: replace
         target_label: app
-    
-    # Static configuration for non-Kubernetes deployments
+  # ==========================================================================
+  # kube-state-metrics (HPA status metrics for alerts)
+  # ==========================================================================
+  - job_name: 'kube-state-metrics'
     static_configs:
       - targets:
-          - 'vllm-server:9090'
+          - 'kube-state-metrics.monitoring.svc:8080'
         labels:
-          service: 'vllm'
-          environment: 'production'
+          service: 'kube-state-metrics'
   
   # ==========================================================================
   # API Gateway

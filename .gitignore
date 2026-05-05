@@ -26,6 +26,7 @@ venv/
 ENV/
 env/
 .venv
+.venv*/
 
 # IDEs
 .vscode/
@@ -99,6 +100,7 @@ PRODUCTION_GUIDE.pdf
 README.pdf
 
 # Exclude guide markdown files (keep only README.md)
+agents.md
 GIT_GUIDE.md
 DEPLOYMENT.md
 SETUP.md

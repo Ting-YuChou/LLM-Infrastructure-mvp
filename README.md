@@ -98,6 +98,7 @@ llm-infrastructure-mvp/
 │   └── Dockerfile.base
 │
 ├── k8s/                  # Kubernetes configuration
+│   ├── autoscaling/      # Prometheus Adapter custom metric rules
 │   ├── deployments/      # Deployment manifests
 │   └── monitoring/       # Monitoring configs
 │
@@ -110,10 +111,15 @@ llm-infrastructure-mvp/
 
 ### Requirements
 
-- Python 3.9+
-- CUDA 11.8+ (for GPU training and inference)
+- Python 3.10+
+- CUDA 12.9-compatible NVIDIA driver for the provided Docker images
 - Docker & Docker Compose (optional, for service deployment)
 - At least 16GB GPU memory (24GB+ recommended)
+
+Serving runtime matrix:
+- vLLM `0.19.1`
+- PyTorch `2.10.0` / torchvision `0.25.0` / torchaudio `2.10.0`
+- CUDA `12.9.1` cuDNN Docker base image
 
 ### Installation
 
@@ -231,13 +237,39 @@ docker-compose down
 
 ### Production Deployment (Kubernetes)
 
+Prerequisites for GPU autoscaling:
+- NVIDIA device plugin and GPU Feature Discovery labels on GPU nodes
+- `metrics-server` for CPU/memory HPA metrics
+- Prometheus or Prometheus Operator scraping `llm-inference` and `monitoring`
+- Prometheus Adapter installed with `k8s/autoscaling/prometheus-adapter-values.yaml`
+- DCGM exporter for node/GPU visibility
+- GPU nodepool quota or cluster autoscaler capacity for the HPA max replica count
+
 ```bash
-# Deploy vLLM service
+# Deploy vLLM service and HPA
 kubectl apply -f k8s/deployments/vllm-deployment.yaml
 
-# Deploy monitoring
-kubectl apply -f k8s/monitoring/
+# Deploy GPU exporter
+kubectl apply -f k8s/monitoring/dcgm-exporter.yaml
+
+# Install Prometheus Adapter with the custom metric mappings
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm upgrade --install prometheus-adapter prometheus-community/prometheus-adapter \
+  --namespace monitoring --create-namespace \
+  -f k8s/autoscaling/prometheus-adapter-values.yaml
 ```
+
+`k8s/monitoring/prometheus.yml` and `k8s/monitoring/alerts.yml` are Prometheus config files, not Kubernetes objects. Mount them through your Prometheus deployment or translate them into the equivalent Helm values for your monitoring stack.
+
+The default Kubernetes manifest uses one GPU per vLLM pod and scales horizontally from 3 to 30 replicas. For tensor-parallel serving inside a single pod, set `TENSOR_PARALLEL_SIZE` and the pod `nvidia.com/gpu` request/limit to the same value, remove any cluster-specific one-GPU scheduling assumptions, and schedule onto nodes with enough local GPUs.
+
+The HPA uses queue depth first (`llm_request_queue_size`), GPU saturation second (`llm_gpu_utilization_percent`), and CPU/memory as backup signals. For 10x traffic spikes, size `minReplicas` and `maxReplicas` from measured baseline capacity:
+
+```text
+required_gpus = ceil((baseline_peak_rps * 10 * avg_tokens_per_request) / measured_tokens_per_second_per_gpu)
+```
+
+Keep `minReplicas` high enough to absorb the first minute of traffic while GPU nodes and model pods warm up.
 
 ### Start Inference Server
 
@@ -245,7 +277,12 @@ kubectl apply -f k8s/monitoring/
 # Run directly
 python -m src.serving.vllm_server \
     --config config/serving_config.yaml \
-    --model /path/to/model
+    --model /path/to/awq-model
+
+# AWQ serving uses vLLM weight quantization, typically 4-bit weights with
+# FP16/BF16 activations. It is not the same thing as FP8 quantization.
+QUANTIZATION=awq DTYPE=float16 MODEL_NAME=/path/to/awq-model \
+python -m src.serving.vllm_server --config config/serving_config.yaml
 
 # Or use API Gateway
 python -m src.api.gateway --host 0.0.0.0 --port 8080
@@ -302,6 +339,8 @@ Key parameters:
 - `model.name`: Model path for serving
 - `gpu.tensor_parallel_size`: Tensor parallel size
 - `gpu.gpu_memory_utilization`: GPU memory utilization
+- `server.max_concurrent_requests`: Requests admitted before queueing
+- `monitoring.metrics_port`: Prometheus exporter port, default `9090`
 
 ## 🛠️ Development Guide
 
@@ -374,8 +413,21 @@ Metrics endpoint: `http://localhost:9090/metrics`
 Key metrics:
 - `llm_requests_total`: Total number of requests
 - `llm_request_duration_seconds`: Request latency
+- `llm_active_requests`: Requests currently admitted for generation
+- `llm_request_queue_size`: Requests waiting behind the admission limit
 - `llm_tokens_processed_total`: Number of tokens processed
 - `llm_gpu_utilization_percent`: GPU utilization
+
+Autoscaling validation:
+```bash
+# Confirm HPA can read custom metrics
+kubectl get --raw \
+  "/apis/custom.metrics.k8s.io/v1beta1/namespaces/llm-inference/pods/*/llm_request_queue_size"
+
+# Build a baseline, then ramp to 10x with the load test
+python scripts/benchmark.py --endpoint http://localhost:8000
+locust -f scripts/load_test.py --host http://localhost:8080
+```
 
 ## 🤝 Contributing
 
