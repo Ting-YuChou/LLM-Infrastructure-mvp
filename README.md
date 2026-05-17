@@ -266,20 +266,52 @@ docker compose up -d --build
 ### Production Deployment (Kubernetes)
 
 ```bash
-# Deploy vLLM service
-kubectl apply -f k8s/deployments/vllm-deployment.yaml
+# Deploy vLLM service with the Helm chart
+helm upgrade --install vllm-inference charts/vllm-inference \
+  --namespace llm-inference \
+  --create-namespace \
+  -f charts/vllm-inference/values.yaml
 
-# Deploy monitoring
-kubectl apply -f k8s/monitoring/
+# Override environment-specific values
+helm upgrade --install vllm-inference charts/vllm-inference \
+  --namespace llm-inference \
+  --create-namespace \
+  -f charts/vllm-inference/values.yaml \
+  --set image.tag=release-candidate \
+  --set model.name=/workspace/models/awq/checkpoint-final
 
-# Install Prometheus Adapter if you use the HPA custom metrics in the manifest
+# Or use the deployment helper, which defaults to Helm mode
+python scripts/deploy.py --action deploy
+
+# Install Prometheus Adapter if you use HPA custom metrics
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm upgrade --install prometheus-adapter prometheus-community/prometheus-adapter \
   --namespace monitoring --create-namespace \
   -f k8s/autoscaling/prometheus-adapter-values.yaml
+
+# Optional GPU exporter; Prometheus/KEDA themselves remain external dependencies
+kubectl apply -f k8s/monitoring/dcgm-exporter.yaml
 ```
 
-The provided Kubernetes manifest scrapes `/metrics` from the main vLLM HTTP port. Its HPA uses queue depth first (`llm_request_queue_size`), GPU saturation second (`llm_gpu_utilization_percent`), and CPU/memory as backup signals. Queue/GPU/custom-metric autoscaling is also available as an optional KEDA manifest in `k8s/autoscaling/vllm-keda-scaledobject.yaml`; do not run the KEDA ScaledObject and the manifest HPA against the same Deployment at the same time.
+The Helm chart renders the vLLM Deployment, Service, ConfigMap, PVC, PDB, NetworkPolicy, HPA, and ServiceMonitor by default. It scrapes `/metrics` from the main vLLM HTTP port. HPA uses queue depth first (`llm_request_queue_size`), GPU saturation second (`llm_gpu_utilization_percent`), and CPU/memory as backup signals.
+
+KEDA autoscaling is available through chart values. Do not enable HPA and KEDA together because both manage the same Deployment:
+
+```bash
+helm upgrade --install vllm-inference charts/vllm-inference \
+  --namespace llm-inference \
+  --create-namespace \
+  -f charts/vllm-inference/values.yaml \
+  --set hpa.enabled=false \
+  --set keda.enabled=true
+```
+
+Legacy raw manifests remain under `k8s/` for reference:
+
+```bash
+kubectl apply -f k8s/deployments/vllm-deployment.yaml
+kubectl apply -f k8s/autoscaling/vllm-keda-scaledobject.yaml  # optional; do not combine with the HPA
+```
 
 ### Start Inference Server
 
@@ -318,7 +350,7 @@ Priority order for production platform hardening:
 2. Canary and rollback: raise the canary target `weight` to shift deterministic per-user traffic; set it back to `0` for immediate rollback without changing client-facing model names.
 3. Eval gate: block promotion unless candidate metrics pass absolute thresholds and baseline regression guards.
 4. Alerting: Prometheus loads `docker/alerts.yml` locally and `k8s/monitoring/alerts.yml` in Kubernetes-style deployments.
-5. Autoscaling: `k8s/autoscaling/vllm-keda-scaledobject.yaml` is an optional KEDA template for queue, GPU utilization, and active-request based scaling.
+5. Autoscaling: Helm values can switch between the default HPA and optional KEDA queue/GPU/active-request based scaling.
 
 Example eval gate:
 
@@ -329,10 +361,15 @@ python scripts/eval_gate.py \
     --config config/eval_gate.json
 ```
 
-Optional KEDA scale-out manifest:
+Optional KEDA scale-out with Helm:
 
 ```bash
-kubectl apply -f k8s/autoscaling/vllm-keda-scaledobject.yaml
+helm upgrade --install vllm-inference charts/vllm-inference \
+    --namespace llm-inference \
+    --create-namespace \
+    -f charts/vllm-inference/values.yaml \
+    --set hpa.enabled=false \
+    --set keda.enabled=true
 ```
 
 ### API Usage Example

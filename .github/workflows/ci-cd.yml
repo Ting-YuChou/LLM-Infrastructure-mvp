@@ -46,6 +46,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.host-check.txt
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
       
       - name: Run serving compile smoke
         run: |
@@ -72,6 +75,8 @@ jobs:
               Path("config/model_routing.local.json"),
           ]
           yaml_paths = [
+              Path("charts/vllm-inference/Chart.yaml"),
+              Path("charts/vllm-inference/values.yaml"),
               *Path("config").glob("*.yaml"),
               *Path("docker").glob("*.yml"),
               *Path("k8s").glob("**/*.yml"),
@@ -90,6 +95,52 @@ jobs:
                   list(yaml.safe_load_all(handle))
 
           print("serving-config-parse-ok")
+          PY
+
+      - name: Validate Helm chart
+        run: |
+          helm lint charts/vllm-inference
+          helm template vllm-inference charts/vllm-inference --namespace llm-inference > /tmp/vllm-rendered.yaml
+          helm template vllm-inference charts/vllm-inference \
+            --namespace llm-inference \
+            --set hpa.enabled=false \
+            --set keda.enabled=true > /tmp/vllm-rendered-keda.yaml
+          helm template vllm-inference charts/vllm-inference \
+            --namespace llm-inference \
+            --set serviceMonitor.enabled=false \
+            --set persistence.enabled=false \
+            --set image.tag=test \
+            --set model.name=hf/example \
+            --set-string 'resources.requests.nvidia\.com/gpu=2' \
+            --set-string 'resources.limits.nvidia\.com/gpu=2' > /tmp/vllm-rendered-toggle.yaml
+          python - <<'PY'
+          from pathlib import Path
+
+          import yaml
+
+          def load_render(path):
+              with Path(path).open("r", encoding="utf-8") as handle:
+                  return [doc for doc in yaml.safe_load_all(handle) if doc]
+
+          default_docs = load_render("/tmp/vllm-rendered.yaml")
+          default_kinds = {doc["kind"] for doc in default_docs}
+          assert "Deployment" in default_kinds
+          assert "HorizontalPodAutoscaler" in default_kinds
+          assert "PersistentVolumeClaim" in default_kinds
+          assert "PodDisruptionBudget" in default_kinds
+          assert "NetworkPolicy" in default_kinds
+          assert "ServiceMonitor" in default_kinds
+          assert "ScaledObject" not in default_kinds
+
+          keda_kinds = {doc["kind"] for doc in load_render("/tmp/vllm-rendered-keda.yaml")}
+          assert "ScaledObject" in keda_kinds
+          assert "HorizontalPodAutoscaler" not in keda_kinds
+
+          toggle_kinds = {doc["kind"] for doc in load_render("/tmp/vllm-rendered-toggle.yaml")}
+          assert "ServiceMonitor" not in toggle_kinds
+          assert "PersistentVolumeClaim" not in toggle_kinds
+
+          print("helm-chart-render-ok")
           PY
 
       - name: Check whitespace errors

@@ -85,7 +85,7 @@ class DeploymentManager:
         
         return result
     
-    def validate_prerequisites(self) -> bool:
+    def validate_prerequisites(self, deploy_mode: str = "helm") -> bool:
         """
         Validate deployment prerequisites
         
@@ -99,6 +99,9 @@ class DeploymentManager:
             ("docker", ["docker", "--version"]),
             ("cluster access", ["kubectl", "cluster-info"]),
         ]
+
+        if deploy_mode == "helm":
+            checks.append(("helm", ["helm", "version", "--short"]))
         
         for name, cmd in checks:
             try:
@@ -203,6 +206,43 @@ class DeploymentManager:
         
         except subprocess.CalledProcessError as e:
             logger.error(f"  ✗ Deployment failed: {e}")
+            return False
+
+    def deploy_helm_release(
+        self,
+        release: str,
+        chart: str,
+        values_files: Optional[List[str]] = None
+    ) -> bool:
+        """
+        Deploy the vLLM inference stack with Helm.
+
+        Args:
+            release: Helm release name
+            chart: Path to the Helm chart
+            values_files: Optional values files to pass with -f
+
+        Returns:
+            True if successful
+        """
+        logger.info(f"Deploying Helm release: {release} ({chart})")
+
+        cmd = [
+            "helm", "upgrade", "--install", release, chart,
+            "--namespace", self.namespace,
+            "--create-namespace",
+        ]
+
+        for values_file in values_files or []:
+            cmd.extend(["-f", values_file])
+
+        try:
+            self.run_command(cmd)
+            logger.info(f"  ✓ Deployed Helm release {release}")
+            return True
+
+        except subprocess.CalledProcessError as e:
+            logger.error(f"  ✗ Helm deployment failed: {e}")
             return False
     
     def wait_for_rollout(
@@ -330,11 +370,39 @@ class DeploymentManager:
         except subprocess.CalledProcessError as e:
             logger.error(f"Rollback failed: {e}")
             return False
+
+    def rollback_helm_release(self, release: str) -> bool:
+        """
+        Roll back a Helm release to the previous revision.
+
+        Args:
+            release: Helm release name
+
+        Returns:
+            True if successful
+        """
+        logger.warning(f"Rolling back Helm release: {release}")
+
+        try:
+            self.run_command([
+                "helm", "rollback", release,
+                "--namespace", self.namespace,
+                "--wait",
+            ])
+            return self.wait_for_rollout("vllm-server")
+
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Helm rollback failed: {e}")
+            return False
     
     def deploy_with_strategy(
         self,
         strategy: str = "rolling",
+        deploy_mode: str = "helm",
         manifest_dir: str = "k8s/deployments",
+        release: str = "vllm-inference",
+        chart: str = "charts/vllm-inference",
+        values_files: Optional[List[str]] = None,
         **kwargs
     ) -> bool:
         """
@@ -342,16 +410,26 @@ class DeploymentManager:
         
         Args:
             strategy: Deployment strategy (rolling, blue-green, canary)
+            deploy_mode: Deployment backend (helm or manifest)
             manifest_dir: Directory with manifests
+            release: Helm release name
+            chart: Path to Helm chart
+            values_files: Helm values files
             **kwargs: Strategy-specific parameters
             
         Returns:
             True if successful
         """
-        logger.info(f"Deploying with {strategy} strategy")
+        logger.info(f"Deploying with {strategy} strategy via {deploy_mode}")
         
         if strategy == "rolling":
-            return self._deploy_rolling(manifest_dir)
+            return self._deploy_rolling(
+                deploy_mode=deploy_mode,
+                manifest_dir=manifest_dir,
+                release=release,
+                chart=chart,
+                values_files=values_files,
+            )
         elif strategy == "blue-green":
             return self._deploy_blue_green(manifest_dir)
         elif strategy == "canary":
@@ -360,10 +438,24 @@ class DeploymentManager:
             logger.error(f"Unknown strategy: {strategy}")
             return False
     
-    def _deploy_rolling(self, manifest_dir: str) -> bool:
+    def _deploy_rolling(
+        self,
+        deploy_mode: str,
+        manifest_dir: str,
+        release: str,
+        chart: str,
+        values_files: Optional[List[str]]
+    ) -> bool:
         """Standard rolling deployment"""
-        # Deploy manifests
-        if not self.deploy_manifest(manifest_dir):
+        if deploy_mode == "helm":
+            deployed = self.deploy_helm_release(release, chart, values_files)
+        elif deploy_mode == "manifest":
+            deployed = self.deploy_manifest(manifest_dir)
+        else:
+            logger.error(f"Unknown deploy mode: {deploy_mode}")
+            return False
+
+        if not deployed:
             return False
         
         # Wait for rollout
@@ -414,6 +506,13 @@ def main():
         default="rolling",
         help="Deployment strategy"
     )
+
+    parser.add_argument(
+        "--deploy-mode",
+        choices=["helm", "manifest"],
+        default="helm",
+        help="Deployment backend"
+    )
     
     parser.add_argument(
         "--namespace",
@@ -436,6 +535,30 @@ def main():
         "--kubeconfig",
         help="Path to kubeconfig file"
     )
+
+    parser.add_argument(
+        "--release",
+        default="vllm-inference",
+        help="Helm release name"
+    )
+
+    parser.add_argument(
+        "--chart",
+        default="charts/vllm-inference",
+        help="Path to Helm chart"
+    )
+
+    parser.add_argument(
+        "--values",
+        action="append",
+        help="Helm values file; may be specified multiple times"
+    )
+
+    parser.add_argument(
+        "--manifest-dir",
+        default="k8s/deployments",
+        help="Path to raw Kubernetes manifest file or directory"
+    )
     
     args = parser.parse_args()
     
@@ -447,9 +570,11 @@ def main():
     
     # Execute action
     success = False
+
+    values_files = args.values or [f"{args.chart}/values.yaml"]
     
     if args.action == "validate":
-        success = manager.validate_prerequisites()
+        success = manager.validate_prerequisites(deploy_mode=args.deploy_mode)
     
     elif args.action == "build":
         success = manager.build_docker_images(tag=args.tag)
@@ -461,10 +586,20 @@ def main():
         success = manager.push_docker_images(args.registry, args.tag)
     
     elif args.action == "deploy":
-        success = manager.deploy_with_strategy(strategy=args.strategy)
+        success = manager.deploy_with_strategy(
+            strategy=args.strategy,
+            deploy_mode=args.deploy_mode,
+            manifest_dir=args.manifest_dir,
+            release=args.release,
+            chart=args.chart,
+            values_files=values_files,
+        )
     
     elif args.action == "rollback":
-        success = manager.rollback_deployment("vllm-server")
+        if args.deploy_mode == "helm":
+            success = manager.rollback_helm_release(args.release)
+        else:
+            success = manager.rollback_deployment("vllm-server")
     
     # Exit with appropriate code
     if success:
