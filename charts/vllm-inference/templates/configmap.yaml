@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.resourceNames.configMap }}
+  namespace: {{ include "vllm-inference.namespace" . }}
+  labels:
+{{ include "vllm-inference.labels" . | nindent 4 }}
+data:
+  MODEL_NAME: {{ .Values.model.name | quote }}
+  QUANTIZATION: {{ .Values.model.quantization | quote }}
+  DTYPE: {{ .Values.model.dtype | quote }}
+  TENSOR_PARALLEL_SIZE: {{ .Values.model.tensorParallelSize | quote }}
+  PIPELINE_PARALLEL_SIZE: {{ .Values.model.pipelineParallelSize | quote }}
+  GPU_MEMORY_UTILIZATION: {{ .Values.model.gpuMemoryUtilization | quote }}
+  MAX_NUM_SEQS: {{ .Values.model.maxNumSeqs | quote }}
+  MAX_NUM_BATCHED_TOKENS: {{ .Values.model.maxNumBatchedTokens | quote }}
+  MAX_CONCURRENT_REQUESTS: {{ .Values.model.maxConcurrentRequests | quote }}
+  ENABLE_PREFIX_CACHING: {{ .Values.model.enablePrefixCaching | quote }}
+  ENABLE_METRICS: {{ .Values.model.enableMetrics | quote }}
+  METRICS_PORT: {{ .Values.model.metricsPort | quote }}
+  GPU_METRICS_INTERVAL: {{ .Values.model.gpuMetricsInterval | quote }}
+  LOG_LEVEL: {{ .Values.model.logLevel | quote }}
+{{- range $key, $value := .Values.extraConfig }}
+  {{ $key }}: {{ $value | quote }}
+{{- end }}

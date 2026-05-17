@@ -1,0 +1,291 @@
+namespace:
+  create: false
+  name: ""
+  labels:
+    app: llm-infrastructure
+
+resourceNames:
+  configMap: vllm-config
+  deployment: vllm-server
+  service: vllm-service
+  headlessService: vllm-headless
+  pvc: model-pvc
+  pdb: vllm-pdb
+  networkPolicy: vllm-network-policy
+  hpa: vllm-hpa
+  serviceMonitor: vllm-metrics
+  kedaScaledObject: vllm-prometheus-autoscaler
+
+selectorLabels:
+  app: vllm
+  version: v1
+
+replicaCount: 3
+
+image:
+  repository: llm-serving
+  tag: latest
+  pullPolicy: IfNotPresent
+
+baseImage:
+  repository: llm-base
+  tag: latest
+  pullPolicy: IfNotPresent
+
+model:
+  name: /workspace/models/awq/checkpoint-final
+  quantization: awq
+  dtype: float16
+  tensorParallelSize: "1"
+  pipelineParallelSize: "1"
+  gpuMemoryUtilization: "0.90"
+  maxNumSeqs: "256"
+  maxNumBatchedTokens: "8192"
+  maxConcurrentRequests: "512"
+  enablePrefixCaching: "true"
+  enableMetrics: "true"
+  metricsPort: "8000"
+  gpuMetricsInterval: "15"
+  logLevel: INFO
+
+extraConfig: {}
+extraEnv: []
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8000"
+  prometheus.io/path: /metrics
+
+podLabels: {}
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+terminationGracePeriodSeconds: 120
+
+nodeSelector:
+  nvidia.com/gpu.present: "true"
+
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app: vllm
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app: vllm
+          topologyKey: kubernetes.io/hostname
+
+resources:
+  requests:
+    memory: 16Gi
+    cpu: "4"
+    nvidia.com/gpu: "1"
+  limits:
+    memory: 32Gi
+    cpu: "8"
+    nvidia.com/gpu: "1"
+
+lifecycle:
+  preStop:
+    exec:
+      command:
+        - /bin/sh
+        - -c
+        - sleep 20
+
+probes:
+  liveness:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 120
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readiness:
+    httpGet:
+      path: /ready
+      port: 8000
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  startup:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 12
+
+initContainer:
+  enabled: true
+  name: model-downloader
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  mountPath: /workspace/models
+  readOnly: true
+  accessModes:
+    - ReadWriteMany
+  size: 100Gi
+  storageClassName: fast-ssd
+
+logs:
+  mountPath: /workspace/outputs/logs
+
+extraVolumeMounts: []
+extraVolumes: []
+
+service:
+  type: LoadBalancer
+  port: 80
+  targetPort: 8000
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 3600
+
+headlessService:
+  enabled: true
+  port: 8000
+  targetPort: 8000
+
+pdb:
+  enabled: true
+  minAvailable: 1
+
+networkPolicy:
+  enabled: true
+  allowSameNamespace: true
+  monitoringNamespaceLabel:
+    name: monitoring
+  egressPorts:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  path: /metrics
+
+hpa:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 30
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 85
+    - type: Pods
+      pods:
+        metric:
+          name: llm_gpu_utilization_percent
+        target:
+          type: AverageValue
+          averageValue: "75"
+    - type: Pods
+      pods:
+        metric:
+          name: llm_request_queue_size
+        target:
+          type: AverageValue
+          averageValue: "4"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+        - type: Percent
+          value: 25
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 200
+          periodSeconds: 15
+        - type: Pods
+          value: 10
+          periodSeconds: 15
+      selectPolicy: Max
+
+keda:
+  enabled: false
+  pollingInterval: 15
+  cooldownPeriod: 300
+  minReplicaCount: 2
+  maxReplicaCount: 10
+  fallback:
+    failureThreshold: 3
+    replicas: 2
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 60
+          policies:
+            - type: Percent
+              value: 100
+              periodSeconds: 30
+            - type: Pods
+              value: 2
+              periodSeconds: 30
+          selectPolicy: Max
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+            - type: Percent
+              value: 50
+              periodSeconds: 60
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus.monitoring.svc.cluster.local:9090
+        metricName: llm_request_queue_depth
+        query: sum(llm_request_queue_size{namespace="llm-inference"})
+        threshold: "5"
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus.monitoring.svc.cluster.local:9090
+        metricName: llm_gpu_utilization_percent
+        query: avg(llm_gpu_utilization_percent{namespace="llm-inference"})
+        threshold: "75"
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus.monitoring.svc.cluster.local:9090
+        metricName: llm_active_requests_per_pod
+        query: |
+          sum(llm_active_requests{namespace="llm-inference"})
+          /
+          clamp_min(count(kube_pod_status_ready{namespace="llm-inference",condition="true"}), 1)
+        threshold: "8"

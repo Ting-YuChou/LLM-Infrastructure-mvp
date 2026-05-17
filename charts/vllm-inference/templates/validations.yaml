@@ -1,0 +1,3 @@
+{{- if and .Values.hpa.enabled .Values.keda.enabled -}}
+{{- fail "hpa.enabled and keda.enabled cannot both be true because both manage scaling for the same Deployment" -}}
+{{- end -}}

@@ -1,0 +1,142 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.resourceNames.deployment }}
+  namespace: {{ include "vllm-inference.namespace" . }}
+  labels:
+{{ include "vllm-inference.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "vllm-inference.selectorLabels" . | nindent 6 }}
+  strategy:
+{{ toYaml .Values.strategy | nindent 4 }}
+  template:
+    metadata:
+      labels:
+{{ include "vllm-inference.selectorLabels" . | nindent 8 }}
+{{- with .Values.podLabels }}
+{{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.podAnnotations }}
+      annotations:
+{{ toYaml . | nindent 8 }}
+{{- end }}
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+{{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+{{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | nindent 8 }}
+{{- end }}
+{{- if .Values.initContainer.enabled }}
+      initContainers:
+        - name: {{ .Values.initContainer.name }}
+          image: {{ include "vllm-inference.baseImage" . }}
+          imagePullPolicy: {{ .Values.baseImage.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.resourceNames.configMap }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              python - <<'PY'
+              import os
+              from huggingface_hub import snapshot_download
+
+              model_name = os.environ["MODEL_NAME"]
+
+              if os.path.isabs(model_name):
+                  if not os.path.isdir(model_name):
+                      raise SystemExit(f"Local model path does not exist: {model_name}")
+                  print(f"Using local model path: {model_name}")
+              else:
+                  print(f"Downloading model snapshot: {model_name}")
+                  snapshot_download(repo_id=model_name, cache_dir="/workspace/models")
+              PY
+          volumeMounts:
+            - name: model-cache
+              mountPath: {{ .Values.persistence.mountPath }}
+{{- end }}
+      containers:
+        - name: vllm
+          image: {{ include "vllm-inference.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.resourceNames.configMap }}
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+{{- with .Values.extraEnv }}
+{{ toYaml . | nindent 12 }}
+{{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          resources:
+{{ toYaml .Values.resources | nindent 12 }}
+{{- with .Values.lifecycle }}
+          lifecycle:
+{{ toYaml . | nindent 12 }}
+{{- end }}
+{{- with .Values.probes.liveness }}
+          livenessProbe:
+{{ toYaml . | nindent 12 }}
+{{- end }}
+{{- with .Values.probes.readiness }}
+          readinessProbe:
+{{ toYaml . | nindent 12 }}
+{{- end }}
+{{- with .Values.probes.startup }}
+          startupProbe:
+{{ toYaml . | nindent 12 }}
+{{- end }}
+          volumeMounts:
+            - name: model-cache
+              mountPath: {{ .Values.persistence.mountPath }}
+              readOnly: {{ .Values.persistence.readOnly }}
+            - name: logs
+              mountPath: {{ .Values.logs.mountPath }}
+{{- with .Values.extraVolumeMounts }}
+{{ toYaml . | nindent 12 }}
+{{- end }}
+      volumes:
+        - name: model-cache
+{{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default .Values.resourceNames.pvc .Values.persistence.existingClaim }}
+{{- else }}
+          emptyDir: {}
+{{- end }}
+        - name: logs
+          emptyDir: {}
+{{- with .Values.extraVolumes }}
+{{ toYaml . | nindent 8 }}
+{{- end }}

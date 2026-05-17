@@ -1,0 +1,14 @@
+{{- if .Values.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ .Values.resourceNames.pdb }}
+  namespace: {{ include "vllm-inference.namespace" . }}
+  labels:
+{{ include "vllm-inference.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      app: {{ .Values.selectorLabels.app }}
+{{- end }}
