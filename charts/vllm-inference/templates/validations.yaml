@@ -1,3 +1,12 @@
 {{- if and .Values.hpa.enabled .Values.keda.enabled -}}
 {{- fail "hpa.enabled and keda.enabled cannot both be true because both manage scaling for the same Deployment" -}}
 {{- end -}}
+{{- if and .Values.gateway.enabled (not .Values.gateway.auth.existingSecret) -}}
+{{- fail "gateway.auth.existingSecret is required when gateway.enabled is true" -}}
+{{- end -}}
+{{- if and .Values.gateway.enabled .Values.gateway.ingress.enabled (not .Values.gateway.ingress.hosts) -}}
+{{- fail "gateway.ingress.hosts must contain at least one host entry when gateway.ingress.enabled is true" -}}
+{{- end -}}
+{{- if and .Values.gateway.enabled (eq (toString .Values.gateway.config.rateLimitEnabled) "true") (not .Values.redis.enabled) (not .Values.redis.externalHost) -}}
+{{- fail "redis.enabled or redis.externalHost is required when gateway rate limiting is enabled" -}}
+{{- end -}}

@@ -62,6 +62,24 @@ class FakeBackendClient:
         return FakeBackendResponse(self.payload)
 
 
+class FakeReadinessClient:
+    """Capture readiness checks without a network service."""
+
+    def __init__(self, status_code: int = 200, error=None):
+        self.status_code = status_code
+        self.error = error
+        self.requests = []
+
+    async def get(self, url, timeout):
+        self.requests.append({"url": url, "timeout": timeout})
+        if self.error:
+            raise self.error
+        return FakeBackendResponse(
+            {"status": "ready" if self.status_code == 200 else "not_ready"},
+            status_code=self.status_code,
+        )
+
+
 class FakeStreamingBackendResponse:
     """Minimal streaming response for SSE proxy tests."""
 
@@ -117,6 +135,69 @@ class TestAPIGateway:
         data = response.json()
         assert data["status"] == "healthy"
         assert "timestamp" in data
+
+    def test_readiness_success(self):
+        """Test readiness validates routing, optional Redis, and backend readiness."""
+        gateway = APIGateway(config=make_test_config(rate_limit_enabled=False))
+        gateway.http_client = FakeReadinessClient(status_code=200)
+        client = TestClient(gateway.app)
+
+        response = client.get("/ready")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ready"
+        assert data["checks"]["routing"]["ok"] is True
+        assert data["checks"]["redis"]["ok"] is True
+        assert data["checks"]["backend"]["ok"] is True
+        assert gateway.http_client.requests[0]["url"] == "http://localhost:8000/ready"
+
+    def test_readiness_fails_when_required_redis_unavailable(self):
+        """Test readiness fails closed when rate limiting needs Redis."""
+        gateway = APIGateway(config=make_test_config(rate_limit_enabled=True))
+        gateway.redis_client = None
+        gateway.http_client = FakeReadinessClient(status_code=200)
+        client = TestClient(gateway.app)
+
+        response = client.get("/ready")
+
+        assert response.status_code == 503
+        data = response.json()
+        assert data["status"] == "not_ready"
+        assert data["checks"]["redis"]["ok"] is False
+        assert data["checks"]["backend"]["ok"] is True
+
+    def test_readiness_fails_when_backend_unavailable(self):
+        """Test readiness reports backend /ready failures."""
+        gateway = APIGateway(config=make_test_config(rate_limit_enabled=False))
+        gateway.http_client = FakeReadinessClient(status_code=503)
+        client = TestClient(gateway.app)
+
+        response = client.get("/ready")
+
+        assert response.status_code == 503
+        data = response.json()
+        assert data["status"] == "not_ready"
+        assert data["checks"]["backend"]["ok"] is False
+        assert data["checks"]["backend"]["failures"][0]["status_code"] == 503
+
+    def test_readiness_fails_when_route_config_does_not_load(self, tmp_path):
+        """Test readiness reports model routing manifest load failures."""
+        manifest_path = tmp_path / "routing.json"
+        manifest_path.write_text("{not-json", encoding="utf-8")
+        config = make_test_config(rate_limit_enabled=False)
+        config.MODEL_ROUTING_CONFIG = str(manifest_path)
+        gateway = APIGateway(config=config)
+        gateway.http_client = FakeReadinessClient(status_code=200)
+        client = TestClient(gateway.app)
+
+        response = client.get("/ready")
+
+        assert response.status_code == 503
+        data = response.json()
+        assert data["status"] == "not_ready"
+        assert data["checks"]["routing"]["ok"] is False
+        assert "Expecting property name" in data["checks"]["routing"]["detail"]
     
     def test_get_token_success(self, client):
         """Test successful token generation"""

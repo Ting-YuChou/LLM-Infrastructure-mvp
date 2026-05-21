@@ -277,13 +277,21 @@ class DeploymentManager:
             logger.error(f"  ✗ Rollout failed or timed out")
             return False
     
-    def health_check(self, service: str, path: str = "/health") -> bool:
+    def health_check(
+        self,
+        service: str,
+        path: str = "/health",
+        local_port: int = 18080,
+        service_port: int = 80,
+    ) -> bool:
         """
         Perform health check on service
         
         Args:
             service: Service name
             path: Health check path
+            local_port: Local port for kubectl port-forward
+            service_port: Service port to forward
             
         Returns:
             True if healthy
@@ -294,7 +302,7 @@ class DeploymentManager:
         port_forward_proc = subprocess.Popen([
             "kubectl", "port-forward",
             f"svc/{service}",
-            "8080:80",
+            f"{local_port}:{service_port}",
             "-n", self.namespace
         ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
@@ -304,7 +312,7 @@ class DeploymentManager:
         try:
             # Make health check request
             import requests
-            response = requests.get(f"http://localhost:8080{path}", timeout=10)
+            response = requests.get(f"http://localhost:{local_port}{path}", timeout=10)
             
             if response.status_code == 200:
                 logger.info("  ✓ Service is healthy")
@@ -389,11 +397,18 @@ class DeploymentManager:
                 "--namespace", self.namespace,
                 "--wait",
             ])
-            return self.wait_for_rollout("vllm-server")
+            return self.wait_for_rollouts(["vllm-server", "api-gateway"])
 
         except subprocess.CalledProcessError as e:
             logger.error(f"Helm rollback failed: {e}")
             return False
+
+    def wait_for_rollouts(self, deployments: List[str], timeout: int = 300) -> bool:
+        """Wait for each named Deployment rollout to complete."""
+        for deployment in deployments:
+            if not self.wait_for_rollout(deployment, timeout=timeout):
+                return False
+        return True
     
     def deploy_with_strategy(
         self,
@@ -459,15 +474,23 @@ class DeploymentManager:
             return False
         
         # Wait for rollout
-        if not self.wait_for_rollout("vllm-server"):
+        deployments = ["vllm-server", "api-gateway"]
+        if not self.wait_for_rollouts(deployments):
             logger.error("Rollout failed, initiating rollback...")
-            self.rollback_deployment("vllm-server")
+            for deployment in deployments:
+                self.rollback_deployment(deployment)
             return False
         
-        # Health check
-        if not self.health_check("vllm-service"):
+        # Health check the public serving entrypoint.
+        if not self.health_check(
+            "api-gateway",
+            path="/ready",
+            local_port=18080,
+            service_port=8080,
+        ):
             logger.error("Health check failed, initiating rollback...")
-            self.rollback_deployment("vllm-server")
+            for deployment in deployments:
+                self.rollback_deployment(deployment)
             return False
         
         logger.info("✓ Rolling deployment successful")

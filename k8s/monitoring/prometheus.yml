@@ -96,9 +96,10 @@ scrape_configs:
   # API Gateway
   # ==========================================================================
   - job_name: 'api-gateway'
+    metrics_path: /metrics
     static_configs:
       - targets:
-          - 'api-gateway:9091'
+          - 'api-gateway.llm-inference.svc.cluster.local:8080'
         labels:
           service: 'gateway'
   

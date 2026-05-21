@@ -47,7 +47,7 @@ services:
       RATE_LIMIT_ENABLED: "false"
       REDIS_HOST: redis
       VLLM_BACKEND_URL: http://vllm-server:8000
-      DEFAULT_COMPLETION_MODEL: /workspace/models/aligned/checkpoint-final
+      DEFAULT_COMPLETION_MODEL: /workspace/models/awq/checkpoint-final
       MODEL_ROUTING_CONFIG: /workspace/config/model_routing.gpu.json
     command: ["python", "-m", "src.api.gateway", "--host", "0.0.0.0", "--port", "8080"]
     ports:

@@ -1,0 +1,17 @@
+{{- if and .Values.gateway.enabled .Values.serviceMonitor.enabled .Values.gateway.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Values.resourceNames.gatewayServiceMonitor }}
+  namespace: {{ include "vllm-inference.namespace" . }}
+  labels:
+{{ include "vllm-inference.gatewayLabels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Values.gateway.selectorLabels.app }}
+  endpoints:
+    - port: http
+      interval: {{ .Values.gateway.serviceMonitor.interval }}
+      path: {{ .Values.gateway.serviceMonitor.path }}
+{{- end }}
