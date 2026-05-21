@@ -6,14 +6,14 @@ Handles model versioning, lineage tracking, and deployment workflows
 import os
 import logging
 from typing import Dict, List, Optional, Any
-from pathlib import Path
 from datetime import datetime
 
-import mlflow
-from mlflow.tracking import MlflowClient
-from mlflow.entities import ViewType
-from mlflow.models.signature import ModelSignature, infer_signature
-import torch
+try:
+    import mlflow
+    from mlflow.tracking import MlflowClient
+except ImportError:  # Allow non-MLflow tests and tools to import this module.
+    mlflow = None  # type: ignore[assignment]
+    MlflowClient = None  # type: ignore[assignment]
 
 # Configure logging
 logging.basicConfig(
@@ -21,6 +21,16 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def _require_mlflow():
+    """Return MLflow module/client class or raise a clear runtime error."""
+    if mlflow is None or MlflowClient is None:
+        raise RuntimeError(
+            "MLflow is required for registry operations. Install the 'mlflow' package "
+            "or disable tracking.mlflow_enabled."
+        )
+    return mlflow, MlflowClient
 
 
 class LLMModelRegistry:
@@ -49,12 +59,13 @@ class LLMModelRegistry:
         """
         self.tracking_uri = tracking_uri
         self.experiment_name = experiment_name
+        self.mlflow, client_cls = _require_mlflow()
         
         # Set tracking URI
-        mlflow.set_tracking_uri(tracking_uri)
+        self.mlflow.set_tracking_uri(tracking_uri)
         
         # Initialize client
-        self.client = MlflowClient(tracking_uri=tracking_uri)
+        self.client = client_cls(tracking_uri=tracking_uri)
         
         # Set or create experiment
         self.experiment_id = self._get_or_create_experiment(experiment_name)
@@ -66,14 +77,14 @@ class LLMModelRegistry:
     def _get_or_create_experiment(self, experiment_name: str) -> str:
         """Get or create experiment"""
         try:
-            experiment = mlflow.get_experiment_by_name(experiment_name)
+            experiment = self.mlflow.get_experiment_by_name(experiment_name)
             if experiment:
                 return experiment.experiment_id
         except Exception:
             pass
         
         # Create new experiment
-        experiment_id = mlflow.create_experiment(
+        experiment_id = self.mlflow.create_experiment(
             experiment_name,
             tags={
                 "project": "llm-infrastructure",
@@ -113,15 +124,15 @@ class LLMModelRegistry:
         logger.info(f"Model type: {model_type}")
         
         # Start MLflow run
-        with mlflow.start_run(experiment_id=self.experiment_id) as run:
+        with self.mlflow.start_run(experiment_id=self.experiment_id) as run:
             
             # Log parameters
             if params:
-                mlflow.log_params(params)
+                self.mlflow.log_params(params)
             
             # Log metrics
             if metrics:
-                mlflow.log_metrics(metrics)
+                self.mlflow.log_metrics(metrics)
             
             # Log tags
             run_tags = {
@@ -131,7 +142,7 @@ class LLMModelRegistry:
             }
             if tags:
                 run_tags.update(tags)
-            mlflow.set_tags(run_tags)
+            self.mlflow.set_tags(run_tags)
             
             # Log model artifacts
             logger.info("Logging model artifacts...")
@@ -139,16 +150,16 @@ class LLMModelRegistry:
             # For HuggingFace models, log the entire checkpoint directory
             if os.path.isdir(model_path):
                 # Log as artifact
-                mlflow.log_artifacts(model_path, artifact_path="model")
+                self.mlflow.log_artifacts(model_path, artifact_path="model")
             else:
                 # Log single file
-                mlflow.log_artifact(model_path)
+                self.mlflow.log_artifact(model_path)
             
             # Register model
             logger.info(f"Registering model to registry: {model_name}")
             model_uri = f"runs:/{run.info.run_id}/model"
             
-            mv = mlflow.register_model(
+            mv = self.mlflow.register_model(
                 model_uri=model_uri,
                 name=model_name,
                 tags=run_tags
@@ -213,7 +224,8 @@ class LLMModelRegistry:
         self,
         model_name: str,
         version: Optional[str] = None,
-        stage: Optional[str] = None
+        stage: Optional[str] = None,
+        alias: Optional[str] = None,
     ) -> Any:
         """
         Get specific model version
@@ -222,12 +234,16 @@ class LLMModelRegistry:
             model_name: Model name
             version: Specific version (overrides stage)
             stage: Stage to get (e.g., "Production")
+            alias: Alias to get (e.g., "champion")
             
         Returns:
             Model version object
         """
         if version:
             return self.client.get_model_version(model_name, version)
+
+        if alias:
+            return self.get_model_version_by_alias(model_name, alias)
         
         if stage:
             versions = self.client.get_latest_versions(model_name, stages=[stage])
@@ -246,7 +262,9 @@ class LLMModelRegistry:
         self,
         model_name: str,
         version: Optional[str] = None,
-        stage: Optional[str] = "Production"
+        stage: Optional[str] = None,
+        alias: Optional[str] = "champion",
+        dst_path: Optional[str] = None,
     ) -> str:
         """
         Get model path for loading
@@ -254,24 +272,91 @@ class LLMModelRegistry:
         Args:
             model_name: Model name
             version: Specific version
-            stage: Stage to load from
+            stage: Legacy stage to load from
+            alias: Alias to load from when version is not provided
+            dst_path: Optional download destination
             
         Returns:
             Path to model artifacts
         """
-        mv = self.get_model_version(model_name, version, stage)
+        mv = self.get_model_version(model_name, version, stage, alias)
         
         logger.info(f"Loading model: {model_name} v{mv.version}")
-        logger.info(f"Stage: {mv.current_stage}")
+        logger.info(f"Stage: {getattr(mv, 'current_stage', 'None')}")
+        logger.info(f"Alias: {alias}")
         
         # Download artifacts to local path
-        local_path = mlflow.artifacts.download_artifacts(
+        safe_model_name = model_name.replace("/", "_")
+        local_path = self.mlflow.artifacts.download_artifacts(
             artifact_uri=mv.source,
-            dst_path=f"/tmp/mlflow_models/{model_name}/{mv.version}"
+            dst_path=dst_path or f"/tmp/mlflow_models/{safe_model_name}/{mv.version}"
         )
         
         logger.info(f"✓ Model downloaded to: {local_path}")
         return local_path
+
+    def set_model_alias(
+        self,
+        model_name: str,
+        alias: str,
+        version: str,
+    ) -> None:
+        """Set or update a registered model alias."""
+        self.client.set_registered_model_alias(model_name, alias, version)
+        logger.info(f"✓ Set alias {model_name}@{alias} -> v{version}")
+
+    def get_model_version_by_alias(
+        self,
+        model_name: str,
+        alias: str,
+    ) -> Any:
+        """Get a model version by alias."""
+        return self.client.get_model_version_by_alias(model_name, alias)
+
+    def promote_to_champion(
+        self,
+        model_name: str,
+        version: str,
+        archive_previous: bool = True,
+        tags: Optional[Dict[str, str]] = None,
+    ) -> None:
+        """
+        Promote a model version by assigning the champion alias.
+
+        This alias-based API is preferred for new code because MLflow model
+        stages are deprecated.
+        """
+        if archive_previous:
+            try:
+                previous = self.get_model_version_by_alias(model_name, "champion")
+            except Exception:
+                previous = None
+
+            if previous is not None and str(previous.version) != str(version):
+                self.client.set_model_version_tag(
+                    model_name,
+                    str(previous.version),
+                    "lifecycle_alias",
+                    "archived",
+                )
+                self.client.set_model_version_tag(
+                    model_name,
+                    str(previous.version),
+                    "replaced_by_version",
+                    str(version),
+                )
+
+        version_tags = {
+            "lifecycle_alias": "champion",
+            "validation_status": "passed",
+            "promoted_at": datetime.now().isoformat(),
+        }
+        if tags:
+            version_tags.update(tags)
+
+        for key, value in version_tags.items():
+            self.client.set_model_version_tag(model_name, version, key, str(value))
+        self.set_model_alias(model_name, "champion", version)
     
     def list_models(
         self,
