@@ -1,0 +1,38 @@
+{{- if .Values.gateway.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.resourceNames.gatewayConfigMap }}
+  namespace: {{ include "vllm-inference.namespace" . }}
+  labels:
+{{ include "vllm-inference.gatewayLabels" . | nindent 4 }}
+data:
+  RATE_LIMIT_ENABLED: {{ .Values.gateway.config.rateLimitEnabled | quote }}
+  RATE_LIMIT_REQUESTS_PER_MINUTE: {{ .Values.gateway.config.requestsPerMinute | quote }}
+  RATE_LIMIT_REQUESTS_PER_HOUR: {{ .Values.gateway.config.requestsPerHour | quote }}
+  RATE_LIMIT_TOKENS_PER_MINUTE: {{ .Values.gateway.config.tokensPerMinute | quote }}
+  RATE_LIMIT_TOKENS_PER_HOUR: {{ .Values.gateway.config.tokensPerHour | quote }}
+  REDIS_HOST: {{ include "vllm-inference.redisHost" . | quote }}
+  REDIS_PORT: {{ .Values.redis.service.port | quote }}
+  VLLM_BACKEND_URL: {{ .Values.gateway.config.vllmBackendUrl | quote }}
+  DEFAULT_COMPLETION_MODEL: {{ .Values.gateway.config.defaultCompletionModel | quote }}
+  MODEL_ROUTING_CONFIG: {{ .Values.gateway.config.modelRoutingConfig | quote }}
+  ROUTING_CANARY_SALT: {{ .Values.gateway.config.routingCanarySalt | quote }}
+  CORS_ORIGINS: {{ .Values.gateway.config.corsOrigins | quote }}
+  ALLOWED_HOSTS: {{ .Values.gateway.config.allowedHosts | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.resourceNames.gatewayRoutingConfigMap }}
+  namespace: {{ include "vllm-inference.namespace" . }}
+  labels:
+{{ include "vllm-inference.gatewayLabels" . | nindent 4 }}
+data:
+  model_routing.k8s.json: |
+    {
+      "default_model": {{ .Values.gateway.routing.defaultModel | quote }},
+      "allow_passthrough": {{ .Values.gateway.routing.allowPassthrough }},
+      "routes": {{ toJson .Values.gateway.routing.routes }}
+    }
+{{- end }}

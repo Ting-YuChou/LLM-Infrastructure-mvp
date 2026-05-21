@@ -216,7 +216,7 @@ spec:
               if not os.path.isdir(model_name):
                   raise SystemExit(f"Local model path does not exist: {model_name}")
               print(f"Using local model path: {model_name}")
-          else
+          else:
               print(f"Downloading model snapshot: {model_name}")
               snapshot_download(repo_id=model_name, cache_dir="/workspace/models")
           PY
@@ -227,7 +227,7 @@ spec:
 ---
 
 # ============================================================================
-# Service (Load Balancer)
+# Service (internal backend for the API gateway)
 # ============================================================================
 
 apiVersion: v1
@@ -238,7 +238,7 @@ metadata:
   labels:
     app: vllm
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: vllm
     version: v1
@@ -247,10 +247,6 @@ spec:
     port: 80
     targetPort: 8000
     protocol: TCP
-  sessionAffinity: ClientIP  # Sticky sessions
-  sessionAffinityConfig:
-    clientIP:
-      timeoutSeconds: 3600
 
 ---
 
@@ -401,9 +397,10 @@ spec:
   - Egress
   ingress:
   - from:
-    - namespaceSelector:
+    - podSelector:
         matchLabels:
-          name: llm-inference
+          app: api-gateway
+          version: v1
     - namespaceSelector:
         matchLabels:
           name: monitoring
@@ -446,8 +443,8 @@ spec:
 # ============================================================================
 # Usage Instructions:
 #
-# Apply all configurations:
-#   kubectl apply -f k8s/deployments/vllm-deployment.yaml
+# Apply all reference deployment manifests:
+#   kubectl apply -f k8s/deployments/
 #
 # Check deployment status:
 #   kubectl get pods -n llm-inference
@@ -459,7 +456,7 @@ spec:
 # Scale manually:
 #   kubectl scale deployment vllm-server -n llm-inference --replicas=5
 #
-# Port forward for local access:
+# Port forward vLLM for backend debugging only:
 #   kubectl port-forward -n llm-inference svc/vllm-service 8000:80
 #
 # Delete all resources:

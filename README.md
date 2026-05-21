@@ -266,19 +266,33 @@ docker compose up -d --build
 ### Production Deployment (Kubernetes)
 
 ```bash
-# Deploy vLLM service with the Helm chart
+# Create gateway credentials before installing the chart. Use real values.
+kubectl create namespace llm-inference
+kubectl create secret generic gateway-auth \
+  --namespace llm-inference \
+  --from-literal=JWT_SECRET='change-me' \
+  --from-literal=AUTH_USERS='local:local'
+
+# Deploy the serving path with the Helm chart:
+# Client -> Ingress -> API gateway -> internal vLLM service -> vLLM pods
 helm upgrade --install vllm-inference charts/vllm-inference \
   --namespace llm-inference \
   --create-namespace \
   -f charts/vllm-inference/values.yaml
 
-# Override environment-specific values
+# Enable the parameterized gateway Ingress with environment-specific values
 helm upgrade --install vllm-inference charts/vllm-inference \
   --namespace llm-inference \
   --create-namespace \
   -f charts/vllm-inference/values.yaml \
   --set image.tag=release-candidate \
-  --set model.name=/workspace/models/awq/checkpoint-final
+  --set gateway.image.tag=release-candidate \
+  --set model.name=/workspace/models/awq/checkpoint-final \
+  --set gateway.ingress.enabled=true \
+  --set gateway.ingress.className=nginx \
+  --set gateway.ingress.hosts[0].host=llm.example.com \
+  --set gateway.ingress.hosts[0].paths[0].path=/ \
+  --set gateway.ingress.hosts[0].paths[0].pathType=Prefix
 
 # Or use the deployment helper, which defaults to Helm mode
 python scripts/deploy.py --action deploy
@@ -293,7 +307,7 @@ helm upgrade --install prometheus-adapter prometheus-community/prometheus-adapte
 kubectl apply -f k8s/monitoring/dcgm-exporter.yaml
 ```
 
-The Helm chart renders the vLLM Deployment, Service, ConfigMap, PVC, PDB, NetworkPolicy, HPA, and ServiceMonitor by default. It scrapes `/metrics` from the main vLLM HTTP port. HPA uses queue depth first (`llm_request_queue_size`), GPU saturation second (`llm_gpu_utilization_percent`), and CPU/memory as backup signals.
+The Helm chart renders the vLLM backend, API gateway, Redis, routing ConfigMap, parameterized Ingress, NetworkPolicies, PDBs, HPAs, and ServiceMonitors. The vLLM Service is `ClusterIP` and should not be exposed directly; the gateway is the serving entrypoint. Both gateway and vLLM expose `/metrics` on their main HTTP ports. vLLM HPA uses queue depth first (`llm_request_queue_size`), GPU saturation second (`llm_gpu_utilization_percent`), and CPU/memory as backup signals.
 
 KEDA autoscaling is available through chart values. Do not enable HPA and KEDA together because both manage the same Deployment:
 
@@ -309,7 +323,12 @@ helm upgrade --install vllm-inference charts/vllm-inference \
 Legacy raw manifests remain under `k8s/` for reference:
 
 ```bash
-kubectl apply -f k8s/deployments/vllm-deployment.yaml
+kubectl create namespace llm-inference
+kubectl create secret generic gateway-auth \
+  --namespace llm-inference \
+  --from-literal=JWT_SECRET='change-me' \
+  --from-literal=AUTH_USERS='local:local'
+kubectl apply -f k8s/deployments/
 kubectl apply -f k8s/autoscaling/vllm-keda-scaledobject.yaml  # optional; do not combine with the HPA
 ```
 
@@ -334,11 +353,13 @@ python -m src.api.gateway --host 0.0.0.0 --port 8080
 Both the vLLM server and the API gateway expose Prometheus metrics on their main HTTP ports:
 - vLLM metrics: `http://localhost:8000/metrics`
 - API Gateway metrics: `http://localhost:8080/metrics`
+In Kubernetes, use the gateway Ingress for client traffic. Direct vLLM access is for debugging only, for example `kubectl port-forward -n llm-inference svc/vllm-service 8000:80`.
 
 The API gateway also provides production-serving controls:
 - `RATE_LIMIT_REQUESTS_PER_MINUTE` / `RATE_LIMIT_REQUESTS_PER_HOUR`: request quota.
 - `RATE_LIMIT_TOKENS_PER_MINUTE` / `RATE_LIMIT_TOKENS_PER_HOUR`: estimated prompt plus max-token quota before dispatch.
 - `MODEL_ROUTING_CONFIG`: JSON route manifest for registry-driven stable/canary model routing.
+- `/ready`: unauthenticated Kubernetes readiness check for routing config, Redis, and active backend `/ready`.
 - `/usage`: authenticated per-user totals split by model and endpoint.
 - Streaming metrics: `llm_time_to_first_token_seconds`, `llm_inter_token_latency_seconds`, and `llm_tokens_per_second`.
 
@@ -346,7 +367,7 @@ The API gateway also provides production-serving controls:
 
 Priority order for production platform hardening:
 
-1. Registry-driven routing: configure logical model names in `config/model_routing.local.json` or `config/model_routing.gpu.json`. Each logical model can route to weighted `stable` and `canary` targets with separate backend URLs and physical model IDs.
+1. Registry-driven routing: configure logical model names in `config/model_routing.local.json` or `config/model_routing.gpu.json` for Compose, or `gateway.routing` values in Helm for Kubernetes. Each logical model can route to weighted `stable` and `canary` targets with separate backend URLs and physical model IDs.
 2. Canary and rollback: raise the canary target `weight` to shift deterministic per-user traffic; set it back to `0` for immediate rollback without changing client-facing model names.
 3. Eval gate: block promotion unless candidate metrics pass absolute thresholds and baseline regression guards.
 4. Alerting: Prometheus loads `docker/alerts.yml` locally and `k8s/monitoring/alerts.yml` in Kubernetes-style deployments.
@@ -456,7 +477,7 @@ python scripts/benchmark.py \
 locust -f scripts/load_test.py --host=http://localhost:8080
 
 # Optional: target a specific backend model directly
-LOAD_TEST_MODEL=/workspace/models/aligned/checkpoint-final \
+LOAD_TEST_MODEL=/workspace/models/awq/checkpoint-final \
 locust -f scripts/load_test.py --host=http://localhost:8080
 ```
 

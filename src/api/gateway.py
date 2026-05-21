@@ -594,6 +594,7 @@ class APIGateway:
         except Exception as e:
             logger.warning(f"Redis unavailable, using in-memory rate limiting: {e}")
             redis_client = None
+        self.redis_client = redis_client
         
         self.rate_limiter = RateLimiter(
             redis_client=redis_client,
@@ -603,7 +604,13 @@ class APIGateway:
             tokens_per_hour=config.RATE_LIMIT_TOKENS_PER_HOUR,
         )
         self.usage_tracker = UsageTracker(redis_client=redis_client)
-        self.model_router = self._build_model_router()
+        self.model_router: Optional[ModelRouter] = None
+        self.model_router_error: Optional[str] = None
+        try:
+            self.model_router = self._build_model_router()
+        except Exception as exc:
+            self.model_router_error = str(exc)
+            logger.exception("Failed to load model routing configuration")
         
         # HTTP client for backend requests
         self.http_client = httpx.AsyncClient(timeout=300.0)
@@ -675,6 +682,9 @@ class APIGateway:
         endpoint: str,
     ) -> ResolvedRoute:
         """Resolve a requested logical model into a concrete backend target."""
+        if self.model_router is None:
+            detail = self.model_router_error or "Model routing is not configured"
+            raise HTTPException(status_code=503, detail=f"Routing unavailable: {detail}")
         try:
             return self.model_router.resolve(
                 requested_model=requested_model,
@@ -683,6 +693,114 @@ class APIGateway:
             )
         except UnknownModelRoute as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    def _check_routing_ready(self) -> Dict[str, Any]:
+        """Return readiness state for the file-backed model router."""
+        if self.model_router is None:
+            return {
+                "ok": False,
+                "detail": self.model_router_error or "model router is not loaded",
+            }
+
+        return {
+            "ok": True,
+            "models": len(self.model_router.routes),
+        }
+
+    def _check_redis_ready(self) -> Dict[str, Any]:
+        """Return readiness state for Redis-backed production limits."""
+        required = self.config.RATE_LIMIT_ENABLED
+        if not required:
+            return {
+                "ok": True,
+                "required": False,
+                "detail": "redis is optional while rate limiting is disabled",
+            }
+
+        if self.redis_client is None:
+            return {
+                "ok": False,
+                "required": True,
+                "detail": "redis is required while rate limiting is enabled",
+            }
+
+        try:
+            self.redis_client.ping()
+        except Exception as exc:
+            return {
+                "ok": False,
+                "required": True,
+                "detail": str(exc),
+            }
+
+        return {
+            "ok": True,
+            "required": True,
+        }
+
+    def _readiness_backend_urls(self) -> List[str]:
+        """Return active backend base URLs that should pass /ready."""
+        if self.model_router is None:
+            return []
+
+        urls: List[str] = []
+        seen = set()
+        for targets in self.model_router.routes.values():
+            for target in targets:
+                if not target.enabled or target.weight <= 0:
+                    continue
+                backend_url = target.backend_url.rstrip("/")
+                if backend_url in seen:
+                    continue
+                seen.add(backend_url)
+                urls.append(backend_url)
+
+        if not urls and self.model_router.fallback_backend_url:
+            urls.append(self.model_router.fallback_backend_url.rstrip("/"))
+
+        return urls
+
+    async def _check_backend_ready(self) -> Dict[str, Any]:
+        """Return readiness state for active routed backend services."""
+        backend_urls = self._readiness_backend_urls()
+        if not backend_urls:
+            return {
+                "ok": False,
+                "detail": "no active backend routes are configured",
+            }
+
+        failures = []
+        for backend_url in backend_urls:
+            try:
+                response = await self.http_client.get(
+                    f"{backend_url}/ready",
+                    timeout=5.0,
+                )
+            except httpx.RequestError as exc:
+                failures.append({"url": backend_url, "detail": str(exc)})
+                continue
+            except Exception as exc:
+                failures.append({"url": backend_url, "detail": str(exc)})
+                continue
+
+            if response.status_code != 200:
+                failures.append({
+                    "url": backend_url,
+                    "status_code": response.status_code,
+                    "detail": response.text,
+                })
+
+        if failures:
+            return {
+                "ok": False,
+                "backends": backend_urls,
+                "failures": failures,
+            }
+
+        return {
+            "ok": True,
+            "backends": backend_urls,
+        }
 
     async def _proxy_streaming_response(
         self,
@@ -863,6 +981,24 @@ class APIGateway:
         async def health_check():
             """Health check endpoint"""
             return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+
+        @self.app.get("/ready")
+        async def readiness_check():
+            """Readiness check for Kubernetes traffic routing."""
+            checks = {
+                "routing": self._check_routing_ready(),
+                "redis": self._check_redis_ready(),
+                "backend": await self._check_backend_ready(),
+            }
+            ready = all(check["ok"] for check in checks.values())
+            payload = {
+                "status": "ready" if ready else "not_ready",
+                "timestamp": datetime.utcnow().isoformat(),
+                "checks": checks,
+            }
+            if not ready:
+                return JSONResponse(status_code=503, content=payload)
+            return payload
         
         @self.app.post("/auth/token", response_model=TokenResponse)
         async def get_token(request: TokenRequest):
@@ -1163,6 +1299,9 @@ class APIGateway:
         @self.app.get("/models")
         async def list_models(user: str = Depends(self._get_current_user)):
             """List available models"""
+            if self.model_router is None:
+                detail = self.model_router_error or "Model routing is not configured"
+                raise HTTPException(status_code=503, detail=f"Routing unavailable: {detail}")
             return {"models": self.model_router.list_models()}
         
         @self.app.get("/usage")

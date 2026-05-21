@@ -18,6 +18,11 @@ spec:
 {{- if .Values.networkPolicy.allowSameNamespace }}
         - podSelector: {}
 {{- end }}
+{{- if and .Values.gateway.enabled .Values.networkPolicy.allowGateway }}
+        - podSelector:
+            matchLabels:
+{{ include "vllm-inference.gatewaySelectorLabels" . | nindent 14 }}
+{{- end }}
         - namespaceSelector:
             matchLabels:
 {{ toYaml .Values.networkPolicy.monitoringNamespaceLabel | nindent 14 }}
