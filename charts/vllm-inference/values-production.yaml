@@ -1,0 +1,21 @@
+image:
+  tag: production
+
+baseImage:
+  tag: production
+
+gateway:
+  image:
+    tag: production
+  config:
+    environment: production
+    corsOrigins: "https://llm-infra.example.com"
+    allowedHosts: "llm-infra.example.com"
+  ingress:
+    enabled: true
+    className: nginx
+    hosts:
+      - host: llm-infra.example.com
+        paths:
+          - path: /
+            pathType: Prefix

@@ -1,8 +1,8 @@
 # Kubernetes reference manifests for the API gateway serving entrypoint.
 # Create the gateway-auth Secret before applying:
 #   kubectl create secret generic gateway-auth -n llm-inference \
-#     --from-literal=JWT_SECRET='change-me' \
-#     --from-literal=AUTH_USERS='local:local'
+#     --from-literal=JWT_SECRET='<strong-random-secret>' \
+#     --from-literal=AUTH_USERS='<username>:<strong-password>'
 
 apiVersion: v1
 kind: ConfigMap
@@ -13,6 +13,7 @@ metadata:
     app: api-gateway
     version: v1
 data:
+  ENVIRONMENT: "production"
   RATE_LIMIT_ENABLED: "true"
   RATE_LIMIT_REQUESTS_PER_MINUTE: "60"
   RATE_LIMIT_REQUESTS_PER_HOUR: "1000"
@@ -24,8 +25,8 @@ data:
   DEFAULT_COMPLETION_MODEL: "/workspace/models/awq/checkpoint-final"
   MODEL_ROUTING_CONFIG: "/workspace/config/model_routing.k8s.json"
   ROUTING_CANARY_SALT: "k8s"
-  CORS_ORIGINS: "*"
-  ALLOWED_HOSTS: "*"
+  CORS_ORIGINS: "https://llm-infra.example.com"
+  ALLOWED_HOSTS: "llm-infra.example.com"
 
 ---
 

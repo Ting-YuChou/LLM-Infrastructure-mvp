@@ -1,0 +1,21 @@
+image:
+  tag: staging
+
+baseImage:
+  tag: staging
+
+gateway:
+  image:
+    tag: staging
+  config:
+    environment: production
+    corsOrigins: "https://staging.llm-infra.example.com"
+    allowedHosts: "staging.llm-infra.example.com"
+  ingress:
+    enabled: true
+    className: nginx
+    hosts:
+      - host: staging.llm-infra.example.com
+        paths:
+          - path: /
+            pathType: Prefix

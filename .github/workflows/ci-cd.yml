@@ -58,8 +58,13 @@ jobs:
             src/monitoring/metrics.py \
             src/serving/mock_server.py \
             src/serving/vllm_server.py \
+            scripts/check_serving_runtime_matrix.py \
             scripts/compose_smoke_test.py \
+            scripts/deploy.py \
             scripts/eval_gate.py
+
+      - name: Check serving runtime matrix
+        run: python scripts/check_serving_runtime_matrix.py
 
       - name: Validate serving configuration files
         run: |
@@ -77,6 +82,8 @@ jobs:
           yaml_paths = [
               Path("charts/vllm-inference/Chart.yaml"),
               Path("charts/vllm-inference/values.yaml"),
+              Path("charts/vllm-inference/values-staging.yaml"),
+              Path("charts/vllm-inference/values-production.yaml"),
               *Path("config").glob("*.yaml"),
               *Path("docker").glob("*.yml"),
               *Path("k8s").glob("**/*.yml"),
@@ -101,6 +108,12 @@ jobs:
         run: |
           helm lint charts/vllm-inference
           helm template vllm-inference charts/vllm-inference --namespace llm-inference > /tmp/vllm-rendered.yaml
+          helm template vllm-inference charts/vllm-inference \
+            --namespace llm-inference \
+            -f charts/vllm-inference/values-staging.yaml > /tmp/vllm-rendered-staging.yaml
+          helm template vllm-inference charts/vllm-inference \
+            --namespace llm-inference \
+            -f charts/vllm-inference/values-production.yaml > /tmp/vllm-rendered-production.yaml
           helm template vllm-inference charts/vllm-inference \
             --namespace llm-inference \
             --set hpa.enabled=false \
@@ -139,6 +152,14 @@ jobs:
           toggle_kinds = {doc["kind"] for doc in load_render("/tmp/vllm-rendered-toggle.yaml")}
           assert "ServiceMonitor" not in toggle_kinds
           assert "PersistentVolumeClaim" not in toggle_kinds
+
+          for rendered in ("/tmp/vllm-rendered-staging.yaml", "/tmp/vllm-rendered-production.yaml"):
+              gateway_config = next(
+                  doc for doc in load_render(rendered)
+                  if doc["kind"] == "ConfigMap" and doc["metadata"]["name"] == "api-gateway-config"
+              )
+              assert gateway_config["data"]["CORS_ORIGINS"] != "*"
+              assert gateway_config["data"]["ALLOWED_HOSTS"] != "*"
 
           print("helm-chart-render-ok")
           PY
@@ -210,6 +231,7 @@ jobs:
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=${{ github.sha }}
             type=sha,prefix=sha-
       
       - name: Build and push Docker image
@@ -268,16 +290,29 @@ jobs:
         with:
           method: kubeconfig
           kubeconfig: ${{ secrets.KUBE_CONFIG_STAGING }}
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
       
-      - name: Deploy to Kubernetes
+      - name: Deploy with Helm
         run: |
-          kubectl apply -f k8s/deployments/vllm-deployment.yaml
-          kubectl rollout status deployment/vllm-server -n llm-inference
+          helm upgrade --install vllm-inference charts/vllm-inference \
+            --namespace llm-inference \
+            --create-namespace \
+            --atomic \
+            --wait \
+            -f charts/vllm-inference/values-staging.yaml \
+            --set-string image.repository=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-serving \
+            --set-string image.tag=${{ github.sha }} \
+            --set-string gateway.image.repository=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-gateway \
+            --set-string gateway.image.tag=${{ github.sha }} \
+            --set-string baseImage.repository=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-base \
+            --set-string baseImage.tag=${{ github.sha }}
       
       - name: Run smoke tests
         run: |
-          kubectl wait --for=condition=available deployment/vllm-server -n llm-inference --timeout=300s
           curl -fsS https://staging.llm-infra.example.com/health
+          curl -fsS https://staging.llm-infra.example.com/ready
 
   # ==========================================================================
   # Deploy to Production
@@ -300,15 +335,29 @@ jobs:
         with:
           method: kubeconfig
           kubeconfig: ${{ secrets.KUBE_CONFIG_PROD }}
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
       
-      - name: Deploy to Kubernetes
+      - name: Deploy with Helm
         run: |
-          kubectl apply -f k8s/deployments/vllm-deployment.yaml
-          kubectl rollout status deployment/vllm-server -n llm-inference
+          helm upgrade --install vllm-inference charts/vllm-inference \
+            --namespace llm-inference \
+            --create-namespace \
+            --atomic \
+            --wait \
+            -f charts/vllm-inference/values-production.yaml \
+            --set-string image.repository=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-serving \
+            --set-string image.tag=${{ github.sha }} \
+            --set-string gateway.image.repository=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-gateway \
+            --set-string gateway.image.tag=${{ github.sha }} \
+            --set-string baseImage.repository=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}-base \
+            --set-string baseImage.tag=${{ github.sha }}
       
       - name: Run production tests
         run: |
           curl -fsS https://llm-infra.example.com/health
+          curl -fsS https://llm-infra.example.com/ready
       
       - name: Notify deployment
         uses: 8398a7/action-slack@v3

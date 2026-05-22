@@ -221,13 +221,14 @@ gateway:
     jwtSecretKey: JWT_SECRET
     authUsersKey: AUTH_USERS
   config:
+    environment: production
     rateLimitEnabled: "true"
     requestsPerMinute: "60"
     requestsPerHour: "1000"
     tokensPerMinute: "100000"
     tokensPerHour: "1000000"
-    corsOrigins: "*"
-    allowedHosts: "*"
+    corsOrigins: "http://localhost:8080"
+    allowedHosts: "localhost,127.0.0.1,api-gateway"
     routingCanarySalt: k8s
     defaultCompletionModel: /workspace/models/awq/checkpoint-final
     vllmBackendUrl: http://vllm-service:80
@@ -245,6 +246,12 @@ gateway:
             weight: 100
             stage: Production
             version: stable
+          - name: canary
+            backend_url: http://vllm-service-canary:80
+            model: /workspace/models/awq/checkpoint-final
+            weight: 0
+            stage: Candidate
+            version: canary
   service:
     type: ClusterIP
     port: 8080

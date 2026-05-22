@@ -10,3 +10,9 @@
 {{- if and .Values.gateway.enabled (eq (toString .Values.gateway.config.rateLimitEnabled) "true") (not .Values.redis.enabled) (not .Values.redis.externalHost) -}}
 {{- fail "redis.enabled or redis.externalHost is required when gateway rate limiting is enabled" -}}
 {{- end -}}
+{{- if and .Values.gateway.enabled (eq (toString .Values.gateway.config.environment) "production") (eq (toString .Values.gateway.config.corsOrigins) "*") -}}
+{{- fail "gateway.config.corsOrigins cannot be '*' when gateway.config.environment is production" -}}
+{{- end -}}
+{{- if and .Values.gateway.enabled (eq (toString .Values.gateway.config.environment) "production") (eq (toString .Values.gateway.config.allowedHosts) "*") -}}
+{{- fail "gateway.config.allowedHosts cannot be '*' when gateway.config.environment is production" -}}
+{{- end -}}

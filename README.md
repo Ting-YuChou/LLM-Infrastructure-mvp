@@ -111,7 +111,7 @@ llm-infrastructure-mvp/
 ### Requirements
 
 - Python 3.9+
-- CUDA 11.8+ (for GPU training and inference)
+- CUDA 12.9.1 runtime for the production serving image
 - Docker & Docker Compose (optional, for service deployment)
 - At least 16GB GPU memory (24GB+ recommended)
 
@@ -298,29 +298,29 @@ docker compose up -d --build
 kubectl create namespace llm-inference
 kubectl create secret generic gateway-auth \
   --namespace llm-inference \
-  --from-literal=JWT_SECRET='change-me' \
-  --from-literal=AUTH_USERS='local:local'
+  --from-literal=JWT_SECRET='<strong-random-secret>' \
+  --from-literal=AUTH_USERS='<username>:<strong-password>'
 
 # Deploy the serving path with the Helm chart:
 # Client -> Ingress -> API gateway -> internal vLLM service -> vLLM pods
 helm upgrade --install vllm-inference charts/vllm-inference \
   --namespace llm-inference \
   --create-namespace \
-  -f charts/vllm-inference/values.yaml
+  --atomic \
+  --wait \
+  -f charts/vllm-inference/values-production.yaml
 
-# Enable the parameterized gateway Ingress with environment-specific values
+# Override image tags for a release candidate
 helm upgrade --install vllm-inference charts/vllm-inference \
   --namespace llm-inference \
   --create-namespace \
+  --atomic \
+  --wait \
   -f charts/vllm-inference/values.yaml \
-  --set image.tag=release-candidate \
-  --set gateway.image.tag=release-candidate \
-  --set model.name=/workspace/models/awq/checkpoint-final \
-  --set gateway.ingress.enabled=true \
-  --set gateway.ingress.className=nginx \
-  --set gateway.ingress.hosts[0].host=llm.example.com \
-  --set gateway.ingress.hosts[0].paths[0].path=/ \
-  --set gateway.ingress.hosts[0].paths[0].pathType=Prefix
+  -f charts/vllm-inference/values-production.yaml \
+  --set-string image.tag=release-candidate \
+  --set-string gateway.image.tag=release-candidate \
+  --set-string baseImage.tag=release-candidate
 
 # Or use the deployment helper, which defaults to Helm mode
 python scripts/deploy.py --action deploy
@@ -348,17 +348,34 @@ helm upgrade --install vllm-inference charts/vllm-inference \
   --set keda.enabled=true
 ```
 
-Legacy raw manifests remain under `k8s/` for reference:
+Legacy raw manifests remain under `k8s/` for reference/dev fallback. If
+`MODEL_NAME` is an absolute path such as `/workspace/models/awq/checkpoint-final`,
+the `model-pvc` volume must already contain a vLLM-supported AWQ checkpoint at
+that path before the vLLM Pod starts. Production deployments should use the Helm
+chart above.
 
 ```bash
 kubectl create namespace llm-inference
 kubectl create secret generic gateway-auth \
   --namespace llm-inference \
-  --from-literal=JWT_SECRET='change-me' \
-  --from-literal=AUTH_USERS='local:local'
+  --from-literal=JWT_SECRET='<strong-random-secret>' \
+  --from-literal=AUTH_USERS='<username>:<strong-password>'
 kubectl apply -f k8s/deployments/
 kubectl apply -f k8s/autoscaling/vllm-keda-scaledobject.yaml  # optional; do not combine with the HPA
 ```
+
+Production serving runtime matrix:
+
+| Component | Version |
+| --- | --- |
+| CUDA image | `12.9.1-cudnn-runtime-ubuntu22.04` |
+| Python | `3.10` |
+| PyTorch | `2.10.0` |
+| Transformers | `4.57.6` |
+| vLLM | `0.19.1` |
+| FastAPI / Pydantic | `0.136.1` / `2.13.3` |
+
+CI enforces this matrix with `python scripts/check_serving_runtime_matrix.py`.
 
 ### Start Inference Server
 

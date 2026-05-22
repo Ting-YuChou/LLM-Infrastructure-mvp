@@ -202,6 +202,9 @@ spec:
       initContainers:
       - name: model-downloader
         image: llm-base:latest
+        envFrom:
+        - configMapRef:
+            name: vllm-config
         command:
         - /bin/bash
         - -c
@@ -214,7 +217,10 @@ spec:
 
           if os.path.isabs(model_name):
               if not os.path.isdir(model_name):
-                  raise SystemExit(f"Local model path does not exist: {model_name}")
+                  raise SystemExit(
+                      "PVC must be preloaded with AWQ weights at MODEL_NAME. "
+                      f"Local model path does not exist: {model_name}"
+                  )
               print(f"Using local model path: {model_name}")
           else:
               print(f"Downloading model snapshot: {model_name}")
