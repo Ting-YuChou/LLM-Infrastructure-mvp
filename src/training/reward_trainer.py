@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader
 from datasets import load_dataset, Dataset
 from transformers import (
     AutoTokenizer,
@@ -22,12 +23,14 @@ from transformers import (
 )
 
 try:
+    from .results import TrainingRunResult
     from .mlflow_lifecycle import (
         MLflowMetricsCallback,
         MLflowTrainingLifecycle,
         PromotionConfig,
     )
 except ImportError:  # pragma: no cover - supports direct script execution
+    from results import TrainingRunResult  # type: ignore[no-redef]
     from mlflow_lifecycle import (  # type: ignore[no-redef]
         MLflowMetricsCallback,
         MLflowTrainingLifecycle,
@@ -422,7 +425,73 @@ class RewardModelTrainer:
             extra_tags={"artifact_type": "full_model"},
         )
 
-    def train(self) -> None:
+    def evaluate_reward_model(
+        self,
+        model: PreTrainedModel,
+        dataset: Dataset,
+    ) -> Dict[str, float]:
+        """Compute pairwise reward metrics on a processed validation dataset."""
+        try:
+            device = next(model.parameters()).device
+        except StopIteration:
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        dataloader = DataLoader(
+            dataset,
+            batch_size=self.config.per_device_train_batch_size,
+            collate_fn=collate_reward_pairs,
+        )
+        total = 0
+        correct = 0
+        margin_sum = 0.0
+
+        was_training = model.training
+        model.eval()
+        with torch.no_grad():
+            for batch in dataloader:
+                chosen_input_ids = torch.as_tensor(batch['chosen_input_ids'], device=device)
+                chosen_attention_mask = torch.as_tensor(
+                    batch['chosen_attention_mask'],
+                    device=device,
+                )
+                rejected_input_ids = torch.as_tensor(
+                    batch['rejected_input_ids'],
+                    device=device,
+                )
+                rejected_attention_mask = torch.as_tensor(
+                    batch['rejected_attention_mask'],
+                    device=device,
+                )
+
+                chosen_rewards = model(
+                    input_ids=chosen_input_ids,
+                    attention_mask=chosen_attention_mask,
+                ).logits.squeeze(-1)
+                rejected_rewards = model(
+                    input_ids=rejected_input_ids,
+                    attention_mask=rejected_attention_mask,
+                ).logits.squeeze(-1)
+                margins = chosen_rewards - rejected_rewards
+
+                total += int(margins.numel())
+                correct += int((margins > 0).sum().item())
+                margin_sum += float(margins.sum().item())
+
+        if was_training:
+            model.train()
+        if total == 0:
+            return {
+                "reward_accuracy": 0.0,
+                "reward_margin": 0.0,
+                "reward_eval_examples": 0.0,
+            }
+        return {
+            "reward_accuracy": correct / total,
+            "reward_margin": margin_sum / total,
+            "reward_eval_examples": float(total),
+        }
+
+    def train(self) -> TrainingRunResult:
         """Execute reward model training"""
         lifecycle = self._build_lifecycle()
         with lifecycle:
@@ -472,6 +541,7 @@ class RewardModelTrainer:
             final_metrics = dict(getattr(train_output, "metrics", {}) or {})
             if val_dataset:
                 final_metrics.update(trainer.evaluate())
+                final_metrics.update(self.evaluate_reward_model(model, val_dataset))
 
             # Save final model
             final_model_path = f"{self.config.output_dir}/final"
@@ -479,13 +549,36 @@ class RewardModelTrainer:
             trainer.save_model(final_model_path)
             tokenizer.save_pretrained(final_model_path)
 
-            lifecycle.register_checkpoint(
+            lifecycle_result = lifecycle.register_checkpoint(
                 final_model_path,
                 final_metrics=final_metrics,
                 extra_tags={"artifact_type": "full_model"},
             )
 
             logger.info("Reward model training complete!")
+            return TrainingRunResult(
+                checkpoint_path=final_model_path,
+                metrics=final_metrics,
+                lifecycle_result=lifecycle_result,
+            )
+
+
+def collate_reward_pairs(examples: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
+    """Stack processed chosen/rejected preference pairs for reward evaluation."""
+    keys = (
+        "chosen_input_ids",
+        "chosen_attention_mask",
+        "rejected_input_ids",
+        "rejected_attention_mask",
+    )
+    batch = {}
+    for key in keys:
+        values = [example[key] for example in examples]
+        if values and torch.is_tensor(values[0]):
+            batch[key] = torch.stack([value.long() for value in values])
+        else:
+            batch[key] = torch.tensor(values, dtype=torch.long)
+    return batch
 
 
 def main():

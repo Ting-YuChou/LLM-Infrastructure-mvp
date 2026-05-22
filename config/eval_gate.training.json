@@ -1,0 +1,11 @@
+{
+  "thresholds": [
+    "sft_eval_loss<=20.0",
+    "reward_accuracy>=0.5",
+    "reward_margin>=0.0",
+    "rlhf_mean_reward>=-100.0",
+    "rlhf_mean_kl<=1.0",
+    "artifact_ready>=1.0"
+  ],
+  "min_delta": {}
+}

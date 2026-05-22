@@ -20,6 +20,18 @@ peft_stub.get_peft_model = lambda model, config: model
 peft_stub.TaskType = SimpleNamespace(CAUSAL_LM="CAUSAL_LM")
 sys.modules.setdefault("peft", peft_stub)
 
+transformers_stub = types.ModuleType("transformers")
+transformers_stub.AutoTokenizer = SimpleNamespace()
+transformers_stub.AutoModelForCausalLM = SimpleNamespace()
+transformers_stub.AutoModelForSequenceClassification = SimpleNamespace()
+transformers_stub.PreTrainedModel = object
+transformers_stub.TrainingArguments = lambda **kwargs: kwargs
+transformers_stub.Trainer = object
+transformers_stub.TrainerCallback = object
+transformers_stub.default_data_collator = lambda features: features
+transformers_stub.get_scheduler = lambda *args, **kwargs: None
+sys.modules.setdefault("transformers", transformers_stub)
+
 from training import reward_trainer, rlhf_trainer, sft_trainer  # noqa: E402
 
 
@@ -43,6 +55,7 @@ class FakeLifecycle:
     def register_checkpoint(self, checkpoint_path, final_metrics=None, extra_tags=None):
         self.events.append(("register", checkpoint_path, dict(final_metrics or {})))
         assert Path(checkpoint_path).exists()
+        return SimpleNamespace(model_name="model", version="1", promoted=False)
 
 
 class FakeTokenizer:
@@ -99,19 +112,16 @@ def test_sft_registers_only_after_final_checkpoint_save(monkeypatch, tmp_path):
     monkeypatch.setattr(sft_trainer, "TrainingArguments", lambda **kwargs: kwargs)
     monkeypatch.setattr(
         sft_trainer,
-        "DataCollatorForLanguageModeling",
-        lambda **kwargs: object(),
-    )
-    monkeypatch.setattr(
-        sft_trainer,
         "Trainer",
         lambda *args, **kwargs: FakeHFTrainer(*args, events=events, **kwargs),
     )
 
-    trainer.train()
+    result = trainer.train()
 
     assert events.index("save_model") < _event_index(events, "register")
     assert events.index("tokenizer_save") < _event_index(events, "register")
+    assert result.checkpoint_path == str(tmp_path / "final")
+    assert result.lifecycle_result.version == "1"
 
 
 def test_reward_registers_only_after_final_checkpoint_save(monkeypatch, tmp_path):
@@ -143,10 +153,12 @@ def test_reward_registers_only_after_final_checkpoint_save(monkeypatch, tmp_path
         lambda *args, **kwargs: FakeHFTrainer(*args, events=events, **kwargs),
     )
 
-    trainer.train()
+    result = trainer.train()
 
     assert events.index("save_model") < _event_index(events, "register")
     assert events.index("tokenizer_save") < _event_index(events, "register")
+    assert result.checkpoint_path == str(tmp_path / "final")
+    assert result.lifecycle_result.version == "1"
 
 
 def test_rlhf_registers_only_after_final_checkpoint_save(monkeypatch, tmp_path):
@@ -174,9 +186,11 @@ def test_rlhf_registers_only_after_final_checkpoint_save(monkeypatch, tmp_path):
     monkeypatch.setattr(trainer, "save_checkpoint", fake_save_checkpoint)
     monkeypatch.setattr(rlhf_trainer, "PromptDataset", lambda *args, **kwargs: [1])
 
-    trainer.train("prompts.json")
+    result = trainer.train("prompts.json")
 
     assert events.index("save_checkpoint") < _event_index(events, "register")
+    assert result.checkpoint_path == str(tmp_path / "checkpoint-final")
+    assert result.lifecycle_result.version == "1"
 
 
 def _event_index(events, event_name):

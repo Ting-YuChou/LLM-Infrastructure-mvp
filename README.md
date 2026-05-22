@@ -153,6 +153,34 @@ python scripts/prepare_data.py \
 
 ## 🎓 Training Pipeline
 
+### Aggregated SFT -> Reward -> RLHF Pipeline
+
+```bash
+python scripts/train_pipeline.py \
+    --config config/training_pipeline.yaml \
+    --stages all
+```
+
+The aggregated entrypoint runs the fixed stage order:
+`sft -> reward -> rlhf -> training_eval -> mlflow_promotion -> serving_handoff`.
+It injects the SFT final checkpoint into reward/RLHF policy inputs, injects the
+reward final checkpoint into RLHF, writes promotion metrics to
+`outputs/training_pipeline/eval/training_candidate.json`, and emits the serving
+handoff manifest at `outputs/training_pipeline/serving_handoff.json`.
+
+Useful options:
+
+```bash
+python scripts/train_pipeline.py --config config/training_pipeline.yaml --dry-run
+python scripts/train_pipeline.py --config config/training_pipeline.yaml --output-dir ./outputs/run-001
+python scripts/train_pipeline.py --config config/training_pipeline.yaml --baseline-metrics ./outputs/baseline.json
+python scripts/train_pipeline.py --config config/training_pipeline.yaml --skip-promotion
+```
+
+This pipeline does not create AWQ weights. The handoff manifest records the
+final aligned checkpoint, expected AWQ target path, validation status, and the
+serving/Kubernetes update hints for a later AWQ conversion step.
+
 ### 1. Supervised Fine-Tuning (SFT)
 
 ```bash
