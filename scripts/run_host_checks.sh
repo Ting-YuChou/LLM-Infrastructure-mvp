@@ -52,7 +52,7 @@ PYTHONPATH="${ROOT_DIR}/src" "${VENV_DIR}/bin/python" -c \
 echo
 echo "[2/6] pipeline/load test import smoke"
 PYTHONPATH="${ROOT_DIR}" "${VENV_DIR}/bin/python" -c \
-  "import scripts.load_test as lt; import scripts.compose_smoke_test as st; import scripts.eval_gate as eg; import scripts.train_pipeline as tp; print('load-smoke-eval-pipeline-import-ok')"
+  "import scripts.load_test as lt; import scripts.compose_smoke_test as st; import scripts.eval_gate as eg; import scripts.train_pipeline as tp; import scripts.awq_handoff as awq; print('load-smoke-eval-pipeline-import-ok')"
 
 echo
 echo "[3/6] runtime and training pipeline dry-run"
@@ -73,6 +73,10 @@ if command -v helm >/dev/null 2>&1; then
   helm template vllm-inference "${ROOT_DIR}/charts/vllm-inference" \
     --namespace llm-inference \
     -f "${ROOT_DIR}/charts/vllm-inference/values-production.yaml" >/dev/null
+  helm template vllm-inference-canary "${ROOT_DIR}/charts/vllm-inference" \
+    --namespace llm-inference \
+    -f "${ROOT_DIR}/charts/vllm-inference/values-production.yaml" \
+    -f "${ROOT_DIR}/charts/vllm-inference/values-canary.yaml" >/dev/null
   echo "helm-template-ok"
 else
   echo "helm-template-skip: helm not installed"

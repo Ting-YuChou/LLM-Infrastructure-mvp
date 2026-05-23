@@ -19,6 +19,7 @@ protobuf==5.29.6
 # ============================================================================
 # DeepSpeed for distributed training
 deepspeed==0.15.1
+peft==0.15.2
 
 # Flash Attention is optional for training workloads and should be installed
 # after torch in a CUDA build environment:

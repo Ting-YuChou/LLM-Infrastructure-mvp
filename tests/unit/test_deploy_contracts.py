@@ -108,6 +108,38 @@ def test_canary_dry_run_generates_weight_override(tmp_path):
         )
 
     output = json.loads(output_buffer.getvalue())
+    assert output["canary_release"] == "vllm-inference-canary"
+    assert output["canary_release_plan"]["deployment"] == "vllm-server-canary"
+    assert output["canary_release_plan"]["service"] == "vllm-service-canary"
     targets = output["routing_override"]["gateway"]["routing"]["routes"]["model-a"]["targets"]
     weights = {target["name"]: target["weight"] for target in targets}
     assert weights == {"stable": 75, "canary": 25}
+
+
+def test_canary_values_define_backend_release_only():
+    values = yaml.safe_load(Path("charts/vllm-inference/values-canary.yaml").read_text())
+
+    assert values["resourceNames"]["deployment"] == "vllm-server-canary"
+    assert values["resourceNames"]["service"] == "vllm-service-canary"
+    assert values["gateway"]["enabled"] is False
+
+
+def test_production_values_enable_secret_tls_and_managed_redis():
+    values = yaml.safe_load(Path("charts/vllm-inference/values-production.yaml").read_text())
+
+    assert values["gateway"]["auth"]["externalSecret"]["enabled"] is True
+    assert values["gateway"]["ingress"]["certManager"]["enabled"] is True
+    assert values["gateway"]["ingress"]["tls"]
+    assert values["redis"]["enabled"] is False
+    assert values["redis"]["externalHost"]
+    assert values["redis"]["auth"]["existingSecret"] == "gateway-auth"
+
+
+def test_training_pipeline_job_values_are_disabled_by_default():
+    values = yaml.safe_load(Path("charts/vllm-inference/values.yaml").read_text())
+    training = values["trainingPipeline"]
+
+    assert training["enabled"] is False
+    assert training["resume"] is True
+    assert training["stages"] == "all"
+    assert training["outputPersistence"]["enabled"] is True

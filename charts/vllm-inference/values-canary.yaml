@@ -1,0 +1,33 @@
+resourceNames:
+  configMap: vllm-config-canary
+  deployment: vllm-server-canary
+  service: vllm-service-canary
+  headlessService: vllm-headless-canary
+  pvc: model-pvc-canary
+  pdb: vllm-pdb-canary
+  networkPolicy: vllm-network-policy-canary
+  hpa: vllm-hpa-canary
+  serviceMonitor: vllm-metrics-canary
+  kedaScaledObject: vllm-prometheus-autoscaler-canary
+
+selectorLabels:
+  app: vllm-canary
+  version: canary
+
+replicaCount: 1
+
+gateway:
+  enabled: false
+
+redis:
+  enabled: false
+
+persistence:
+  existingClaim: model-pvc
+  readOnly: true
+
+hpa:
+  enabled: false
+
+keda:
+  enabled: false

@@ -15,6 +15,7 @@ data:
   RATE_LIMIT_TOKENS_PER_HOUR: {{ .Values.gateway.config.tokensPerHour | quote }}
   REDIS_HOST: {{ include "vllm-inference.redisHost" . | quote }}
   REDIS_PORT: {{ .Values.redis.service.port | quote }}
+  REDIS_SSL: {{ .Values.gateway.config.redisSsl | quote }}
   VLLM_BACKEND_URL: {{ .Values.gateway.config.vllmBackendUrl | quote }}
   DEFAULT_COMPLETION_MODEL: {{ .Values.gateway.config.defaultCompletionModel | quote }}
   MODEL_ROUTING_CONFIG: {{ .Values.gateway.config.modelRoutingConfig | quote }}

@@ -7,15 +7,52 @@ baseImage:
 gateway:
   image:
     tag: production
+  auth:
+    externalSecret:
+      enabled: true
+      secretStoreRef:
+        name: production-secrets
+        kind: ClusterSecretStore
+      remoteRefs:
+        jwtSecret:
+          key: llm-infra/production/gateway
+          property: jwtSecret
+        authUsers:
+          key: llm-infra/production/gateway
+          property: authUsers
+        redisPassword:
+          key: llm-infra/production/redis
+          property: password
   config:
     environment: production
     corsOrigins: "https://llm-infra.example.com"
     allowedHosts: "llm-infra.example.com"
+    redisSsl: "true"
   ingress:
     enabled: true
     className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    certManager:
+      enabled: true
+      issuerRef:
+        name: letsencrypt-prod
+        kind: ClusterIssuer
     hosts:
       - host: llm-infra.example.com
         paths:
           - path: /
             pathType: Prefix
+    tls:
+      - secretName: llm-infra-tls
+        hosts:
+          - llm-infra.example.com
+
+redis:
+  enabled: false
+  externalHost: redis-prod.llm-infra.example.com
+  tls:
+    enabled: true
+  auth:
+    existingSecret: gateway-auth
+    passwordKey: REDIS_PASSWORD

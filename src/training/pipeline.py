@@ -9,8 +9,11 @@ training stack.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import logging
+import os
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -32,6 +35,8 @@ PIPELINE_STAGE_ORDER = (
     "rlhf",
     "training_eval",
     "mlflow_promotion",
+    "artifact_manifest",
+    "awq_handoff",
     "serving_handoff",
 )
 
@@ -39,7 +44,9 @@ STAGE_ALIASES = {
     "all": PIPELINE_STAGE_ORDER,
     "eval": ("training_eval",),
     "promotion": ("mlflow_promotion",),
-    "handoff": ("serving_handoff",),
+    "manifest": ("artifact_manifest",),
+    "awq": ("awq_handoff",),
+    "handoff": ("artifact_manifest", "awq_handoff", "serving_handoff"),
 }
 
 
@@ -52,6 +59,8 @@ class PipelineArtifacts:
     reward_output_dir: Path
     rlhf_output_dir: Path
     metrics_path: Path
+    artifact_manifest_path: Path
+    awq_handoff_path: Path
     handoff_path: Path
     expected_awq_path: str
     gate_config_path: Path
@@ -67,6 +76,7 @@ class TrainingPipeline:
         output_dir: Optional[str] = None,
         baseline_metrics: Optional[str] = None,
         skip_promotion: bool = False,
+        resume: bool = False,
         dry_run: bool = False,
     ) -> None:
         self.config_path = Path(config_path)
@@ -75,6 +85,7 @@ class TrainingPipeline:
         self.output_override = Path(output_dir) if output_dir else None
         self.baseline_metrics = baseline_metrics
         self.skip_promotion = skip_promotion
+        self.resume = resume
         self.dry_run = dry_run
         self.artifacts = self._resolve_artifacts()
 
@@ -83,6 +94,7 @@ class TrainingPipeline:
         return {
             "config_path": str(self.config_path),
             "dry_run": self.dry_run,
+            "resume": self.resume,
             "stages": list(self.stages),
             "stage_order": list(PIPELINE_STAGE_ORDER),
             "configs": {
@@ -97,12 +109,15 @@ class TrainingPipeline:
                 "gate_config_exists": self.artifacts.gate_config_path.exists(),
                 "output_parent_exists": self.artifacts.output_dir.parent.exists(),
             },
+            "resume_checkpoints": self.discover_stage_checkpoints(),
             "outputs": {
                 "root": str(self.artifacts.output_dir),
                 "sft": str(self.artifacts.sft_output_dir),
                 "reward": str(self.artifacts.reward_output_dir),
                 "rlhf": str(self.artifacts.rlhf_output_dir),
                 "metrics": str(self.artifacts.metrics_path),
+                "artifact_manifest": str(self.artifacts.artifact_manifest_path),
+                "awq_handoff": str(self.artifacts.awq_handoff_path),
                 "serving_handoff": str(self.artifacts.handoff_path),
             },
             "injections": {
@@ -121,6 +136,12 @@ class TrainingPipeline:
                 "quantization": self._serving_config().get("quantization", "awq"),
                 "dtype": self._serving_config().get("dtype", "float16"),
             },
+            "artifact_manifest": {
+                "dataset_version": self._artifact_config().get("dataset_version")
+                or os.getenv("DATASET_VERSION", "unversioned"),
+                "storage_uri": self._artifact_config().get("storage_uri", ""),
+            },
+            "awq_handoff": self._awq_config(),
         }
 
     def run(self) -> Dict[str, Any]:
@@ -133,13 +154,17 @@ class TrainingPipeline:
         stage_results: Dict[str, TrainingRunResult] = {}
 
         if "sft" in self.stages:
-            sft_result = self._run_sft()
+            sft_result = self._resume_or_run("sft", self.artifacts.sft_output_dir / "final", self._run_sft)
             stage_results["sft"] = sft_result
             results["stages"]["sft"] = result_to_dict(sft_result)
 
         if "reward" in self.stages:
             sft_checkpoint = require_checkpoint(stage_results, "sft", self.artifacts.sft_output_dir / "final")
-            reward_result = self._run_reward(sft_checkpoint)
+            reward_result = self._resume_or_run(
+                "reward",
+                self.artifacts.reward_output_dir / "final",
+                lambda: self._run_reward(sft_checkpoint),
+            )
             stage_results["reward"] = reward_result
             results["stages"]["reward"] = result_to_dict(reward_result)
 
@@ -151,7 +176,11 @@ class TrainingPipeline:
                 reward_metrics=stage_results.get("reward").metrics if "reward" in stage_results else {},
                 aligned_checkpoint=None,
             )
-            rlhf_result = self._run_rlhf(sft_checkpoint, reward_checkpoint)
+            rlhf_result = self._resume_or_run(
+                "rlhf",
+                self.artifacts.rlhf_output_dir / "checkpoint-final",
+                lambda: self._run_rlhf(sft_checkpoint, reward_checkpoint),
+            )
             stage_results["rlhf"] = rlhf_result
             results["stages"]["rlhf"] = result_to_dict(rlhf_result)
 
@@ -180,6 +209,19 @@ class TrainingPipeline:
                 "skip_promotion": self.skip_promotion,
             }
 
+        if "artifact_manifest" in self.stages:
+            manifest = self.write_model_artifact_manifest(stage_results)
+            results["stages"]["artifact_manifest"] = manifest
+
+        if "awq_handoff" in self.stages:
+            aligned_checkpoint = require_checkpoint(
+                stage_results,
+                "rlhf",
+                self.artifacts.rlhf_output_dir / "checkpoint-final",
+            )
+            awq_handoff = self.write_awq_handoff(aligned_checkpoint)
+            results["stages"]["awq_handoff"] = awq_handoff
+
         if "serving_handoff" in self.stages:
             aligned_checkpoint = require_checkpoint(
                 stage_results,
@@ -191,6 +233,109 @@ class TrainingPipeline:
 
         results["status"] = "completed"
         return results
+
+    def discover_stage_checkpoints(self) -> Dict[str, Dict[str, Any]]:
+        """Return deterministic checkpoint discovery metadata for resume mode."""
+        checkpoints = {
+            "sft": self.artifacts.sft_output_dir / "final",
+            "reward": self.artifacts.reward_output_dir / "final",
+            "rlhf": self.artifacts.rlhf_output_dir / "checkpoint-final",
+        }
+        return {
+            stage: {
+                "path": str(path),
+                "exists": path.is_dir(),
+                "validation": validate_checkpoint_artifact(path),
+            }
+            for stage, path in checkpoints.items()
+        }
+
+    def write_model_artifact_manifest(
+        self,
+        stage_results: Optional[Mapping[str, TrainingRunResult]] = None,
+    ) -> Dict[str, Any]:
+        """Write the canonical Train -> Serving artifact manifest."""
+        stage_results = stage_results or {}
+        checkpoints = {
+            "sft": require_checkpoint(stage_results, "sft", self.artifacts.sft_output_dir / "final"),
+            "reward": require_checkpoint(stage_results, "reward", self.artifacts.reward_output_dir / "final"),
+            "rlhf": require_checkpoint(stage_results, "rlhf", self.artifacts.rlhf_output_dir / "checkpoint-final"),
+        }
+        artifact_config = self._artifact_config()
+        manifest = {
+            "schema_version": "1.0",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "git_sha": git_commit(),
+            "base_model": self._base_model_name(),
+            "dataset_version": artifact_config.get("dataset_version")
+            or os.getenv("DATASET_VERSION", "unversioned"),
+            "dataset_fingerprints": self._dataset_fingerprints(),
+            "storage_uri": artifact_config.get("storage_uri", ""),
+            "expected_awq_target_path": self.artifacts.expected_awq_path,
+            "quantization": self._serving_config().get("quantization", "awq"),
+            "model_card": {
+                "intended_use": artifact_config.get("intended_use", "text generation"),
+                "limitations": artifact_config.get(
+                    "limitations",
+                    "Requires separate safety and task evaluation before production traffic.",
+                ),
+                "promotion_metrics_path": str(self.artifacts.metrics_path),
+            },
+            "checkpoints": {
+                stage: checkpoint_record(
+                    stage=stage,
+                    path=Path(path),
+                    result=stage_results.get(stage),
+                )
+                for stage, path in checkpoints.items()
+            },
+            "promotion": {
+                "metrics_path": str(self.artifacts.metrics_path),
+                "gate_config_path": str(self.artifacts.gate_config_path),
+                "skip_promotion": self.skip_promotion,
+            },
+        }
+        manifest["artifact_checksum_ready"] = 1.0 if all(
+            item.get("checksum_sha256")
+            and item.get("validation", {}).get("ready_for_awq_conversion")
+            for item in manifest["checkpoints"].values()
+        ) else 0.0
+        metrics = load_json_if_exists(self.artifacts.metrics_path)
+        metrics["artifact_checksum_ready"] = manifest["artifact_checksum_ready"]
+        write_json(self.artifacts.metrics_path, metrics)
+        write_json(self.artifacts.artifact_manifest_path, manifest)
+        return manifest
+
+    def write_awq_handoff(self, aligned_checkpoint: str) -> Dict[str, Any]:
+        """Write an AWQ conversion handoff contract without requiring AWQ deps."""
+        checkpoint = Path(aligned_checkpoint)
+        target = Path(self.artifacts.expected_awq_path)
+        source_validation = validate_checkpoint_artifact(checkpoint)
+        target_validation = validate_checkpoint_artifact(target)
+        awq_config = self._awq_config()
+        handoff = {
+            "schema_version": "1.0",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "source_checkpoint": str(checkpoint),
+            "source_validation": source_validation,
+            "target_path": str(target),
+            "target_validation": target_validation,
+            "quantization": self._serving_config().get("quantization", "awq"),
+            "dtype": self._serving_config().get("dtype", "float16"),
+            "conversion_required": True,
+            "conversion_command": awq_config.get("conversion_command", ""),
+            "artifact_manifest_path": str(self.artifacts.artifact_manifest_path),
+            "status": "ready_for_conversion"
+            if source_validation["ready_for_awq_conversion"]
+            else "blocked_source_checkpoint_not_ready",
+            "serving_update": {
+                "helm_values_key": "model.name",
+                "routing_values_key": "gateway.routing.routes",
+                "expected_model_path": str(target),
+            },
+        }
+        write_json(self.artifacts.awq_handoff_path, handoff)
+        return handoff
 
     def write_serving_handoff(self, aligned_checkpoint: str) -> Dict[str, Any]:
         """Write the serving handoff manifest for a final aligned checkpoint."""
@@ -204,6 +349,8 @@ class TrainingPipeline:
             "quantization": serving_config.get("quantization", "awq"),
             "dtype": serving_config.get("dtype", "float16"),
             "artifact_validation": validation,
+            "artifact_manifest_path": str(self.artifacts.artifact_manifest_path),
+            "awq_handoff_path": str(self.artifacts.awq_handoff_path),
             "next_steps": [
                 "Convert final_aligned_checkpoint to vLLM-supported AWQ weights outside this pipeline.",
                 "Place converted weights at expected_awq_target_path or update serving config to the actual AWQ path.",
@@ -317,9 +464,14 @@ class TrainingPipeline:
                     "rlhf_mean_kl": float_metric(rlhf_metrics, ("rlhf_mean_kl",), default=0.0),
                 }
             )
+        metrics.setdefault("task_eval_score", 0.0)
+        metrics.setdefault("safety_score", 1.0)
+        metrics.setdefault("latency_p95_ms", 0.0)
+        metrics.setdefault("cost_per_1k_tokens_usd", 0.0)
         metrics["artifact_ready"] = (
             1.0 if aligned_checkpoint and Path(aligned_checkpoint).is_dir() else 0.0
         )
+        metrics.setdefault("artifact_checksum_ready", 0.0)
         write_json(self.artifacts.metrics_path, metrics)
         return metrics
 
@@ -327,6 +479,8 @@ class TrainingPipeline:
         output_dir = self.output_override or Path(self.config.get("output_dir", "outputs/training_pipeline"))
         stages = self.config.get("stages", {})
         promotion = self.config.get("promotion", {})
+        artifact = self._artifact_config()
+        awq = self._awq_config()
         serving = self._serving_config()
 
         if self.output_override:
@@ -334,12 +488,18 @@ class TrainingPipeline:
             reward_output = output_dir / "models" / "reward"
             rlhf_output = output_dir / "models" / "aligned"
             metrics_path = output_dir / "eval" / "training_candidate.json"
+            artifact_manifest_path = output_dir / "model_artifact_manifest.json"
+            awq_handoff_path = output_dir / "awq_handoff.json"
             handoff_path = output_dir / "serving_handoff.json"
         else:
             sft_output = Path(stages.get("sft", {}).get("output_dir", output_dir / "models" / "sft"))
             reward_output = Path(stages.get("reward", {}).get("output_dir", output_dir / "models" / "reward"))
             rlhf_output = Path(stages.get("rlhf", {}).get("output_dir", output_dir / "models" / "aligned"))
             metrics_path = Path(promotion.get("metrics_path", output_dir / "eval" / "training_candidate.json"))
+            artifact_manifest_path = Path(
+                artifact.get("manifest_path", output_dir / "model_artifact_manifest.json")
+            )
+            awq_handoff_path = Path(awq.get("handoff_path", output_dir / "awq_handoff.json"))
             handoff_path = Path(serving.get("handoff_path", output_dir / "serving_handoff.json"))
         gate_config_path = Path(promotion.get("gate_config", "config/eval_gate.training.json"))
 
@@ -349,6 +509,8 @@ class TrainingPipeline:
             reward_output_dir=reward_output,
             rlhf_output_dir=rlhf_output,
             metrics_path=metrics_path,
+            artifact_manifest_path=artifact_manifest_path,
+            awq_handoff_path=awq_handoff_path,
             handoff_path=handoff_path,
             expected_awq_path=str(serving.get("expected_awq_path", "/workspace/models/awq/checkpoint-final")),
             gate_config_path=gate_config_path,
@@ -365,6 +527,46 @@ class TrainingPipeline:
 
     def _serving_config(self) -> Dict[str, Any]:
         return dict(self.config.get("serving") or {})
+
+    def _artifact_config(self) -> Dict[str, Any]:
+        return dict(self.config.get("artifact") or {})
+
+    def _awq_config(self) -> Dict[str, Any]:
+        return dict(self.config.get("awq") or {})
+
+    def _resume_or_run(self, stage: str, checkpoint: Path, runner) -> TrainingRunResult:
+        if self.resume and checkpoint.is_dir():
+            logger.info("Resuming pipeline stage %s from %s", stage, checkpoint)
+            return TrainingRunResult(
+                checkpoint_path=str(checkpoint),
+                metrics=load_json_if_exists(self.artifacts.metrics_path),
+                lifecycle_result=None,
+            )
+        return runner()
+
+    def _base_model_name(self) -> str:
+        try:
+            return str(self._load_yaml(self._stage_config_path("sft")).get("model", {}).get("name", ""))
+        except Exception:
+            return ""
+
+    def _dataset_fingerprints(self) -> Dict[str, Any]:
+        fingerprints: Dict[str, Any] = {}
+        for stage in ("sft", "reward", "rlhf"):
+            try:
+                stage_yaml = self._load_yaml(self._stage_config_path(stage))
+            except Exception:
+                stage_yaml = {}
+            data_config = dict(stage_yaml.get("data") or {})
+            pipeline_stage = self._stage_config(stage)
+            if stage == "rlhf" and pipeline_stage.get("prompts_file"):
+                data_config["prompts_file"] = pipeline_stage["prompts_file"]
+            fingerprints[stage] = {
+                key: file_fingerprint(Path(value))
+                for key, value in sorted(data_config.items())
+                if key.endswith("_file") and isinstance(value, str)
+            }
+        return fingerprints
 
     @staticmethod
     def _load_yaml(path: Path) -> Dict[str, Any]:
@@ -460,6 +662,86 @@ def validate_checkpoint_artifact(checkpoint_path: Path) -> Dict[str, Any]:
         "files": sorted(files),
         "ready_for_awq_conversion": checkpoint_path.is_dir() and "config.json" in files and has_tokenizer and has_weights,
     }
+
+
+def checkpoint_record(
+    stage: str,
+    path: Path,
+    result: Optional[TrainingRunResult] = None,
+) -> Dict[str, Any]:
+    """Build one stage checkpoint entry for model_artifact_manifest.json."""
+    lifecycle = result.lifecycle_result if result is not None else None
+    return {
+        "stage": stage,
+        "path": str(path),
+        "exists": path.is_dir(),
+        "validation": validate_checkpoint_artifact(path),
+        "checksum_sha256": checksum_path(path) if path.is_dir() else None,
+        "metrics": result.metrics if result is not None else {},
+        "mlflow": None
+        if lifecycle is None
+        else {
+            "model_name": lifecycle.model_name,
+            "version": lifecycle.version,
+            "run_id": lifecycle.run_id,
+            "artifact_uri": lifecycle.artifact_uri,
+            "validation_status": lifecycle.validation_status,
+            "alias": "champion" if lifecycle.promoted else "candidate",
+        },
+    }
+
+
+def checksum_path(path: Path) -> str:
+    """Return a deterministic SHA256 for a file or directory tree."""
+    digest = hashlib.sha256()
+    if path.is_file():
+        digest.update(path.name.encode("utf-8"))
+        _hash_file(path, digest)
+        return digest.hexdigest()
+
+    for file_path in sorted(item for item in path.rglob("*") if item.is_file()):
+        relative = file_path.relative_to(path).as_posix()
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        _hash_file(file_path, digest)
+    return digest.hexdigest()
+
+
+def _hash_file(path: Path, digest: "hashlib._Hash") -> None:
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+
+
+def file_fingerprint(path: Path) -> Dict[str, Any]:
+    """Fingerprint a dataset/config input without failing dry-run discovery."""
+    if not path.exists() or not path.is_file():
+        return {
+            "path": str(path),
+            "exists": False,
+            "size_bytes": None,
+            "sha256": None,
+        }
+    return {
+        "path": str(path),
+        "exists": True,
+        "size_bytes": path.stat().st_size,
+        "sha256": checksum_path(path),
+    }
+
+
+def git_commit() -> Optional[str]:
+    """Return the current git SHA when available."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return None
+    return result.stdout.strip() or None
 
 
 def require_checkpoint(

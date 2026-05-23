@@ -6,6 +6,7 @@ from scripts.eval_gate import (
     evaluate_gates,
     parse_min_delta,
     parse_threshold,
+    load_config,
 )
 
 
@@ -49,3 +50,12 @@ def test_eval_gate_requires_baseline_for_min_delta():
             thresholds=[],
             min_delta=[parse_min_delta("win_rate:-0.02")],
         )
+
+
+def test_production_gate_includes_baseline_quality_guards():
+    thresholds, min_delta = load_config("config/eval_gate.production.json")
+    threshold_names = {rule.metric for rule in thresholds}
+    delta_names = {rule.metric for rule in min_delta}
+
+    assert {"task_eval_score", "safety_score", "latency_p95_ms", "artifact_checksum_ready"} <= threshold_names
+    assert {"task_eval_score", "safety_score"} <= delta_names

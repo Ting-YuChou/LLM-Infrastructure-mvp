@@ -58,10 +58,14 @@ jobs:
             src/monitoring/metrics.py \
             src/serving/mock_server.py \
             src/serving/vllm_server.py \
+            scripts/awq_handoff.py \
+            scripts/auth_smoke.py \
             scripts/check_serving_runtime_matrix.py \
+            scripts/completion_smoke.py \
             scripts/compose_smoke_test.py \
             scripts/deploy.py \
-            scripts/eval_gate.py
+            scripts/eval_gate.py \
+            scripts/vllm_awq_smoke.py
 
       - name: Check serving runtime matrix
         run: python scripts/check_serving_runtime_matrix.py
@@ -76,6 +80,7 @@ jobs:
 
           json_paths = [
               Path("config/eval_gate.json"),
+              Path("config/eval_gate.production.json"),
               Path("config/model_routing.gpu.json"),
               Path("config/model_routing.local.json"),
           ]
@@ -84,6 +89,7 @@ jobs:
               Path("charts/vllm-inference/values.yaml"),
               Path("charts/vllm-inference/values-staging.yaml"),
               Path("charts/vllm-inference/values-production.yaml"),
+              Path("charts/vllm-inference/values-canary.yaml"),
               *Path("config").glob("*.yaml"),
               *Path("docker").glob("*.yml"),
               *Path("k8s").glob("**/*.yml"),
@@ -114,6 +120,10 @@ jobs:
           helm template vllm-inference charts/vllm-inference \
             --namespace llm-inference \
             -f charts/vllm-inference/values-production.yaml > /tmp/vllm-rendered-production.yaml
+          helm template vllm-inference-canary charts/vllm-inference \
+            --namespace llm-inference \
+            -f charts/vllm-inference/values-production.yaml \
+            -f charts/vllm-inference/values-canary.yaml > /tmp/vllm-rendered-canary.yaml
           helm template vllm-inference charts/vllm-inference \
             --namespace llm-inference \
             --set hpa.enabled=false \
@@ -160,6 +170,16 @@ jobs:
               )
               assert gateway_config["data"]["CORS_ORIGINS"] != "*"
               assert gateway_config["data"]["ALLOWED_HOSTS"] != "*"
+              assert gateway_config["data"]["REDIS_SSL"] == "true"
+              kinds = {doc["kind"] for doc in load_render(rendered)}
+              assert "ExternalSecret" in kinds
+              assert "Certificate" in kinds
+
+          canary_docs = load_render("/tmp/vllm-rendered-canary.yaml")
+          canary_names = {(doc["kind"], doc["metadata"]["name"]) for doc in canary_docs}
+          assert ("Deployment", "vllm-server-canary") in canary_names
+          assert ("Service", "vllm-service-canary") in canary_names
+          assert ("Deployment", "api-gateway") not in canary_names
 
           print("helm-chart-render-ok")
           PY
@@ -313,6 +333,20 @@ jobs:
         run: |
           curl -fsS https://staging.llm-infra.example.com/health
           curl -fsS https://staging.llm-infra.example.com/ready
+          TOKEN=$(python scripts/auth_smoke.py \
+            --base-url https://staging.llm-infra.example.com \
+            --username "${{ secrets.STAGING_SMOKE_USERNAME }}" \
+            --password "${{ secrets.STAGING_SMOKE_PASSWORD }}")
+          python scripts/completion_smoke.py \
+            --base-url https://staging.llm-infra.example.com \
+            --token "$TOKEN" \
+            --model /workspace/models/awq/checkpoint-final
+          python scripts/deploy.py --action deploy --strategy canary --deploy-mode helm --dry-run \
+            --values charts/vllm-inference/values.yaml \
+            --values charts/vllm-inference/values-staging.yaml \
+            --canary-values charts/vllm-inference/values-canary.yaml \
+            --canary-percentage 10 >/tmp/staging-canary-plan.json
+          python scripts/deploy.py --action rollback --deploy-mode helm --dry-run
 
   # ==========================================================================
   # Deploy to Production
@@ -358,6 +392,14 @@ jobs:
         run: |
           curl -fsS https://llm-infra.example.com/health
           curl -fsS https://llm-infra.example.com/ready
+          TOKEN=$(python scripts/auth_smoke.py \
+            --base-url https://llm-infra.example.com \
+            --username "${{ secrets.PRODUCTION_SMOKE_USERNAME }}" \
+            --password "${{ secrets.PRODUCTION_SMOKE_PASSWORD }}")
+          python scripts/completion_smoke.py \
+            --base-url https://llm-infra.example.com \
+            --token "$TOKEN" \
+            --model /workspace/models/awq/checkpoint-final
       
       - name: Notify deployment
         uses: 8398a7/action-slack@v3

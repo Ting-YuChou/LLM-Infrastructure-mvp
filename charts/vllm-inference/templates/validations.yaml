@@ -7,6 +7,12 @@
 {{- if and .Values.gateway.enabled .Values.gateway.ingress.enabled (not .Values.gateway.ingress.hosts) -}}
 {{- fail "gateway.ingress.hosts must contain at least one host entry when gateway.ingress.enabled is true" -}}
 {{- end -}}
+{{- if and .Values.gateway.enabled .Values.gateway.ingress.enabled (eq (toString .Values.gateway.config.environment) "production") (not .Values.gateway.ingress.tls) -}}
+{{- fail "gateway.ingress.tls is required when production gateway ingress is enabled" -}}
+{{- end -}}
+{{- if and .Values.gateway.enabled .Values.gateway.auth.externalSecret.enabled (not .Values.gateway.auth.externalSecret.secretStoreRef.name) -}}
+{{- fail "gateway.auth.externalSecret.secretStoreRef.name is required when externalSecret is enabled" -}}
+{{- end -}}
 {{- if and .Values.gateway.enabled (eq (toString .Values.gateway.config.rateLimitEnabled) "true") (not .Values.redis.enabled) (not .Values.redis.externalHost) -}}
 {{- fail "redis.enabled or redis.externalHost is required when gateway rate limiting is enabled" -}}
 {{- end -}}
@@ -15,4 +21,7 @@
 {{- end -}}
 {{- if and .Values.gateway.enabled (eq (toString .Values.gateway.config.environment) "production") (eq (toString .Values.gateway.config.allowedHosts) "*") -}}
 {{- fail "gateway.config.allowedHosts cannot be '*' when gateway.config.environment is production" -}}
+{{- end -}}
+{{- if and .Values.trainingPipeline.enabled (not .Values.trainingPipeline.image.repository) -}}
+{{- fail "trainingPipeline.image.repository is required when trainingPipeline.enabled is true" -}}
 {{- end -}}

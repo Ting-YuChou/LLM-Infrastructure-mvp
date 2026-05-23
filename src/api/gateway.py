@@ -133,6 +133,8 @@ class GatewayConfig:
     REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
     REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
     REDIS_DB = int(os.getenv("REDIS_DB", 0))
+    REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
+    REDIS_SSL = _get_env_bool("REDIS_SSL", False)
     
     # Backend services
     VLLM_BACKEND_URL = os.getenv("VLLM_BACKEND_URL", "http://localhost:8000")
@@ -636,6 +638,8 @@ class APIGateway:
                 host=self.config.REDIS_HOST,
                 port=self.config.REDIS_PORT,
                 db=self.config.REDIS_DB,
+                password=self.config.REDIS_PASSWORD,
+                ssl=self.config.REDIS_SSL,
                 decode_responses=True
             )
             # Test connection

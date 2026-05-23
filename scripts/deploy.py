@@ -545,8 +545,10 @@ class DeploymentManager:
         chart: str,
         values_files: Optional[List[str]],
         canary_percentage: int = 10,
+        canary_release: str = "vllm-inference-canary",
+        canary_values_files: Optional[List[str]] = None,
     ) -> bool:
-        """Deploy a Helm canary by updating gateway routing weights."""
+        """Deploy a canary backend release, then shift gateway routing weights."""
         if deploy_mode != "helm":
             logger.error("Canary deployment is only supported with --deploy-mode helm")
             return False
@@ -557,6 +559,8 @@ class DeploymentManager:
         logger.info(f"Canary deployment ({canary_percentage}% traffic)")
         try:
             override = self.build_canary_values_override(values_files or [], canary_percentage)
+            canary_values = canary_values_files or [f"{chart}/values-canary.yaml"]
+            canary_plan = self.build_canary_release_plan(canary_values)
         except ValueError as exc:
             logger.error(str(exc))
             return False
@@ -566,11 +570,36 @@ class DeploymentManager:
                 "strategy": "canary",
                 "deploy_mode": "helm",
                 "release": release,
+                "canary_release": canary_release,
                 "chart": chart,
                 "canary_percentage": canary_percentage,
+                "canary_values_files": canary_values,
+                "canary_release_plan": canary_plan,
                 "routing_override": override,
             }, indent=2, sort_keys=True))
             return True
+
+        deployed_canary = self.deploy_helm_release(
+            canary_release,
+            chart,
+            values_files=[*(values_files or []), *canary_values],
+        )
+        if not deployed_canary:
+            return False
+
+        if not self.wait_for_rollout(canary_plan["deployment"]):
+            logger.error("Canary backend rollout failed, initiating Helm rollback...")
+            self.rollback_helm_release(canary_release)
+            return False
+        if not self.health_check(
+            canary_plan["service"],
+            path="/ready",
+            local_port=18081,
+            service_port=canary_plan["service_port"],
+        ):
+            logger.error("Canary backend health check failed, initiating Helm rollback...")
+            self.rollback_helm_release(canary_release)
+            return False
 
         with tempfile.NamedTemporaryFile("w", suffix="-canary-values.yaml", delete=False) as handle:
             yaml.safe_dump(override, handle, sort_keys=False)
@@ -588,10 +617,12 @@ class DeploymentManager:
         if not self.wait_for_rollouts(deployments):
             logger.error("Canary rollout failed, initiating Helm rollback...")
             self.rollback_helm_release(release)
+            self.rollback_helm_release(canary_release)
             return False
         if not self.health_check("api-gateway", path="/ready", local_port=18080, service_port=8080):
             logger.error("Canary health check failed, initiating Helm rollback...")
             self.rollback_helm_release(release)
+            self.rollback_helm_release(canary_release)
             return False
         logger.info("✓ Canary deployment successful")
         return True
@@ -634,6 +665,29 @@ class DeploymentManager:
             )
 
         return {"gateway": {"routing": {"routes": updated_routes}}}
+
+    def build_canary_release_plan(self, values_files: List[str]) -> Dict[str, object]:
+        """Return the expected resource names for the canary backend release."""
+        merged: Dict = {}
+        for values_file in values_files:
+            with open(values_file, "r") as handle:
+                merged = deep_merge(merged, yaml.safe_load(handle) or {})
+
+        resource_names = merged.get("resourceNames", {})
+        if not resource_names.get("deployment") or not resource_names.get("service"):
+            raise ValueError("Canary values must override resourceNames.deployment and service")
+        if merged.get("gateway", {}).get("enabled", True):
+            raise ValueError("Canary backend release values must set gateway.enabled=false")
+
+        service_port = (
+            merged.get("service", {}).get("port")
+            or 80
+        )
+        return {
+            "deployment": resource_names["deployment"],
+            "service": resource_names["service"],
+            "service_port": int(service_port),
+        }
 
 
 def main():
@@ -715,6 +769,18 @@ def main():
     )
 
     parser.add_argument(
+        "--canary-release",
+        default="vllm-inference-canary",
+        help="Helm release name for the canary backend"
+    )
+
+    parser.add_argument(
+        "--canary-values",
+        action="append",
+        help="Helm values file for the canary backend release"
+    )
+
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print planned deployment commands/overrides without mutating the cluster"
@@ -755,6 +821,8 @@ def main():
             chart=args.chart,
             values_files=values_files,
             canary_percentage=args.canary_percentage,
+            canary_release=args.canary_release,
+            canary_values_files=args.canary_values,
         )
     
     elif args.action == "rollback":

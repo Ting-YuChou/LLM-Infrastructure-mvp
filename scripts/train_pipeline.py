@@ -23,7 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--stages",
         default="all",
-        help="all or comma-separated stages: sft,reward,rlhf,eval,handoff",
+        help="all or comma-separated stages: sft,reward,rlhf,eval,promotion,manifest,awq,handoff",
     )
     parser.add_argument("--output-dir", help="Override pipeline output root")
     parser.add_argument("--baseline-metrics", help="Baseline metrics JSON for final delta gates")
@@ -31,6 +31,11 @@ def parse_args() -> argparse.Namespace:
         "--skip-promotion",
         action="store_true",
         help="Register final aligned model as pending without setting champion",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Reuse deterministic final checkpoints when they already exist",
     )
     parser.add_argument(
         "--dry-run",
@@ -48,6 +53,7 @@ def main() -> int:
         output_dir=args.output_dir,
         baseline_metrics=args.baseline_metrics,
         skip_promotion=args.skip_promotion,
+        resume=args.resume,
         dry_run=args.dry_run,
     )
     result = pipeline.run()
@@ -57,4 +63,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

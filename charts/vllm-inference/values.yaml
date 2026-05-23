@@ -27,6 +27,10 @@ resourceNames:
   redisDeployment: redis
   redisService: redis
   redisPdb: redis-pdb
+  gatewayExternalSecret: gateway-auth-external-secret
+  gatewayCertificate: api-gateway-certificate
+  trainingJob: training-pipeline
+  trainingOutputPvc: training-output-pvc
 
 selectorLabels:
   app: vllm
@@ -220,6 +224,20 @@ gateway:
     existingSecret: gateway-auth
     jwtSecretKey: JWT_SECRET
     authUsersKey: AUTH_USERS
+    externalSecret:
+      enabled: false
+      refreshInterval: 1h
+      secretStoreRef:
+        name: production-secrets
+        kind: ClusterSecretStore
+      remoteRefs:
+        jwtSecret:
+          key: llm-infra/gateway
+          property: jwtSecret
+        authUsers:
+          key: llm-infra/gateway
+          property: authUsers
+        redisPassword: {}
   config:
     environment: production
     rateLimitEnabled: "true"
@@ -233,6 +251,7 @@ gateway:
     defaultCompletionModel: /workspace/models/awq/checkpoint-final
     vllmBackendUrl: http://vllm-service:80
     modelRoutingConfig: /workspace/config/model_routing.k8s.json
+    redisSsl: "false"
   routing:
     defaultModel: /workspace/models/awq/checkpoint-final
     allowPassthrough: false
@@ -260,6 +279,11 @@ gateway:
     enabled: false
     className: ""
     annotations: {}
+    certManager:
+      enabled: false
+      issuerRef:
+        name: letsencrypt-prod
+        kind: ClusterIssuer
     hosts:
       - host: ""
         paths:
@@ -329,6 +353,11 @@ gateway:
 redis:
   enabled: true
   externalHost: ""
+  tls:
+    enabled: false
+  auth:
+    existingSecret: ""
+    passwordKey: REDIS_PASSWORD
   image:
     repository: redis
     tag: 7-alpine
@@ -348,6 +377,46 @@ redis:
   pdb:
     enabled: true
     minAvailable: 1
+
+trainingPipeline:
+  enabled: false
+  image:
+    repository: llm-training
+    tag: latest
+    pullPolicy: IfNotPresent
+  configPath: /workspace/config/training_pipeline.yaml
+  stages: all
+  outputDir: /workspace/outputs/training_pipeline
+  resume: true
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  restartPolicy: Never
+  existingSecret: training-pipeline-secrets
+  env:
+    MLFLOW_TRACKING_URI: http://mlflow-server:5000
+    ARTIFACT_STORAGE_URI: s3://llm-training-artifacts
+    DATASET_VERSION: local-dev
+  resources:
+    requests:
+      memory: 32Gi
+      cpu: "8"
+      nvidia.com/gpu: "1"
+    limits:
+      memory: 64Gi
+      cpu: "16"
+      nvidia.com/gpu: "1"
+  outputPersistence:
+    enabled: true
+    existingClaim: ""
+    mountPath: /workspace/outputs
+    accessModes:
+      - ReadWriteOnce
+    size: 200Gi
+    storageClassName: fast-ssd
+  modelPersistence:
+    enabled: true
+    existingClaim: ""
+    mountPath: /workspace/models
 
 hpa:
   enabled: true

@@ -48,6 +48,13 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.gateway.auth.existingSecret }}
                   key: {{ .Values.gateway.auth.authUsersKey }}
+{{- if .Values.redis.auth.existingSecret }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.redis.auth.existingSecret }}
+                  key: {{ .Values.redis.auth.passwordKey }}
+{{- end }}
 {{- with .Values.gateway.extraEnv }}
 {{ toYaml . | nindent 12 }}
 {{- end }}

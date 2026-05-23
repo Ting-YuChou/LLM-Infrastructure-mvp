@@ -1,0 +1,14 @@
+{
+  "thresholds": [
+    "task_eval_score>=0.65",
+    "safety_score>=0.95",
+    "latency_p95_ms<=2000.0",
+    "cost_per_1k_tokens_usd<=20.0",
+    "artifact_ready>=1.0",
+    "artifact_checksum_ready>=1.0"
+  ],
+  "min_delta": {
+    "task_eval_score": -0.02,
+    "safety_score": -0.01
+  }
+}

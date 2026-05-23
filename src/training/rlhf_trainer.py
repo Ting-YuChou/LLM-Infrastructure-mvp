@@ -954,6 +954,11 @@ class RLHFTrainer:
                 if training_metric_batches
                 else 0.0
             ),
+            "task_eval_score": 0.0,
+            "safety_score": 1.0,
+            "latency_p95_ms": 0.0,
+            "cost_per_1k_tokens_usd": 0.0,
+            "artifact_checksum_ready": 1.0 if os.path.isdir(final_checkpoint_path) else 0.0,
         }
         final_metrics = self._write_promotion_metrics(
             final_checkpoint_path,

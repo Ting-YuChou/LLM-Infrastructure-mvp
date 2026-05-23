@@ -162,11 +162,13 @@ python scripts/train_pipeline.py \
 ```
 
 The aggregated entrypoint runs the fixed stage order:
-`sft -> reward -> rlhf -> training_eval -> mlflow_promotion -> serving_handoff`.
+`sft -> reward -> rlhf -> training_eval -> mlflow_promotion -> artifact_manifest -> awq_handoff -> serving_handoff`.
 It injects the SFT final checkpoint into reward/RLHF policy inputs, injects the
 reward final checkpoint into RLHF, writes promotion metrics to
-`outputs/training_pipeline/eval/training_candidate.json`, and emits the serving
-handoff manifest at `outputs/training_pipeline/serving_handoff.json`.
+`outputs/training_pipeline/eval/training_candidate.json`, emits
+`model_artifact_manifest.json` with checkpoint checksums, dataset fingerprints,
+git SHA, MLflow lineage, and model-card metadata, and writes AWQ/serving
+handoff manifests for deployment automation.
 
 Useful options:
 
@@ -175,11 +177,13 @@ python scripts/train_pipeline.py --config config/training_pipeline.yaml --dry-ru
 python scripts/train_pipeline.py --config config/training_pipeline.yaml --output-dir ./outputs/run-001
 python scripts/train_pipeline.py --config config/training_pipeline.yaml --baseline-metrics ./outputs/baseline.json
 python scripts/train_pipeline.py --config config/training_pipeline.yaml --skip-promotion
+python scripts/train_pipeline.py --config config/training_pipeline.yaml --resume
 ```
 
-This pipeline does not create AWQ weights. The handoff manifest records the
-final aligned checkpoint, expected AWQ target path, validation status, and the
-serving/Kubernetes update hints for a later AWQ conversion step.
+This pipeline still does not install a heavy AWQ converter by default. The AWQ
+handoff contract validates the source checkpoint, expected target path, and
+optional conversion command so a GPU conversion job can be run and audited
+without confusing bitsandbytes INT4 output for vLLM-supported AWQ weights.
 
 ### 1. Supervised Fine-Tuning (SFT)
 
@@ -337,6 +341,36 @@ kubectl apply -f k8s/monitoring/dcgm-exporter.yaml
 
 The Helm chart renders the vLLM backend, API gateway, Redis, routing ConfigMap, parameterized Ingress, NetworkPolicies, PDBs, HPAs, and ServiceMonitors. The vLLM Service is `ClusterIP` and should not be exposed directly; the gateway is the serving entrypoint. Both gateway and vLLM expose `/metrics` on their main HTTP ports. vLLM HPA uses queue depth first (`llm_request_queue_size`), GPU saturation second (`llm_gpu_utilization_percent`), and CPU/memory as backup signals.
 
+Production values assume External Secrets, cert-manager TLS, and managed Redis:
+`values-production.yaml` renders an `ExternalSecret` for `gateway-auth`, a
+cert-manager `Certificate`, TLS ingress, and Redis connection settings for an
+external Redis endpoint. For local/dev clusters, keep the defaults and create
+`gateway-auth` manually.
+
+Canary serving uses a separate backend release and gateway routing weights:
+
+```bash
+helm upgrade --install vllm-inference-canary charts/vllm-inference \
+  --namespace llm-inference \
+  -f charts/vllm-inference/values-production.yaml \
+  -f charts/vllm-inference/values-canary.yaml \
+  --atomic --wait
+
+python scripts/deploy.py --action deploy --strategy canary --deploy-mode helm \
+  --values charts/vllm-inference/values.yaml \
+  --values charts/vllm-inference/values-production.yaml \
+  --canary-values charts/vllm-inference/values-canary.yaml \
+  --canary-percentage 10
+```
+
+The chart also includes a disabled-by-default `trainingPipeline` Kubernetes Job
+spec. Enable it only with a training image that contains this repo, training
+dependencies, MLflow credentials, dataset/object-store access, and GPU capacity.
+Build the reference image after the base image with
+`docker build -f docker/Dockerfile.training --build-arg BASE_IMAGE=llm-base:latest -t llm-training:latest .`.
+After an AWQ checkpoint is available, run `scripts/vllm_awq_smoke.py` against a
+GPU-backed staging endpoint before promoting traffic.
+
 KEDA autoscaling is available through chart values. Do not enable HPA and KEDA together because both manage the same Deployment:
 
 ```bash
@@ -413,8 +447,8 @@ The API gateway also provides production-serving controls:
 Priority order for production platform hardening:
 
 1. Registry-driven routing: configure logical model names in `config/model_routing.local.json` or `config/model_routing.gpu.json` for Compose, or `gateway.routing` values in Helm for Kubernetes. Each logical model can route to weighted `stable` and `canary` targets with separate backend URLs and physical model IDs.
-2. Canary and rollback: raise the canary target `weight` to shift deterministic per-user traffic; set it back to `0` for immediate rollback without changing client-facing model names.
-3. Eval gate: block promotion unless candidate metrics pass absolute thresholds and baseline regression guards.
+2. Canary and rollback: deploy `vllm-inference-canary` with `values-canary.yaml`, then shift deterministic per-user traffic through gateway weights. Helm `--atomic --wait` and `helm rollback` are the rollback path.
+3. Eval gate: `config/eval_gate.training.json` protects training handoff metrics; `config/eval_gate.production.json` adds task, safety, latency, cost, checksum, and baseline regression requirements for real promotion.
 4. Alerting: Prometheus loads `docker/alerts.yml` locally and `k8s/monitoring/alerts.yml` in Kubernetes-style deployments.
 5. Autoscaling: Helm values can switch between the default HPA and optional KEDA queue/GPU/active-request based scaling.
 
