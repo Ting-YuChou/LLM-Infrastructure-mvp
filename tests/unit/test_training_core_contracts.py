@@ -181,4 +181,3 @@ def test_rlhf_compute_reward_uses_sequence_classifier_logits_and_attention_mask(
     assert rewards.tolist() == [3.0]
     assert reward_model.last_input_ids.tolist() == [[5, 6, 0, 7, 0]]
     assert reward_model.last_attention_mask.tolist() == [[1, 1, 0, 1, 0]]
-
