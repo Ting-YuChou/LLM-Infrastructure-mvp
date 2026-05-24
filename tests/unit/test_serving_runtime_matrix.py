@@ -35,6 +35,7 @@ def test_serving_runtime_matrix_detects_version_drift(tmp_path):
                 "fastapi==0.136.1",
                 "uvicorn[standard]==0.46.0",
                 "pydantic==2.13.3",
+                "httpx==0.28.1",
                 "vllm==0.19.1",
             ]
         ),

@@ -22,6 +22,7 @@ REQUIRED_PACKAGES = (
     "fastapi",
     "uvicorn",
     "pydantic",
+    "httpx",
     "vllm",
 )
 

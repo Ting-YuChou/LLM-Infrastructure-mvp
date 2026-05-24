@@ -76,7 +76,7 @@ tqdm==4.66.3
 click==8.1.7
 python-dotenv==1.2.2
 requests==2.33.0
-httpx==0.26.0
+httpx==0.28.1
 
 # ============================================================================
 # Testing & Quality Assurance
