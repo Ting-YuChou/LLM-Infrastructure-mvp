@@ -1,17 +1,22 @@
-transformers==4.36.0
-tokenizers==0.15.0
-accelerate==0.25.0
+# Serving runtime dependency subset. Keep versions aligned with requirements.txt.
+--index-url https://download.pytorch.org/whl/cu129
+--extra-index-url https://pypi.org/simple
+
+torch==2.10.0
+torchvision==0.25.0
+torchaudio==2.10.0
+transformers==4.57.6
+tokenizers==0.22.2
+accelerate==1.13.0
 sentencepiece==0.2.1
 protobuf==5.29.6
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-# vLLM 0.2.7 pins Pydantic 1.10.13. Keep this serving image
-# isolated from the gateway image, which uses Pydantic 2.
-pydantic==1.10.13
+fastapi[standard]==0.136.1
+uvicorn[standard]==0.46.0
+pydantic==2.13.3
 pyyaml==6.0.1
-httpx==0.26.0
-safetensors==0.4.1
+httpx==0.28.1
+safetensors==0.7.0
 ninja==1.11.1.1
-vllm==0.2.7
+vllm==0.19.1
 prometheus-client==0.19.0
 nvidia-ml-py==12.535.133

@@ -10,6 +10,7 @@ import time
 import subprocess
 import argparse
 import logging
+import tempfile
 from typing import List, Dict, Optional
 from datetime import datetime
 import yaml
@@ -29,8 +30,8 @@ class DeploymentManager:
     
     Features:
     - Pre-deployment validation
-    - Blue-green deployment
-    - Canary deployment
+    - Rolling deployment
+    - Helm routing-weight canary deployment
     - Health checks
     - Automatic rollback
     - Deployment history tracking
@@ -39,7 +40,8 @@ class DeploymentManager:
     def __init__(
         self,
         namespace: str = "llm-inference",
-        kubeconfig: Optional[str] = None
+        kubeconfig: Optional[str] = None,
+        dry_run: bool = False,
     ):
         """
         Initialize deployment manager
@@ -50,6 +52,8 @@ class DeploymentManager:
         """
         self.namespace = namespace
         self.kubeconfig = kubeconfig
+        self.dry_run = dry_run
+        self.commands_executed: List[List[str]] = []
         
         # Set kubeconfig if provided
         if kubeconfig:
@@ -75,6 +79,11 @@ class DeploymentManager:
             Completed process
         """
         logger.debug(f"Running: {' '.join(cmd)}")
+        self.commands_executed.append(cmd)
+
+        if self.dry_run:
+            logger.info("[dry-run] %s", " ".join(cmd))
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
         
         result = subprocess.run(
             cmd,
@@ -212,7 +221,8 @@ class DeploymentManager:
         self,
         release: str,
         chart: str,
-        values_files: Optional[List[str]] = None
+        values_files: Optional[List[str]] = None,
+        set_values: Optional[Dict[str, str]] = None,
     ) -> bool:
         """
         Deploy the vLLM inference stack with Helm.
@@ -231,10 +241,14 @@ class DeploymentManager:
             "helm", "upgrade", "--install", release, chart,
             "--namespace", self.namespace,
             "--create-namespace",
+            "--atomic",
+            "--wait",
         ]
 
         for values_file in values_files or []:
             cmd.extend(["-f", values_file])
+        for key, value in (set_values or {}).items():
+            cmd.extend(["--set-string", f"{key}={value}"])
 
         try:
             self.run_command(cmd)
@@ -297,6 +311,9 @@ class DeploymentManager:
             True if healthy
         """
         logger.info(f"Health check: {service}{path}")
+        if self.dry_run:
+            logger.info("[dry-run] health check skipped")
+            return True
         
         # Port forward to service
         port_forward_proc = subprocess.Popen([
@@ -448,7 +465,13 @@ class DeploymentManager:
         elif strategy == "blue-green":
             return self._deploy_blue_green(manifest_dir)
         elif strategy == "canary":
-            return self._deploy_canary(manifest_dir, **kwargs)
+            return self._deploy_canary(
+                deploy_mode=deploy_mode,
+                release=release,
+                chart=chart,
+                values_files=values_files,
+                **kwargs,
+            )
         else:
             logger.error(f"Unknown strategy: {strategy}")
             return False
@@ -477,8 +500,7 @@ class DeploymentManager:
         deployments = ["vllm-server", "api-gateway"]
         if not self.wait_for_rollouts(deployments):
             logger.error("Rollout failed, initiating rollback...")
-            for deployment in deployments:
-                self.rollback_deployment(deployment)
+            self._rollback_for_mode(deploy_mode, release, deployments)
             return False
         
         # Health check the public serving entrypoint.
@@ -489,27 +511,183 @@ class DeploymentManager:
             service_port=8080,
         ):
             logger.error("Health check failed, initiating rollback...")
-            for deployment in deployments:
-                self.rollback_deployment(deployment)
+            self._rollback_for_mode(deploy_mode, release, deployments)
             return False
         
         logger.info("✓ Rolling deployment successful")
         return True
     
+    def _rollback_for_mode(
+        self,
+        deploy_mode: str,
+        release: str,
+        deployments: List[str],
+    ) -> None:
+        """Roll back with the same backend used for deployment."""
+        if deploy_mode == "helm":
+            self.rollback_helm_release(release)
+            return
+        for deployment in deployments:
+            self.rollback_deployment(deployment)
+
     def _deploy_blue_green(self, manifest_dir: str) -> bool:
         """Blue-green deployment"""
-        logger.info("Blue-green deployment not yet implemented")
+        logger.error(
+            "Blue-green deployment is not supported. Use --strategy rolling or "
+            "--strategy canary with --deploy-mode helm."
+        )
         return False
     
     def _deploy_canary(
         self,
-        manifest_dir: str,
-        canary_percentage: int = 10
+        deploy_mode: str,
+        release: str,
+        chart: str,
+        values_files: Optional[List[str]],
+        canary_percentage: int = 10,
+        canary_release: str = "vllm-inference-canary",
+        canary_values_files: Optional[List[str]] = None,
     ) -> bool:
-        """Canary deployment"""
+        """Deploy a canary backend release, then shift gateway routing weights."""
+        if deploy_mode != "helm":
+            logger.error("Canary deployment is only supported with --deploy-mode helm")
+            return False
+        if canary_percentage < 0 or canary_percentage > 100:
+            logger.error("Canary percentage must be between 0 and 100")
+            return False
+
         logger.info(f"Canary deployment ({canary_percentage}% traffic)")
-        logger.info("Canary deployment not yet implemented")
-        return False
+        try:
+            override = self.build_canary_values_override(values_files or [], canary_percentage)
+            canary_values = canary_values_files or [f"{chart}/values-canary.yaml"]
+            canary_plan = self.build_canary_release_plan(canary_values)
+        except ValueError as exc:
+            logger.error(str(exc))
+            return False
+
+        if self.dry_run:
+            print(json.dumps({
+                "strategy": "canary",
+                "deploy_mode": "helm",
+                "release": release,
+                "canary_release": canary_release,
+                "chart": chart,
+                "canary_percentage": canary_percentage,
+                "canary_values_files": canary_values,
+                "canary_release_plan": canary_plan,
+                "routing_override": override,
+            }, indent=2, sort_keys=True))
+            return True
+
+        deployed_canary = self.deploy_helm_release(
+            canary_release,
+            chart,
+            values_files=[*(values_files or []), *canary_values],
+        )
+        if not deployed_canary:
+            return False
+
+        if not self.wait_for_rollout(canary_plan["deployment"]):
+            logger.error("Canary backend rollout failed, initiating Helm rollback...")
+            self.rollback_helm_release(canary_release)
+            return False
+        if not self.health_check(
+            canary_plan["service"],
+            path="/ready",
+            local_port=18081,
+            service_port=canary_plan["service_port"],
+        ):
+            logger.error("Canary backend health check failed, initiating Helm rollback...")
+            self.rollback_helm_release(canary_release)
+            return False
+
+        with tempfile.NamedTemporaryFile("w", suffix="-canary-values.yaml", delete=False) as handle:
+            yaml.safe_dump(override, handle, sort_keys=False)
+            override_path = handle.name
+
+        deployed = self.deploy_helm_release(
+            release,
+            chart,
+            values_files=[*(values_files or []), override_path],
+        )
+        if not deployed:
+            return False
+
+        deployments = ["vllm-server", "api-gateway"]
+        if not self.wait_for_rollouts(deployments):
+            logger.error("Canary rollout failed, initiating Helm rollback...")
+            self.rollback_helm_release(release)
+            self.rollback_helm_release(canary_release)
+            return False
+        if not self.health_check("api-gateway", path="/ready", local_port=18080, service_port=8080):
+            logger.error("Canary health check failed, initiating Helm rollback...")
+            self.rollback_helm_release(release)
+            self.rollback_helm_release(canary_release)
+            return False
+        logger.info("✓ Canary deployment successful")
+        return True
+
+    def build_canary_values_override(
+        self,
+        values_files: List[str],
+        canary_percentage: int,
+    ) -> Dict:
+        """Build a Helm values override that adjusts stable/canary route weights."""
+        merged: Dict = {}
+        for values_file in values_files:
+            with open(values_file, "r") as handle:
+                merged = deep_merge(merged, yaml.safe_load(handle) or {})
+
+        routes = (
+            merged.get("gateway", {})
+            .get("routing", {})
+            .get("routes", {})
+        )
+        if not routes:
+            raise ValueError("Canary deployment requires gateway.routing.routes in Helm values")
+
+        updated_routes = json.loads(json.dumps(routes))
+        found_canary = False
+        for route in updated_routes.values():
+            targets = route.get("targets") or []
+            stable_target = next((target for target in targets if target.get("name") == "stable"), None)
+            canary_target = next((target for target in targets if target.get("name") == "canary"), None)
+            if not stable_target or not canary_target:
+                continue
+            stable_target["weight"] = 100 - canary_percentage
+            canary_target["weight"] = canary_percentage
+            found_canary = True
+
+        if not found_canary:
+            raise ValueError(
+                "Canary deployment requires each canary route to define targets named "
+                "'stable' and 'canary'"
+            )
+
+        return {"gateway": {"routing": {"routes": updated_routes}}}
+
+    def build_canary_release_plan(self, values_files: List[str]) -> Dict[str, object]:
+        """Return the expected resource names for the canary backend release."""
+        merged: Dict = {}
+        for values_file in values_files:
+            with open(values_file, "r") as handle:
+                merged = deep_merge(merged, yaml.safe_load(handle) or {})
+
+        resource_names = merged.get("resourceNames", {})
+        if not resource_names.get("deployment") or not resource_names.get("service"):
+            raise ValueError("Canary values must override resourceNames.deployment and service")
+        if merged.get("gateway", {}).get("enabled", True):
+            raise ValueError("Canary backend release values must set gateway.enabled=false")
+
+        service_port = (
+            merged.get("service", {}).get("port")
+            or 80
+        )
+        return {
+            "deployment": resource_names["deployment"],
+            "service": resource_names["service"],
+            "service_port": int(service_port),
+        }
 
 
 def main():
@@ -582,13 +760,39 @@ def main():
         default="k8s/deployments",
         help="Path to raw Kubernetes manifest file or directory"
     )
+
+    parser.add_argument(
+        "--canary-percentage",
+        type=int,
+        default=10,
+        help="Canary traffic percentage for --strategy canary"
+    )
+
+    parser.add_argument(
+        "--canary-release",
+        default="vllm-inference-canary",
+        help="Helm release name for the canary backend"
+    )
+
+    parser.add_argument(
+        "--canary-values",
+        action="append",
+        help="Helm values file for the canary backend release"
+    )
+
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print planned deployment commands/overrides without mutating the cluster"
+    )
     
     args = parser.parse_args()
     
     # Initialize deployment manager
     manager = DeploymentManager(
         namespace=args.namespace,
-        kubeconfig=args.kubeconfig
+        kubeconfig=args.kubeconfig,
+        dry_run=args.dry_run,
     )
     
     # Execute action
@@ -616,6 +820,9 @@ def main():
             release=args.release,
             chart=args.chart,
             values_files=values_files,
+            canary_percentage=args.canary_percentage,
+            canary_release=args.canary_release,
+            canary_values_files=args.canary_values,
         )
     
     elif args.action == "rollback":
@@ -631,6 +838,16 @@ def main():
     else:
         logger.error("✗ Action failed")
         sys.exit(1)
+
+def deep_merge(base: Dict, override: Dict) -> Dict:
+    """Recursively merge two dictionaries without mutating inputs."""
+    merged = json.loads(json.dumps(base))
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
 
 
 if __name__ == "__main__":

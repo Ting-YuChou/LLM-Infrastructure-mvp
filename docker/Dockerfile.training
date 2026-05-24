@@ -1,0 +1,17 @@
+ARG BASE_IMAGE=llm-base:latest
+FROM ${BASE_IMAGE}
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/workspace:/workspace/src
+
+WORKDIR /workspace
+
+COPY src /workspace/src
+COPY scripts /workspace/scripts
+COPY config /workspace/config
+COPY requirements.txt /workspace/requirements.txt
+
+RUN mkdir -p /workspace/data /workspace/models /workspace/outputs
+
+CMD ["python", "/workspace/scripts/train_pipeline.py", "--config", "/workspace/config/training_pipeline.yaml", "--stages", "all"]

@@ -1,0 +1,89 @@
+{{- if .Values.trainingPipeline.enabled }}
+{{- if and .Values.trainingPipeline.outputPersistence.enabled (not .Values.trainingPipeline.outputPersistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.resourceNames.trainingOutputPvc }}
+  namespace: {{ include "vllm-inference.namespace" . }}
+  labels:
+{{ include "vllm-inference.commonLabels" . | nindent 4 }}
+    app.kubernetes.io/component: training-pipeline
+spec:
+  accessModes:
+{{ toYaml .Values.trainingPipeline.outputPersistence.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.trainingPipeline.outputPersistence.size }}
+{{- if .Values.trainingPipeline.outputPersistence.storageClassName }}
+  storageClassName: {{ .Values.trainingPipeline.outputPersistence.storageClassName }}
+{{- end }}
+---
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.resourceNames.trainingJob }}
+  namespace: {{ include "vllm-inference.namespace" . }}
+  labels:
+{{ include "vllm-inference.commonLabels" . | nindent 4 }}
+    app.kubernetes.io/component: training-pipeline
+spec:
+  backoffLimit: {{ .Values.trainingPipeline.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.trainingPipeline.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: training-pipeline
+        app: {{ .Values.resourceNames.trainingJob }}
+    spec:
+      restartPolicy: {{ .Values.trainingPipeline.restartPolicy }}
+      containers:
+        - name: train-pipeline
+          image: {{ .Values.trainingPipeline.image.repository }}:{{ .Values.trainingPipeline.image.tag }}
+          imagePullPolicy: {{ .Values.trainingPipeline.image.pullPolicy }}
+          command:
+            - python
+            - /workspace/scripts/train_pipeline.py
+          args:
+            - --config
+            - {{ .Values.trainingPipeline.configPath | quote }}
+            - --stages
+            - {{ .Values.trainingPipeline.stages | quote }}
+            - --output-dir
+            - {{ .Values.trainingPipeline.outputDir | quote }}
+{{- if .Values.trainingPipeline.resume }}
+            - --resume
+{{- end }}
+          env:
+{{- range $name, $value := .Values.trainingPipeline.env }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+{{- end }}
+{{- if .Values.trainingPipeline.existingSecret }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.trainingPipeline.existingSecret }}
+{{- end }}
+          resources:
+{{ toYaml .Values.trainingPipeline.resources | nindent 12 }}
+          volumeMounts:
+{{- if .Values.trainingPipeline.outputPersistence.enabled }}
+            - name: training-outputs
+              mountPath: {{ .Values.trainingPipeline.outputPersistence.mountPath }}
+{{- end }}
+{{- if .Values.trainingPipeline.modelPersistence.enabled }}
+            - name: model-cache
+              mountPath: {{ .Values.trainingPipeline.modelPersistence.mountPath }}
+{{- end }}
+      volumes:
+{{- if .Values.trainingPipeline.outputPersistence.enabled }}
+        - name: training-outputs
+          persistentVolumeClaim:
+            claimName: {{ default .Values.resourceNames.trainingOutputPvc .Values.trainingPipeline.outputPersistence.existingClaim }}
+{{- end }}
+{{- if .Values.trainingPipeline.modelPersistence.enabled }}
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: {{ default .Values.resourceNames.pvc .Values.trainingPipeline.modelPersistence.existingClaim }}
+{{- end }}
+{{- end }}

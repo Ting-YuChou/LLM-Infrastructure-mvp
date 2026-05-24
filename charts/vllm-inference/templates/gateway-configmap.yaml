@@ -7,6 +7,7 @@ metadata:
   labels:
 {{ include "vllm-inference.gatewayLabels" . | nindent 4 }}
 data:
+  ENVIRONMENT: {{ .Values.gateway.config.environment | quote }}
   RATE_LIMIT_ENABLED: {{ .Values.gateway.config.rateLimitEnabled | quote }}
   RATE_LIMIT_REQUESTS_PER_MINUTE: {{ .Values.gateway.config.requestsPerMinute | quote }}
   RATE_LIMIT_REQUESTS_PER_HOUR: {{ .Values.gateway.config.requestsPerHour | quote }}
@@ -14,6 +15,7 @@ data:
   RATE_LIMIT_TOKENS_PER_HOUR: {{ .Values.gateway.config.tokensPerHour | quote }}
   REDIS_HOST: {{ include "vllm-inference.redisHost" . | quote }}
   REDIS_PORT: {{ .Values.redis.service.port | quote }}
+  REDIS_SSL: {{ .Values.gateway.config.redisSsl | quote }}
   VLLM_BACKEND_URL: {{ .Values.gateway.config.vllmBackendUrl | quote }}
   DEFAULT_COMPLETION_MODEL: {{ .Values.gateway.config.defaultCompletionModel | quote }}
   MODEL_ROUTING_CONFIG: {{ .Values.gateway.config.modelRoutingConfig | quote }}

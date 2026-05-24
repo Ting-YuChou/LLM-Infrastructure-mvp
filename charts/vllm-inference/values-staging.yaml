@@ -1,0 +1,58 @@
+image:
+  tag: staging
+
+baseImage:
+  tag: staging
+
+gateway:
+  image:
+    tag: staging
+  auth:
+    externalSecret:
+      enabled: true
+      secretStoreRef:
+        name: staging-secrets
+        kind: ClusterSecretStore
+      remoteRefs:
+        jwtSecret:
+          key: llm-infra/staging/gateway
+          property: jwtSecret
+        authUsers:
+          key: llm-infra/staging/gateway
+          property: authUsers
+        redisPassword:
+          key: llm-infra/staging/redis
+          property: password
+  config:
+    environment: production
+    corsOrigins: "https://staging.llm-infra.example.com"
+    allowedHosts: "staging.llm-infra.example.com"
+    redisSsl: "true"
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-staging
+    certManager:
+      enabled: true
+      issuerRef:
+        name: letsencrypt-staging
+        kind: ClusterIssuer
+    hosts:
+      - host: staging.llm-infra.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: staging-llm-infra-tls
+        hosts:
+          - staging.llm-infra.example.com
+
+redis:
+  enabled: false
+  externalHost: redis-staging.llm-infra.example.com
+  tls:
+    enabled: true
+  auth:
+    existingSecret: gateway-auth
+    passwordKey: REDIS_PASSWORD

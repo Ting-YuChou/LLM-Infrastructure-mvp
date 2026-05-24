@@ -1,0 +1,44 @@
+# Aggregated training pipeline configuration.
+# Entrypoint:
+#   python scripts/train_pipeline.py --config config/training_pipeline.yaml --stages all
+
+output_dir: "outputs/training_pipeline"
+
+stages:
+  sft:
+    config: "config/sft_config.yaml"
+    output_dir: "outputs/training_pipeline/models/sft"
+    use_lora: false
+
+  reward:
+    config: "config/reward_config.yaml"
+    output_dir: "outputs/training_pipeline/models/reward"
+
+  rlhf:
+    config: "config/rlhf_config.yaml"
+    output_dir: "outputs/training_pipeline/models/aligned"
+    prompts_file: "/workspace/data/prompts/rl_prompts.json"
+
+promotion:
+  metrics_path: "outputs/training_pipeline/eval/training_candidate.json"
+  gate_config: "config/eval_gate.training.json"
+
+artifact:
+  manifest_path: "outputs/training_pipeline/model_artifact_manifest.json"
+  dataset_version: "local-dev"
+  storage_uri: ""
+  intended_use: "instruction-following text generation"
+  limitations: "Run production eval_gate.production.json and AWQ load smoke before serving traffic."
+
+awq:
+  handoff_path: "outputs/training_pipeline/awq_handoff.json"
+  conversion_command: ""
+
+serving:
+  handoff_path: "outputs/training_pipeline/serving_handoff.json"
+  expected_awq_path: "/workspace/models/awq/checkpoint-final"
+  quantization: "awq"
+  dtype: "float16"
+  config_file: "config/serving_config.yaml"
+  docker_compose_service: "vllm-server"
+  kubernetes_manifest: "k8s/deployments/vllm-deployment.yaml"

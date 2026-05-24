@@ -96,6 +96,7 @@ RUN pip install --no-cache-dir \
     tensorboard==2.15.1 \
     wandb==0.16.1 \
     mlflow==3.11.1 \
+    peft==0.15.2 \
     tqdm==4.66.3 \
     pyyaml==6.0.1
 

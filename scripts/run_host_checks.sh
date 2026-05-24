@@ -6,6 +6,8 @@ VENV_DIR="${ROOT_DIR}/.venv-host-check"
 BOOTSTRAP_MARKER="${VENV_DIR}/.bootstrap-complete"
 VENV_CREATED=0
 
+cd "${ROOT_DIR}"
+
 pick_python() {
   if command -v python3.10 >/dev/null 2>&1; then
     echo "python3.10"
@@ -43,27 +45,59 @@ if [ "${VENV_CREATED}" -eq 1 ] || [ ! -f "${BOOTSTRAP_MARKER}" ] || [ "${FORCE_B
 fi
 
 echo
-echo "[1/4] gateway import smoke"
+echo "[1/6] gateway import smoke"
 PYTHONPATH="${ROOT_DIR}/src" "${VENV_DIR}/bin/python" -c \
   "import api.gateway as g; print('gateway-import-ok')"
 
 echo
-echo "[2/4] load test import smoke"
+echo "[2/6] pipeline/load test import smoke"
 PYTHONPATH="${ROOT_DIR}" "${VENV_DIR}/bin/python" -c \
-  "import scripts.load_test as lt; import scripts.compose_smoke_test as st; import scripts.eval_gate as eg; print('load-smoke-eval-import-ok')"
+  "import scripts.load_test as lt; import scripts.compose_smoke_test as st; import scripts.eval_gate as eg; import scripts.train_pipeline as tp; import scripts.awq_handoff as awq; print('load-smoke-eval-pipeline-import-ok')"
 
 echo
-echo "[3/4] gateway route smoke"
+echo "[3/6] runtime and training pipeline dry-run"
+PYTHONPATH="${ROOT_DIR}" "${VENV_DIR}/bin/python" \
+  "${ROOT_DIR}/scripts/check_serving_runtime_matrix.py"
+PYTHONPATH="${ROOT_DIR}/src:${ROOT_DIR}" "${VENV_DIR}/bin/python" \
+  "${ROOT_DIR}/scripts/train_pipeline.py" \
+  --config "${ROOT_DIR}/config/training_pipeline.yaml" \
+  --dry-run >/dev/null
+echo "training-pipeline-dry-run-ok"
+
+echo
+echo "[4/6] helm template smoke"
+if command -v helm >/dev/null 2>&1; then
+  helm template vllm-inference "${ROOT_DIR}/charts/vllm-inference" \
+    --namespace llm-inference \
+    -f "${ROOT_DIR}/charts/vllm-inference/values-staging.yaml" >/dev/null
+  helm template vllm-inference "${ROOT_DIR}/charts/vllm-inference" \
+    --namespace llm-inference \
+    -f "${ROOT_DIR}/charts/vllm-inference/values-production.yaml" >/dev/null
+  helm template vllm-inference-canary "${ROOT_DIR}/charts/vllm-inference" \
+    --namespace llm-inference \
+    -f "${ROOT_DIR}/charts/vllm-inference/values-production.yaml" \
+    -f "${ROOT_DIR}/charts/vllm-inference/values-canary.yaml" >/dev/null
+  echo "helm-template-ok"
+else
+  echo "helm-template-skip: helm not installed"
+fi
+
+echo
+echo "[5/6] gateway route smoke"
 JWT_SECRET=host-check-secret AUTH_USERS=local:local PYTHONPATH="${ROOT_DIR}/src" "${VENV_DIR}/bin/python" -c \
   "from api.gateway import APIGateway; app = APIGateway().app; print(sorted(route.path for route in app.routes if route.path in {'/health', '/metrics', '/auth/token', '/v1/completions', '/v1/chat/completions'}))"
 
 echo
-echo "[4/4] targeted pytest"
+echo "[6/6] targeted pytest"
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH="${ROOT_DIR}/src" \
   "${VENV_DIR}/bin/python" -m pytest -q \
   -p pytest_asyncio.plugin \
+  "${ROOT_DIR}/tests/unit/test_deploy_contracts.py" \
+  "${ROOT_DIR}/tests/unit/test_gateway_production_security.py" \
+  "${ROOT_DIR}/tests/unit/test_serving_runtime_matrix.py" \
   "${ROOT_DIR}/tests/unit/test_vllm_server_config.py" \
   "${ROOT_DIR}/tests/unit/test_metrics.py" \
   "${ROOT_DIR}/tests/unit/test_model_routing.py" \
+  "${ROOT_DIR}/tests/unit/test_training_pipeline.py" \
   "${ROOT_DIR}/tests/unit/test_eval_gate.py" \
   "${ROOT_DIR}/tests/integration/test_api_gateway.py"

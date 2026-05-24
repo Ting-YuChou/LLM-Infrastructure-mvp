@@ -96,12 +96,24 @@ def _get_env_users(name: str = "AUTH_USERS") -> Dict[str, str]:
     return users
 
 
+def _get_environment() -> str:
+    """Return normalized runtime environment name."""
+    return (os.getenv("ENVIRONMENT") or os.getenv("APP_ENV") or "development").strip().lower()
+
+
+def _contains_wildcard(values: List[str]) -> bool:
+    """Return true when a list contains an unrestricted wildcard."""
+    return any(value.strip() == "*" for value in values)
+
+
 # ============================================================================
 # Configuration
 # ============================================================================
 
 class GatewayConfig:
     """API Gateway configuration"""
+
+    ENVIRONMENT = _get_environment()
     
     # JWT Settings
     JWT_SECRET = os.getenv("JWT_SECRET")
@@ -121,6 +133,8 @@ class GatewayConfig:
     REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
     REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
     REDIS_DB = int(os.getenv("REDIS_DB", 0))
+    REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
+    REDIS_SSL = _get_env_bool("REDIS_SSL", False)
     
     # Backend services
     VLLM_BACKEND_URL = os.getenv("VLLM_BACKEND_URL", "http://localhost:8000")
@@ -262,6 +276,51 @@ class RateLimiter:
     
     Implements fixed-window RPM/RPH and TPM/TPH quota checks.
     """
+
+    REDIS_CHECK_AND_INCREMENT_SCRIPT = """
+    local token_cost = tonumber(ARGV[1])
+    local rpm_limit = tonumber(ARGV[2])
+    local rph_limit = tonumber(ARGV[3])
+    local tpm_limit = tonumber(ARGV[4])
+    local tph_limit = tonumber(ARGV[5])
+
+    local minute_count = tonumber(redis.call("GET", KEYS[1]) or "0")
+    local hour_count = tonumber(redis.call("GET", KEYS[2]) or "0")
+    local minute_tokens = tonumber(redis.call("GET", KEYS[3]) or "0")
+    local hour_tokens = tonumber(redis.call("GET", KEYS[4]) or "0")
+
+    local next_minute_count = minute_count + 1
+    local next_hour_count = hour_count + 1
+    local next_minute_tokens = minute_tokens + token_cost
+    local next_hour_tokens = hour_tokens + token_cost
+
+    local function under_limit(value, limit)
+      return limit <= 0 or value <= limit
+    end
+
+    local allowed = (
+      under_limit(next_minute_count, rpm_limit)
+      and under_limit(next_hour_count, rph_limit)
+      and under_limit(next_minute_tokens, tpm_limit)
+      and under_limit(next_hour_tokens, tph_limit)
+    )
+
+    if allowed then
+      minute_count = redis.call("INCRBY", KEYS[1], 1)
+      hour_count = redis.call("INCRBY", KEYS[2], 1)
+      minute_tokens = redis.call("INCRBY", KEYS[3], token_cost)
+      hour_tokens = redis.call("INCRBY", KEYS[4], token_cost)
+
+      if minute_count == 1 then redis.call("EXPIRE", KEYS[1], 60) end
+      if hour_count == 1 then redis.call("EXPIRE", KEYS[2], 3600) end
+      if minute_tokens == token_cost then redis.call("EXPIRE", KEYS[3], 60) end
+      if hour_tokens == token_cost then redis.call("EXPIRE", KEYS[4], 3600) end
+
+      return {1, minute_count, hour_count, minute_tokens, hour_tokens}
+    end
+
+    return {0, next_minute_count, next_hour_count, next_minute_tokens, next_hour_tokens}
+    """
     
     def __init__(
         self,
@@ -336,26 +395,24 @@ class RateLimiter:
         token_minute_key = f"{minute_key}:tokens"
         token_hour_key = f"{hour_key}:tokens"
         
-        minute_count = self.redis.incr(minute_key)
-        hour_count = self.redis.incr(hour_key)
-        minute_tokens = self.redis.incrby(token_minute_key, token_cost)
-        hour_tokens = self.redis.incrby(token_hour_key, token_cost)
-
-        if minute_count == 1:
-            self.redis.expire(minute_key, 60)
-        if hour_count == 1:
-            self.redis.expire(hour_key, 3600)
-        if minute_tokens == token_cost:
-            self.redis.expire(token_minute_key, 60)
-        if hour_tokens == token_cost:
-            self.redis.expire(token_hour_key, 3600)
-
-        allowed = (
-            self._under_limit(minute_count, self.rpm_limit)
-            and self._under_limit(hour_count, self.rph_limit)
-            and self._under_limit(minute_tokens, self.tpm_limit)
-            and self._under_limit(hour_tokens, self.tph_limit)
+        result = self.redis.eval(
+            self.REDIS_CHECK_AND_INCREMENT_SCRIPT,
+            4,
+            minute_key,
+            hour_key,
+            token_minute_key,
+            token_hour_key,
+            token_cost,
+            self.rpm_limit,
+            self.rph_limit,
+            self.tpm_limit,
+            self.tph_limit,
         )
+        allowed = bool(int(result[0]))
+        minute_count = int(result[1])
+        hour_count = int(result[2])
+        minute_tokens = int(result[3])
+        hour_tokens = int(result[4])
         
         remaining = {
             "requests_per_minute": max(0, self.rpm_limit - minute_count),
@@ -550,21 +607,16 @@ class UsageTracker:
 class APIGateway:
     """Main API Gateway application"""
     
-    def __init__(self, config: GatewayConfig = GatewayConfig()):
+    def __init__(self, config: Optional[GatewayConfig] = None):
         """
         Initialize API Gateway
         
         Args:
             config: Gateway configuration
         """
-        self.config = config
+        self.config = config or GatewayConfig()
 
-        if not self.config.JWT_SECRET:
-            raise RuntimeError(
-                "JWT_SECRET must be set. Configure AUTH_USERS for static "
-                "credentials, or set DEV_AUTH_ENABLED=true only for local "
-                "development."
-            )
+        self._validate_startup_config()
         
         # Initialize FastAPI app
         self.app = FastAPI(
@@ -576,16 +628,18 @@ class APIGateway:
         
         # Initialize auth manager
         self.auth_manager = AuthManager(
-            secret=config.JWT_SECRET,
-            algorithm=config.JWT_ALGORITHM
+            secret=self.config.JWT_SECRET,
+            algorithm=self.config.JWT_ALGORITHM
         )
         
         # Initialize rate limiter
         try:
             redis_client = redis.Redis(
-                host=config.REDIS_HOST,
-                port=config.REDIS_PORT,
-                db=config.REDIS_DB,
+                host=self.config.REDIS_HOST,
+                port=self.config.REDIS_PORT,
+                db=self.config.REDIS_DB,
+                password=self.config.REDIS_PASSWORD,
+                ssl=self.config.REDIS_SSL,
                 decode_responses=True
             )
             # Test connection
@@ -598,10 +652,10 @@ class APIGateway:
         
         self.rate_limiter = RateLimiter(
             redis_client=redis_client,
-            requests_per_minute=config.RATE_LIMIT_REQUESTS_PER_MINUTE,
-            requests_per_hour=config.RATE_LIMIT_REQUESTS_PER_HOUR,
-            tokens_per_minute=config.RATE_LIMIT_TOKENS_PER_MINUTE,
-            tokens_per_hour=config.RATE_LIMIT_TOKENS_PER_HOUR,
+            requests_per_minute=self.config.RATE_LIMIT_REQUESTS_PER_MINUTE,
+            requests_per_hour=self.config.RATE_LIMIT_REQUESTS_PER_HOUR,
+            tokens_per_minute=self.config.RATE_LIMIT_TOKENS_PER_MINUTE,
+            tokens_per_hour=self.config.RATE_LIMIT_TOKENS_PER_HOUR,
         )
         self.usage_tracker = UsageTracker(redis_client=redis_client)
         self.model_router: Optional[ModelRouter] = None
@@ -620,6 +674,32 @@ class APIGateway:
         self._setup_routes()
         
         logger.info("API Gateway initialized")
+
+    def _validate_startup_config(self) -> None:
+        """Fail fast for missing auth/security configuration."""
+        if not self.config.JWT_SECRET:
+            raise RuntimeError(
+                "JWT_SECRET must be set. Configure AUTH_USERS for static "
+                "credentials, or set DEV_AUTH_ENABLED=true only for local "
+                "development."
+            )
+
+        environment = str(getattr(self.config, "ENVIRONMENT", "development")).lower()
+        if environment != "production":
+            return
+
+        errors = []
+        if str(self.config.JWT_SECRET).strip().lower() == "change-me":
+            errors.append("JWT_SECRET must not use the placeholder value 'change-me'")
+        if not self.config.AUTH_USERS:
+            errors.append("AUTH_USERS must be configured in production")
+        if _contains_wildcard(self.config.CORS_ORIGINS):
+            errors.append("CORS_ORIGINS must not contain '*' in production")
+        if _contains_wildcard(self.config.ALLOWED_HOSTS):
+            errors.append("ALLOWED_HOSTS must not contain '*' in production")
+
+        if errors:
+            raise RuntimeError("Invalid production gateway configuration: " + "; ".join(errors))
 
     def _estimate_tokens(self, text: str) -> int:
         """Estimate token counts when the backend does not provide usage."""

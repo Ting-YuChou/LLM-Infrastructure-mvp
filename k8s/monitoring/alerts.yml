@@ -45,6 +45,26 @@ groups:
           summary: "LLM request metrics are missing"
           description: "Prometheus is not seeing llm_requests_total from the gateway or serving backend."
 
+      - alert: LLMGatewayPodsUnavailable
+        expr: kube_deployment_status_replicas_available{namespace="llm-inference", deployment="api-gateway"} < 1
+        for: 2m
+        labels:
+          severity: page
+          service: api-gateway
+        annotations:
+          summary: "API gateway has no available replicas"
+          description: "The production serving entrypoint is unavailable."
+
+      - alert: LLMRedisUnavailable
+        expr: up{namespace="llm-inference", service=~"redis|managed-redis"} == 0
+        for: 2m
+        labels:
+          severity: page
+          service: redis
+        annotations:
+          summary: "Redis is unavailable for gateway rate limiting"
+          description: "Production rate limiting requires Redis readiness."
+
   - name: llm-serving-saturation
     rules:
       - alert: LLMRequestQueueSustained

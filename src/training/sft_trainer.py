@@ -17,17 +17,19 @@ from transformers import (
     AutoModelForCausalLM,
     TrainingArguments,
     Trainer,
-    DataCollatorForLanguageModeling,
+    default_data_collator,
 )
 from peft import LoraConfig, get_peft_model, TaskType
 
 try:
+    from .results import TrainingRunResult
     from .mlflow_lifecycle import (
         MLflowMetricsCallback,
         MLflowTrainingLifecycle,
         PromotionConfig,
     )
 except ImportError:  # pragma: no cover - supports direct script execution
+    from results import TrainingRunResult  # type: ignore[no-redef]
     from mlflow_lifecycle import (  # type: ignore[no-redef]
         MLflowMetricsCallback,
         MLflowTrainingLifecycle,
@@ -136,6 +138,10 @@ class SFTDataPreprocessor:
         logger.info(f"Loaded {len(dataset)} examples")
         return dataset
 
+    def format_prompt(self, prompt: str) -> str:
+        """Format the instruction prefix that should be masked from loss."""
+        return f"### Instruction:\n{prompt}\n\n### Response:\n"
+
     def format_instruction(self, example: Dict[str, str]) -> str:
         """
         Format instruction-response pair into a single training sequence
@@ -156,13 +162,7 @@ class SFTDataPreprocessor:
         instruction = example.get('prompt', '')
         response = example.get('completion', '')
 
-        # Alpaca formatting
-        text = (
-            f"### Instruction:\n{instruction}\n\n"
-            f"### Response:\n{response}{self.tokenizer.eos_token}"
-        )
-
-        return text
+        return f"{self.format_prompt(instruction)}{response}{self.tokenizer.eos_token}"
 
     def tokenize_function(self, examples: Dict[str, List]) -> Dict[str, List]:
         """
@@ -174,20 +174,45 @@ class SFTDataPreprocessor:
         Returns:
             Tokenized batch
         """
-        # Format all examples in batch
-        texts = [self.format_instruction(ex) for ex in examples]
+        prompts = examples.get('prompt', [])
+        completions = examples.get('completion', [])
+        texts = []
+        prompt_lengths = []
 
-        # Tokenize
+        for prompt, completion in zip(prompts, completions):
+            prompt_text = self.format_prompt(str(prompt or ""))
+            full_text = f"{prompt_text}{completion or ''}{self.tokenizer.eos_token}"
+            texts.append(full_text)
+            prompt_encoding = self.tokenizer(
+                prompt_text,
+                truncation=True,
+                max_length=self.max_length,
+                padding=False,
+                return_tensors=None,
+            )
+            prompt_lengths.append(len(prompt_encoding['input_ids']))
+
         tokenized = self.tokenizer(
             texts,
             truncation=True,
             padding='max_length',
             max_length=self.max_length,
-            return_tensors=None,  # Return lists, not tensors
+            return_tensors=None,
         )
 
-        # For causal LM, labels are the same as input_ids
-        tokenized['labels'] = tokenized['input_ids'].copy()
+        labels = []
+        attention_masks = tokenized.get('attention_mask', [])
+        for input_ids, attention_mask, prompt_length in zip(
+            tokenized['input_ids'],
+            attention_masks,
+            prompt_lengths,
+        ):
+            example_labels = list(input_ids)
+            for index, mask_value in enumerate(attention_mask):
+                if index < prompt_length or mask_value == 0:
+                    example_labels[index] = -100
+            labels.append(example_labels)
+        tokenized['labels'] = labels
 
         return tokenized
 
@@ -310,7 +335,7 @@ class SFTTrainer:
             },
         )
 
-    def train(self) -> None:
+    def train(self) -> TrainingRunResult:
         """Execute SFT training"""
         lifecycle = self._build_lifecycle()
         with lifecycle:
@@ -345,19 +370,13 @@ class SFTTrainer:
                 logging_dir=f"{self.config.output_dir}/logs",
             )
 
-            # Data collator
-            data_collator = DataCollatorForLanguageModeling(
-                tokenizer=tokenizer,
-                mlm=False,  # Causal LM, not masked LM
-            )
-
             # Initialize trainer
             trainer = Trainer(
                 model=model,
                 args=training_args,
                 train_dataset=train_dataset,
                 eval_dataset=val_dataset,
-                data_collator=data_collator,
+                data_collator=default_data_collator,
                 callbacks=[MLflowMetricsCallback(lifecycle)],
             )
 
@@ -374,7 +393,7 @@ class SFTTrainer:
             trainer.save_model(final_model_path)
             tokenizer.save_pretrained(final_model_path)
 
-            lifecycle.register_checkpoint(
+            lifecycle_result = lifecycle.register_checkpoint(
                 final_model_path,
                 final_metrics=final_metrics,
                 extra_tags={
@@ -384,6 +403,11 @@ class SFTTrainer:
             )
 
             logger.info("Training complete!")
+            return TrainingRunResult(
+                checkpoint_path=final_model_path,
+                metrics=final_metrics,
+                lifecycle_result=lifecycle_result,
+            )
 
 
 def main():
