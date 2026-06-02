@@ -1,0 +1,76 @@
+services:
+  nano-vllm-server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.nano-serving
+    image: nano-vllm-serving:latest
+    gpus: all
+    environment:
+      MODEL_NAME: /workspace/models/nano/checkpoint-final
+      SERVED_MODEL_NAME: nano-llm-local
+      DTYPE: float16
+      DEVICE: auto
+      USE_TRITON: "true"
+      MAX_MODEL_LEN: "2048"
+      MAX_CONCURRENT_REQUESTS: "16"
+      ENABLE_METRICS: "true"
+    command:
+      - python
+      - -m
+      - src.serving.nano_vllm.server
+      - --config
+      - /workspace/config/nano_vllm_config.yaml
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/workspace/models:ro
+      - ./config:/workspace/config:ro
+      - ./outputs:/workspace/outputs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.gateway
+    image: llm-gateway:latest
+    environment:
+      JWT_SECRET: local-dev-secret
+      AUTH_USERS: "local:local,loadtest:loadtest123"
+      RATE_LIMIT_ENABLED: "false"
+      REDIS_HOST: redis
+      VLLM_BACKEND_URL: http://nano-vllm-server:8000
+      DEFAULT_COMPLETION_MODEL: nano-llm-local
+      MODEL_ROUTING_CONFIG: /workspace/config/model_routing.nano.json
+    command: ["python", "-m", "src.api.gateway", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/workspace/config:ro
+    depends_on:
+      nano-vllm-server:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped

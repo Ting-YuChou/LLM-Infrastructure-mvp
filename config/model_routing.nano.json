@@ -1,0 +1,19 @@
+{
+  "default_model": "nano-llm-local",
+  "allow_passthrough": false,
+  "routes": {
+    "nano-llm-local": {
+      "description": "Educational nano-vLLM backend route.",
+      "targets": [
+        {
+          "name": "stable",
+          "backend_url": "http://nano-vllm-server:8000",
+          "model": "/workspace/models/nano/checkpoint-final",
+          "weight": 100,
+          "stage": "Development",
+          "version": "v0.1"
+        }
+      ]
+    }
+  }
+}

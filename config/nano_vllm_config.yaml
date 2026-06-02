@@ -1,0 +1,27 @@
+# nano-vLLM v0.1 configuration
+# Educational single-model backend for learning KV cache, decode loops, and kernels.
+
+model:
+  # Must point to a HuggingFace Llama-family checkpoint already present on disk.
+  name: "/workspace/models/nano/checkpoint-final"
+  served_model_name: "nano-llm-local"
+  tokenizer: null
+  trust_remote_code: false
+  dtype: "float16"
+  max_model_len: 2048
+
+engine:
+  # "auto" uses CUDA when available and CPU otherwise. Triton fast paths only
+  # run when CUDA + triton are available; PyTorch fallbacks are always available.
+  device: "auto"
+  use_triton: true
+  eager_load: true
+  max_new_tokens: 256
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+  max_concurrent_requests: 16
+
+monitoring:
+  enable_metrics: true

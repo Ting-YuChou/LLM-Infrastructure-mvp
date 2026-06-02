@@ -1,0 +1,15 @@
+# nano-vLLM serving runtime dependency subset.
+--index-url https://download.pytorch.org/whl/cu129
+--extra-index-url https://pypi.org/simple
+
+torch==2.10.0
+transformers==4.57.6
+tokenizers==0.22.2
+sentencepiece==0.2.1
+protobuf==5.29.6
+fastapi[standard]==0.136.1
+uvicorn[standard]==0.46.0
+pydantic==2.13.3
+pyyaml==6.0.1
+safetensors==0.7.0
+prometheus-client==0.19.0

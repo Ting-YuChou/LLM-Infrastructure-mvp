@@ -1,0 +1,38 @@
+FROM nvidia/cuda:12.9.1-cudnn-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/workspace
+ENV CUDA_HOME=/usr/local/cuda
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
+ENV PATH=/usr/local/cuda/bin:${PATH}
+
+WORKDIR /workspace
+
+RUN apt-get update && apt-get install -y \
+    python3.10 \
+    python3-pip \
+    python3.10-dev \
+    python3.10-venv \
+    build-essential \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 && \
+    update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
+
+COPY docker/requirements.nano-serving.txt /tmp/requirements.nano-serving.txt
+
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r /tmp/requirements.nano-serving.txt
+
+COPY src /workspace/src
+COPY config /workspace/config
+
+RUN mkdir -p /workspace/models /workspace/outputs/logs
+
+EXPOSE 8000
+
+CMD ["python", "-m", "src.serving.nano_vllm.server", "--config", "/workspace/config/nano_vllm_config.yaml"]
