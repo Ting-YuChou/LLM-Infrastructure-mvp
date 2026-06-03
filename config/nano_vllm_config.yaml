@@ -14,9 +14,15 @@ engine:
   # "auto" uses CUDA when available and CPU otherwise. Triton fast paths only
   # run when CUDA + triton are available; PyTorch fallbacks are always available.
   device: "auto"
+  attention_backend: "torch"
   use_triton: true
   eager_load: true
   max_new_tokens: 256
+  kvcache_block_size: 16
+  num_kvcache_blocks: 1024
+  max_num_seqs: 16
+  max_num_batched_tokens: 512
+  enable_prefix_cache: true
 
 server:
   host: "0.0.0.0"

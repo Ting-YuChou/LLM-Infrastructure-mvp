@@ -96,7 +96,14 @@ class NanoVLLMServer:
         del app
         if self.config.eager_load:
             await self._initialize_engine()
-        yield
+        try:
+            yield
+        finally:
+            shutdown = getattr(self.engine, "shutdown", None)
+            if shutdown is not None:
+                maybe_awaitable = shutdown()
+                if inspect.isawaitable(maybe_awaitable):
+                    await maybe_awaitable
 
     async def _initialize_engine(self) -> None:
         try:
@@ -163,10 +170,10 @@ class NanoVLLMServer:
                 prompt_tokens = 0
                 completion_tokens = 0
                 async with self._admitted():
-                    for index, prompt in enumerate(prompts):
-                        result = await asyncio.to_thread(
-                            self.engine.generate, prompt, sampling
-                        )
+                    results = await asyncio.gather(
+                        *(self._generate(prompt, sampling) for prompt in prompts)
+                    )
+                    for index, result in enumerate(results):
                         prompt_tokens += result.prompt_tokens
                         completion_tokens += result.completion_tokens
                         choices.append(
@@ -227,9 +234,7 @@ class NanoVLLMServer:
             request_start = start_request_tracking(model_name)
             try:
                 async with self._admitted():
-                    result = await asyncio.to_thread(
-                        self.engine.generate, prompt, sampling
-                    )
+                    result = await self._generate(prompt, sampling)
                 response = {
                     "id": f"nano-chatcmpl-{int(time.time() * 1000)}",
                     "object": "chat.completion",
@@ -274,6 +279,30 @@ class NanoVLLMServer:
                 status_code=503, detail="nano-vLLM engine is not initialized"
             )
 
+    async def _generate(
+        self,
+        prompt: str,
+        sampling: SamplingOptions,
+    ) -> GenerationResult:
+        generate_async = getattr(self.engine, "generate_async", None)
+        if generate_async is not None:
+            return await generate_async(prompt, sampling)
+        return await asyncio.to_thread(self.engine.generate, prompt, sampling)
+
+    async def _stream_text(
+        self,
+        prompt: str,
+        sampling: SamplingOptions,
+    ):
+        stream_async = getattr(self.engine, "generate_stream_async", None)
+        if stream_async is not None:
+            async for chunk in stream_async(prompt, sampling):
+                yield chunk
+            return
+        result = await self._generate(prompt, sampling)
+        for chunk in self._chunk_text(result.text):
+            yield chunk
+
     def _completion_sampling(self, request: CompletionRequest) -> SamplingOptions:
         return SamplingOptions(
             max_tokens=request.max_tokens,
@@ -314,32 +343,41 @@ class NanoVLLMServer:
         first_token_seen = False
         last_token_time: Optional[float] = None
         try:
+            completion_text = ""
             async with self._admitted():
-                result = await asyncio.to_thread(self.engine.generate, prompt, sampling)
-            for chunk in self._chunk_text(result.text):
+                async for chunk in self._stream_text(prompt, sampling):
+                    completion_text += chunk
+                    now = time.time()
+                    if not first_token_seen:
+                        record_time_to_first_token(model_name, now - request_start)
+                        first_token_seen = True
+                    elif last_token_time is not None:
+                        record_inter_token_latency(model_name, now - last_token_time)
+                    last_token_time = now
+                    yield self._format_sse_payload(
+                        {
+                            "id": completion_id,
+                            "object": "text_completion",
+                            "created": created,
+                            "model": model_name,
+                            "choices": [
+                                {
+                                    "text": chunk,
+                                    "index": 0,
+                                    "logprobs": None,
+                                    "finish_reason": None,
+                                }
+                            ],
+                        }
+                    )
+            prompt_tokens = self._estimate_prompt_tokens(prompt)
+            completion_tokens = self._estimate_completion_tokens(completion_text)
+            if result is not None:
+                prompt_tokens = result.prompt_tokens
+                completion_tokens = result.completion_tokens
+            if not first_token_seen:
                 now = time.time()
-                if not first_token_seen:
-                    record_time_to_first_token(model_name, now - request_start)
-                    first_token_seen = True
-                elif last_token_time is not None:
-                    record_inter_token_latency(model_name, now - last_token_time)
-                last_token_time = now
-                yield self._format_sse_payload(
-                    {
-                        "id": completion_id,
-                        "object": "text_completion",
-                        "created": created,
-                        "model": model_name,
-                        "choices": [
-                            {
-                                "text": chunk,
-                                "index": 0,
-                                "logprobs": None,
-                                "finish_reason": None,
-                            }
-                        ],
-                    }
-                )
+                record_time_to_first_token(model_name, now - request_start)
             yield self._format_sse_payload(
                 {
                     "id": completion_id,
@@ -361,8 +399,8 @@ class NanoVLLMServer:
                 model_name=model_name,
                 endpoint="/v1/completions",
                 start_time=request_start,
-                prompt_tokens=result.prompt_tokens,
-                completion_tokens=result.completion_tokens,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
             )
         except Exception as exc:
             finish_request_tracking(
@@ -386,24 +424,25 @@ class NanoVLLMServer:
         sent_role = False
         result: Optional[GenerationResult] = None
         try:
+            completion_text = ""
             async with self._admitted():
-                result = await asyncio.to_thread(self.engine.generate, prompt, sampling)
-            for chunk in self._chunk_text(result.text):
-                delta = {"content": chunk}
-                if not sent_role:
-                    delta["role"] = "assistant"
-                    sent_role = True
-                yield self._format_sse_payload(
-                    {
-                        "id": completion_id,
-                        "object": "chat.completion.chunk",
-                        "created": created,
-                        "model": model_name,
-                        "choices": [
-                            {"index": 0, "delta": delta, "finish_reason": None}
-                        ],
-                    }
-                )
+                async for chunk in self._stream_text(prompt, sampling):
+                    completion_text += chunk
+                    delta = {"content": chunk}
+                    if not sent_role:
+                        delta["role"] = "assistant"
+                        sent_role = True
+                    yield self._format_sse_payload(
+                        {
+                            "id": completion_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": model_name,
+                            "choices": [
+                                {"index": 0, "delta": delta, "finish_reason": None}
+                            ],
+                        }
+                    )
             yield self._format_sse_payload(
                 {
                     "id": completion_id,
@@ -418,8 +457,16 @@ class NanoVLLMServer:
                 model_name=model_name,
                 endpoint="/v1/chat/completions",
                 start_time=request_start,
-                prompt_tokens=result.prompt_tokens,
-                completion_tokens=result.completion_tokens,
+                prompt_tokens=(
+                    result.prompt_tokens
+                    if result is not None
+                    else self._estimate_prompt_tokens(prompt)
+                ),
+                completion_tokens=(
+                    result.completion_tokens
+                    if result is not None
+                    else self._estimate_completion_tokens(completion_text)
+                ),
             )
         except Exception as exc:
             finish_request_tracking(
@@ -440,6 +487,12 @@ class NanoVLLMServer:
             " ".join(words[i : i + chunk_size])
             for i in range(0, len(words), chunk_size)
         ]
+
+    def _estimate_prompt_tokens(self, text: str) -> int:
+        return max(1, len(text.split()))
+
+    def _estimate_completion_tokens(self, text: str) -> int:
+        return max(0, len(text.split()))
 
     def _admitted(self):
         return _SemaphoreContext(self.admission)

@@ -87,3 +87,46 @@ def test_toy_nano_llama_forward_prefill_and_decode():
     assert prefill_logits.shape == (1, 3, config.vocab_size)
     assert decode_logits.shape == (1, 1, config.vocab_size)
     assert int(cache.lengths[0].item()) == 4
+
+
+def test_toy_nano_llama_forward_paged_prefill_and_decode():
+    config = NanoLlamaConfig(
+        vocab_size=16,
+        hidden_size=8,
+        intermediate_size=16,
+        num_hidden_layers=1,
+        num_attention_heads=2,
+        num_key_value_heads=1,
+        max_position_embeddings=8,
+    )
+    model = NanoLlamaForCausalLM(
+        config=config,
+        weights=_toy_weights(config),
+        device=torch.device("cpu"),
+        dtype=torch.float32,
+        use_triton=False,
+    )
+    cache = model.new_paged_cache(num_blocks=2, block_size=4)
+    prefill_logits = model.forward_paged(
+        input_ids=torch.tensor([1, 2, 3]),
+        positions=torch.tensor([0, 1, 2]),
+        cache=cache,
+        slot_mapping=torch.tensor([0, 1, 2]),
+        block_tables=torch.tensor([[0]]),
+        context_lens=torch.tensor([3]),
+        query_lens=[3],
+        is_prefill=True,
+    )
+    decode_logits = model.forward_paged(
+        input_ids=torch.tensor([4]),
+        positions=torch.tensor([3]),
+        cache=cache,
+        slot_mapping=torch.tensor([3]),
+        block_tables=torch.tensor([[0]]),
+        context_lens=torch.tensor([4]),
+        query_lens=[1],
+        is_prefill=False,
+    )
+
+    assert prefill_logits.shape == (3, config.vocab_size)
+    assert decode_logits.shape == (1, config.vocab_size)

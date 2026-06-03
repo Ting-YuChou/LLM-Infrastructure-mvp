@@ -1,4 +1,5 @@
 import sys
+import asyncio
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -28,6 +29,33 @@ class FakeNanoEngine:
         )
 
 
+class FakeAsyncBatchEngine(FakeNanoEngine):
+    def __init__(self):
+        super().__init__()
+        self.async_prompts = []
+        self.active = 0
+        self.max_active = 0
+
+    async def generate_async(self, prompt, sampling):
+        self.async_prompts.append(prompt)
+        self.active += 1
+        self.max_active = max(self.max_active, self.active)
+        await asyncio.sleep(0.01)
+        self.active -= 1
+        return GenerationResult(
+            text=f"batched response for {prompt.split()[0]}",
+            prompt_tokens=max(1, len(prompt.split())),
+            completion_tokens=3,
+            token_ids=[2, 3, 4],
+        )
+
+    async def generate_stream_async(self, prompt, sampling):
+        self.async_prompts.append(prompt)
+        for token in ("batched", " stream"):
+            await asyncio.sleep(0)
+            yield token
+
+
 def _server(eager_load: bool = True) -> NanoVLLMServer:
     return NanoVLLMServer(
         NanoVLLMConfig(
@@ -37,6 +65,18 @@ def _server(eager_load: bool = True) -> NanoVLLMServer:
             enable_metrics=False,
         ),
         engine=FakeNanoEngine(),
+    )
+
+
+def _server_with_engine(engine, eager_load: bool = True) -> NanoVLLMServer:
+    return NanoVLLMServer(
+        NanoVLLMConfig(
+            served_model_name="nano-test",
+            model_name="/tmp/not-used",
+            eager_load=eager_load,
+            enable_metrics=False,
+        ),
+        engine=engine,
     )
 
 
@@ -85,3 +125,34 @@ def test_nano_server_reports_not_ready_when_engine_not_loaded():
 
     assert ready.status_code == 503
     assert completion.status_code == 503
+
+
+def test_nano_server_uses_async_batch_generation_for_prompt_lists():
+    engine = FakeAsyncBatchEngine()
+    server = _server_with_engine(engine)
+    with TestClient(server.app) as client:
+        response = client.post(
+            "/v1/completions",
+            json={"prompt": ["alpha prompt", "beta prompt"], "max_tokens": 8},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [choice["index"] for choice in data["choices"]] == [0, 1]
+    assert engine.async_prompts == ["alpha prompt", "beta prompt"]
+    assert engine.prompts == []
+    assert engine.max_active == 2
+
+
+def test_nano_server_streams_from_async_engine():
+    engine = FakeAsyncBatchEngine()
+    server = _server_with_engine(engine)
+    with TestClient(server.app) as client:
+        response = client.post(
+            "/v1/completions",
+            json={"prompt": "alpha prompt", "stream": True, "max_tokens": 8},
+        )
+
+    assert response.status_code == 200
+    assert "data: [DONE]" in response.text
+    assert "batched" in response.text

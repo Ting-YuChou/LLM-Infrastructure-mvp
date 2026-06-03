@@ -11,7 +11,7 @@ import torch
 import torch.nn.functional as F
 
 from .kernels import apply_rope, causal_attention, rms_norm, silu_mul
-from .kv_cache import StaticKVCache
+from .kv_cache import PagedKVCache, StaticKVCache
 
 
 def torch_dtype_from_string(value: str) -> torch.dtype:
@@ -106,11 +106,13 @@ class NanoLlamaForCausalLM:
         device: torch.device,
         dtype: torch.dtype,
         use_triton: bool = True,
+        attention_backend: str = "torch",
     ) -> None:
         self.config = config
         self.device = device
         self.dtype = dtype if device.type == "cuda" else torch.float32
         self.use_triton = use_triton
+        self.attention_backend = attention_backend
         self.weights = {
             name: self._move_weight(tensor) for name, tensor in weights.items()
         }
@@ -123,6 +125,7 @@ class NanoLlamaForCausalLM:
         dtype: str = "float16",
         device: str = "auto",
         use_triton: bool = True,
+        attention_backend: str = "torch",
     ) -> "NanoLlamaForCausalLM":
         path = Path(model_path)
         if not path.is_dir():
@@ -135,6 +138,7 @@ class NanoLlamaForCausalLM:
             device=resolved_device,
             dtype=torch_dtype_from_string(dtype),
             use_triton=use_triton,
+            attention_backend=attention_backend,
         )
 
     def new_cache(self, batch_size: int, max_seq_len: int) -> StaticKVCache:
@@ -143,6 +147,21 @@ class NanoLlamaForCausalLM:
             batch_size=batch_size,
             num_key_value_heads=self.config.num_key_value_heads,
             max_seq_len=max_seq_len,
+            head_dim=self.config.head_dim,
+            dtype=self.dtype,
+            device=self.device,
+        )
+
+    def new_paged_cache(
+        self,
+        num_blocks: int,
+        block_size: int,
+    ) -> PagedKVCache:
+        return PagedKVCache(
+            num_layers=self.config.num_hidden_layers,
+            num_blocks=num_blocks,
+            block_size=block_size,
+            num_key_value_heads=self.config.num_key_value_heads,
             head_dim=self.config.head_dim,
             dtype=self.dtype,
             device=self.device,
@@ -236,6 +255,135 @@ class NanoLlamaForCausalLM:
         )
         return F.linear(x, lm_head)
 
+    @torch.inference_mode()
+    def forward_paged(
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        cache: PagedKVCache,
+        slot_mapping: torch.Tensor,
+        block_tables: torch.Tensor,
+        context_lens: torch.Tensor,
+        query_lens: list[int],
+        is_prefill: bool,
+    ) -> torch.Tensor:
+        """Forward over a scheduler batch using paged KV cache metadata."""
+        del is_prefill
+        if self.attention_backend != "torch":
+            raise NotImplementedError(
+                "nano-vLLM v0.2 implements the paged KV contract with the "
+                "PyTorch attention backend. flash_attn is reserved for the "
+                "GPU fast-path phase."
+            )
+        if input_ids.ndim != 1:
+            raise ValueError("forward_paged expects flat input_ids")
+        if positions.shape != input_ids.shape:
+            raise ValueError("positions must match input_ids shape")
+        if slot_mapping.shape != input_ids.shape:
+            raise ValueError("slot_mapping must match input_ids shape")
+        if sum(query_lens) != input_ids.numel():
+            raise ValueError("query_lens must sum to the flat token count")
+
+        input_ids = input_ids.to(self.device)
+        positions = positions.to(self.device)
+        slot_mapping = slot_mapping.to(self.device)
+        block_tables = block_tables.to(self.device)
+        context_lens = context_lens.to(self.device)
+        x = self.weights["model.embed_tokens.weight"][input_ids]
+        query_offsets = self._query_offsets(query_lens)
+
+        for layer_idx in range(self.config.num_hidden_layers):
+            residual = x
+            x_norm = rms_norm(
+                x,
+                self._weight(f"model.layers.{layer_idx}.input_layernorm.weight"),
+                eps=self.config.rms_norm_eps,
+                use_triton=self.use_triton,
+            )
+            query = self._linear(x_norm, f"model.layers.{layer_idx}.self_attn.q_proj")
+            key = self._linear(x_norm, f"model.layers.{layer_idx}.self_attn.k_proj")
+            value = self._linear(x_norm, f"model.layers.{layer_idx}.self_attn.v_proj")
+            query = query.view(
+                -1,
+                self.config.num_attention_heads,
+                self.config.head_dim,
+            )
+            key = key.view(-1, self.config.num_key_value_heads, self.config.head_dim)
+            value = value.view(
+                -1, self.config.num_key_value_heads, self.config.head_dim
+            )
+
+            query_segments = []
+            key_segments = []
+            for start, end in query_offsets:
+                q_seg = query[start:end].transpose(0, 1).unsqueeze(0)
+                k_seg = key[start:end].transpose(0, 1).unsqueeze(0)
+                q_seg, k_seg = apply_rope(
+                    q_seg,
+                    k_seg,
+                    positions=positions[start:end],
+                    theta=self.config.rope_theta,
+                    use_triton=self.use_triton,
+                )
+                query_segments.append(q_seg.squeeze(0).transpose(0, 1))
+                key_segments.append(k_seg.squeeze(0).transpose(0, 1))
+            query = torch.cat(query_segments, dim=0)
+            key = torch.cat(key_segments, dim=0)
+            cache.update(layer_idx, slot_mapping, key, value)
+
+            attn_segments = []
+            for seq_index, (start, end) in enumerate(query_offsets):
+                seq_query = query[start:end].transpose(0, 1).unsqueeze(0)
+                seq_key, seq_value = cache.read_sequence(
+                    layer_idx,
+                    block_tables[seq_index],
+                    int(context_lens[seq_index].item()),
+                )
+                seq_key = self._repeat_kv(seq_key)
+                seq_value = self._repeat_kv(seq_value)
+                attn = causal_attention(
+                    seq_query,
+                    seq_key,
+                    seq_value,
+                    query_positions=positions[start:end],
+                    use_triton=self.use_triton,
+                )
+                attn_segments.append(attn.squeeze(0).transpose(0, 1))
+            attn = (
+                torch.cat(attn_segments, dim=0).contiguous().view(input_ids.numel(), -1)
+            )
+            x = residual + self._linear(
+                attn,
+                f"model.layers.{layer_idx}.self_attn.o_proj",
+            )
+
+            residual = x
+            x_norm = rms_norm(
+                x,
+                self._weight(
+                    f"model.layers.{layer_idx}.post_attention_layernorm.weight"
+                ),
+                eps=self.config.rms_norm_eps,
+                use_triton=self.use_triton,
+            )
+            gate = self._linear(x_norm, f"model.layers.{layer_idx}.mlp.gate_proj")
+            up = self._linear(x_norm, f"model.layers.{layer_idx}.mlp.up_proj")
+            x = residual + self._linear(
+                silu_mul(gate, up, use_triton=self.use_triton),
+                f"model.layers.{layer_idx}.mlp.down_proj",
+            )
+
+        x = rms_norm(
+            x,
+            self._weight("model.norm.weight"),
+            eps=self.config.rms_norm_eps,
+            use_triton=self.use_triton,
+        )
+        lm_head = self.weights.get(
+            "lm_head.weight", self.weights["model.embed_tokens.weight"]
+        )
+        return F.linear(x, lm_head)
+
     def _weight(self, name: str) -> torch.Tensor:
         try:
             return self.weights[name]
@@ -263,6 +411,15 @@ class NanoLlamaForCausalLM:
         if repeats == 1:
             return x
         return x.repeat_interleave(repeats, dim=1)
+
+    def _query_offsets(self, query_lens: list[int]) -> list[tuple[int, int]]:
+        offsets = []
+        start = 0
+        for query_len in query_lens:
+            end = start + query_len
+            offsets.append((start, end))
+            start = end
+        return offsets
 
     def _validate_required_weights(self) -> None:
         required = [

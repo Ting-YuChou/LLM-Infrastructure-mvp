@@ -6,6 +6,7 @@ import torch
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from serving.nano_vllm.kv_cache import StaticKVCache  # noqa: E402
+from serving.nano_vllm.kv_cache import PagedKVCache  # noqa: E402
 from serving.nano_vllm.sampling import filter_logits, sample_next_token  # noqa: E402
 
 
@@ -46,3 +47,25 @@ def test_static_kv_cache_update_and_read():
     assert read_value.shape == (1, 2, 3, 3)
     torch.testing.assert_close(read_key[:, :, 1:3], key)
     torch.testing.assert_close(read_value[:, :, 1:3], value)
+
+
+def test_paged_kv_cache_update_and_read_sequence():
+    cache = PagedKVCache(
+        num_layers=1,
+        num_blocks=2,
+        block_size=2,
+        num_key_value_heads=1,
+        head_dim=2,
+        dtype=torch.float32,
+        device="cpu",
+    )
+    key = torch.tensor([[[1.0, 0.0]], [[2.0, 0.0]], [[3.0, 0.0]]])
+    value = torch.tensor([[[0.0, 1.0]], [[0.0, 2.0]], [[0.0, 3.0]]])
+
+    cache.update(0, torch.tensor([0, 1, 2]), key, value)
+    read_key, read_value = cache.read_sequence(0, [0, 1], seq_len=3)
+
+    assert read_key.shape == (1, 1, 3, 2)
+    assert read_value.shape == (1, 1, 3, 2)
+    torch.testing.assert_close(read_key[0, 0], key[:, 0])
+    torch.testing.assert_close(read_value[0, 0], value[:, 0])

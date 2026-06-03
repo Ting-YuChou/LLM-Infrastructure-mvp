@@ -11,7 +11,14 @@ services:
       DTYPE: float16
       DEVICE: auto
       USE_TRITON: "true"
+      ATTENTION_BACKEND: torch
       MAX_MODEL_LEN: "2048"
+      MAX_NEW_TOKENS: "256"
+      KVCACHE_BLOCK_SIZE: "16"
+      NUM_KVCACHE_BLOCKS: "1024"
+      MAX_NUM_SEQS: "16"
+      MAX_NUM_BATCHED_TOKENS: "512"
+      ENABLE_PREFIX_CACHE: "true"
       MAX_CONCURRENT_REQUESTS: "16"
       ENABLE_METRICS: "true"
     command:

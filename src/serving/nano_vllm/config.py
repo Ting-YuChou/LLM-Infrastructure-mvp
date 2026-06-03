@@ -43,12 +43,30 @@ class NanoVLLMConfig:
     device: str = "auto"
     max_model_len: int = 2048
     max_new_tokens: int = 256
+    kvcache_block_size: int = 16
+    num_kvcache_blocks: int = 1024
+    max_num_seqs: int = 16
+    max_num_batched_tokens: int = 512
+    enable_prefix_cache: bool = True
+    attention_backend: str = "torch"
     use_triton: bool = True
     eager_load: bool = True
     host: str = "0.0.0.0"
     port: int = 8000
     max_concurrent_requests: int = 16
     enable_metrics: bool = True
+
+    def __post_init__(self) -> None:
+        if self.kvcache_block_size <= 0:
+            raise ValueError("kvcache_block_size must be positive")
+        if self.num_kvcache_blocks <= 0:
+            raise ValueError("num_kvcache_blocks must be positive")
+        if self.max_num_seqs <= 0:
+            raise ValueError("max_num_seqs must be positive")
+        if self.max_num_batched_tokens <= 0:
+            raise ValueError("max_num_batched_tokens must be positive")
+        if self.attention_backend not in {"torch", "flash_attn"}:
+            raise ValueError("attention_backend must be one of: torch, flash_attn")
 
     @classmethod
     def from_yaml(cls, config_path: str | None) -> "NanoVLLMConfig":
@@ -83,6 +101,40 @@ class NanoVLLMConfig:
             ),
             max_new_tokens=int(
                 _env("MAX_NEW_TOKENS", engine.get("max_new_tokens", cls.max_new_tokens))
+            ),
+            kvcache_block_size=int(
+                _env(
+                    "KVCACHE_BLOCK_SIZE",
+                    engine.get("kvcache_block_size", cls.kvcache_block_size),
+                )
+            ),
+            num_kvcache_blocks=int(
+                _env(
+                    "NUM_KVCACHE_BLOCKS",
+                    engine.get("num_kvcache_blocks", cls.num_kvcache_blocks),
+                )
+            ),
+            max_num_seqs=int(
+                _env("MAX_NUM_SEQS", engine.get("max_num_seqs", cls.max_num_seqs))
+            ),
+            max_num_batched_tokens=int(
+                _env(
+                    "MAX_NUM_BATCHED_TOKENS",
+                    engine.get(
+                        "max_num_batched_tokens",
+                        cls.max_num_batched_tokens,
+                    ),
+                )
+            ),
+            enable_prefix_cache=_bool_value(
+                _env("ENABLE_PREFIX_CACHE", engine.get("enable_prefix_cache")),
+                default=cls.enable_prefix_cache,
+            ),
+            attention_backend=str(
+                _env(
+                    "ATTENTION_BACKEND",
+                    engine.get("attention_backend", cls.attention_backend),
+                )
             ),
             use_triton=_bool_value(
                 _env("USE_TRITON", engine.get("use_triton")),
