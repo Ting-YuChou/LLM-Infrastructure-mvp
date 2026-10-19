@@ -6,13 +6,13 @@
 # ============================================================================
 model:
   # Base model to train reward model from (usually same as SFT model)
-  name: "/workspace/models/sft/checkpoint-final"
+  name: "/workspace/models/sft/final"
   
   # Cache directory
   cache_dir: "/workspace/models/sft"
   
-  # Model precision
-  precision: "fp16"
+  # Mixed precision (bf16, fp16, fp32); sets load dtype and Trainer flags
+  precision: "bf16"
   
   # Freeze base model layers (train only reward head)
   freeze_base: false  # Set true to only train reward head
@@ -30,8 +30,9 @@ data:
   # Validation preference data
   val_file: "/workspace/data/preferences/val.json"
   
-  # Maximum sequence length
-  max_length: 512
+  # Maximum tokens for chat-templated prompt + response (incl. <|eot_id|>).
+  # Longer pairs are dropped, not truncated.
+  max_length: 1024
   
   # Expected JSON format:
   # [
@@ -81,10 +82,7 @@ training:
   # Checkpoint management
   save_total_limit: 3
   save_strategy: "steps"
-  evaluation_strategy: "steps"
-  
-  # Mixed precision
-  fp16: true
+  eval_strategy: "steps"
   
   # Performance
   dataloader_num_workers: 4
@@ -144,9 +142,9 @@ hardware:
 # ============================================================================
 tracking:
   # Weights & Biases
-  wandb_enabled: true
+  wandb_enabled: false  # Needs WANDB_API_KEY; MLflow is the default tracker
   wandb_project: "llm-reward-training"
-  wandb_run_name: "llama2-7b-reward"
+  wandb_run_name: "llama3-8b-reward"
   
   # TensorBoard
   tensorboard_enabled: true
@@ -165,12 +163,12 @@ registry:
   auto_register: true
   
   # Model name in registry
-  model_name: "llama2-7b-reward"
+  model_name: "llama3-8b-reward"
   
   # Tags
   tags:
     task: "reward-modeling"
-    base_model: "llama2-7b"
+    base_model: "llama3-8b"
     training_type: "preference"
 
 # ============================================================================
@@ -198,7 +196,7 @@ safety:
   early_stopping:
     enabled: true
     patience: 3
-    metric: "eval_accuracy"
+    metric: "eval_reward_accuracy"
     mode: "max"
   
   # Gradient clipping

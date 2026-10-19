@@ -1,9 +1,21 @@
+import importlib.util
 import sys
 import types
 from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+
+
+def _stub_if_missing(name, module):
+    """Install a stub only when the real package is not installed.
+
+    A stub peft next to a real transformers breaks transformers.trainer, which
+    imports peft whenever the real package is importable.
+    """
+    if name not in sys.modules and importlib.util.find_spec(name) is None:
+        sys.modules[name] = module
+
 
 datasets_stub = types.ModuleType("datasets")
 datasets_stub.load_dataset = lambda *args, **kwargs: []
@@ -12,13 +24,13 @@ datasets_stub.Dataset = type(
     (),
     {"from_list": classmethod(lambda cls, data: data)},
 )
-sys.modules.setdefault("datasets", datasets_stub)
+_stub_if_missing("datasets", datasets_stub)
 
 peft_stub = types.ModuleType("peft")
 peft_stub.LoraConfig = lambda *args, **kwargs: SimpleNamespace()
 peft_stub.get_peft_model = lambda model, config: model
 peft_stub.TaskType = SimpleNamespace(CAUSAL_LM="CAUSAL_LM")
-sys.modules.setdefault("peft", peft_stub)
+_stub_if_missing("peft", peft_stub)
 
 transformers_stub = types.ModuleType("transformers")
 transformers_stub.AutoTokenizer = SimpleNamespace()
@@ -27,10 +39,11 @@ transformers_stub.AutoModelForSequenceClassification = SimpleNamespace()
 transformers_stub.PreTrainedModel = object
 transformers_stub.TrainingArguments = lambda **kwargs: kwargs
 transformers_stub.Trainer = object
+transformers_stub.EarlyStoppingCallback = lambda *args, **kwargs: None
 transformers_stub.TrainerCallback = object
 transformers_stub.default_data_collator = lambda features: features
 transformers_stub.get_scheduler = lambda *args, **kwargs: None
-sys.modules.setdefault("transformers", transformers_stub)
+_stub_if_missing("transformers", transformers_stub)
 
 from training import reward_trainer, rlhf_trainer, sft_trainer  # noqa: E402
 
@@ -70,11 +83,18 @@ class FakeTokenizer:
         self.events.append("tokenizer_save")
 
 
+class FakeModel:
+    def __init__(self, events):
+        self.generation_config = SimpleNamespace(
+            save_pretrained=lambda path: events.append("generation_config_save")
+        )
+
+
 class FakeHFTrainer:
     def __init__(self, *args, events=None, **kwargs):
         self.events = events
 
-    def train(self):
+    def train(self, resume_from_checkpoint=None):
         self.events.append("train")
         return SimpleNamespace(metrics={"train_loss": 0.1})
 
@@ -102,8 +122,9 @@ def test_sft_registers_only_after_final_checkpoint_save(monkeypatch, tmp_path):
     monkeypatch.setattr(
         trainer,
         "load_model_and_tokenizer",
-        lambda: (object(), FakeTokenizer(events)),
+        lambda: (FakeModel(events), FakeTokenizer(events)),
     )
+    monkeypatch.setattr(sft_trainer, "ensure_chat_tokenizer", lambda tokenizer: tokenizer)
     monkeypatch.setattr(
         sft_trainer.SFTDataPreprocessor,
         "prepare_datasets",
@@ -120,6 +141,7 @@ def test_sft_registers_only_after_final_checkpoint_save(monkeypatch, tmp_path):
 
     assert events.index("save_model") < _event_index(events, "register")
     assert events.index("tokenizer_save") < _event_index(events, "register")
+    assert events.index("generation_config_save") < _event_index(events, "register")
     assert result.checkpoint_path == str(tmp_path / "final")
     assert result.lifecycle_result.version == "1"
 
@@ -141,6 +163,7 @@ def test_reward_registers_only_after_final_checkpoint_save(monkeypatch, tmp_path
         "load_model_and_tokenizer",
         lambda: (object(), FakeTokenizer(events)),
     )
+    monkeypatch.setattr(reward_trainer, "ensure_chat_tokenizer", lambda tokenizer: tokenizer)
     monkeypatch.setattr(
         reward_trainer.RewardDataPreprocessor,
         "prepare_datasets",
@@ -174,7 +197,7 @@ def test_rlhf_registers_only_after_final_checkpoint_save(monkeypatch, tmp_path):
     trainer = rlhf_trainer.RLHFTrainer.__new__(rlhf_trainer.RLHFTrainer)
     trainer.config = config
     trainer.kl_coef = 0.05
-    trainer.tokenizer = object()
+    trainer.tokenizer = SimpleNamespace(pad_token_id=0)
 
     def fake_save_checkpoint(step):
         path = tmp_path / f"checkpoint-{step}"

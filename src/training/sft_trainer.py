@@ -10,19 +10,32 @@ import logging
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 
-import torch
 from datasets import load_dataset, Dataset
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
+    EarlyStoppingCallback,
     TrainingArguments,
     Trainer,
     default_data_collator,
 )
-from peft import LoraConfig, get_peft_model, TaskType
 
 try:
     from .results import TrainingRunResult
+    from .chat_format import (
+        apply_generation_config,
+        encode_prompt_and_completion,
+        ensure_chat_tokenizer,
+        format_prompt,
+        resize_embeddings_if_needed,
+    )
+    from .hf_config import (
+        attention_implementation,
+        build_training_arguments_kwargs,
+        early_stopping_settings,
+        model_load_dtype,
+        resolve_precision,
+    )
     from .mlflow_lifecycle import (
         MLflowMetricsCallback,
         MLflowTrainingLifecycle,
@@ -30,11 +43,37 @@ try:
     )
 except ImportError:  # pragma: no cover - supports direct script execution
     from results import TrainingRunResult  # type: ignore[no-redef]
+    from chat_format import (  # type: ignore[no-redef]
+        apply_generation_config,
+        encode_prompt_and_completion,
+        ensure_chat_tokenizer,
+        format_prompt,
+        resize_embeddings_if_needed,
+    )
+    from hf_config import (  # type: ignore[no-redef]
+        attention_implementation,
+        build_training_arguments_kwargs,
+        early_stopping_settings,
+        model_load_dtype,
+        resolve_precision,
+    )
     from mlflow_lifecycle import (  # type: ignore[no-redef]
         MLflowMetricsCallback,
         MLflowTrainingLifecycle,
         PromotionConfig,
     )
+
+# Llama attention + MLP projections; adapting only q/k/v/o leaves most of the
+# trainable capacity on the table.
+DEFAULT_LORA_TARGET_MODULES = [
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "o_proj",
+    "gate_proj",
+    "up_proj",
+    "down_proj",
+]
 
 # Configure logging
 logging.basicConfig(
@@ -93,12 +132,8 @@ class SFTDataPreprocessor:
             tokenizer: HuggingFace tokenizer
             max_length: Maximum sequence length
         """
-        self.tokenizer = tokenizer
+        self.tokenizer = ensure_chat_tokenizer(tokenizer)
         self.max_length = max_length
-
-        # Ensure tokenizer has padding token
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
 
         logger.info(f"Initialized SFTDataPreprocessor with max_length={max_length}")
 
@@ -139,82 +174,51 @@ class SFTDataPreprocessor:
         return dataset
 
     def format_prompt(self, prompt: str) -> str:
-        """Format the instruction prefix that should be masked from loss."""
-        return f"### Instruction:\n{prompt}\n\n### Response:\n"
-
-    def format_instruction(self, example: Dict[str, str]) -> str:
-        """
-        Format instruction-response pair into a single training sequence
-
-        Uses Alpaca-style formatting:
-        ### Instruction:
-        {prompt}
-
-        ### Response:
-        {completion}
-
-        Args:
-            example: Dict with 'prompt' and 'completion' keys
-
-        Returns:
-            Formatted text string
-        """
-        instruction = example.get('prompt', '')
-        response = example.get('completion', '')
-
-        return f"{self.format_prompt(instruction)}{response}{self.tokenizer.eos_token}"
+        """Render the chat-templated prompt that is masked from the loss."""
+        return format_prompt(self.tokenizer, prompt)
 
     def tokenize_function(self, examples: Dict[str, List]) -> Dict[str, List]:
         """
-        Tokenize examples for training
+        Tokenize prompt/completion pairs with the chat template.
+
+        Prompt tokens and padding get label -100. Examples whose completion is
+        cut off entirely by max_length are dropped: an all -100 row has no
+        tokens to average over and turns the loss into NaN.
 
         Args:
             examples: Batch of examples
 
         Returns:
-            Tokenized batch
+            Tokenized batch (possibly with fewer rows than the input)
         """
-        prompts = examples.get('prompt', [])
-        completions = examples.get('completion', [])
-        texts = []
-        prompt_lengths = []
+        pad_token_id = self.tokenizer.pad_token_id
+        batch: Dict[str, List] = {"input_ids": [], "attention_mask": [], "labels": []}
+        dropped = 0
 
-        for prompt, completion in zip(prompts, completions):
-            prompt_text = self.format_prompt(str(prompt or ""))
-            full_text = f"{prompt_text}{completion or ''}{self.tokenizer.eos_token}"
-            texts.append(full_text)
-            prompt_encoding = self.tokenizer(
-                prompt_text,
-                truncation=True,
-                max_length=self.max_length,
-                padding=False,
-                return_tensors=None,
+        for prompt, completion in zip(examples.get('prompt', []), examples.get('completion', [])):
+            prompt_ids, completion_ids = encode_prompt_and_completion(
+                self.tokenizer,
+                str(prompt or ""),
+                str(completion or ""),
             )
-            prompt_lengths.append(len(prompt_encoding['input_ids']))
+            input_ids = (prompt_ids + completion_ids)[:self.max_length]
+            labels = ([-100] * len(prompt_ids) + completion_ids)[:self.max_length]
+            if all(label == -100 for label in labels):
+                dropped += 1
+                continue
 
-        tokenized = self.tokenizer(
-            texts,
-            truncation=True,
-            padding='max_length',
-            max_length=self.max_length,
-            return_tensors=None,
-        )
+            padding = self.max_length - len(input_ids)
+            batch["input_ids"].append(input_ids + [pad_token_id] * padding)
+            batch["attention_mask"].append([1] * len(input_ids) + [0] * padding)
+            batch["labels"].append(labels + [-100] * padding)
 
-        labels = []
-        attention_masks = tokenized.get('attention_mask', [])
-        for input_ids, attention_mask, prompt_length in zip(
-            tokenized['input_ids'],
-            attention_masks,
-            prompt_lengths,
-        ):
-            example_labels = list(input_ids)
-            for index, mask_value in enumerate(attention_mask):
-                if index < prompt_length or mask_value == 0:
-                    example_labels[index] = -100
-            labels.append(example_labels)
-        tokenized['labels'] = labels
-
-        return tokenized
+        if dropped:
+            logger.warning(
+                "Dropped %d SFT examples whose prompt fills max_length=%d",
+                dropped,
+                self.max_length,
+            )
+        return batch
 
     def prepare_datasets(
         self,
@@ -256,6 +260,30 @@ class SFTDataPreprocessor:
         return train_dataset, val_dataset
 
 
+def limit_debug_samples(
+    raw_config: Dict[str, Any],
+    train_dataset: Dataset,
+    val_dataset: Optional[Dataset],
+) -> tuple:
+    """Trim datasets to debug.max_train_samples/max_eval_samples when debug is enabled."""
+    debug = raw_config.get("debug") or {}
+    if not debug.get("enabled", False):
+        return train_dataset, val_dataset
+
+    max_train = debug.get("max_train_samples")
+    if max_train is not None:
+        train_dataset = train_dataset.select(range(min(int(max_train), len(train_dataset))))
+    max_eval = debug.get("max_eval_samples")
+    if val_dataset is not None and max_eval is not None:
+        val_dataset = val_dataset.select(range(min(int(max_eval), len(val_dataset))))
+    logger.info(
+        "Debug mode: using %d train / %s eval examples",
+        len(train_dataset),
+        len(val_dataset) if val_dataset is not None else 0,
+    )
+    return train_dataset, val_dataset
+
+
 class MLflowCallback(MLflowMetricsCallback):
     """Backward-compatible name for the shared MLflow metrics callback."""
 
@@ -272,7 +300,9 @@ class SFTTrainer:
             use_lora: Whether to use LoRA for parameter-efficient training
         """
         self.config = config
-        self.use_lora = use_lora
+        lora_config = config.raw_config.get("lora") or {}
+        self.use_lora = use_lora or bool(lora_config.get("enabled", False))
+        self.precision = resolve_precision(config.raw_config.get("model"))
 
         logger.info(f"Initializing SFT Trainer for model: {config.model_name}")
         logger.info(f"Output directory: {config.output_dir}")
@@ -288,33 +318,62 @@ class SFTTrainer:
             trust_remote_code=False,
         )
 
-        # Ensure tokenizer has padding token
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
+        tokenizer = ensure_chat_tokenizer(tokenizer)
 
-        logger.info(f"Loading model from {self.config.model_name}")
+        model_config = self.config.raw_config.get("model") or {}
+        torch_dtype = model_load_dtype(self.precision, full_fine_tune=not self.use_lora)
+        attn_implementation = attention_implementation(model_config)
+        logger.info(
+            "Loading model from %s (dtype=%s, attention=%s)",
+            self.config.model_name,
+            torch_dtype,
+            attn_implementation,
+        )
+        # No device_map: Trainer/accelerate place the model, which keeps
+        # torchrun, FSDP and DeepSpeed launches working.
         model = AutoModelForCausalLM.from_pretrained(
             self.config.model_name,
-            torch_dtype=torch.float16,
-            device_map="auto",
+            torch_dtype=torch_dtype,
+            attn_implementation=attn_implementation,
+            cache_dir=model_config.get("cache_dir"),
             trust_remote_code=False,
         )
+        if model_config.get("gradient_checkpointing", False):
+            model.config.use_cache = False
+        resize_embeddings_if_needed(model, tokenizer)
+        apply_generation_config(model, tokenizer)
 
-        # Apply LoRA if enabled
         if self.use_lora:
-            logger.info("Applying LoRA configuration")
-            lora_config = LoraConfig(
-                task_type=TaskType.CAUSAL_LM,
-                r=8,  # LoRA rank
-                lora_alpha=16,
-                lora_dropout=0.05,
-                target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
-                bias="none",
-            )
-            model = get_peft_model(model, lora_config)
-            model.print_trainable_parameters()
+            model = self._apply_lora(model)
 
         return model, tokenizer
+
+    def _apply_lora(self, model):
+        """Wrap the model with a LoRA adapter configured from the `lora:` YAML section."""
+        # peft is only needed for adapter runs, not full fine-tuning.
+        from peft import LoraConfig, TaskType, get_peft_model
+
+        lora_settings = self.config.raw_config.get("lora") or {}
+        lora_config = LoraConfig(
+            task_type=TaskType.CAUSAL_LM,
+            r=int(lora_settings.get("r", 16)),
+            lora_alpha=int(lora_settings.get("alpha", 32)),
+            lora_dropout=float(lora_settings.get("dropout", 0.05)),
+            target_modules=list(
+                lora_settings.get("target_modules") or DEFAULT_LORA_TARGET_MODULES
+            ),
+            bias=lora_settings.get("bias", "none"),
+            modules_to_save=lora_settings.get("modules_to_save"),
+        )
+        if not {"embed_tokens", "lm_head"} <= set(lora_config.modules_to_save or ()):
+            logger.warning(
+                "LoRA without embed_tokens/lm_head in lora.modules_to_save: the Llama 3 "
+                "base embeddings for the chat header/<|eot_id|> tokens stay untrained"
+            )
+        logger.info("Applying LoRA configuration: %s", lora_config)
+        model = get_peft_model(model, lora_config)
+        model.print_trainable_parameters()
+        return model
 
     def _build_lifecycle(self) -> MLflowTrainingLifecycle:
         """Build the MLflow lifecycle controller for this training run."""
@@ -335,6 +394,20 @@ class SFTTrainer:
             },
         )
 
+    def _training_arguments_kwargs(self, has_eval: bool) -> Dict[str, Any]:
+        """Build TrainingArguments kwargs from the YAML config."""
+        kwargs = build_training_arguments_kwargs(
+            self.config.raw_config,
+            output_dir=self.config.output_dir,
+            has_eval=has_eval,
+        )
+        # The dataclass fields can be overridden after loading the YAML.
+        kwargs["num_train_epochs"] = self.config.num_train_epochs
+        kwargs["per_device_train_batch_size"] = self.config.per_device_train_batch_size
+        kwargs.setdefault("per_device_eval_batch_size", self.config.per_device_train_batch_size)
+        kwargs["learning_rate"] = self.config.learning_rate
+        return kwargs
+
     def train(self) -> TrainingRunResult:
         """Execute SFT training"""
         lifecycle = self._build_lifecycle()
@@ -348,27 +421,22 @@ class SFTTrainer:
                 self.config.train_file,
                 self.config.val_file
             )
-
-            # Define training arguments
-            training_args = TrainingArguments(
-                output_dir=self.config.output_dir,
-                num_train_epochs=self.config.num_train_epochs,
-                per_device_train_batch_size=self.config.per_device_train_batch_size,
-                per_device_eval_batch_size=self.config.per_device_train_batch_size,
-                learning_rate=self.config.learning_rate,
-                lr_scheduler_type="cosine",
-                warmup_ratio=0.03,
-                logging_steps=10,
-                save_steps=500,
-                eval_steps=500 if val_dataset else None,
-                evaluation_strategy="steps" if val_dataset else "no",
-                save_total_limit=3,
-                fp16=True,
-                gradient_accumulation_steps=8,
-                remove_unused_columns=False,
-                report_to=["tensorboard"],
-                logging_dir=f"{self.config.output_dir}/logs",
+            train_dataset, val_dataset = limit_debug_samples(
+                self.config.raw_config,
+                train_dataset,
+                val_dataset,
             )
+
+            training_args = TrainingArguments(**self._training_arguments_kwargs(
+                has_eval=bool(val_dataset),
+            ))
+
+            callbacks = [MLflowMetricsCallback(lifecycle)]
+            early_stopping = early_stopping_settings(self.config.raw_config, bool(val_dataset))
+            if early_stopping is not None:
+                callbacks.append(
+                    EarlyStoppingCallback(early_stopping_patience=early_stopping["patience"])
+                )
 
             # Initialize trainer
             trainer = Trainer(
@@ -377,12 +445,15 @@ class SFTTrainer:
                 train_dataset=train_dataset,
                 eval_dataset=val_dataset,
                 data_collator=default_data_collator,
-                callbacks=[MLflowMetricsCallback(lifecycle)],
+                callbacks=callbacks,
             )
 
             # Train
             logger.info("Starting training...")
-            train_output = trainer.train()
+            resume_from_checkpoint = (
+                self.config.raw_config.get("training") or {}
+            ).get("resume_from_checkpoint")
+            train_output = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
             final_metrics = dict(getattr(train_output, "metrics", {}) or {})
             if val_dataset:
                 final_metrics.update(trainer.evaluate())
@@ -392,6 +463,9 @@ class SFTTrainer:
             logger.info(f"Saving final model to {final_model_path}")
             trainer.save_model(final_model_path)
             tokenizer.save_pretrained(final_model_path)
+            # Adapter-only saves skip generation_config.json; vLLM and generate()
+            # read the <|eot_id|> stop token from it.
+            model.generation_config.save_pretrained(final_model_path)
 
             lifecycle_result = lifecycle.register_checkpoint(
                 final_model_path,

@@ -6,13 +6,16 @@
 # ============================================================================
 model:
   # Base model to fine-tune (HuggingFace model ID or local path)
-  name: "meta-llama/Llama-2-7b-hf"
+  # Gated repo: export HF_TOKEN after accepting the Meta license on Hugging Face.
+  name: "meta-llama/Meta-Llama-3-8B"
   
   # Local cache directory for downloaded models
   cache_dir: "/workspace/models/base"
   
-  # Model precision (fp16, bf16, fp32)
-  precision: "fp16"
+  # Mixed precision (bf16, fp16, fp32). This is the only precision switch:
+  # it sets the load dtype and Trainer bf16/fp16 flags. Llama 3 is trained in
+  # bf16; fp16 full fine-tuning loads fp32 master weights (GradScaler requires it).
+  precision: "bf16"
   
   # Enable gradient checkpointing (saves memory at cost of compute)
   gradient_checkpointing: true
@@ -30,7 +33,9 @@ data:
   # Validation dataset path
   val_file: "/workspace/data/sft/val.json"
   
-  # Maximum sequence length (longer sequences truncated)
+  # Maximum tokens per example. Prompt and completion are rendered with the
+  # Llama 3 chat template (src/training/chat_format.py), which RM, PPO and
+  # serving reuse; examples whose prompt alone fills max_length are dropped.
   max_length: 2048
   
   # Input/output format
@@ -82,11 +87,7 @@ training:
   # Checkpoint management
   save_total_limit: 3  # Keep only last 3 checkpoints
   save_strategy: "steps"
-  evaluation_strategy: "steps"
-  
-  # Mixed precision training
-  fp16: true
-  fp16_opt_level: "O1"
+  eval_strategy: "steps"
   
   # Performance optimization
   dataloader_num_workers: 4
@@ -96,7 +97,6 @@ training:
   resume_from_checkpoint: null
   
   # Distributed training settings
-  local_rank: -1  # Set by DeepSpeed launcher
   deepspeed: null  # Path to DeepSpeed config if using
 
 # ============================================================================
@@ -107,8 +107,8 @@ lora:
   enabled: false  # Set true to use LoRA instead of full fine-tuning
   
   # LoRA hyperparameters
-  r: 8  # LoRA rank
-  alpha: 16  # LoRA scaling
+  r: 16  # LoRA rank
+  alpha: 32  # LoRA scaling
   dropout: 0.05
   
   # Modules to apply LoRA (typical for LLaMA)
@@ -117,9 +117,19 @@ lora:
     - "k_proj"
     - "v_proj"
     - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
   
   # LoRA bias settings
   bias: "none"  # Options: none, all, lora_only
+
+  # Llama 3 base never trained the <|start_header_id|>/<|eot_id|> embeddings
+  # the chat template uses, so LoRA runs also train embeddings and lm_head
+  # (full copies: ~2 GB extra in the adapter). Full fine-tuning covers them already.
+  modules_to_save:
+    - "embed_tokens"
+    - "lm_head"
 
 # ============================================================================
 # Hardware Configuration
@@ -143,9 +153,9 @@ hardware:
 # ============================================================================
 tracking:
   # Enable Weights & Biases logging
-  wandb_enabled: true
+  wandb_enabled: false  # Needs WANDB_API_KEY; MLflow is the default tracker
   wandb_project: "llm-sft-training"
-  wandb_run_name: "llama2-7b-sft"
+  wandb_run_name: "llama3-8b-sft"
   
   # Enable TensorBoard logging
   tensorboard_enabled: true
@@ -164,12 +174,12 @@ registry:
   auto_register: true
   
   # Model name in registry
-  model_name: "llama2-7b-sft"
+  model_name: "llama3-8b-sft"
   
   # Tags to add to registered model
   tags:
     task: "instruction-following"
-    base_model: "llama2-7b"
+    base_model: "llama3-8b"
     training_type: "sft"
 
 # ============================================================================

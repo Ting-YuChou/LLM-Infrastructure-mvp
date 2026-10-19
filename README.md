@@ -595,7 +595,7 @@ registry = LLMModelRegistry(
 # Register model
 version = registry.register_model(
     model_path="./outputs/sft/final",
-    model_name="llama2-7b-sft",
+    model_name="llama3-8b-sft",
     model_type="sft",
     metrics={"eval_loss": 0.5},
     tags={"task": "instruction-following"}
@@ -603,7 +603,7 @@ version = registry.register_model(
 
 # Deploy to production
 registry.transition_model_stage(
-    model_name="llama2-7b-sft",
+    model_name="llama3-8b-sft",
     version=version,
     stage="Production"
 )

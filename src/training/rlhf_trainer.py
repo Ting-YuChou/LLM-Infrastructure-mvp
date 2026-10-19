@@ -5,6 +5,7 @@ Implements reinforcement learning from human feedback for LLM alignment
 
 import os
 import logging
+from functools import partial
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
 import json
@@ -23,9 +24,27 @@ import numpy as np
 
 try:
     from .results import TrainingRunResult
+    from .chat_format import (
+        encode,
+        ensure_chat_tokenizer,
+        format_prompt,
+        pad_to_length,
+        resize_embeddings_if_needed,
+        stop_token_ids,
+    )
+    from .hf_config import model_load_dtype, resolve_precision
     from .mlflow_lifecycle import MLflowTrainingLifecycle, PromotionConfig
 except ImportError:  # pragma: no cover - supports direct script execution
     from results import TrainingRunResult  # type: ignore[no-redef]
+    from chat_format import (  # type: ignore[no-redef]
+        encode,
+        ensure_chat_tokenizer,
+        format_prompt,
+        pad_to_length,
+        resize_embeddings_if_needed,
+        stop_token_ids,
+    )
+    from hf_config import model_load_dtype, resolve_precision  # type: ignore[no-redef]
     from mlflow_lifecycle import (  # type: ignore[no-redef]
         MLflowTrainingLifecycle,
         PromotionConfig,
@@ -79,16 +98,19 @@ class RLHFConfig:
 
 
 class PromptDataset(Dataset):
-    """Dataset of prompts for RL training"""
+    """Chat-templated RL prompts, kept unpadded; collate_prompts pads each batch."""
 
     def __init__(self, prompts_file: str, tokenizer: AutoTokenizer, max_length: int = 512):
         """
         Initialize dataset
 
+        Prompts longer than max_length are skipped: truncating a templated
+        prompt would cut its BOS or its assistant header.
+
         Args:
             prompts_file: Path to JSON file with prompts
-            tokenizer: Tokenizer
-            max_length: Maximum prompt length
+            tokenizer: Tokenizer (with the chat template applied)
+            max_length: Maximum prompt length in tokens
         """
         self.tokenizer = tokenizer
         self.max_length = max_length
@@ -97,29 +119,74 @@ class PromptDataset(Dataset):
         with open(prompts_file, 'r') as f:
             data = json.load(f)
 
-        self.prompts = [item['prompt'] for item in data]
+        self.prompts: List[str] = []
+        self.input_ids: List[List[int]] = []
+        skipped = 0
+        for item in data:
+            input_ids = encode(tokenizer, format_prompt(tokenizer, item['prompt']))
+            if len(input_ids) > max_length:
+                skipped += 1
+                continue
+            self.prompts.append(item['prompt'])
+            self.input_ids.append(input_ids)
+
+        if skipped:
+            logger.warning("Skipped %d prompts longer than %d tokens", skipped, max_length)
         logger.info(f"Loaded {len(self.prompts)} prompts from {prompts_file}")
 
     def __len__(self) -> int:
         return len(self.prompts)
 
-    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
-        prompt = self.prompts[idx]
-
-        # Tokenize
-        encoding = self.tokenizer(
-            prompt,
-            truncation=True,
-            max_length=self.max_length,
-            padding='max_length',
-            return_tensors='pt'
-        )
-
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
         return {
-            'input_ids': encoding['input_ids'].squeeze(0),
-            'attention_mask': encoding['attention_mask'].squeeze(0),
-            'prompt_text': prompt
+            'input_ids': self.input_ids[idx],
+            'prompt_text': self.prompts[idx],
         }
+
+
+def collate_prompts(examples: List[Dict[str, Any]], pad_token_id: int) -> Dict[str, Any]:
+    """
+    Left-pad a batch of prompts.
+
+    generate() appends new tokens after the last column, so right padding
+    would make the model continue from pad tokens instead of the prompt.
+    """
+    length = max(len(example['input_ids']) for example in examples)
+    input_ids = pad_to_length(
+        [example['input_ids'] for example in examples], length, pad_token_id, left=True
+    )
+    attention_mask = pad_to_length(
+        [[1] * len(example['input_ids']) for example in examples], length, 0, left=True
+    )
+    return {
+        'input_ids': torch.tensor(input_ids, dtype=torch.long),
+        'attention_mask': torch.tensor(attention_mask, dtype=torch.long),
+        'prompt_text': [example['prompt_text'] for example in examples],
+    }
+
+
+def position_ids_from_mask(attention_mask: torch.Tensor) -> torch.Tensor:
+    """
+    Position ids that skip left padding, as generate() computes them.
+
+    Llama's RoPE is relative, so a uniform left-pad offset barely changes the
+    scores; passing the same positions keeps scoring passes consistent with
+    sampling and stays correct for models with absolute position embeddings.
+    """
+    return (attention_mask.long().cumsum(-1) - 1).clamp(min=0)
+
+
+def response_mask_from_stops(response_ids: torch.Tensor, stop_ids: List[int]) -> torch.Tensor:
+    """
+    1 for generated tokens up to and including the first stop token, 0 after it.
+
+    The stop token itself stays in the mask so PPO credits the decision to end
+    the turn, and the reward lands on it.
+    """
+    stops = torch.tensor(stop_ids, device=response_ids.device)
+    is_stop = torch.isin(response_ids, stops).long()
+    stops_before = is_stop.cumsum(-1) - is_stop
+    return (stops_before == 0).long()
 
 
 class ValueHead(nn.Module):
@@ -143,7 +210,10 @@ class ValueHead(nn.Module):
         Returns:
             values: [batch_size, seq_len] - per-token value estimates
         """
-        # Apply value head to each token position
+        # The head stays in fp32 while the policy runs in bf16/fp16, and with
+        # device_map="auto" the last hidden state can sit on another GPU.
+        weight = self.value_head.weight
+        hidden_states = hidden_states.to(device=weight.device, dtype=weight.dtype)
         values = self.value_head(hidden_states).squeeze(-1)  # [batch_size, seq_len]
         return values
 
@@ -179,26 +249,43 @@ class RLHFTrainer:
         os.makedirs(config.output_dir, exist_ok=True)
 
         # Load models
-        self.tokenizer = AutoTokenizer.from_pretrained(config.policy_model_path)
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.tokenizer = ensure_chat_tokenizer(
+            AutoTokenizer.from_pretrained(config.policy_model_path)
+        )
+        self.stop_token_ids = stop_token_ids(self.tokenizer)
+
+        # The policy is updated with a plain torch optimizer and no GradScaler,
+        # so precision "fp16" loads fp32 policy weights instead of running
+        # pure-fp16 Adam. bf16 (the Llama 3 default) trains directly in bf16.
+        policy_config = (config.raw_config.get("model") or {}).get("policy") or {}
+        self.precision = resolve_precision(policy_config)
+        self.policy_dtype = model_load_dtype(self.precision, full_fine_tune=True)
+        frozen_dtype = model_load_dtype(self.precision, full_fine_tune=False)
+        logger.info(
+            "Precision: %s (policy dtype=%s, frozen model dtype=%s)",
+            self.precision,
+            self.policy_dtype,
+            frozen_dtype,
+        )
 
         # Policy model (model being optimized)
         logger.info("Loading policy model...")
         self.policy_model = AutoModelForCausalLM.from_pretrained(
             config.policy_model_path,
-            torch_dtype=torch.float16,
+            torch_dtype=self.policy_dtype,
             device_map="auto"
         )
+        resize_embeddings_if_needed(self.policy_model, self.tokenizer)
         self.policy_model.train()
 
         # Reference model (frozen, for KL penalty)
         logger.info("Loading reference model...")
         self.ref_model = AutoModelForCausalLM.from_pretrained(
             config.policy_model_path,
-            torch_dtype=torch.float16,
+            torch_dtype=frozen_dtype,
             device_map="auto"
         )
+        resize_embeddings_if_needed(self.ref_model, self.tokenizer)
         self.ref_model.eval()
         for param in self.ref_model.parameters():
             param.requires_grad = False
@@ -208,7 +295,7 @@ class RLHFTrainer:
         self.reward_model = AutoModelForSequenceClassification.from_pretrained(
             config.reward_model_path,
             num_labels=1,
-            torch_dtype=torch.float16,
+            torch_dtype=frozen_dtype,
             device_map="auto"
         )
         self.reward_model.config.pad_token_id = self.tokenizer.pad_token_id
@@ -216,9 +303,10 @@ class RLHFTrainer:
         for param in self.reward_model.parameters():
             param.requires_grad = False
 
-        # Value function
+        # Value function: kept in fp32 next to the policy's final hidden state.
         hidden_size = self.policy_model.config.hidden_size
-        self.value_head = ValueHead(hidden_size).to(self.device)
+        value_head_device = self.policy_model.get_output_embeddings().weight.device
+        self.value_head = ValueHead(hidden_size).to(value_head_device)
 
         # Optimizers
         self.policy_optimizer = torch.optim.Adam(
@@ -277,96 +365,44 @@ class RLHFTrainer:
             json.dump(metrics, f, indent=2, sort_keys=True)
         return metrics
 
+    @property
+    def logit_temperature(self) -> float:
+        """Temperature applied to logits wherever log-probs are computed."""
+        return self.config.temperature if self.config.temperature > 0 else 1.0
+
     @torch.no_grad()
     def generate_response(
         self,
         prompt_ids: torch.Tensor,
         attention_mask: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Generate response from policy model
+        Sample responses from the policy model
+
+        Log-probs and values are not taken from generate(): its scores are
+        already temperature/top-p processed, which skews the PPO ratio. The
+        rollout recomputes them with a forward pass instead.
 
         Args:
-            prompt_ids: Prompt token IDs [batch_size, prompt_len]
-            attention_mask: Attention mask [batch_size, prompt_len]
+            prompt_ids: Left-padded prompt token IDs [batch_size, prompt_len]
+            attention_mask: Prompt attention mask [batch_size, prompt_len]
 
         Returns:
             response_ids: Generated token IDs [batch_size, response_len]
-            log_probs: Per-token log probabilities [batch_size, response_len]
-            values: Per-token value estimates [batch_size, response_len]
+            response_mask: 1 up to and including the first stop token [batch_size, response_len]
         """
-        batch_size = prompt_ids.shape[0]
-        prompt_length = prompt_ids.shape[1]
-
-        # Generate with scores
-        outputs = self.policy_model.generate(
-            prompt_ids,
+        sequences = self.policy_model.generate(
+            input_ids=prompt_ids,
             attention_mask=attention_mask,
             max_new_tokens=self.config.max_response_length,
             temperature=self.config.temperature,
             top_p=self.config.top_p,
             do_sample=True,
+            eos_token_id=self.stop_token_ids,
             pad_token_id=self.tokenizer.pad_token_id,
-            return_dict_in_generate=True,
-            output_scores=True,
-            output_hidden_states=True,
         )
-
-        # Extract response tokens (exclude prompt)
-        response_ids = outputs.sequences[:, prompt_length:]
-        response_length = response_ids.shape[1]
-
-        # Compute log probabilities from scores
-        # outputs.scores is a tuple of tensors, one for each generated token
-        # Each tensor has shape [batch_size, vocab_size]
-        if len(outputs.scores) > 0:
-            # Stack scores: [response_len, batch_size, vocab_size]
-            stacked_scores = torch.stack(outputs.scores, dim=0)
-            # Transpose to [batch_size, response_len, vocab_size]
-            stacked_scores = stacked_scores.transpose(0, 1)
-
-            # Apply softmax to get probabilities
-            log_probs_all = F.log_softmax(stacked_scores, dim=-1)
-
-            # Gather log probs for selected tokens
-            # response_ids: [batch_size, response_len]
-            # We need to gather the log prob for each selected token
-            response_ids_expanded = response_ids.unsqueeze(-1)  # [batch_size, response_len, 1]
-            log_probs = log_probs_all.gather(-1, response_ids_expanded).squeeze(-1)  # [batch_size, response_len]
-        else:
-            log_probs = torch.zeros(batch_size, response_length, device=self.device)
-
-        # Compute per-token value estimates using value head
-        # We need to get hidden states from the full sequence
-        full_ids = outputs.sequences
-        with torch.no_grad():
-            model_outputs = self.policy_model(
-                full_ids,
-                output_hidden_states=True,
-                return_dict=True
-            )
-            # Get last hidden state for all positions
-            hidden_states = model_outputs.hidden_states[-1]  # [batch_size, seq_len, hidden_size]
-
-            # Apply value head to get per-token values
-            all_values = self.value_head(hidden_states)  # [batch_size, seq_len]
-
-            # Extract values for response positions only
-            # The value at position t estimates V(s_t), which is the value before generating token t+1
-            # For response tokens, we want values from positions [prompt_length-1, seq_len-2]
-            # because the value at position i predicts the value of state after seeing tokens 0..i
-            values = all_values[:, prompt_length-1:-1]  # [batch_size, response_len]
-
-            # Handle case where response_len doesn't match
-            if values.shape[1] != response_length:
-                # Pad or truncate to match response_length
-                if values.shape[1] < response_length:
-                    padding = torch.zeros(batch_size, response_length - values.shape[1], device=self.device)
-                    values = torch.cat([values, padding], dim=1)
-                else:
-                    values = values[:, :response_length]
-
-        return response_ids, log_probs, values
+        response_ids = sequences[:, prompt_ids.shape[1]:]
+        return response_ids, response_mask_from_stops(response_ids, self.stop_token_ids)
 
     @torch.no_grad()
     def compute_reward(
@@ -402,6 +438,7 @@ class RLHFTrainer:
         outputs = self.reward_model(
             input_ids=full_ids,
             attention_mask=full_attention_mask,
+            position_ids=position_ids_from_mask(full_attention_mask),
         )
         rewards = outputs.logits.squeeze(-1)
 
@@ -446,57 +483,70 @@ class RLHFTrainer:
 
         return rewards
 
-    @torch.no_grad()
-    def compute_kl_penalty_per_token(
+    def _response_log_probs(
         self,
-        prompt_ids: torch.Tensor,
-        response_ids: torch.Tensor
-    ) -> torch.Tensor:
+        model: nn.Module,
+        input_ids: torch.Tensor,
+        response_ids: torch.Tensor,
+        attention_mask: Optional[torch.Tensor],
+        output_hidden_states: bool = False,
+    ) -> Tuple[torch.Tensor, torch.Tensor, Any]:
         """
-        Compute per-token KL divergence from reference model
+        Per-token log-probs of response_ids under `model`.
 
-        KL(policy || reference) for each token in the response
-
-        Args:
-            prompt_ids: Prompt token IDs [batch_size, prompt_len]
-            response_ids: Response token IDs [batch_size, response_len]
+        Logits are divided by the sampling temperature so rollout, PPO update
+        and reference all score the distribution the tokens were drawn from.
 
         Returns:
-            kl_per_token: Per-token KL penalty [batch_size, response_len]
+            log_probs: [batch_size, response_len]
+            log_probs_all: [batch_size, response_len, vocab_size]
+            outputs: the raw model outputs
         """
-        full_ids = torch.cat([prompt_ids, response_ids], dim=1)
-        prompt_length = prompt_ids.shape[1]
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
+        prompt_length = input_ids.shape[1] - response_ids.shape[1]
 
-        # Policy model logits
-        policy_outputs = self.policy_model(full_ids)
-        policy_logits = policy_outputs.logits
+        outputs = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids_from_mask(attention_mask),
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+        )
+        # Logits at position i predict token i+1.
+        logits = outputs.logits[:, prompt_length - 1:-1, :].float() / self.logit_temperature
+        log_probs_all = F.log_softmax(logits, dim=-1)
+        log_probs = log_probs_all.gather(-1, response_ids.unsqueeze(-1)).squeeze(-1)
+        return log_probs, log_probs_all, outputs
 
-        # Reference model logits
-        ref_outputs = self.ref_model(full_ids)
-        ref_logits = ref_outputs.logits
+    @torch.no_grad()
+    def compute_ref_log_probs(
+        self,
+        input_ids: torch.Tensor,
+        response_ids: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Per-token log-probs of the response under the frozen reference model
 
-        # Get logits for response positions only
-        # Logits at position i predict token at position i+1
-        # So for response tokens, we need logits from positions [prompt_length-1, seq_len-2]
-        policy_logits_response = policy_logits[:, prompt_length-1:-1, :]  # [batch_size, response_len, vocab_size]
-        ref_logits_response = ref_logits[:, prompt_length-1:-1, :]  # [batch_size, response_len, vocab_size]
+        The per-token KL estimate is policy_log_probs - ref_log_probs on the
+        sampled tokens.
 
-        # Compute log probabilities
-        policy_log_probs = F.log_softmax(policy_logits_response, dim=-1)
-        ref_log_probs = F.log_softmax(ref_logits_response, dim=-1)
+        Args:
+            input_ids: Prompt + response token IDs [batch_size, seq_len]
+            response_ids: Response token IDs [batch_size, response_len]
+            attention_mask: Attention mask [batch_size, seq_len]
 
-        # Get log probs for the actual response tokens
-        # response_ids: [batch_size, response_len]
-        response_ids_expanded = response_ids.unsqueeze(-1)  # [batch_size, response_len, 1]
-
-        policy_token_log_probs = policy_log_probs.gather(-1, response_ids_expanded).squeeze(-1)  # [batch_size, response_len]
-        ref_token_log_probs = ref_log_probs.gather(-1, response_ids_expanded).squeeze(-1)  # [batch_size, response_len]
-
-        # Per-token KL: log(policy/ref) = log_policy - log_ref
-        # This is the simple KL estimator: E[log(p/q)] where we use the sampled token
-        kl_per_token = policy_token_log_probs - ref_token_log_probs  # [batch_size, response_len]
-
-        return kl_per_token
+        Returns:
+            ref_log_probs: [batch_size, response_len]
+        """
+        ref_log_probs, _, _ = self._response_log_probs(
+            self.ref_model,
+            input_ids,
+            response_ids,
+            attention_mask,
+        )
+        return ref_log_probs
 
     def compute_gae_per_token(
         self,
@@ -582,6 +632,9 @@ class RLHFTrainer:
         """
         Compute per-token log probabilities, entropy, and values for given sequences
 
+        Used both for the rollout's old log-probs/values (under no_grad) and in
+        the PPO update, so the first update's ratio is exactly 1.
+
         Args:
             input_ids: Full input sequence (prompt + response) [batch_size, seq_len]
             response_ids: Response tokens [batch_size, response_len]
@@ -592,49 +645,22 @@ class RLHFTrainer:
             entropy: Per-token entropy [batch_size, response_len]
             values: Per-token value estimates [batch_size, response_len]
         """
-        batch_size = input_ids.shape[0]
         prompt_length = input_ids.shape[1] - response_ids.shape[1]
-        response_length = response_ids.shape[1]
-
-        # Forward pass through policy model
-        outputs = self.policy_model(
+        log_probs, log_probs_all, outputs = self._response_log_probs(
+            self.policy_model,
             input_ids,
-            attention_mask=attention_mask,
+            response_ids,
+            attention_mask,
             output_hidden_states=True,
-            return_dict=True
         )
 
-        # Get logits for response positions
-        # Logits at position i predict token at position i+1
-        # So for response tokens, we need logits from positions [prompt_length-1, seq_len-2]
-        logits = outputs.logits[:, prompt_length-1:-1, :]  # [batch_size, response_len, vocab_size]
-
-        # Compute log probabilities
-        log_probs_all = F.log_softmax(logits, dim=-1)  # [batch_size, response_len, vocab_size]
-
-        # Gather log probs for actual response tokens
-        response_ids_expanded = response_ids.unsqueeze(-1)  # [batch_size, response_len, 1]
-        log_probs = log_probs_all.gather(-1, response_ids_expanded).squeeze(-1)  # [batch_size, response_len]
-
         # Compute per-token entropy: -sum(p * log(p))
-        probs = F.softmax(logits, dim=-1)  # [batch_size, response_len, vocab_size]
-        entropy = -torch.sum(probs * log_probs_all, dim=-1)  # [batch_size, response_len]
+        entropy = -torch.sum(log_probs_all.exp() * log_probs_all, dim=-1)
 
-        # Compute per-token values from hidden states
-        hidden_states = outputs.hidden_states[-1]  # [batch_size, seq_len, hidden_size]
-        all_values = self.value_head(hidden_states)  # [batch_size, seq_len]
-
-        # Extract values for response positions
         # Value at position t estimates V(s_t) before generating token t+1
-        values = all_values[:, prompt_length-1:-1]  # [batch_size, response_len]
-
-        # Handle case where dimensions don't match
-        if values.shape[1] != response_length:
-            if values.shape[1] < response_length:
-                padding = torch.zeros(batch_size, response_length - values.shape[1], device=values.device)
-                values = torch.cat([values, padding], dim=1)
-            else:
-                values = values[:, :response_length]
+        hidden_states = outputs.hidden_states[-1]  # [batch_size, seq_len, hidden_size]
+        all_values = self.value_head(hidden_states).to(self.device)  # [batch_size, seq_len]
+        values = all_values[:, prompt_length - 1:-1]  # [batch_size, response_len]
 
         return log_probs, entropy, values
 
@@ -791,7 +817,12 @@ class RLHFTrainer:
 
         # Create dataset
         dataset = PromptDataset(prompts_file, self.tokenizer, self.config.max_prompt_length)
-        dataloader = DataLoader(dataset, batch_size=self.config.batch_size, shuffle=True)
+        dataloader = DataLoader(
+            dataset,
+            batch_size=self.config.batch_size,
+            shuffle=True,
+            collate_fn=partial(collate_prompts, pad_token_id=self.tokenizer.pad_token_id),
+        )
 
         # Training metrics
         global_step = 0
@@ -811,39 +842,44 @@ class RLHFTrainer:
 
                 prompt_ids = batch['input_ids'].to(self.device)
                 prompt_attention_mask = batch['attention_mask'].to(self.device)
-                batch_size = prompt_ids.shape[0]
 
                 # ==================== Rollout Phase ====================
-                # Generate responses and get per-token log_probs and values
                 with torch.no_grad():
-                    response_ids, old_log_probs, old_values = self.generate_response(
+                    response_ids, response_attention_mask = self.generate_response(
                         prompt_ids, prompt_attention_mask
                     )
-                    # response_ids: [batch_size, response_len]
-                    # old_log_probs: [batch_size, response_len] (per-token)
-                    # old_values: [batch_size, response_len] (per-token)
+                    # response_mask covers tokens up to and including the first
+                    # stop token, so the EOS decision is trained and rewarded.
+                    response_mask = response_attention_mask.float()
 
-                    # Create response mask for valid (non-padding) tokens
-                    pad_token_id = self.tokenizer.pad_token_id
-                    response_mask = (response_ids != pad_token_id).float()  # [batch_size, response_len]
+                    input_ids = torch.cat([prompt_ids, response_ids], dim=1)
+                    full_attention_mask = torch.cat(
+                        [prompt_attention_mask, response_attention_mask], dim=1
+                    )
 
-                    # Compute per-token KL penalty
-                    kl_per_token = self.compute_kl_penalty_per_token(prompt_ids, response_ids)
-                    # kl_per_token: [batch_size, response_len]
+                    # Old log-probs/values from the same forward pass the PPO
+                    # update uses, not from generate()'s processed scores.
+                    old_log_probs, _, old_values = self.compute_log_probs_and_entropy_per_token(
+                        input_ids, response_ids, full_attention_mask
+                    )
+                    ref_log_probs = self.compute_ref_log_probs(
+                        input_ids, response_ids, full_attention_mask
+                    )
+                    # Per-token KL estimate on the sampled tokens
+                    kl_per_token = (old_log_probs - ref_log_probs) * response_mask
 
                     # Compute scalar RM scores
                     rm_scores = self.compute_reward(
                         prompt_ids,
                         response_ids,
                         prompt_attention_mask=prompt_attention_mask,
-                        response_attention_mask=response_mask.long(),
-                    )
+                        response_attention_mask=response_attention_mask,
+                    ).to(self.device)
                     # rm_scores: [batch_size]
 
                     # Combine into per-token rewards
                     # rewards = -kl_coef * kl_per_token + rm_score (at last valid token)
                     rewards = self.compute_rewards_per_token(rm_scores, kl_per_token, response_mask)
-                    # rewards: [batch_size, response_len]
 
                     # Compute per-token GAE advantages and returns
                     advantages, returns = self.compute_gae_per_token(
@@ -853,17 +889,8 @@ class RLHFTrainer:
                         gamma=self.config.gamma,
                         gae_lambda=self.config.gae_lambda
                     )
-                    # advantages: [batch_size, response_len]
-                    # returns: [batch_size, response_len]
 
                 # ==================== PPO Update Phase ====================
-                # Create full input_ids (prompt + response)
-                input_ids = torch.cat([prompt_ids, response_ids], dim=1)
-
-                # Create full attention mask
-                full_attention_mask = (input_ids != pad_token_id).long()
-
-                # Create PPO batch with per-token data
                 ppo_batch = {
                     'input_ids': input_ids,
                     'response_ids': response_ids,
@@ -1031,35 +1058,35 @@ class RLHFTrainer:
         }
 
         for prompt in eval_prompts[:num_samples]:
-            # Tokenize prompt
-            inputs = self.tokenizer(
-                prompt,
-                return_tensors='pt',
-                truncation=True,
-                max_length=self.config.max_prompt_length,
-                padding='max_length'
+            prompt_ids = torch.tensor(
+                [encode(self.tokenizer, format_prompt(self.tokenizer, prompt))],
+                device=self.device,
             )
-            prompt_ids = inputs['input_ids'].to(self.device)
-            attention_mask = inputs['attention_mask'].to(self.device)
+            attention_mask = torch.ones_like(prompt_ids)
 
-            # Generate response
-            response_ids, _, _ = self.generate_response(prompt_ids, attention_mask)
+            response_ids, response_attention_mask = self.generate_response(prompt_ids, attention_mask)
+            response_mask = response_attention_mask.float()
+            input_ids = torch.cat([prompt_ids, response_ids], dim=1)
+            full_attention_mask = torch.cat([attention_mask, response_attention_mask], dim=1)
 
-            # Compute reward
-            response_mask = (response_ids != self.tokenizer.pad_token_id).float()
             reward = self.compute_reward(
                 prompt_ids,
                 response_ids,
                 prompt_attention_mask=attention_mask,
-                response_attention_mask=response_mask.long(),
+                response_attention_mask=response_attention_mask,
             )
 
-            # Compute KL
-            kl_per_token = self.compute_kl_penalty_per_token(prompt_ids, response_ids)
-            kl = (kl_per_token * response_mask).sum() / (response_mask.sum() + 1e-8)
+            policy_log_probs, _, _ = self.compute_log_probs_and_entropy_per_token(
+                input_ids, response_ids, full_attention_mask
+            )
+            ref_log_probs = self.compute_ref_log_probs(input_ids, response_ids, full_attention_mask)
+            kl_per_token = policy_log_probs - ref_log_probs
+            kl = (kl_per_token * response_mask).sum() / response_mask.sum().clamp(min=1.0)
 
-            # Decode response
-            response_text = self.tokenizer.decode(response_ids[0], skip_special_tokens=True)
+            response_text = self.tokenizer.decode(
+                response_ids[0][response_attention_mask[0].bool()],
+                skip_special_tokens=True,
+            )
 
             results['rewards'].append(reward.item())
             results['kl_divergences'].append(kl.item())
