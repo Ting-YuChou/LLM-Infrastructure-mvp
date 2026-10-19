@@ -31,6 +31,12 @@ except ImportError:  # pragma: no cover - supports direct module execution
     evaluate_gates = load_config = load_json = render_results = None  # type: ignore[assignment]
 
 
+try:
+    from .distributed import is_main_process, world_size
+except ImportError:  # pragma: no cover - supports direct module execution
+    from distributed import is_main_process, world_size  # type: ignore[no-redef]
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -149,13 +155,15 @@ class MLflowTrainingLifecycle:
             "project": "llm-infrastructure",
             "model_type": model_type,
             "lifecycle": "training",
+            "world_size": str(world_size()),
         }
         tags.update(_stringify_tags(registry_config.get("tags") or {}))
         if extra_tags:
             tags.update(_stringify_tags(extra_tags))
 
         config = LifecycleConfig(
-            enabled=bool(tracking_config.get("mlflow_enabled", False)),
+            # One run per job: under torchrun only rank 0 talks to MLflow.
+            enabled=bool(tracking_config.get("mlflow_enabled", False)) and is_main_process(),
             tracking_uri=str(
                 tracking_config.get("mlflow_tracking_uri")
                 or os.getenv("MLFLOW_TRACKING_URI")
