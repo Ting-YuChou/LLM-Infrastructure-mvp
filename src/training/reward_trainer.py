@@ -10,13 +10,14 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 
+import numpy as np
 import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader
+import torch.nn.functional as F
 from datasets import load_dataset, Dataset
 from transformers import (
     AutoTokenizer,
     AutoModelForSequenceClassification,
+    EarlyStoppingCallback,
     TrainingArguments,
     Trainer,
     PreTrainedModel,
@@ -24,6 +25,13 @@ from transformers import (
 
 try:
     from .results import TrainingRunResult
+    from .hf_config import (
+        attention_implementation,
+        build_training_arguments_kwargs,
+        early_stopping_settings,
+        model_load_dtype,
+        resolve_precision,
+    )
     from .mlflow_lifecycle import (
         MLflowMetricsCallback,
         MLflowTrainingLifecycle,
@@ -31,6 +39,13 @@ try:
     )
 except ImportError:  # pragma: no cover - supports direct script execution
     from results import TrainingRunResult  # type: ignore[no-redef]
+    from hf_config import (  # type: ignore[no-redef]
+        attention_implementation,
+        build_training_arguments_kwargs,
+        early_stopping_settings,
+        model_load_dtype,
+        resolve_precision,
+    )
     from mlflow_lifecycle import (  # type: ignore[no-redef]
         MLflowMetricsCallback,
         MLflowTrainingLifecycle,
@@ -81,72 +96,6 @@ class RewardModelConfig:
             raw_config=config,
             config_path=config_path,
         )
-
-
-class RewardModel(nn.Module):
-    """
-    Reward Model that outputs a scalar reward for a given input
-
-    Architecture:
-    - Base LLM (frozen or fine-tunable)
-    - Linear head that outputs single scalar value
-    """
-
-    def __init__(self, base_model: PreTrainedModel):
-        """
-        Initialize reward model
-
-        Args:
-            base_model: Pre-trained language model
-        """
-        super().__init__()
-        self.base_model = base_model
-
-        # Get hidden size from base model
-        hidden_size = base_model.config.hidden_size
-
-        # Reward head: maps hidden states to single scalar
-        self.reward_head = nn.Linear(hidden_size, 1, bias=False)
-
-        # Initialize reward head with small values
-        nn.init.normal_(self.reward_head.weight, mean=0.0, std=0.01)
-
-        logger.info(f"Initialized reward model with hidden_size={hidden_size}")
-
-    def forward(
-        self,
-        input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
-        **kwargs
-    ) -> torch.Tensor:
-        """
-        Forward pass
-
-        Args:
-            input_ids: Token IDs [batch_size, seq_len]
-            attention_mask: Attention mask [batch_size, seq_len]
-
-        Returns:
-            Rewards: Scalar rewards [batch_size, 1]
-        """
-        # Get hidden states from base model
-        outputs = self.base_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            output_hidden_states=True
-        )
-
-        # Get last hidden state
-        hidden_states = outputs.hidden_states[-1]  # [batch_size, seq_len, hidden_size]
-
-        # Use the last token's hidden state (or mean pool)
-        # For causal LM, last token is the most informative
-        last_token_hidden = hidden_states[:, -1, :]  # [batch_size, hidden_size]
-
-        # Compute reward
-        rewards = self.reward_head(last_token_hidden)  # [batch_size, 1]
-
-        return rewards
 
 
 class RewardDataPreprocessor:
@@ -356,8 +305,9 @@ class RewardTrainer(Trainer):
 
         # Pairwise ranking loss
         # We want: reward_chosen > reward_rejected
-        # Loss = -log(sigmoid(reward_chosen - reward_rejected))
-        loss = -torch.log(torch.sigmoid(rewards_chosen - rewards_rejected)).mean()
+        # Loss = -log(sigmoid(reward_chosen - reward_rejected)), computed with
+        # logsigmoid so large negative margins don't underflow to -log(0) = inf.
+        loss = -F.logsigmoid(rewards_chosen - rewards_rejected).mean()
 
         if return_outputs:
             return loss, {
@@ -366,6 +316,47 @@ class RewardTrainer(Trainer):
             }
 
         return loss
+
+    def prediction_step(
+        self,
+        model: PreTrainedModel,
+        inputs: Dict[str, torch.Tensor],
+        prediction_loss_only: bool,
+        ignore_keys: Optional[List[str]] = None,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+        """
+        Evaluate one chosen/rejected batch.
+
+        The batches carry no `labels`, so the default Trainer.prediction_step
+        would call model(**inputs) with the chosen_*/rejected_* keys and crash.
+        """
+        inputs = self._prepare_inputs(inputs)
+        with torch.no_grad(), self.compute_loss_context_manager():
+            loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
+        loss = loss.detach()
+        if prediction_loss_only:
+            return loss, None, None
+
+        logits = torch.stack(
+            [outputs['rewards_chosen'], outputs['rewards_rejected']],
+            dim=-1,
+        ).detach()
+        # compute_metrics only runs when labels are present; the chosen
+        # response is always index 0.
+        labels = torch.zeros(logits.shape[0], dtype=torch.long, device=logits.device)
+        return loss, logits, labels
+
+
+def compute_reward_metrics(eval_prediction: Any) -> Dict[str, float]:
+    """Pairwise accuracy and mean margin from [chosen, rejected] reward logits."""
+    rewards = np.asarray(eval_prediction.predictions, dtype=np.float64)
+    if rewards.size == 0:
+        return {"reward_accuracy": 0.0, "reward_margin": 0.0}
+    margins = rewards[:, 0] - rewards[:, 1]
+    return {
+        "reward_accuracy": float((margins > 0).mean()),
+        "reward_margin": float(margins.mean()),
+    }
 
 
 class RewardModelTrainer:
@@ -398,15 +389,27 @@ class RewardModelTrainer:
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
 
-        logger.info(f"Loading base model from {self.config.model_name}")
+        model_config = self.config.raw_config.get("model") or {}
+        precision = resolve_precision(model_config)
+        torch_dtype = model_load_dtype(precision, full_fine_tune=True)
+        logger.info(
+            "Loading base model from %s (dtype=%s)",
+            self.config.model_name,
+            torch_dtype,
+        )
+        # No device_map: Trainer/accelerate place the model, which keeps
+        # torchrun, FSDP and DeepSpeed launches working.
         base_model = AutoModelForSequenceClassification.from_pretrained(
             self.config.model_name,
             num_labels=1,  # Single scalar output
-            torch_dtype=torch.float16,
-            device_map="auto",
+            torch_dtype=torch_dtype,
+            attn_implementation=attention_implementation(model_config),
+            cache_dir=model_config.get("cache_dir"),
             trust_remote_code=False,
         )
         base_model.config.pad_token_id = tokenizer.pad_token_id
+        if model_config.get("gradient_checkpointing", False):
+            base_model.config.use_cache = False
 
         return base_model, tokenizer
 
@@ -425,71 +428,19 @@ class RewardModelTrainer:
             extra_tags={"artifact_type": "full_model"},
         )
 
-    def evaluate_reward_model(
-        self,
-        model: PreTrainedModel,
-        dataset: Dataset,
-    ) -> Dict[str, float]:
-        """Compute pairwise reward metrics on a processed validation dataset."""
-        try:
-            device = next(model.parameters()).device
-        except StopIteration:
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-        dataloader = DataLoader(
-            dataset,
-            batch_size=self.config.per_device_train_batch_size,
-            collate_fn=collate_reward_pairs,
+    def _training_arguments_kwargs(self, has_eval: bool) -> Dict[str, Any]:
+        """Build TrainingArguments kwargs from the YAML config."""
+        kwargs = build_training_arguments_kwargs(
+            self.config.raw_config,
+            output_dir=self.config.output_dir,
+            has_eval=has_eval,
         )
-        total = 0
-        correct = 0
-        margin_sum = 0.0
-
-        was_training = model.training
-        model.eval()
-        with torch.no_grad():
-            for batch in dataloader:
-                chosen_input_ids = torch.as_tensor(batch['chosen_input_ids'], device=device)
-                chosen_attention_mask = torch.as_tensor(
-                    batch['chosen_attention_mask'],
-                    device=device,
-                )
-                rejected_input_ids = torch.as_tensor(
-                    batch['rejected_input_ids'],
-                    device=device,
-                )
-                rejected_attention_mask = torch.as_tensor(
-                    batch['rejected_attention_mask'],
-                    device=device,
-                )
-
-                chosen_rewards = model(
-                    input_ids=chosen_input_ids,
-                    attention_mask=chosen_attention_mask,
-                ).logits.squeeze(-1)
-                rejected_rewards = model(
-                    input_ids=rejected_input_ids,
-                    attention_mask=rejected_attention_mask,
-                ).logits.squeeze(-1)
-                margins = chosen_rewards - rejected_rewards
-
-                total += int(margins.numel())
-                correct += int((margins > 0).sum().item())
-                margin_sum += float(margins.sum().item())
-
-        if was_training:
-            model.train()
-        if total == 0:
-            return {
-                "reward_accuracy": 0.0,
-                "reward_margin": 0.0,
-                "reward_eval_examples": 0.0,
-            }
-        return {
-            "reward_accuracy": correct / total,
-            "reward_margin": margin_sum / total,
-            "reward_eval_examples": float(total),
-        }
+        # The dataclass fields can be overridden after loading the YAML.
+        kwargs["num_train_epochs"] = self.config.num_train_epochs
+        kwargs["per_device_train_batch_size"] = self.config.per_device_train_batch_size
+        kwargs.setdefault("per_device_eval_batch_size", self.config.per_device_train_batch_size)
+        kwargs["learning_rate"] = self.config.learning_rate
+        return kwargs
 
     def train(self) -> TrainingRunResult:
         """Execute reward model training"""
@@ -505,26 +456,16 @@ class RewardModelTrainer:
                 self.config.val_file
             )
 
-            # Define training arguments
-            training_args = TrainingArguments(
-                output_dir=self.config.output_dir,
-                num_train_epochs=self.config.num_train_epochs,
-                per_device_train_batch_size=self.config.per_device_train_batch_size,
-                per_device_eval_batch_size=self.config.per_device_train_batch_size,
-                learning_rate=self.config.learning_rate,
-                lr_scheduler_type="cosine",
-                warmup_ratio=0.1,
-                logging_steps=10,
-                save_steps=500,
-                eval_steps=500 if val_dataset else None,
-                evaluation_strategy="steps" if val_dataset else "no",
-                save_total_limit=3,
-                fp16=True,
-                gradient_accumulation_steps=4,
-                remove_unused_columns=False,
-                report_to=["tensorboard"],
-                logging_dir=f"{self.config.output_dir}/logs",
-            )
+            training_args = TrainingArguments(**self._training_arguments_kwargs(
+                has_eval=bool(val_dataset),
+            ))
+
+            callbacks = [MLflowMetricsCallback(lifecycle)]
+            early_stopping = early_stopping_settings(self.config.raw_config, bool(val_dataset))
+            if early_stopping is not None:
+                callbacks.append(
+                    EarlyStoppingCallback(early_stopping_patience=early_stopping["patience"])
+                )
 
             # Initialize trainer
             trainer = RewardTrainer(
@@ -532,16 +473,23 @@ class RewardModelTrainer:
                 args=training_args,
                 train_dataset=train_dataset,
                 eval_dataset=val_dataset,
-                callbacks=[MLflowMetricsCallback(lifecycle)],
+                compute_metrics=compute_reward_metrics,
+                callbacks=callbacks,
             )
 
             # Train
             logger.info("Starting reward model training...")
-            train_output = trainer.train()
+            resume_from_checkpoint = (
+                self.config.raw_config.get("training") or {}
+            ).get("resume_from_checkpoint")
+            train_output = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
             final_metrics = dict(getattr(train_output, "metrics", {}) or {})
             if val_dataset:
-                final_metrics.update(trainer.evaluate())
-                final_metrics.update(self.evaluate_reward_model(model, val_dataset))
+                eval_metrics = trainer.evaluate()
+                final_metrics.update(eval_metrics)
+                # Promotion gates read the unprefixed names.
+                final_metrics["reward_accuracy"] = eval_metrics["eval_reward_accuracy"]
+                final_metrics["reward_margin"] = eval_metrics["eval_reward_margin"]
 
             # Save final model
             final_model_path = f"{self.config.output_dir}/final"
@@ -561,24 +509,6 @@ class RewardModelTrainer:
                 metrics=final_metrics,
                 lifecycle_result=lifecycle_result,
             )
-
-
-def collate_reward_pairs(examples: List[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
-    """Stack processed chosen/rejected preference pairs for reward evaluation."""
-    keys = (
-        "chosen_input_ids",
-        "chosen_attention_mask",
-        "rejected_input_ids",
-        "rejected_attention_mask",
-    )
-    batch = {}
-    for key in keys:
-        values = [example[key] for example in examples]
-        if values and torch.is_tensor(values[0]):
-            batch[key] = torch.stack([value.long() for value in values])
-        else:
-            batch[key] = torch.tensor(values, dtype=torch.long)
-    return batch
 
 
 def main():

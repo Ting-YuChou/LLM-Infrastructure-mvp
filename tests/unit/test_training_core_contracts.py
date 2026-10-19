@@ -1,3 +1,4 @@
+import importlib.util
 import sys
 import types
 from pathlib import Path
@@ -7,6 +8,17 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
+
+def _stub_if_missing(name, module):
+    """Install a stub only when the real package is not installed.
+
+    A stub peft next to a real transformers breaks transformers.trainer, which
+    imports peft whenever the real package is importable.
+    """
+    if name not in sys.modules and importlib.util.find_spec(name) is None:
+        sys.modules[name] = module
+
+
 datasets_stub = types.ModuleType("datasets")
 datasets_stub.load_dataset = lambda *args, **kwargs: []
 datasets_stub.Dataset = type(
@@ -14,13 +26,13 @@ datasets_stub.Dataset = type(
     (),
     {"from_list": classmethod(lambda cls, data: data)},
 )
-sys.modules.setdefault("datasets", datasets_stub)
+_stub_if_missing("datasets", datasets_stub)
 
 peft_stub = types.ModuleType("peft")
 peft_stub.LoraConfig = lambda *args, **kwargs: SimpleNamespace()
 peft_stub.get_peft_model = lambda model, config: model
 peft_stub.TaskType = SimpleNamespace(CAUSAL_LM="CAUSAL_LM")
-sys.modules.setdefault("peft", peft_stub)
+_stub_if_missing("peft", peft_stub)
 
 transformers_stub = types.ModuleType("transformers")
 transformers_stub.AutoTokenizer = SimpleNamespace()
@@ -29,10 +41,11 @@ transformers_stub.AutoModelForSequenceClassification = SimpleNamespace()
 transformers_stub.PreTrainedModel = torch.nn.Module
 transformers_stub.TrainingArguments = lambda **kwargs: kwargs
 transformers_stub.Trainer = object
+transformers_stub.EarlyStoppingCallback = lambda *args, **kwargs: None
 transformers_stub.TrainerCallback = object
 transformers_stub.default_data_collator = lambda features: features
 transformers_stub.get_scheduler = lambda *args, **kwargs: None
-sys.modules.setdefault("transformers", transformers_stub)
+_stub_if_missing("transformers", transformers_stub)
 
 from training import reward_trainer, rlhf_trainer, sft_trainer  # noqa: E402
 
@@ -108,44 +121,36 @@ def test_sft_batched_preprocessing_masks_prompt_and_padding_labels():
     assert all(label == -100 for label, mask in zip(labels, attention_mask) if mask == 0)
 
 
-class FakeRewardModel(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.anchor = torch.nn.Parameter(torch.zeros(()))
-
-    def forward(self, input_ids=None, attention_mask=None):
-        return SimpleNamespace(logits=input_ids[:, :1].float())
-
-
-def test_reward_eval_metrics_report_accuracy_and_margin(tmp_path):
-    config = reward_trainer.RewardModelConfig(
-        model_name="base",
-        train_file="train.json",
-        val_file="val.json",
-        output_dir=str(tmp_path),
-        per_device_train_batch_size=2,
+def test_reward_eval_metrics_report_accuracy_and_margin():
+    # predictions are [chosen_reward, rejected_reward] per pair.
+    eval_prediction = SimpleNamespace(
+        predictions=[[3.0, 1.0], [1.0, 2.0]],
+        label_ids=[0, 0],
     )
-    trainer = reward_trainer.RewardModelTrainer(config)
-    dataset = [
-        {
-            "chosen_input_ids": [3, 0],
-            "chosen_attention_mask": [1, 0],
-            "rejected_input_ids": [1, 0],
-            "rejected_attention_mask": [1, 0],
-        },
-        {
-            "chosen_input_ids": [1, 0],
-            "chosen_attention_mask": [1, 0],
-            "rejected_input_ids": [2, 0],
-            "rejected_attention_mask": [1, 0],
-        },
-    ]
 
-    metrics = trainer.evaluate_reward_model(FakeRewardModel(), dataset)
+    metrics = reward_trainer.compute_reward_metrics(eval_prediction)
 
     assert metrics["reward_accuracy"] == 0.5
     assert metrics["reward_margin"] == 0.5
-    assert metrics["reward_eval_examples"] == 2.0
+
+
+def test_reward_loss_stays_finite_for_large_negative_margins():
+    class FixedRewardModel(torch.nn.Module):
+        def forward(self, input_ids=None, attention_mask=None):
+            return SimpleNamespace(logits=input_ids[:, :1].to(torch.float16))
+
+    trainer = reward_trainer.RewardTrainer.__new__(reward_trainer.RewardTrainer)
+    inputs = {
+        "chosen_input_ids": torch.tensor([[-200]]),
+        "chosen_attention_mask": torch.tensor([[1]]),
+        "rejected_input_ids": torch.tensor([[0]]),
+        "rejected_attention_mask": torch.tensor([[1]]),
+    }
+
+    loss = trainer.compute_loss(FixedRewardModel(), inputs)
+
+    assert torch.isfinite(loss)
+    assert loss.item() == 200.0
 
 
 class CapturingSequenceRewardModel(torch.nn.Module):

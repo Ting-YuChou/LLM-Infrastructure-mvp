@@ -1,9 +1,21 @@
+import importlib.util
 import sys
 import types
 from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+
+
+def _stub_if_missing(name, module):
+    """Install a stub only when the real package is not installed.
+
+    A stub peft next to a real transformers breaks transformers.trainer, which
+    imports peft whenever the real package is importable.
+    """
+    if name not in sys.modules and importlib.util.find_spec(name) is None:
+        sys.modules[name] = module
+
 
 datasets_stub = types.ModuleType("datasets")
 datasets_stub.load_dataset = lambda *args, **kwargs: []
@@ -12,13 +24,13 @@ datasets_stub.Dataset = type(
     (),
     {"from_list": classmethod(lambda cls, data: data)},
 )
-sys.modules.setdefault("datasets", datasets_stub)
+_stub_if_missing("datasets", datasets_stub)
 
 peft_stub = types.ModuleType("peft")
 peft_stub.LoraConfig = lambda *args, **kwargs: SimpleNamespace()
 peft_stub.get_peft_model = lambda model, config: model
 peft_stub.TaskType = SimpleNamespace(CAUSAL_LM="CAUSAL_LM")
-sys.modules.setdefault("peft", peft_stub)
+_stub_if_missing("peft", peft_stub)
 
 transformers_stub = types.ModuleType("transformers")
 transformers_stub.AutoTokenizer = SimpleNamespace()
@@ -27,10 +39,11 @@ transformers_stub.AutoModelForSequenceClassification = SimpleNamespace()
 transformers_stub.PreTrainedModel = object
 transformers_stub.TrainingArguments = lambda **kwargs: kwargs
 transformers_stub.Trainer = object
+transformers_stub.EarlyStoppingCallback = lambda *args, **kwargs: None
 transformers_stub.TrainerCallback = object
 transformers_stub.default_data_collator = lambda features: features
 transformers_stub.get_scheduler = lambda *args, **kwargs: None
-sys.modules.setdefault("transformers", transformers_stub)
+_stub_if_missing("transformers", transformers_stub)
 
 from training import reward_trainer, rlhf_trainer, sft_trainer  # noqa: E402
 
@@ -74,7 +87,7 @@ class FakeHFTrainer:
     def __init__(self, *args, events=None, **kwargs):
         self.events = events
 
-    def train(self):
+    def train(self, resume_from_checkpoint=None):
         self.events.append("train")
         return SimpleNamespace(metrics={"train_loss": 0.1})
 

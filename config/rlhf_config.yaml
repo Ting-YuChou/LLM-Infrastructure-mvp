@@ -7,26 +7,26 @@
 model:
   # Policy model (the model we're optimizing)
   policy:
-    name: "/workspace/models/sft/checkpoint-final"  # SFT model path
+    name: "/workspace/models/sft/final"  # SFT model path
     cache_dir: "/workspace/models/sft"
-    precision: "fp16"
+    precision: "bf16"  # Applies to policy, reference and reward models
     gradient_checkpointing: true
   
   # Reference model (frozen copy for KL penalty)
   reference:
-    name: "/workspace/models/sft/checkpoint-final"  # Same as policy initially
+    name: "/workspace/models/sft/final"  # Same as policy initially
     cache_dir: "/workspace/models/sft"
     frozen: true  # Don't update reference model
   
   # Reward model
   reward:
-    name: "/workspace/models/reward/checkpoint-final"
+    name: "/workspace/models/reward/final"
     cache_dir: "/workspace/models/reward"
     frozen: true  # Reward model stays fixed
   
   # Value model (optional, for PPO)
   value:
-    name: "/workspace/models/sft/checkpoint-final"  # Initialize from SFT
+    name: "/workspace/models/sft/final"  # Initialize from SFT
     cache_dir: "/workspace/models/sft"
 
 # ============================================================================
@@ -167,9 +167,6 @@ training:
   # Checkpoint management
   save_total_limit: 3
   
-  # Mixed precision
-  fp16: true
-  
   # Performance
   dataloader_num_workers: 4
 
@@ -246,9 +243,9 @@ hardware:
 # ============================================================================
 tracking:
   # Weights & Biases
-  wandb_enabled: true
+  wandb_enabled: false  # Needs WANDB_API_KEY; MLflow is the default tracker
   wandb_project: "llm-rlhf-training"
-  wandb_run_name: "llama2-7b-rlhf-ppo"
+  wandb_run_name: "llama3-8b-rlhf-ppo"
   
   # TensorBoard
   tensorboard_enabled: true
@@ -275,11 +272,11 @@ tracking:
 # ============================================================================
 registry:
   auto_register: true
-  model_name: "llama2-7b-rlhf"
+  model_name: "llama3-8b-rlhf"
   
   tags:
     task: "rlhf-alignment"
-    base_model: "llama2-7b"
+    base_model: "llama3-8b"
     algorithm: "ppo"
     training_type: "rlhf"
 
