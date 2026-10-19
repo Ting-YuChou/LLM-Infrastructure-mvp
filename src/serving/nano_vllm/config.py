@@ -39,7 +39,8 @@ class NanoVLLMConfig:
     served_model_name: str = "nano-llm-local"
     tokenizer: Optional[str] = None
     trust_remote_code: bool = False
-    dtype: str = "float16"
+    # "auto" follows the checkpoint's torch_dtype (bfloat16 for Llama 3).
+    dtype: str = "auto"
     device: str = "auto"
     max_model_len: int = 2048
     max_new_tokens: int = 256

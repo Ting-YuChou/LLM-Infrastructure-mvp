@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import suppress
 from collections import deque
+from typing import Optional
 
 from .block_manager import BlockManager
 from .sequence import Sequence, SequenceStatus
@@ -28,9 +29,28 @@ class Scheduler:
         return not self.waiting and not self.running
 
     def add(self, seq: Sequence) -> None:
+        # A sequence that can never fit would wait (or be preempted) forever.
+        max_tokens = seq.num_prompt_tokens + seq.sampling.max_tokens
+        capacity = self.block_manager.num_blocks * self.block_manager.block_size
+        if max_tokens > capacity:
+            raise ValueError(
+                f"Request needs up to {max_tokens} KV slots (prompt + max_tokens) "
+                f"but the KV cache holds only {capacity}"
+            )
         seq.status = SequenceStatus.WAITING
         seq.is_prefill = True
         self.waiting.append(seq)
+
+    def abort(self, seq: Sequence, finish_reason: str = "abort") -> None:
+        """Drop ``seq`` from the queues and free its KV blocks."""
+        seq.status = SequenceStatus.FINISHED
+        if seq.finish_reason is None:
+            seq.finish_reason = finish_reason
+        self.block_manager.deallocate(seq)
+        with suppress(ValueError):
+            self.running.remove(seq)
+        with suppress(ValueError):
+            self.waiting.remove(seq)
 
     def schedule(self) -> tuple[list[Sequence], bool]:
         prefill_batch = self._schedule_prefill()
@@ -40,8 +60,18 @@ class Scheduler:
 
     def postprocess(
         self, seqs: list[Sequence], token_ids: list[int], is_prefill: bool
-    ) -> None:
+    ) -> list[tuple[Sequence, int]]:
+        """Apply a finished model step; return the tokens actually appended.
+
+        A prefill chunk that leaves prompt tokens unprocessed samples a logit
+        that is meaningless, so it appends (and returns) nothing.
+        """
+        emitted: list[tuple[Sequence, int]] = []
         for seq, token_id in zip(seqs, token_ids):
+            if seq.is_finished:
+                # Aborted while its batch was running: release it now.
+                self.abort(seq)
+                continue
             self.block_manager.hash_blocks(seq)
             seq.num_cached_tokens += seq.num_scheduled_tokens
             seq.num_scheduled_tokens = 0
@@ -50,17 +80,36 @@ class Scheduler:
                 continue
 
             seq.append_token(token_id)
+            emitted.append((seq, token_id))
             if seq.should_finish(token_id):
                 seq.status = SequenceStatus.FINISHED
                 self.block_manager.deallocate(seq)
                 with suppress(ValueError):
                     self.running.remove(seq)
+        return emitted
 
     def preempt(self, seq: Sequence) -> None:
         seq.status = SequenceStatus.WAITING
         seq.is_prefill = True
         self.block_manager.deallocate(seq)
         self.waiting.appendleft(seq)
+
+    def unschedulable_head(self) -> Optional[Sequence]:
+        """Return the head waiting sequence if nothing can ever free room for it.
+
+        Only meaningful right after schedule() returned nothing: with no running
+        sequences and no partially prefilled ones holding blocks, the free pool
+        cannot grow, so the head would otherwise wait forever.
+        """
+        if self.running or not self.waiting:
+            return None
+        if any(seq.block_table for seq in self.waiting):
+            return None
+        return self.waiting[0]
+
+    def _num_active(self) -> int:
+        # Running sequences plus admitted ones still mid chunked-prefill.
+        return len(self.running) + sum(1 for seq in self.waiting if seq.block_table)
 
     def _schedule_prefill(self) -> list[Sequence]:
         scheduled: list[Sequence] = []
@@ -72,6 +121,8 @@ class Scheduler:
                 break
 
             if not seq.block_table:
+                if self._num_active() >= self.max_num_seqs:
+                    break
                 cached_blocks = self.block_manager.can_allocate(seq)
                 if cached_blocks == -1:
                     break
@@ -99,21 +150,31 @@ class Scheduler:
         return scheduled
 
     def _schedule_decode(self) -> list[Sequence]:
+        """Round-robin decode: scheduled sequences rotate to the back.
+
+        When the batch is capped (max_num_seqs or max_num_batched_tokens), the
+        sequences skipped this step sit at the front and go first next step.
+        """
         scheduled: list[Sequence] = []
-        while self.running and len(scheduled) < self.max_num_seqs:
+        budget = min(self.max_num_seqs, self.max_num_batched_tokens)
+        while self.running and len(scheduled) < budget:
             seq = self.running.popleft()
-            if not self.block_manager.can_append(seq):
-                if self.running:
-                    self.preempt(self.running.pop())
-                    self.running.appendleft(seq)
-                    continue
-                self.preempt(seq)
-                break
+            while not self.block_manager.can_append(seq):
+                # Preempt the youngest request (vLLM's recompute policy); it may
+                # be ``seq`` itself. Already scheduled ones are off-limits.
+                victim = max([seq, *self.running], key=lambda item: item.seq_id)
+                if victim is seq:
+                    self.preempt(seq)
+                    seq = None
+                    break
+                self.running.remove(victim)
+                self.preempt(victim)
+            if seq is None:
+                continue
             seq.num_scheduled_tokens = 1
             seq.is_prefill = False
             self.block_manager.may_append(seq)
             scheduled.append(seq)
 
-        if scheduled:
-            self.running.extendleft(reversed(scheduled))
+        self.running.extend(scheduled)
         return scheduled

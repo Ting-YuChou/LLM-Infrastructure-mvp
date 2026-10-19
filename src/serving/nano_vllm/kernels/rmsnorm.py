@@ -22,11 +22,18 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
         row = tl.program_id(0)
         offsets = tl.arange(0, BLOCK)
         mask = offsets < n_cols
-        x = tl.load(x_ptr + row * n_cols + offsets, mask=mask, other=0.0)
-        w = tl.load(w_ptr + offsets, mask=mask, other=0.0)
+        # Square and reduce in fp32: fp16 x*x overflows once |x| exceeds ~256.
+        x = tl.load(x_ptr + row * n_cols + offsets, mask=mask, other=0.0).to(
+            tl.float32
+        )
+        w = tl.load(w_ptr + offsets, mask=mask, other=0.0).to(tl.float32)
         var = tl.sum(x * x, axis=0) / n_cols
         y = x * tl.rsqrt(var + eps) * w
-        tl.store(y_ptr + row * n_cols + offsets, y, mask=mask)
+        tl.store(
+            y_ptr + row * n_cols + offsets,
+            y.to(y_ptr.dtype.element_ty),
+            mask=mask,
+        )
 
 
 def is_triton_available() -> bool:
@@ -36,9 +43,11 @@ def is_triton_available() -> bool:
 def rms_norm_reference(
     x: torch.Tensor, weight: torch.Tensor, eps: float = 1e-6
 ) -> torch.Tensor:
-    variance = x.float().pow(2).mean(dim=-1, keepdim=True)
-    normalized = x * torch.rsqrt(variance + eps).to(dtype=x.dtype)
-    return normalized * weight
+    # Matches transformers' LlamaRMSNorm: normalize in fp32, then cast back.
+    x_fp32 = x.float()
+    variance = x_fp32.pow(2).mean(dim=-1, keepdim=True)
+    normalized = (x_fp32 * torch.rsqrt(variance + eps)).to(dtype=x.dtype)
+    return weight * normalized
 
 
 def rms_norm(

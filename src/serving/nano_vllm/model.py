@@ -5,18 +5,29 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import torch
 import torch.nn.functional as F
 
 from .kernels import apply_rope, causal_attention, rms_norm, silu_mul
+from .kernels.rotary import compute_inv_freq, validate_rope_scaling
 from .kv_cache import PagedKVCache, StaticKVCache
 
 
-def torch_dtype_from_string(value: str) -> torch.dtype:
+def torch_dtype_from_string(
+    value: str, checkpoint_dtype: Optional[str | torch.dtype] = None
+) -> torch.dtype:
+    """Resolve a dtype name; "auto" follows the checkpoint's dtype."""
     normalized = value.lower()
-    if normalized in {"auto", "float16", "fp16", "half"}:
+    if normalized == "auto":
+        if checkpoint_dtype is None:
+            raise ValueError(
+                "dtype='auto' needs the checkpoint dtype; set DTYPE explicitly "
+                "(e.g. bfloat16 for Llama 3)"
+            )
+        normalized = str(checkpoint_dtype).lower().replace("torch.", "")
+    if normalized in {"float16", "fp16", "half"}:
         return torch.float16
     if normalized in {"bfloat16", "bf16"}:
         return torch.bfloat16
@@ -42,9 +53,15 @@ class NanoLlamaConfig:
     max_position_embeddings: int = 2048
     rms_norm_eps: float = 1e-6
     rope_theta: float = 10000.0
+    rope_scaling: Optional[Dict[str, Any]] = None
+    tie_word_embeddings: bool = False
+    torch_dtype: Optional[str] = None
     bos_token_id: Optional[int] = None
-    eos_token_id: Optional[int] = None
+    eos_token_id: Optional[int | list[int]] = None
     pad_token_id: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        validate_rope_scaling(self.rope_scaling)
 
     @property
     def head_dim(self) -> int:
@@ -61,6 +78,7 @@ class NanoLlamaConfig:
                 f"got model_type={model_type!r}"
             )
         heads = int(data["num_attention_heads"])
+        rope_scaling = data.get("rope_scaling")
         return cls(
             vocab_size=int(data["vocab_size"]),
             hidden_size=int(data["hidden_size"]),
@@ -71,6 +89,11 @@ class NanoLlamaConfig:
             max_position_embeddings=int(data.get("max_position_embeddings", 2048)),
             rms_norm_eps=float(data.get("rms_norm_eps", 1e-6)),
             rope_theta=float(data.get("rope_theta", 10000.0)),
+            rope_scaling=dict(rope_scaling) if rope_scaling else None,
+            # LlamaConfig defaults to untied; only tie when the checkpoint says so.
+            tie_word_embeddings=bool(data.get("tie_word_embeddings", False)),
+            # transformers >= 4.56 writes "dtype"; older releases "torch_dtype".
+            torch_dtype=data.get("torch_dtype") or data.get("dtype"),
             bos_token_id=data.get("bos_token_id"),
             eos_token_id=data.get("eos_token_id"),
             pad_token_id=data.get("pad_token_id"),
@@ -96,6 +119,13 @@ def _load_state_dict(model_path: Path) -> Dict[str, torch.Tensor]:
     )
 
 
+def _first_floating_dtype(weights: Dict[str, torch.Tensor]) -> Optional[torch.dtype]:
+    for tensor in weights.values():
+        if tensor.is_floating_point():
+            return tensor.dtype
+    return None
+
+
 class NanoLlamaForCausalLM:
     """Small, explicit Llama forward path for learning serving internals."""
 
@@ -117,12 +147,19 @@ class NanoLlamaForCausalLM:
             name: self._move_weight(tensor) for name, tensor in weights.items()
         }
         self._validate_required_weights()
+        self.lm_head_weight = self._resolve_lm_head()
+        self.inv_freq = compute_inv_freq(
+            config.head_dim,
+            theta=config.rope_theta,
+            rope_scaling=config.rope_scaling,
+            device=device,
+        )
 
     @classmethod
     def from_pretrained(
         cls,
         model_path: str | Path,
-        dtype: str = "float16",
+        dtype: str = "auto",
         device: str = "auto",
         use_triton: bool = True,
         attention_backend: str = "torch",
@@ -132,11 +169,14 @@ class NanoLlamaForCausalLM:
             raise FileNotFoundError(f"nano-vLLM model path does not exist: {path}")
         config = NanoLlamaConfig.from_pretrained(path)
         resolved_device = resolve_device(device)
+        weights = _load_state_dict(path)
+        # Like transformers' torch_dtype="auto": config first, then the weights.
+        checkpoint_dtype = config.torch_dtype or _first_floating_dtype(weights)
         return cls(
             config=config,
-            weights=_load_state_dict(path),
+            weights=weights,
             device=resolved_device,
-            dtype=torch_dtype_from_string(dtype),
+            dtype=torch_dtype_from_string(dtype, checkpoint_dtype),
             use_triton=use_triton,
             attention_backend=attention_backend,
         )
@@ -208,6 +248,7 @@ class NanoLlamaForCausalLM:
                 positions=positions,
                 theta=self.config.rope_theta,
                 use_triton=self.use_triton,
+                inv_freq=self.inv_freq,
             )
 
             cache.update(layer_idx, positions, key, value)
@@ -250,10 +291,7 @@ class NanoLlamaForCausalLM:
             eps=self.config.rms_norm_eps,
             use_triton=self.use_triton,
         )
-        lm_head = self.weights.get(
-            "lm_head.weight", self.weights["model.embed_tokens.weight"]
-        )
-        return F.linear(x, lm_head)
+        return F.linear(x, self.lm_head_weight)
 
     @torch.inference_mode()
     def forward_paged(
@@ -324,6 +362,7 @@ class NanoLlamaForCausalLM:
                     positions=positions[start:end],
                     theta=self.config.rope_theta,
                     use_triton=self.use_triton,
+                    inv_freq=self.inv_freq,
                 )
                 query_segments.append(q_seg.squeeze(0).transpose(0, 1))
                 key_segments.append(k_seg.squeeze(0).transpose(0, 1))
@@ -379,10 +418,17 @@ class NanoLlamaForCausalLM:
             eps=self.config.rms_norm_eps,
             use_triton=self.use_triton,
         )
-        lm_head = self.weights.get(
-            "lm_head.weight", self.weights["model.embed_tokens.weight"]
-        )
-        return F.linear(x, lm_head)
+        return F.linear(x, self.lm_head_weight)
+
+    def _resolve_lm_head(self) -> torch.Tensor:
+        if self.config.tie_word_embeddings:
+            return self.weights["model.embed_tokens.weight"]
+        if "lm_head.weight" not in self.weights:
+            raise KeyError(
+                "Model checkpoint is missing lm_head.weight and config.json does "
+                "not set tie_word_embeddings=true"
+            )
+        return self.weights["lm_head.weight"]
 
     def _weight(self, name: str) -> torch.Tensor:
         try:
