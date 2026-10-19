@@ -1,0 +1,29 @@
+# CPU-only environment for the training tests in CI (no CUDA, flash-attn,
+# DeepSpeed or vLLM). Every pin must match requirements.txt; the training-cpu
+# job checks this.
+#
+# Install torch from the PyTorch CPU index first, then the rest:
+#   pip install --index-url https://download.pytorch.org/whl/cpu "$(grep '^torch==' requirements.training-ci.txt)"
+#   pip install -r requirements.training-ci.txt
+
+torch==2.10.0
+transformers==4.57.6
+datasets==2.16.0
+tokenizers==0.22.2
+accelerate==1.13.0
+peft==0.15.2
+safetensors==0.7.0
+huggingface-hub==0.36.2
+
+numpy==1.26.4
+pandas==2.0.3
+pyarrow==14.0.2
+pyyaml==6.0.1
+
+# test_training_chat_format.py imports src/serving/vllm_server.py (vllm is faked).
+fastapi==0.136.1
+uvicorn[standard]==0.46.0
+pydantic==2.13.3
+prometheus-client==0.19.0
+
+pytest==9.0.3
