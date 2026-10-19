@@ -213,7 +213,7 @@ jobs:
       # No torch here: torch-dependent modules skip via pytest.importorskip and
       # run in the training-cpu job instead.
       - name: Run pytest
-        run: pytest tests/ -q -rs
+        run: python -m pytest tests/ -q -rs
 
       - name: Run host checks
         run: |
@@ -268,8 +268,9 @@ jobs:
       - name: Run training tests (no skips allowed)
         shell: bash
         run: |
-          pytest -q -rs \
+          python -m pytest -q -rs \
             tests/unit/test_training_real_smoke.py \
+            tests/unit/test_training_chat_format.py \
             tests/unit/test_training_hf_config.py \
             tests/unit/test_training_core_contracts.py \
             tests/unit/test_training_lifecycle_wiring.py | tee pytest-training.log
