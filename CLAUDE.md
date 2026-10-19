@@ -22,13 +22,19 @@ python -m src.training.reward_trainer --config config/reward_config.yaml
 python -m src.training.rlhf_trainer --config config/rlhf_config.yaml --prompts <prompts.json>
 python -m src.serving.vllm_server --config config/serving_config.yaml
 pytest tests/unit/ tests/integration/
-bash scripts/run_host_checks.sh   # what the CI "Unit Tests" job runs
+bash scripts/run_host_checks.sh
 ```
+
+CI (`.github/workflows/ci-cd.yml`) runs tests in two jobs:
+- **Unit Tests** runs pytest without torch, so torch-dependent tests skip, then runs the host checks.
+- **Training Tests (CPU)** installs CPU torch from `requirements.training-ci.txt` and runs the real-library training tests. Any skip fails the job.
+
+`requirements.training-ci.txt` must keep the same pins as `requirements.txt`; CI checks this.
 
 ## Rules that are easy to get wrong
 
 ### Dependencies
-- Pins move together: torch 2.10.0, transformers 4.57.6, datasets 2.16.0, vLLM 0.19.1, CUDA 12.9.1. If you change one, update `requirements.txt`, `docker/Dockerfile.base` and `docker/Dockerfile.serving` in the same change.
+- Pins move together: torch 2.10.0, transformers 4.57.6, datasets 2.16.0, vLLM 0.19.1, CUDA 12.9.1. If you change one, update `requirements.txt`, `requirements.training-ci.txt`, `docker/Dockerfile.base` and `docker/Dockerfile.serving` in the same change.
 - An unpinned `pip install` pulls in transformers 5.x and datasets 5.x, and those break the trainers.
 - transformers 4.57 renamed `evaluation_strategy` to `eval_strategy`. Build `TrainingArguments` through `hf_config.build_training_arguments_kwargs` instead of hand-writing kwargs.
 
