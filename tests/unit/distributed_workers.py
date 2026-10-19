@@ -122,9 +122,96 @@ def run_sft(tmp, use_lora):
     return {"checkpoint_path": result.checkpoint_path, "eval_loss": result.metrics.get("eval_loss")}
 
 
+def _prepare_chat_models(tmp):
+    """Tiny SFT policy + reward model that already carry the chat-token vocabulary."""
+    from training.chat_format import ensure_chat_tokenizer
+
+    policy_dir, reward_dir = tmp / "sft-final", tmp / "reward-final"
+    if distributed.is_main_process():
+        tokenizer = ensure_chat_tokenizer(build_tiny_tokenizer())
+        for model_dir, causal_lm in ((policy_dir, True), (reward_dir, False)):
+            build_tiny_llama(len(tokenizer), causal_lm=causal_lm).save_pretrained(model_dir)
+            tokenizer.save_pretrained(model_dir)
+        _write_json(tmp / "prompts.json", [{"prompt": f"explain tests {i}"} for i in range(8)])
+    distributed.barrier()
+    return policy_dir, reward_dir
+
+
+def _checksum(parameters):
+    import torch
+
+    return float(sum(param.detach().double().sum() for param in parameters))
+
+
+def _merged_logit_diff(trainer, merged_path):
+    """Largest logit gap between the trained LoRA policy and the merged checkpoint."""
+    import torch
+    from transformers import AutoModelForCausalLM
+
+    merged = AutoModelForCausalLM.from_pretrained(merged_path, torch_dtype=torch.float32)
+    input_ids = torch.tensor([[1, 5, 6, 7, 8, 9]])
+    trainer.policy_model.eval()
+    with torch.no_grad():
+        expected = trainer.policy_model(input_ids=input_ids).logits
+        actual = merged(input_ids=input_ids).logits
+    return float((expected - actual).abs().max())
+
+
+def run_ppo(tmp):
+    from training import rlhf_trainer
+
+    policy_dir, reward_dir = _prepare_chat_models(tmp)
+    raw = yaml.safe_load((ROOT / "config" / "rlhf_config.yaml").read_text())
+    raw["model"]["policy"].update(name=str(policy_dir), precision="fp32", use_flash_attention=False)
+    raw["model"]["reward"]["name"] = str(reward_dir)
+    raw["lora"].update(r=4, alpha=8)
+    raw["distributed"]["timeout_minutes"] = 5
+    raw["tracking"].update(mlflow_enabled=True, tensorboard_enabled=False, wandb_enabled=False)
+    config = rlhf_trainer.rlhf_config_from_dict(
+        raw,
+        output_dir=str(tmp / "aligned"),
+        num_epochs=1,
+        ppo_epochs=2,
+        num_steps=2,
+        batch_size=2,
+        max_response_length=4,
+        save_steps=1,
+        learning_rate=1e-2,
+        value_learning_rate=1e-2,
+    )
+
+    kl_means = []
+    masked_global_mean = rlhf_trainer.masked_global_mean
+
+    def recording_masked_global_mean(values, mask):
+        result = masked_global_mean(values, mask)
+        kl_means.append(float(result))
+        return result
+
+    rlhf_trainer.masked_global_mean = recording_masked_global_mean
+    trainer = rlhf_trainer.RLHFTrainer(config)
+    lora_before = _checksum(trainer._trainable_policy_parameters())
+    value_before = _checksum(trainer.value_head.parameters())
+    result = trainer.train(str(tmp / "prompts.json"))
+    merge_max_diff = None
+    if distributed.is_main_process():
+        merge_max_diff = _merged_logit_diff(trainer, result.checkpoint_path)
+    return {
+        "merge_max_diff": merge_max_diff,
+        "checkpoint_path": result.checkpoint_path,
+        "kl_means": kl_means,
+        "kl_coef": trainer.kl_coef,
+        "lora_before": lora_before,
+        "lora_after": _checksum(trainer._trainable_policy_parameters()),
+        "value_before": value_before,
+        "value_after": _checksum(trainer.value_head.parameters()),
+    }
+
+
 CASES = {
     "sft_ddp": lambda tmp: run_sft(tmp, use_lora=False),
     "sft_lora_ddp": lambda tmp: run_sft(tmp, use_lora=True),
+    "ppo_lora_ddp": run_ppo,
 }
 
 

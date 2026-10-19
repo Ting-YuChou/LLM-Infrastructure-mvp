@@ -126,3 +126,32 @@ def test_sft_under_torchrun_logs_and_saves_once(tmp_path, case, weights):
     assert (final / weights).exists()
     assert (final / "generation_config.json").exists()
     assert (final / "tokenizer_config.json").exists()
+
+
+def test_ppo_lora_ddp_keeps_ranks_in_sync_and_merges_final_model(tmp_path):
+    if importlib.util.find_spec("peft") is None:
+        pytest.skip("peft is not installed")
+
+    rank0, rank1 = _run_workers("ppo_lora_ddp", tmp_path)
+
+    # LoRA B starts at zero, so the adapter-disabled reference equals the policy.
+    assert rank0["kl_means"][0] == pytest.approx(0.0, abs=1e-6)
+    # Globally reduced KL drives one kl_coef on every rank.
+    assert rank0["kl_means"] == pytest.approx(rank1["kl_means"])
+    assert rank0["kl_coef"] == pytest.approx(rank1["kl_coef"])
+    # DDP keeps adapter and value head identical while they train.
+    assert rank0["lora_after"] == pytest.approx(rank1["lora_after"])
+    assert rank0["value_after"] == pytest.approx(rank1["value_after"])
+    assert rank0["lora_after"] != pytest.approx(rank0["lora_before"])
+    assert rank0["value_after"] != pytest.approx(rank0["value_before"])
+    assert rank0["events"] == ["start_run", "create_model_version"]
+    assert rank1["events"] == []
+
+    output_dir = tmp_path / "aligned"
+    final = output_dir / "checkpoint-final"
+    assert (final / "config.json").exists()
+    assert (final / "model.safetensors").exists()
+    assert (final / "value_head.pt").exists()
+    assert (output_dir / "checkpoint-final-adapter" / "adapter_config.json").exists()
+    assert (output_dir / "checkpoint-1" / "optimizer.pt").exists()
+    assert rank0["merge_max_diff"] < 1e-4

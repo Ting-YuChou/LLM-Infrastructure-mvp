@@ -65,6 +65,18 @@ _PASSTHROUGH_TRAINING_KEYS = (
 # under training: is how fp16 silently stayed on after switching to bf16.
 _REJECTED_TRAINING_KEYS = ("fp16", "bf16", "fp16_opt_level")
 
+# Llama attention + MLP projections; adapting only q/k/v/o leaves most of the
+# trainable capacity on the table.
+DEFAULT_LORA_TARGET_MODULES = [
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "o_proj",
+    "gate_proj",
+    "up_proj",
+    "down_proj",
+]
+
 _DISTRIBUTED_STRATEGIES = ("none", "ddp", "fsdp")
 _FSDP_SHARDING = ("full_shard", "shard_grad_op", "hybrid_shard")
 _FSDP_CHECKPOINT_STATE_DICT = {
@@ -115,6 +127,27 @@ def attention_implementation(model_config: Optional[Mapping[str, Any]]) -> str:
             "falling back to sdpa attention"
         )
     return "sdpa"
+
+
+def apply_lora(model: Any, lora_settings: Optional[Mapping[str, Any]], default_dropout: float = 0.05) -> Any:
+    """Wrap a causal LM with a LoRA adapter configured from a `lora:` YAML section."""
+    # peft is only needed for adapter runs, not full fine-tuning.
+    from peft import LoraConfig, TaskType, get_peft_model
+
+    lora_settings = lora_settings or {}
+    lora_config = LoraConfig(
+        task_type=TaskType.CAUSAL_LM,
+        r=int(lora_settings.get("r", 16)),
+        lora_alpha=int(lora_settings.get("alpha", 32)),
+        lora_dropout=float(lora_settings.get("dropout", default_dropout)),
+        target_modules=list(lora_settings.get("target_modules") or DEFAULT_LORA_TARGET_MODULES),
+        bias=lora_settings.get("bias", "none"),
+        modules_to_save=lora_settings.get("modules_to_save"),
+    )
+    logger.info("Applying LoRA configuration: %s", lora_config)
+    model = get_peft_model(model, lora_config)
+    model.print_trainable_parameters()
+    return model
 
 
 def report_targets(tracking_config: Optional[Mapping[str, Any]]) -> List[str]:

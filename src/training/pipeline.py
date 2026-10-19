@@ -600,38 +600,11 @@ def resolve_stages(stages: str | Sequence[str]) -> List[str]:
 
 def build_rlhf_config(config_path: str):
     """Load RLHFConfig from YAML without forcing that logic into the CLI only."""
-    from .rlhf_trainer import RLHFConfig
+    from .rlhf_trainer import rlhf_config_from_dict
 
     with open(config_path, "r", encoding="utf-8") as f:
         config_dict = yaml.safe_load(f)
-
-    ppo_config = config_dict.get("algorithm", {}).get("ppo", {})
-    training_config = config_dict.get("training", {})
-    generation_config = config_dict.get("generation", {})
-    data_config = config_dict.get("data", {})
-
-    return RLHFConfig(
-        policy_model_path=config_dict["model"]["policy"]["name"],
-        reward_model_path=config_dict["model"]["reward"]["name"],
-        output_dir=training_config.get("output_dir", "./outputs/rlhf"),
-        num_epochs=ppo_config.get("num_epochs", 4),
-        num_steps=training_config.get("total_steps", 10000),
-        batch_size=training_config.get("per_device_batch_size", 4),
-        learning_rate=training_config.get("policy_learning_rate", 1e-6),
-        init_kl_coef=ppo_config.get("init_kl_coef", ppo_config.get("kl_coef", 0.05)),
-        target_kl=ppo_config.get("target_kl", 0.1),
-        clip_range=ppo_config.get("clip_range", 0.2),
-        value_loss_coef=ppo_config.get("value_loss_coef", 0.1),
-        entropy_coef=ppo_config.get("entropy_coef", 0.01),
-        gae_lambda=ppo_config.get("gae_lambda", 0.95),
-        gamma=ppo_config.get("gamma", 0.99),
-        max_prompt_length=data_config.get("max_prompt_length", 512),
-        max_response_length=data_config.get("max_response_length", 512),
-        temperature=generation_config.get("temperature", 0.7),
-        top_p=generation_config.get("top_p", 0.9),
-        raw_config=config_dict,
-        config_path=config_path,
-    )
+    return rlhf_config_from_dict(config_dict, config_path=config_path)
 
 
 def validate_checkpoint_artifact(checkpoint_path: Path) -> Dict[str, Any]:

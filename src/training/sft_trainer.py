@@ -39,6 +39,7 @@ try:
         world_size,
     )
     from .hf_config import (
+        apply_lora,
         attention_implementation,
         build_training_arguments_kwargs,
         early_stopping_settings,
@@ -71,6 +72,7 @@ except ImportError:  # pragma: no cover - supports direct script execution
         world_size,
     )
     from hf_config import (  # type: ignore[no-redef]
+        apply_lora,
         attention_implementation,
         build_training_arguments_kwargs,
         early_stopping_settings,
@@ -84,18 +86,6 @@ except ImportError:  # pragma: no cover - supports direct script execution
         MLflowTrainingLifecycle,
         PromotionConfig,
     )
-
-# Llama attention + MLP projections; adapting only q/k/v/o leaves most of the
-# trainable capacity on the table.
-DEFAULT_LORA_TARGET_MODULES = [
-    "q_proj",
-    "k_proj",
-    "v_proj",
-    "o_proj",
-    "gate_proj",
-    "up_proj",
-    "down_proj",
-]
 
 # Configure logging
 logging.basicConfig(
@@ -372,30 +362,13 @@ class SFTTrainer:
 
     def _apply_lora(self, model):
         """Wrap the model with a LoRA adapter configured from the `lora:` YAML section."""
-        # peft is only needed for adapter runs, not full fine-tuning.
-        from peft import LoraConfig, TaskType, get_peft_model
-
         lora_settings = self.config.raw_config.get("lora") or {}
-        lora_config = LoraConfig(
-            task_type=TaskType.CAUSAL_LM,
-            r=int(lora_settings.get("r", 16)),
-            lora_alpha=int(lora_settings.get("alpha", 32)),
-            lora_dropout=float(lora_settings.get("dropout", 0.05)),
-            target_modules=list(
-                lora_settings.get("target_modules") or DEFAULT_LORA_TARGET_MODULES
-            ),
-            bias=lora_settings.get("bias", "none"),
-            modules_to_save=lora_settings.get("modules_to_save"),
-        )
-        if not {"embed_tokens", "lm_head"} <= set(lora_config.modules_to_save or ()):
+        if not {"embed_tokens", "lm_head"} <= set(lora_settings.get("modules_to_save") or ()):
             logger.warning(
                 "LoRA without embed_tokens/lm_head in lora.modules_to_save: the Llama 3 "
                 "base embeddings for the chat header/<|eot_id|> tokens stay untrained"
             )
-        logger.info("Applying LoRA configuration: %s", lora_config)
-        model = get_peft_model(model, lora_config)
-        model.print_trainable_parameters()
-        return model
+        return apply_lora(model, lora_settings)
 
     def _build_lifecycle(self) -> MLflowTrainingLifecycle:
         """Build the MLflow lifecycle controller for this training run."""

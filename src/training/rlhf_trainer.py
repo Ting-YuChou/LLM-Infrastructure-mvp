@@ -13,7 +13,8 @@ import json
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Dataset
+from torch.nn.parallel import DistributedDataParallel
+from torch.utils.data import DataLoader, Dataset, DistributedSampler, RandomSampler
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
@@ -32,7 +33,29 @@ try:
         resize_embeddings_if_needed,
         stop_token_ids,
     )
-    from .hf_config import model_load_dtype, resolve_precision
+    from .distributed import (
+        all_reduce_mean,
+        barrier,
+        distributed_timeout_minutes,
+        init_distributed,
+        is_distributed,
+        is_main_process,
+        local_rank,
+        main_process_only,
+        masked_global_mean,
+        masked_global_whiten,
+        rank,
+        reduce_scalar_metrics,
+        world_size,
+    )
+    from .export import merge_adapter
+    from .hf_config import (
+        apply_lora,
+        attention_implementation,
+        model_load_dtype,
+        resolve_distributed_strategy,
+        resolve_precision,
+    )
     from .mlflow_lifecycle import MLflowTrainingLifecycle, PromotionConfig
 except ImportError:  # pragma: no cover - supports direct script execution
     from results import TrainingRunResult  # type: ignore[no-redef]
@@ -44,7 +67,29 @@ except ImportError:  # pragma: no cover - supports direct script execution
         resize_embeddings_if_needed,
         stop_token_ids,
     )
-    from hf_config import model_load_dtype, resolve_precision  # type: ignore[no-redef]
+    from distributed import (  # type: ignore[no-redef]
+        all_reduce_mean,
+        barrier,
+        distributed_timeout_minutes,
+        init_distributed,
+        is_distributed,
+        is_main_process,
+        local_rank,
+        main_process_only,
+        masked_global_mean,
+        masked_global_whiten,
+        rank,
+        reduce_scalar_metrics,
+        world_size,
+    )
+    from export import merge_adapter  # type: ignore[no-redef]
+    from hf_config import (  # type: ignore[no-redef]
+        apply_lora,
+        attention_implementation,
+        model_load_dtype,
+        resolve_distributed_strategy,
+        resolve_precision,
+    )
     from mlflow_lifecycle import (  # type: ignore[no-redef]
         MLflowTrainingLifecycle,
         PromotionConfig,
@@ -65,15 +110,23 @@ class RLHFConfig:
     reward_model_path: str
     output_dir: str
 
-    # PPO hyperparameters
+    # PPO hyperparameters. num_epochs counts passes over the prompts;
+    # ppo_epochs counts optimizer passes per rollout batch (defaults to num_epochs).
     num_epochs: int = 4
     num_steps: int = 10000
-    batch_size: int = 4
+    batch_size: int = 4  # prompts per GPU per step
     learning_rate: float = 1e-6
+    value_learning_rate: Optional[float] = None  # defaults to 5x learning_rate
+    ppo_epochs: Optional[int] = None
+    max_grad_norm: float = 1.0
+    save_steps: int = 500
+    seed: int = 42
 
     # KL penalty
     init_kl_coef: float = 0.05
     target_kl: float = 0.1
+    kl_coef_min: float = 0.001
+    kl_coef_max: float = 1.0
 
     # PPO specific
     clip_range: float = 0.2
@@ -218,6 +271,37 @@ class ValueHead(nn.Module):
         return values
 
 
+class ActorCritic(nn.Module):
+    """
+    Policy + value head as one module, so one DDP wrapper syncs both.
+
+    One forward returns the policy logits and per-token values from the same
+    last hidden state; the PPO update runs exactly one forward and one
+    backward through it per optimizer step.
+    """
+
+    def __init__(self, policy: nn.Module, value_head: ValueHead):
+        super().__init__()
+        self.policy = policy
+        self.value_head = value_head
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        position_ids: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        outputs = self.policy(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            output_hidden_states=True,
+            use_cache=False,
+            return_dict=True,
+        )
+        return outputs.logits, self.value_head(outputs.hidden_states[-1])
+
+
 class RLHFTrainer:
     """
     RLHF Trainer using PPO
@@ -238,15 +322,25 @@ class RLHFTrainer:
             config: RLHF configuration
         """
         self.config = config
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        raw_config = config.raw_config or {}
+        self.device = init_distributed(distributed_timeout_minutes(raw_config))
+        strategy = resolve_distributed_strategy(raw_config, world_size())
+        if strategy == "fsdp":
+            raise ValueError(
+                "PPO supports distributed.strategy ddp (LoRA policy) or none; "
+                "full-parameter PPO with FSDP is not implemented"
+            )
+        # Identical LoRA/value-head init on every rank (DDP also broadcasts rank 0's).
+        torch.manual_seed(config.seed)
 
         logger.info("Initializing RLHF Trainer")
-        logger.info(f"Device: {self.device}")
+        logger.info(f"Device: {self.device} (rank {rank()}/{world_size()})")
         logger.info(f"Policy model: {config.policy_model_path}")
         logger.info(f"Reward model: {config.reward_model_path}")
 
         # Create output directory
-        os.makedirs(config.output_dir, exist_ok=True)
+        if is_main_process():
+            os.makedirs(config.output_dir, exist_ok=True)
 
         # Load models
         self.tokenizer = ensure_chat_tokenizer(
@@ -254,41 +348,69 @@ class RLHFTrainer:
         )
         self.stop_token_ids = stop_token_ids(self.tokenizer)
 
+        model_config = raw_config.get("model") or {}
+        policy_config = model_config.get("policy") or {}
+        lora_settings = raw_config.get("lora") or {}
+        self.use_lora = bool(lora_settings.get("enabled", False))
+        if is_distributed() and not self.use_lora:
+            raise ValueError(
+                "Distributed PPO needs lora.enabled: true; full-parameter PPO only "
+                "runs as a single process"
+            )
+
         # The policy is updated with a plain torch optimizer and no GradScaler,
-        # so precision "fp16" loads fp32 policy weights instead of running
-        # pure-fp16 Adam. bf16 (the Llama 3 default) trains directly in bf16.
-        policy_config = (config.raw_config.get("model") or {}).get("policy") or {}
+        # so precision "fp16" loads fp32 policy weights for full-parameter PPO.
+        # With LoRA the base is frozen and only the (fp32) adapter trains.
         self.precision = resolve_precision(policy_config)
-        self.policy_dtype = model_load_dtype(self.precision, full_fine_tune=True)
+        self.policy_dtype = model_load_dtype(self.precision, full_fine_tune=not self.use_lora)
         frozen_dtype = model_load_dtype(self.precision, full_fine_tune=False)
         logger.info(
-            "Precision: %s (policy dtype=%s, frozen model dtype=%s)",
+            "Precision: %s (policy dtype=%s, frozen model dtype=%s, lora=%s)",
             self.precision,
             self.policy_dtype,
             frozen_dtype,
+            self.use_lora,
         )
+        # One full copy of each model per GPU (DDP), never split across GPUs.
+        device_map = {"": self.device}
 
         # Policy model (model being optimized)
         logger.info("Loading policy model...")
-        self.policy_model = AutoModelForCausalLM.from_pretrained(
+        policy_model = AutoModelForCausalLM.from_pretrained(
             config.policy_model_path,
             torch_dtype=self.policy_dtype,
-            device_map="auto"
+            attn_implementation=attention_implementation(policy_config),
+            device_map=device_map,
         )
-        resize_embeddings_if_needed(self.policy_model, self.tokenizer)
-        self.policy_model.train()
+        resize_embeddings_if_needed(policy_model, self.tokenizer)
+        if policy_config.get("gradient_checkpointing", False):
+            policy_model.gradient_checkpointing_enable(
+                gradient_checkpointing_kwargs={"use_reentrant": False}
+            )
+            policy_model.config.use_cache = False
 
-        # Reference model (frozen, for KL penalty)
-        logger.info("Loading reference model...")
-        self.ref_model = AutoModelForCausalLM.from_pretrained(
-            config.policy_model_path,
-            torch_dtype=frozen_dtype,
-            device_map="auto"
-        )
-        resize_embeddings_if_needed(self.ref_model, self.tokenizer)
-        self.ref_model.eval()
-        for param in self.ref_model.parameters():
-            param.requires_grad = False
+        if self.use_lora:
+            # Dropout would make the rollout's old log-probs differ from the
+            # update's, so step-0 ratios and the reference KL would not start at 1/0.
+            if float(lora_settings.get("dropout", 0.0)) != 0.0:
+                logger.warning("lora.dropout should be 0 for PPO; got %s", lora_settings["dropout"])
+            policy_model = apply_lora(policy_model, lora_settings, default_dropout=0.0)
+            # The reference model is the same weights with the adapter disabled.
+            self.ref_model = None
+        else:
+            logger.info("Loading reference model...")
+            self.ref_model = AutoModelForCausalLM.from_pretrained(
+                config.policy_model_path,
+                torch_dtype=frozen_dtype,
+                attn_implementation=attention_implementation(policy_config),
+                device_map=device_map,
+            )
+            resize_embeddings_if_needed(self.ref_model, self.tokenizer)
+            self.ref_model.eval()
+            for param in self.ref_model.parameters():
+                param.requires_grad = False
+        self.policy_model = policy_model
+        self.policy_model.train()
 
         # Reward model (frozen)
         logger.info("Loading reward model...")
@@ -296,7 +418,8 @@ class RLHFTrainer:
             config.reward_model_path,
             num_labels=1,
             torch_dtype=frozen_dtype,
-            device_map="auto"
+            attn_implementation=attention_implementation(policy_config),
+            device_map=device_map,
         )
         self.reward_model.config.pad_token_id = self.tokenizer.pad_token_id
         self.reward_model.eval()
@@ -305,24 +428,38 @@ class RLHFTrainer:
 
         # Value function: kept in fp32 next to the policy's final hidden state.
         hidden_size = self.policy_model.config.hidden_size
-        value_head_device = self.policy_model.get_output_embeddings().weight.device
-        self.value_head = ValueHead(hidden_size).to(value_head_device)
+        self.value_head = ValueHead(hidden_size).to(self.device)
+        self.actor_critic = ActorCritic(self.policy_model, self.value_head)
+        if is_distributed():
+            self.ac_ddp = DistributedDataParallel(
+                self.actor_critic,
+                device_ids=[local_rank()] if self.device.type == "cuda" else None,
+                broadcast_buffers=False,
+                find_unused_parameters=False,
+            )
+        else:
+            self.ac_ddp = self.actor_critic
+        # Ranks must sample different responses from here on.
+        torch.manual_seed(config.seed + rank())
 
-        # Optimizers
-        self.policy_optimizer = torch.optim.Adam(
-            self.policy_model.parameters(),
-            lr=config.learning_rate
-        )
-
-        self.value_optimizer = torch.optim.Adam(
-            self.value_head.parameters(),
-            lr=config.learning_rate * 5  # Higher LR for value function
+        # One optimizer, two learning rates: the trainable policy weights (LoRA
+        # adapters, or everything for full-parameter PPO) and the value head.
+        value_learning_rate = config.value_learning_rate or config.learning_rate * 5
+        self.optimizer = torch.optim.AdamW(
+            [
+                {"params": self._trainable_policy_parameters(), "lr": config.learning_rate},
+                {"params": list(self.value_head.parameters()), "lr": value_learning_rate},
+            ],
+            weight_decay=0.0,
         )
 
         # KL coefficient (adaptive)
         self.kl_coef = config.init_kl_coef
 
         logger.info("RLHF Trainer initialized successfully")
+
+    def _trainable_policy_parameters(self) -> List[nn.Parameter]:
+        return [param for param in self.policy_model.parameters() if param.requires_grad]
 
     def _build_lifecycle(self) -> MLflowTrainingLifecycle:
         """Build the MLflow lifecycle controller for this RLHF run."""
@@ -342,6 +479,7 @@ class RLHFTrainer:
             },
         )
 
+    @main_process_only
     def _write_promotion_metrics(
         self,
         checkpoint_path: str,
@@ -391,16 +529,24 @@ class RLHFTrainer:
             response_ids: Generated token IDs [batch_size, response_len]
             response_mask: 1 up to and including the first stop token [batch_size, response_len]
         """
-        sequences = self.policy_model.generate(
-            input_ids=prompt_ids,
-            attention_mask=attention_mask,
-            max_new_tokens=self.config.max_response_length,
-            temperature=self.config.temperature,
-            top_p=self.config.top_p,
-            do_sample=True,
-            eos_token_id=self.stop_token_ids,
-            pad_token_id=self.tokenizer.pad_token_id,
-        )
+        # Generate on the unwrapped policy (DDP only wraps forward). Eval mode
+        # keeps the KV cache on when gradient checkpointing is enabled.
+        was_training = self.policy_model.training
+        self.policy_model.eval()
+        try:
+            sequences = self.policy_model.generate(
+                input_ids=prompt_ids,
+                attention_mask=attention_mask,
+                max_new_tokens=self.config.max_response_length,
+                temperature=self.config.temperature,
+                top_p=self.config.top_p,
+                do_sample=True,
+                use_cache=True,
+                eos_token_id=self.stop_token_ids,
+                pad_token_id=self.tokenizer.pad_token_id,
+            )
+        finally:
+            self.policy_model.train(was_training)
         response_ids = sequences[:, prompt_ids.shape[1]:]
         return response_ids, response_mask_from_stops(response_ids, self.stop_token_ids)
 
@@ -513,11 +659,22 @@ class RLHFTrainer:
             output_hidden_states=output_hidden_states,
             return_dict=True,
         )
-        # Logits at position i predict token i+1.
-        logits = outputs.logits[:, prompt_length - 1:-1, :].float() / self.logit_temperature
+        log_probs, log_probs_all = self._log_probs_from_logits(
+            outputs.logits, response_ids, prompt_length
+        )
+        return log_probs, log_probs_all, outputs
+
+    def _log_probs_from_logits(
+        self,
+        logits: torch.Tensor,
+        response_ids: torch.Tensor,
+        prompt_length: int,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Temperature-scaled log-probs of response_ids; logits at i predict token i+1."""
+        logits = logits[:, prompt_length - 1:-1, :].float() / self.logit_temperature
         log_probs_all = F.log_softmax(logits, dim=-1)
         log_probs = log_probs_all.gather(-1, response_ids.unsqueeze(-1)).squeeze(-1)
-        return log_probs, log_probs_all, outputs
+        return log_probs, log_probs_all
 
     @torch.no_grad()
     def compute_ref_log_probs(
@@ -540,12 +697,18 @@ class RLHFTrainer:
         Returns:
             ref_log_probs: [batch_size, response_len]
         """
-        ref_log_probs, _, _ = self._response_log_probs(
-            self.ref_model,
-            input_ids,
-            response_ids,
-            attention_mask,
-        )
+        ref_model = getattr(self, "ref_model", None)
+        if ref_model is not None:
+            ref_log_probs, _, _ = self._response_log_probs(
+                ref_model, input_ids, response_ids, attention_mask
+            )
+            return ref_log_probs
+        # LoRA: the reference is the base weights, i.e. the policy with its
+        # adapter switched off (no second 8B copy on the GPU).
+        with self.policy_model.disable_adapter():
+            ref_log_probs, _, _ = self._response_log_probs(
+                self.policy_model, input_ids, response_ids, attention_mask
+            )
         return ref_log_probs
 
     def compute_gae_per_token(
@@ -623,44 +786,53 @@ class RLHFTrainer:
 
         return advantages, returns
 
+    def _actor_critic(self, train: bool) -> nn.Module:
+        """DDP-wrapped module for the update, the plain module for no-grad scoring."""
+        if train and getattr(self, "ac_ddp", None) is not None:
+            return self.ac_ddp
+        actor_critic = getattr(self, "actor_critic", None)
+        if actor_critic is None:
+            actor_critic = ActorCritic(self.policy_model, self.value_head)
+        return actor_critic
+
     def compute_log_probs_and_entropy_per_token(
         self,
         input_ids: torch.Tensor,
         response_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None
+        attention_mask: Optional[torch.Tensor] = None,
+        train: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Compute per-token log probabilities, entropy, and values for given sequences
 
         Used both for the rollout's old log-probs/values (under no_grad) and in
-        the PPO update, so the first update's ratio is exactly 1.
+        the PPO update (train=True, through DDP), so the first update's ratio
+        is exactly 1.
 
         Args:
             input_ids: Full input sequence (prompt + response) [batch_size, seq_len]
             response_ids: Response tokens [batch_size, response_len]
             attention_mask: Attention mask [batch_size, seq_len]
+            train: Run through the DDP wrapper so gradients are synchronized
 
         Returns:
             log_probs: Per-token log probabilities [batch_size, response_len]
             entropy: Per-token entropy [batch_size, response_len]
             values: Per-token value estimates [batch_size, response_len]
         """
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
         prompt_length = input_ids.shape[1] - response_ids.shape[1]
-        log_probs, log_probs_all, outputs = self._response_log_probs(
-            self.policy_model,
-            input_ids,
-            response_ids,
-            attention_mask,
-            output_hidden_states=True,
+        logits, all_values = self._actor_critic(train)(
+            input_ids, attention_mask, position_ids_from_mask(attention_mask)
         )
+        log_probs, log_probs_all = self._log_probs_from_logits(logits, response_ids, prompt_length)
 
         # Compute per-token entropy: -sum(p * log(p))
         entropy = -torch.sum(log_probs_all.exp() * log_probs_all, dim=-1)
 
         # Value at position t estimates V(s_t) before generating token t+1
-        hidden_states = outputs.hidden_states[-1]  # [batch_size, seq_len, hidden_size]
-        all_values = self.value_head(hidden_states).to(self.device)  # [batch_size, seq_len]
-        values = all_values[:, prompt_length - 1:-1]  # [batch_size, response_len]
+        values = all_values.to(log_probs.device)[:, prompt_length - 1:-1]  # [batch_size, response_len]
 
         return log_probs, entropy, values
 
@@ -699,14 +871,9 @@ class RLHFTrainer:
         advantages = batch['advantages'].to(self.device).detach()
         returns = batch['returns'].to(self.device).detach()
 
-        # Normalize advantages (only over valid tokens)
-        valid_advantages = advantages[response_mask.bool()]
-        if valid_advantages.numel() > 0:
-            adv_mean = valid_advantages.mean()
-            adv_std = valid_advantages.std() + 1e-8
-            advantages = (advantages - adv_mean) / adv_std
-            # Apply mask again to ensure padding positions are 0
-            advantages = advantages * response_mask
+        # Normalize advantages over valid tokens, pooled across ranks so every
+        # rank scales its gradients the same way. Padding positions stay 0.
+        advantages = masked_global_whiten(advantages, response_mask)
 
         # Track metrics across PPO epochs
         total_policy_loss = 0.0
@@ -718,7 +885,7 @@ class RLHFTrainer:
         for ppo_epoch in range(num_ppo_epochs):
             # Compute new per-token log probs, entropy, and values
             new_log_probs, entropy, values = self.compute_log_probs_and_entropy_per_token(
-                input_ids, response_ids, attention_mask
+                input_ids, response_ids, attention_mask, train=True
             )
 
             # Compute per-token ratio: exp(new_log_prob - old_log_prob)
@@ -758,18 +925,13 @@ class RLHFTrainer:
                 - self.config.entropy_coef * entropy_bonus
             )
 
-            # Backward pass
-            self.policy_optimizer.zero_grad()
-            self.value_optimizer.zero_grad()
+            # One backward per DDP forward; DDP all-reduces the gradients, so
+            # the clipped norms below are identical on every rank.
+            self.optimizer.zero_grad(set_to_none=True)
             loss.backward()
-
-            # Gradient clipping
-            torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), 1.0)
-            torch.nn.utils.clip_grad_norm_(self.value_head.parameters(), 1.0)
-
-            # Optimizer steps
-            self.policy_optimizer.step()
-            self.value_optimizer.step()
+            torch.nn.utils.clip_grad_norm_(self._trainable_policy_parameters(), self.config.max_grad_norm)
+            torch.nn.utils.clip_grad_norm_(self.value_head.parameters(), self.config.max_grad_norm)
+            self.optimizer.step()
 
             # Compute metrics (masked)
             with torch.no_grad():
@@ -784,16 +946,16 @@ class RLHFTrainer:
             total_kl += approx_kl.item()
             total_clip_frac += clip_frac.item()
 
-        # Average metrics over PPO epochs
+        # Average metrics over PPO epochs, then across ranks
         num_epochs = num_ppo_epochs
-        return {
+        return reduce_scalar_metrics({
             'policy_loss': total_policy_loss / num_epochs,
             'value_loss': total_value_loss / num_epochs,
             'entropy': total_entropy / num_epochs,
             'approx_kl': total_kl / num_epochs,
             'clip_frac': total_clip_frac / num_epochs,
             'total_loss': (total_policy_loss + total_value_loss) / num_epochs,
-        }
+        })
 
     def train(self, prompts_file: str) -> TrainingRunResult:
         lifecycle = self._build_lifecycle()
@@ -815,14 +977,21 @@ class RLHFTrainer:
         logger.info(f"Batch size: {self.config.batch_size}, Learning rate: {self.config.learning_rate}")
         logger.info(f"Gamma: {self.config.gamma}, GAE Lambda: {self.config.gae_lambda}")
 
-        # Create dataset
+        # Create dataset. Each rank gets a disjoint shard of equal size, so all
+        # ranks run the same number of steps and reach every collective together.
         dataset = PromptDataset(prompts_file, self.tokenizer, self.config.max_prompt_length)
+        if is_distributed():
+            sampler = DistributedSampler(dataset, shuffle=True, seed=self.config.seed, drop_last=True)
+        else:
+            generator = torch.Generator().manual_seed(self.config.seed)
+            sampler = RandomSampler(dataset, generator=generator)
         dataloader = DataLoader(
             dataset,
             batch_size=self.config.batch_size,
-            shuffle=True,
+            sampler=sampler,
             collate_fn=partial(collate_prompts, pad_token_id=self.tokenizer.pad_token_id),
         )
+        ppo_epochs = self.config.ppo_epochs or self.config.num_epochs
 
         # Training metrics
         global_step = 0
@@ -835,6 +1004,8 @@ class RLHFTrainer:
 
         for epoch in range(self.config.num_epochs):
             logger.info(f"Epoch {epoch + 1}/{self.config.num_epochs}")
+            if isinstance(sampler, DistributedSampler):
+                sampler.set_epoch(epoch)
 
             for batch_idx, batch in enumerate(dataloader):
                 if global_step >= self.config.num_steps:
@@ -903,13 +1074,14 @@ class RLHFTrainer:
                 }
 
                 # PPO update
-                metrics = self.ppo_update(ppo_batch, num_ppo_epochs=self.config.num_epochs)
+                metrics = self.ppo_update(ppo_batch, num_ppo_epochs=ppo_epochs)
 
                 # ==================== Logging and Metrics ====================
-                # Compute mean KL for this batch (over valid tokens)
+                # Mean KL/reward over every rank's batch: the adaptive KL
+                # coefficient must stay identical across ranks.
                 with torch.no_grad():
-                    mean_kl = (kl_per_token * response_mask).sum() / (response_mask.sum() + 1e-8)
-                    mean_reward = rm_scores.mean()
+                    mean_kl = masked_global_mean(kl_per_token, response_mask)
+                    mean_reward = all_reduce_mean(rm_scores.float().mean())
 
                 running_reward += mean_reward.item()
                 running_kl += mean_kl.item()
@@ -951,14 +1123,14 @@ class RLHFTrainer:
                 # ==================== Adaptive KL Coefficient ====================
                 current_kl = mean_kl.item()
                 if current_kl > self.config.target_kl * 1.5:
-                    self.kl_coef = min(self.kl_coef * 1.5, 1.0)  # Cap at 1.0
+                    self.kl_coef = min(self.kl_coef * 1.5, self.config.kl_coef_max)
                 elif current_kl < self.config.target_kl / 1.5:
-                    self.kl_coef = max(self.kl_coef / 1.5, 0.001)  # Floor at 0.001
+                    self.kl_coef = max(self.kl_coef / 1.5, self.config.kl_coef_min)
 
                 global_step += 1
 
                 # Save checkpoint periodically
-                if global_step % 500 == 0:
+                if self.config.save_steps and global_step % self.config.save_steps == 0:
                     self.save_checkpoint(global_step)
 
             # End of epoch
@@ -967,7 +1139,7 @@ class RLHFTrainer:
 
         # Save final model
         logger.info("Saving final model")
-        final_checkpoint_path = self.save_checkpoint("final")
+        final_checkpoint_path = self.save_final_model()
         final_metrics = {
             "total_steps": global_step,
             "kl_coef": self.kl_coef,
@@ -987,10 +1159,11 @@ class RLHFTrainer:
             "cost_per_1k_tokens_usd": 0.0,
             "artifact_checksum_ready": 1.0 if os.path.isdir(final_checkpoint_path) else 0.0,
         }
+        # Rank 0 writes the metrics file; other ranks keep their local copy.
         final_metrics = self._write_promotion_metrics(
             final_checkpoint_path,
             final_metrics,
-        )
+        ) or final_metrics
         lifecycle_result = lifecycle.register_checkpoint(
             final_checkpoint_path,
             final_metrics=final_metrics,
@@ -1007,31 +1180,67 @@ class RLHFTrainer:
         )
 
     def save_checkpoint(self, step):
-        """Save model checkpoint"""
+        """
+        Save a resumable checkpoint (rank 0 writes; every rank waits for it).
+
+        LoRA runs save only the adapter plus optimizer state, which is small;
+        save_final_model turns the final adapter into a full model.
+        """
         save_path = os.path.join(self.config.output_dir, f"checkpoint-{step}")
-        os.makedirs(save_path, exist_ok=True)
+        if is_main_process():
+            os.makedirs(save_path, exist_ok=True)
+            self.policy_model.save_pretrained(save_path)
+            self.tokenizer.save_pretrained(save_path)
+            torch.save(self.value_head.state_dict(), os.path.join(save_path, "value_head.pt"))
+            if getattr(self, "use_lora", False) and getattr(self, "optimizer", None) is not None:
+                torch.save(self.optimizer.state_dict(), os.path.join(save_path, "optimizer.pt"))
+            self._write_run_config(save_path, step)
+            logger.info(f"Checkpoint saved: {save_path}")
+        barrier()
+        return save_path
 
-        self.policy_model.save_pretrained(save_path)
-        self.tokenizer.save_pretrained(save_path)
-        torch.save(self.value_head.state_dict(), os.path.join(save_path, "value_head.pt"))
+    def save_final_model(self) -> str:
+        """
+        Save checkpoint-final as a full Hugging Face model.
 
-        # Save config
-        config_path = os.path.join(save_path, "rlhf_config.json")
-        with open(config_path, 'w') as f:
+        For LoRA, rank 0 saves the adapter next to it and merges it into the
+        base weights on CPU, so the AWQ/vLLM handoff keeps getting a complete
+        model. The merge is not followed by a barrier: other ranks are done.
+        """
+        if not getattr(self, "use_lora", False):
+            return self.save_checkpoint("final")
+
+        adapter_path = self.save_checkpoint("final-adapter")
+        final_path = os.path.join(self.config.output_dir, "checkpoint-final")
+        if is_main_process():
+            merge_adapter(
+                self.config.policy_model_path,
+                adapter_path,
+                final_path,
+                dtype=model_load_dtype(self.precision, full_fine_tune=False),
+            )
+            torch.save(self.value_head.state_dict(), os.path.join(final_path, "value_head.pt"))
+            self._write_run_config(final_path, "final")
+        return final_path
+
+    def _write_run_config(self, save_path: str, step) -> None:
+        with open(os.path.join(save_path, "rlhf_config.json"), 'w') as f:
             json.dump({
                 'policy_model_path': self.config.policy_model_path,
                 'reward_model_path': self.config.reward_model_path,
                 'num_epochs': self.config.num_epochs,
+                'ppo_epochs': self.config.ppo_epochs or self.config.num_epochs,
                 'num_steps': self.config.num_steps,
                 'batch_size': self.config.batch_size,
+                'world_size': world_size(),
                 'learning_rate': self.config.learning_rate,
+                'value_learning_rate': self.config.value_learning_rate,
+                'lora': bool(getattr(self, "use_lora", False)),
+                'step': step,
                 'kl_coef': self.kl_coef,
                 'target_kl': self.config.target_kl,
                 'clip_range': self.config.clip_range,
             }, f, indent=2)
-
-        logger.info(f"Checkpoint saved: {save_path}")
-        return save_path
 
     @torch.no_grad()
     def evaluate(
@@ -1107,6 +1316,60 @@ class RLHFTrainer:
         return results
 
 
+def rlhf_config_from_dict(
+    config_dict: Dict[str, Any],
+    config_path: Optional[str] = None,
+    **overrides: Any,
+) -> RLHFConfig:
+    """Build RLHFConfig from the rlhf YAML mapping (shared by the CLI and the pipeline)."""
+    ppo_config = (config_dict.get('algorithm') or {}).get('ppo') or {}
+    adaptive_kl = (config_dict.get('advanced') or {}).get('adaptive_kl') or {}
+    training_config = config_dict.get('training') or {}
+    generation_config = config_dict.get('generation') or {}
+    data_config = config_dict.get('data') or {}
+
+    values: Dict[str, Any] = dict(
+        # Model paths
+        policy_model_path=config_dict['model']['policy']['name'],
+        reward_model_path=config_dict['model']['reward']['name'],
+        output_dir=training_config.get('output_dir', './outputs/rlhf'),
+
+        # PPO hyperparameters
+        num_epochs=ppo_config.get('num_epochs', 4),
+        ppo_epochs=ppo_config.get('ppo_epochs'),
+        num_steps=training_config.get('total_steps', 10000),
+        batch_size=training_config.get('per_device_batch_size', 4),
+        learning_rate=training_config.get('policy_learning_rate', 1e-6),
+        value_learning_rate=training_config.get('value_learning_rate'),
+        max_grad_norm=training_config.get('max_grad_norm', 1.0),
+        save_steps=training_config.get('save_steps', 500),
+        seed=training_config.get('seed', 42),
+
+        # KL penalty
+        init_kl_coef=ppo_config.get('init_kl_coef', ppo_config.get('kl_coef', 0.05)),
+        target_kl=ppo_config.get('target_kl', 0.1),
+        kl_coef_min=adaptive_kl.get('kl_coef_min', 0.001),
+        kl_coef_max=adaptive_kl.get('kl_coef_max', 1.0),
+
+        # PPO specific
+        clip_range=ppo_config.get('clip_range', 0.2),
+        value_loss_coef=ppo_config.get('value_loss_coef', 0.1),
+        entropy_coef=ppo_config.get('entropy_coef', 0.01),
+        gae_lambda=ppo_config.get('gae_lambda', 0.95),
+        gamma=ppo_config.get('gamma', 0.99),
+
+        # Generation
+        max_prompt_length=data_config.get('max_prompt_length', 512),
+        max_response_length=data_config.get('max_response_length', 512),
+        temperature=generation_config.get('temperature', 0.7),
+        top_p=generation_config.get('top_p', 0.9),
+        raw_config=config_dict,
+        config_path=config_path,
+    )
+    values.update(overrides)
+    return RLHFConfig(**values)
+
+
 def main():
     """Main entry point"""
     import argparse
@@ -1132,42 +1395,8 @@ def main():
     with open(args.config, 'r') as f:
         config_dict = yaml.safe_load(f)
 
-    # Extract PPO parameters with defaults
-    ppo_config = config_dict.get('algorithm', {}).get('ppo', {})
-    training_config = config_dict.get('training', {})
-    generation_config = config_dict.get('generation', {})
-    data_config = config_dict.get('data', {})
-
-    # Build RLHFConfig
-    config = RLHFConfig(
-        # Model paths
-        policy_model_path=config_dict['model']['policy']['name'],
-        reward_model_path=config_dict['model']['reward']['name'],
-        output_dir=training_config.get('output_dir', './outputs/rlhf'),
-
-        # PPO hyperparameters
-        num_epochs=ppo_config.get('num_epochs', 4),
-        num_steps=training_config.get('total_steps', 10000),
-        batch_size=training_config.get('per_device_batch_size', 4),
-        learning_rate=training_config.get('policy_learning_rate', 1e-6),
-
-        # KL penalty
-        init_kl_coef=ppo_config.get('init_kl_coef', ppo_config.get('kl_coef', 0.05)),
-        target_kl=ppo_config.get('target_kl', 0.1),
-
-        # PPO specific
-        clip_range=ppo_config.get('clip_range', 0.2),
-        value_loss_coef=ppo_config.get('value_loss_coef', 0.1),
-        entropy_coef=ppo_config.get('entropy_coef', 0.01),
-        gae_lambda=ppo_config.get('gae_lambda', 0.95),
-        gamma=ppo_config.get('gamma', 0.99),
-
-        # Generation
-        max_prompt_length=data_config.get('max_prompt_length', 512),
-        max_response_length=data_config.get('max_response_length', 512),
-        temperature=generation_config.get('temperature', 0.7),
-        top_p=generation_config.get('top_p', 0.9),
-        raw_config=config_dict,
+    config = rlhf_config_from_dict(
+        config_dict,
         config_path=args.config,
         promotion_metrics_path=args.promotion_metrics,
         baseline_metrics_path=args.baseline_metrics,
@@ -1201,8 +1430,8 @@ def main():
     # Train
     trainer.train(args.prompts)
 
-    # Optional evaluation
-    if args.eval_prompts:
+    # Optional evaluation (rank 0 only; it needs no other rank)
+    if args.eval_prompts and is_main_process():
         logger.info("Running evaluation...")
         with open(args.eval_prompts, 'r') as f:
             eval_data = json.load(f)
