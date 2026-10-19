@@ -13,17 +13,22 @@ import hashlib
 import json
 import logging
 import os
+import socket
 import subprocess
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
+from types import SimpleNamespace
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence
 
 import yaml
 
 try:
+    from .distributed import is_main_process
     from .results import TrainingRunResult
 except ImportError:  # pragma: no cover - supports direct script execution
+    from distributed import is_main_process  # type: ignore[no-redef]
     from results import TrainingRunResult  # type: ignore[no-redef]
 
 
@@ -39,6 +44,10 @@ PIPELINE_STAGE_ORDER = (
     "awq_handoff",
     "serving_handoff",
 )
+
+GPU_STAGES = ("sft", "reward", "rlhf")
+LAUNCHERS = ("auto", "torchrun", "inprocess")
+SRC_DIR = Path(__file__).resolve().parent.parent
 
 STAGE_ALIASES = {
     "all": PIPELINE_STAGE_ORDER,
@@ -78,6 +87,8 @@ class TrainingPipeline:
         skip_promotion: bool = False,
         resume: bool = False,
         dry_run: bool = False,
+        launcher: Optional[str] = None,
+        nproc_per_node: Optional[int] = None,
     ) -> None:
         self.config_path = Path(config_path)
         self.config = self._load_yaml(self.config_path)
@@ -87,6 +98,11 @@ class TrainingPipeline:
         self.skip_promotion = skip_promotion
         self.resume = resume
         self.dry_run = dry_run
+        distributed = dict(self.config.get("distributed") or {})
+        self.launcher = str(launcher or distributed.get("launcher", "auto"))
+        if self.launcher not in LAUNCHERS:
+            raise ValueError(f"Unknown launcher {self.launcher!r}; expected one of {', '.join(LAUNCHERS)}")
+        self.nproc_per_node = nproc_per_node or distributed.get("nproc_per_node", "auto")
         self.artifacts = self._resolve_artifacts()
 
     def build_execution_plan(self) -> Dict[str, Any]:
@@ -142,6 +158,14 @@ class TrainingPipeline:
                 "storage_uri": self._artifact_config().get("storage_uri", ""),
             },
             "awq_handoff": self._awq_config(),
+            "distributed": {
+                # "auto" is resolved from the visible GPUs only when stages run.
+                "launcher": self.launcher,
+                "nproc_per_node": {
+                    stage: self._stage_config(stage).get("nproc_per_node", self.nproc_per_node)
+                    for stage in GPU_STAGES
+                },
+            },
         }
 
     def run(self) -> Dict[str, Any]:
@@ -150,11 +174,24 @@ class TrainingPipeline:
         if self.dry_run:
             return {"status": "dry_run", "plan": plan}
 
+        if int(os.environ.get("WORLD_SIZE", 1)) > 1 and (
+            len(self.stages) != 1 or self.stages[0] not in GPU_STAGES
+        ):
+            raise ValueError(
+                "Under torchrun the pipeline runs exactly one of the sft, reward or rlhf "
+                "stages; launch scripts/train_pipeline.py with plain python to run several "
+                "(it starts one torchrun per stage)"
+            )
+
         results: Dict[str, Any] = {"plan": plan, "stages": {}}
         stage_results: Dict[str, TrainingRunResult] = {}
 
         if "sft" in self.stages:
-            sft_result = self._resume_or_run("sft", self.artifacts.sft_output_dir / "final", self._run_sft)
+            sft_result = self._resume_or_run(
+                "sft",
+                self.artifacts.sft_output_dir / "final",
+                lambda: self._execute_gpu_stage("sft", self._run_sft),
+            )
             stage_results["sft"] = sft_result
             results["stages"]["sft"] = result_to_dict(sft_result)
 
@@ -163,7 +200,7 @@ class TrainingPipeline:
             reward_result = self._resume_or_run(
                 "reward",
                 self.artifacts.reward_output_dir / "final",
-                lambda: self._run_reward(sft_checkpoint),
+                lambda: self._execute_gpu_stage("reward", lambda: self._run_reward(sft_checkpoint)),
             )
             stage_results["reward"] = reward_result
             results["stages"]["reward"] = result_to_dict(reward_result)
@@ -179,7 +216,9 @@ class TrainingPipeline:
             rlhf_result = self._resume_or_run(
                 "rlhf",
                 self.artifacts.rlhf_output_dir / "checkpoint-final",
-                lambda: self._run_rlhf(sft_checkpoint, reward_checkpoint),
+                lambda: self._execute_gpu_stage(
+                    "rlhf", lambda: self._run_rlhf(sft_checkpoint, reward_checkpoint)
+                ),
             )
             stage_results["rlhf"] = rlhf_result
             results["stages"]["rlhf"] = result_to_dict(rlhf_result)
@@ -368,6 +407,78 @@ class TrainingPipeline:
         }
         write_json(self.artifacts.handoff_path, handoff)
         return handoff
+
+    def run_gpu_stage(self, stage: str) -> TrainingRunResult:
+        """Run one training stage in this process, reading earlier stages from disk."""
+        sft_checkpoint = str(self.artifacts.sft_output_dir / "final")
+        reward_checkpoint = str(self.artifacts.reward_output_dir / "final")
+        if stage == "sft":
+            return self._run_sft()
+        if stage == "reward":
+            return self._run_reward(sft_checkpoint)
+        if stage == "rlhf":
+            return self._run_rlhf(sft_checkpoint, reward_checkpoint)
+        raise ValueError(f"Not a training stage: {stage}")
+
+    def stage_result_path(self, stage: str) -> Path:
+        output_dirs = {
+            "sft": self.artifacts.sft_output_dir,
+            "reward": self.artifacts.reward_output_dir,
+            "rlhf": self.artifacts.rlhf_output_dir,
+        }
+        return output_dirs[stage] / "stage_result.json"
+
+    def resolve_nproc(self, stage: str) -> int:
+        """GPUs for one stage: per-stage override, pipeline setting, or every visible GPU."""
+        value = self._stage_config(stage).get("nproc_per_node", self.nproc_per_node)
+        if value in (None, "auto"):
+            try:
+                import torch
+            except ImportError:
+                return 1
+            return max(torch.cuda.device_count(), 1)
+        return int(value)
+
+    def _execute_gpu_stage(self, stage: str, inprocess: Callable[[], TrainingRunResult]) -> TrainingRunResult:
+        """
+        Run a training stage in this process or as its own torchrun job.
+
+        A separate job per stage frees all GPU memory between stages and keeps
+        the FSDP environment variables and accelerate state of one stage out
+        of the next.
+        """
+        if int(os.environ.get("WORLD_SIZE", 1)) > 1 or self.launcher == "inprocess":
+            return inprocess()
+        nproc = self.resolve_nproc(stage)
+        if self.launcher == "auto" and nproc <= 1:
+            return inprocess()
+        return self._launch_stage(stage, nproc)
+
+    def _launch_stage(self, stage: str, nproc: int) -> TrainingRunResult:
+        result_path = self.stage_result_path(stage)
+        if result_path.exists():
+            result_path.unlink()
+        command = torchrun_command(nproc) + [
+            "-m",
+            "training.stage_runner",
+            "--pipeline-config",
+            str(self.config_path),
+            "--stage",
+            stage,
+        ]
+        if self.output_override:
+            command += ["--output-dir", str(self.output_override)]
+        if self.baseline_metrics:
+            command += ["--baseline-metrics", self.baseline_metrics]
+        if self.skip_promotion:
+            command.append("--skip-promotion")
+        env = dict(os.environ)
+        env["PYTHONPATH"] = os.pathsep.join(
+            path for path in (str(SRC_DIR), env.get("PYTHONPATH", "")) if path
+        )
+        logger.info("Launching %s on %d processes: %s", stage, nproc, " ".join(command))
+        subprocess.run(command, check=True, env=env)
+        return load_stage_result(result_path)
 
     def _run_sft(self) -> TrainingRunResult:
         from .sft_trainer import SFTConfig, SFTTrainer
@@ -600,38 +711,11 @@ def resolve_stages(stages: str | Sequence[str]) -> List[str]:
 
 def build_rlhf_config(config_path: str):
     """Load RLHFConfig from YAML without forcing that logic into the CLI only."""
-    from .rlhf_trainer import RLHFConfig
+    from .rlhf_trainer import rlhf_config_from_dict
 
     with open(config_path, "r", encoding="utf-8") as f:
         config_dict = yaml.safe_load(f)
-
-    ppo_config = config_dict.get("algorithm", {}).get("ppo", {})
-    training_config = config_dict.get("training", {})
-    generation_config = config_dict.get("generation", {})
-    data_config = config_dict.get("data", {})
-
-    return RLHFConfig(
-        policy_model_path=config_dict["model"]["policy"]["name"],
-        reward_model_path=config_dict["model"]["reward"]["name"],
-        output_dir=training_config.get("output_dir", "./outputs/rlhf"),
-        num_epochs=ppo_config.get("num_epochs", 4),
-        num_steps=training_config.get("total_steps", 10000),
-        batch_size=training_config.get("per_device_batch_size", 4),
-        learning_rate=training_config.get("policy_learning_rate", 1e-6),
-        init_kl_coef=ppo_config.get("init_kl_coef", ppo_config.get("kl_coef", 0.05)),
-        target_kl=ppo_config.get("target_kl", 0.1),
-        clip_range=ppo_config.get("clip_range", 0.2),
-        value_loss_coef=ppo_config.get("value_loss_coef", 0.1),
-        entropy_coef=ppo_config.get("entropy_coef", 0.01),
-        gae_lambda=ppo_config.get("gae_lambda", 0.95),
-        gamma=ppo_config.get("gamma", 0.99),
-        max_prompt_length=data_config.get("max_prompt_length", 512),
-        max_response_length=data_config.get("max_response_length", 512),
-        temperature=generation_config.get("temperature", 0.7),
-        top_p=generation_config.get("top_p", 0.9),
-        raw_config=config_dict,
-        config_path=config_path,
-    )
+    return rlhf_config_from_dict(config_dict, config_path=config_path)
 
 
 def validate_checkpoint_artifact(checkpoint_path: Path) -> Dict[str, Any]:
@@ -662,6 +746,44 @@ def validate_checkpoint_artifact(checkpoint_path: Path) -> Dict[str, Any]:
         "files": sorted(files),
         "ready_for_awq_conversion": checkpoint_path.is_dir() and "config.json" in files and has_tokenizer and has_weights,
     }
+
+
+def torchrun_command(nproc: int) -> List[str]:
+    """
+    Single-node torchrun with a static rendezvous on loopback.
+
+    Equivalent to --standalone, but does not resolve the host name, which
+    hangs on some macOS setups.
+    """
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    return [
+        sys.executable,
+        "-m",
+        "torch.distributed.run",
+        "--nnodes=1",
+        f"--nproc_per_node={nproc}",
+        "--master_addr=127.0.0.1",
+        f"--master_port={port}",
+    ]
+
+
+def write_stage_result(path: Path, result: TrainingRunResult) -> None:
+    """Persist a stage result so the launching process can read it back."""
+    write_json(path, result_to_dict(result))
+
+
+def load_stage_result(path: Path) -> TrainingRunResult:
+    if not path.exists():
+        raise RuntimeError(f"Training stage finished without writing {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    lifecycle = data.get("lifecycle_result")
+    return TrainingRunResult(
+        checkpoint_path=data["checkpoint_path"],
+        metrics=dict(data.get("metrics") or {}),
+        lifecycle_result=SimpleNamespace(**lifecycle) if lifecycle else None,
+    )
 
 
 def checkpoint_record(
@@ -801,6 +923,9 @@ def load_json_if_exists(path: Path) -> Dict[str, Any]:
 
 
 def write_json(path: Path, payload: Dict[str, Any]) -> None:
+    # Under torchrun only rank 0 writes pipeline files.
+    if not is_main_process():
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n",

@@ -62,9 +62,9 @@ training:
   per_device_train_batch_size: 4
   per_device_eval_batch_size: 4
   
-  # Gradient accumulation steps (effective batch size = batch_size * grad_accum)
-  # Effective batch size = 4 * 8 = 32
-  gradient_accumulation_steps: 8
+  # Gradient accumulation steps. Global batch = per_device * grad_accum * GPUs:
+  # 4 * 1 * 8 GPUs = 32. On a single GPU set this to 8 for the same batch.
+  gradient_accumulation_steps: 1
   
   # Learning rate and scheduler
   learning_rate: 2.0e-5
@@ -95,16 +95,15 @@ training:
   
   # Resume from checkpoint (set path if resuming)
   resume_from_checkpoint: null
-  
-  # Distributed training settings
-  deepspeed: null  # Path to DeepSpeed config if using
 
 # ============================================================================
 # LoRA (Low-Rank Adaptation) Configuration - Optional
 # Enable for parameter-efficient fine-tuning
 # ============================================================================
 lora:
-  enabled: false  # Set true to use LoRA instead of full fine-tuning
+  # Set true to use LoRA instead of full fine-tuning; with LoRA prefer
+  # distributed.strategy: ddp (the frozen bf16 base fits on every GPU).
+  enabled: false
   
   # LoRA hyperparameters
   r: 16  # LoRA rank
@@ -132,21 +131,33 @@ lora:
     - "lm_head"
 
 # ============================================================================
-# Hardware Configuration
+# Distributed Training
+# Launch with: torchrun --standalone --nproc_per_node 8 ... (or
+# scripts/launch_training.sh). A single process ignores this section.
 # ============================================================================
-hardware:
-  # Number of GPUs to use (1 for single GPU, >1 for distributed)
-  num_gpus: 1
-  
-  # GPU device IDs (e.g., [0, 1, 2, 3])
-  gpu_ids: [0]
-  
-  # DeepSpeed stage (0, 1, 2, 3) - higher stages save more memory
-  # Stage 0: Disabled
-  # Stage 1: Optimizer state partitioning
-  # Stage 2: Optimizer + Gradient partitioning  
-  # Stage 3: Optimizer + Gradient + Parameter partitioning
-  deepspeed_stage: 0
+distributed:
+  # none | ddp | fsdp. FSDP shards parameters, gradients and optimizer state
+  # across GPUs (needed for full fine-tuning 8B); ddp replicates the model and
+  # suits LoRA runs.
+  strategy: "fsdp"
+  timeout_minutes: 60
+  find_unused_parameters: false
+  fsdp:
+    version: 1  # FSDP2 is not selectable through transformers 4.57 TrainingArguments
+    sharding: "full_shard"  # full_shard | shard_grad_op | hybrid_shard
+    transformer_layer_cls_to_wrap: ["LlamaDecoderLayer"]
+    # null follows model.gradient_checkpointing; FSDP checkpoints each wrapped layer.
+    activation_checkpointing: null
+    use_orig_params: true
+    sync_module_states: true
+    cpu_ram_efficient_loading: false
+    limit_all_gathers: true
+    backward_prefetch: "backward_pre"
+    forward_prefetch: false
+    offload: false
+    # Intermediate checkpoints are sharded (resume needs the same GPU count); final/ is always a
+    # full bf16 model written by rank 0.
+    checkpoint_state_dict_type: "sharded"
 
 # ============================================================================
 # Experiment Tracking

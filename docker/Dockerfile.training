@@ -14,4 +14,7 @@ COPY requirements.txt /workspace/requirements.txt
 
 RUN mkdir -p /workspace/data /workspace/models /workspace/outputs
 
-CMD ["python", "/workspace/scripts/train_pipeline.py", "--config", "/workspace/config/training_pipeline.yaml", "--stages", "all"]
+# One torchrun job per training stage across every visible GPU; pass a stage
+# (sft | reward | rlhf) to run only that one. Needs HF_TOKEN for Llama 3.
+ENTRYPOINT ["bash", "/workspace/scripts/launch_training.sh"]
+CMD ["all"]

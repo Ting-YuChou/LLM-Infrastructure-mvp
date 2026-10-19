@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+import os
 from typing import Any, Dict, List, Mapping, Optional
 
 import torch
@@ -56,7 +57,7 @@ _PASSTHROUGH_TRAINING_KEYS = (
     "save_strategy",
     "dataloader_num_workers",
     "dataloader_pin_memory",
-    "deepspeed",
+    "use_cpu",
     "seed",
     "data_seed",
 )
@@ -64,6 +65,25 @@ _PASSTHROUGH_TRAINING_KEYS = (
 # Mixed-precision flags are derived from model.precision; keeping a second copy
 # under training: is how fp16 silently stayed on after switching to bf16.
 _REJECTED_TRAINING_KEYS = ("fp16", "bf16", "fp16_opt_level")
+
+# Llama attention + MLP projections; adapting only q/k/v/o leaves most of the
+# trainable capacity on the table.
+DEFAULT_LORA_TARGET_MODULES = [
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "o_proj",
+    "gate_proj",
+    "up_proj",
+    "down_proj",
+]
+
+_DISTRIBUTED_STRATEGIES = ("none", "ddp", "fsdp")
+_FSDP_SHARDING = ("full_shard", "shard_grad_op", "hybrid_shard")
+_FSDP_CHECKPOINT_STATE_DICT = {
+    "sharded": "SHARDED_STATE_DICT",
+    "full": "FULL_STATE_DICT",
+}
 
 
 def resolve_precision(model_config: Optional[Mapping[str, Any]]) -> str:
@@ -89,6 +109,11 @@ def model_load_dtype(precision: str, full_fine_tune: bool) -> torch.dtype:
     return _PRECISION_DTYPES[precision]
 
 
+def precision_dtype(precision: str) -> torch.dtype:
+    """Dtype a finished checkpoint is saved in for this precision."""
+    return _PRECISION_DTYPES[precision]
+
+
 def attention_implementation(model_config: Optional[Mapping[str, Any]]) -> str:
     """Pick the attention kernel requested by the model config."""
     model_config = model_config or {}
@@ -103,6 +128,27 @@ def attention_implementation(model_config: Optional[Mapping[str, Any]]) -> str:
             "falling back to sdpa attention"
         )
     return "sdpa"
+
+
+def apply_lora(model: Any, lora_settings: Optional[Mapping[str, Any]], default_dropout: float = 0.05) -> Any:
+    """Wrap a causal LM with a LoRA adapter configured from a `lora:` YAML section."""
+    # peft is only needed for adapter runs, not full fine-tuning.
+    from peft import LoraConfig, TaskType, get_peft_model
+
+    lora_settings = lora_settings or {}
+    lora_config = LoraConfig(
+        task_type=TaskType.CAUSAL_LM,
+        r=int(lora_settings.get("r", 16)),
+        lora_alpha=int(lora_settings.get("alpha", 32)),
+        lora_dropout=float(lora_settings.get("dropout", default_dropout)),
+        target_modules=list(lora_settings.get("target_modules") or DEFAULT_LORA_TARGET_MODULES),
+        bias=lora_settings.get("bias", "none"),
+        modules_to_save=lora_settings.get("modules_to_save"),
+    )
+    logger.info("Applying LoRA configuration: %s", lora_config)
+    model = get_peft_model(model, lora_config)
+    model.print_trainable_parameters()
+    return model
 
 
 def report_targets(tracking_config: Optional[Mapping[str, Any]]) -> List[str]:
@@ -131,14 +177,138 @@ def early_stopping_settings(
     }
 
 
+def distributed_settings(raw_config: Mapping[str, Any]) -> Dict[str, Any]:
+    """Return the `distributed:` section with defaults filled in."""
+    distributed = dict(raw_config.get("distributed") or {})
+    distributed.setdefault("strategy", "none")
+    distributed.setdefault("timeout_minutes", 60)
+    distributed.setdefault("find_unused_parameters", False)
+    distributed["fsdp"] = dict(distributed.get("fsdp") or {})
+    return distributed
+
+
+def env_world_size() -> int:
+    return int(os.environ.get("WORLD_SIZE", 1))
+
+
+def resolve_distributed_strategy(raw_config: Mapping[str, Any], world_size: int) -> str:
+    """
+    Return the strategy that will actually run.
+
+    A single process falls back to "none": Trainer refuses FSDP without a
+    process group, and CPU tests and single-GPU debug runs share these configs.
+    """
+    strategy = str(distributed_settings(raw_config)["strategy"]).strip().lower()
+    if strategy not in _DISTRIBUTED_STRATEGIES:
+        raise ValueError(
+            f"Unsupported distributed.strategy {strategy!r}; expected one of "
+            f"{', '.join(_DISTRIBUTED_STRATEGIES)}"
+        )
+    if strategy != "none" and world_size <= 1:
+        logger.warning(
+            "distributed.strategy=%s needs torchrun with more than one process; "
+            "running single-process instead",
+            strategy,
+        )
+        return "none"
+    return strategy
+
+
+def build_distributed_kwargs(
+    raw_config: Mapping[str, Any],
+    world_size: int,
+    gradient_checkpointing: bool,
+) -> Dict[str, Any]:
+    """TrainingArguments kwargs for DDP or FSDP (empty for a single process)."""
+    if (raw_config.get("training") or {}).get("deepspeed"):
+        raise ValueError(
+            "training.deepspeed is not supported; use distributed.strategy fsdp or ddp"
+        )
+    settings = distributed_settings(raw_config)
+    strategy = resolve_distributed_strategy(raw_config, world_size)
+    if strategy == "none":
+        return {}
+
+    kwargs: Dict[str, Any] = {"ddp_timeout": int(float(settings["timeout_minutes"]) * 60)}
+    if strategy == "ddp":
+        kwargs["ddp_find_unused_parameters"] = bool(settings["find_unused_parameters"])
+        return kwargs
+
+    fsdp = settings["fsdp"]
+    version = int(fsdp.get("version", 1))
+    if version != 1:
+        raise ValueError(
+            "distributed.fsdp.version must be 1: transformers 4.57 TrainingArguments "
+            "cannot select FSDP2 or its state dict type"
+        )
+    sharding = str(fsdp.get("sharding", "full_shard"))
+    if sharding not in _FSDP_SHARDING:
+        raise ValueError(
+            f"Unsupported distributed.fsdp.sharding {sharding!r}; expected one of "
+            f"{', '.join(_FSDP_SHARDING)}"
+        )
+    sync_module_states = bool(fsdp.get("sync_module_states", True))
+    cpu_ram_efficient_loading = bool(fsdp.get("cpu_ram_efficient_loading", False))
+    if cpu_ram_efficient_loading and not sync_module_states:
+        raise ValueError(
+            "distributed.fsdp.cpu_ram_efficient_loading requires sync_module_states"
+        )
+    activation_checkpointing = fsdp.get("activation_checkpointing")
+    if activation_checkpointing is None:
+        activation_checkpointing = gradient_checkpointing
+
+    # Without "auto_wrap" accelerate falls back to NO_WRAP and the whole model
+    # becomes one FSDP unit, so every forward gathers all 8B parameters.
+    options = [sharding, "auto_wrap"]
+    if fsdp.get("offload", False):
+        options.append("offload")
+    layer_classes = fsdp.get("transformer_layer_cls_to_wrap") or ["LlamaDecoderLayer"]
+    if isinstance(layer_classes, str):
+        layer_classes = [layer_classes]
+    kwargs["fsdp"] = " ".join(options)
+    kwargs["fsdp_config"] = {
+        "transformer_layer_cls_to_wrap": list(layer_classes),
+        "backward_prefetch": str(fsdp.get("backward_prefetch", "backward_pre")),
+        "forward_prefetch": bool(fsdp.get("forward_prefetch", False)),
+        "limit_all_gathers": bool(fsdp.get("limit_all_gathers", True)),
+        "use_orig_params": bool(fsdp.get("use_orig_params", True)),
+        "sync_module_states": sync_module_states,
+        "cpu_ram_efficient_loading": cpu_ram_efficient_loading,
+        "activation_checkpointing": bool(activation_checkpointing),
+    }
+    return kwargs
+
+
+def fsdp_environment(raw_config: Mapping[str, Any], world_size: int) -> Dict[str, str]:
+    """
+    Environment accelerate reads for FSDP settings TrainingArguments cannot pass.
+
+    Intermediate checkpoints default to sharded so rank 0 does not gather a full
+    fp32 model plus optimizer state every save_steps. Apply before constructing
+    TrainingArguments.
+    """
+    if resolve_distributed_strategy(raw_config, world_size) != "fsdp":
+        return {}
+    name = str(distributed_settings(raw_config)["fsdp"].get("checkpoint_state_dict_type", "sharded"))
+    if name not in _FSDP_CHECKPOINT_STATE_DICT:
+        raise ValueError(
+            f"Unsupported distributed.fsdp.checkpoint_state_dict_type {name!r}; "
+            "expected sharded or full"
+        )
+    return {"FSDP_STATE_DICT_TYPE": _FSDP_CHECKPOINT_STATE_DICT[name]}
+
+
 def build_training_arguments_kwargs(
     raw_config: Mapping[str, Any],
     output_dir: str,
     has_eval: bool,
+    world_size: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Translate a training YAML mapping into TrainingArguments kwargs."""
     training = dict(raw_config.get("training") or {})
     model_config = dict(raw_config.get("model") or {})
+    if world_size is None:
+        world_size = env_world_size()
 
     rejected = [key for key in _REJECTED_TRAINING_KEYS if key in training]
     if rejected:
@@ -165,7 +335,14 @@ def build_training_arguments_kwargs(
     if not has_eval:
         kwargs.pop("eval_steps", None)
 
-    if model_config.get("gradient_checkpointing", False):
+    gradient_checkpointing = bool(model_config.get("gradient_checkpointing", False))
+    distributed_kwargs = build_distributed_kwargs(raw_config, world_size, gradient_checkpointing)
+    kwargs.update(distributed_kwargs)
+    fsdp_activation_checkpointing = (distributed_kwargs.get("fsdp_config") or {}).get(
+        "activation_checkpointing", False
+    )
+    # Trainer raises if both are on; FSDP checkpoints per wrapped decoder layer.
+    if gradient_checkpointing and not fsdp_activation_checkpointing:
         kwargs["gradient_checkpointing"] = True
         # Non-reentrant checkpointing also works for LoRA, where the frozen
         # embedding output does not require grad.

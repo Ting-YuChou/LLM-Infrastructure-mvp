@@ -11,8 +11,10 @@ model:
     cache_dir: "/workspace/models/sft"
     precision: "bf16"  # Applies to policy, reference and reward models
     gradient_checkpointing: true
+    use_flash_attention: true  # falls back to sdpa without flash-attn
   
-  # Reference model (frozen copy for KL penalty)
+  # Reference model for the KL penalty. With lora.enabled it is the policy with
+  # its adapter disabled (no second copy is loaded); otherwise this path loads.
   reference:
     name: "/workspace/models/sft/final"  # Same as policy initially
     cache_dir: "/workspace/models/sft"
@@ -24,10 +26,42 @@ model:
     cache_dir: "/workspace/models/reward"
     frozen: true  # Reward model stays fixed
   
-  # Value model (optional, for PPO)
+  # Not loaded: the value function is a linear head on the policy's last
+  # hidden state (ValueHead), trained together with the policy.
   value:
     name: "/workspace/models/sft/final"  # Initialize from SFT
     cache_dir: "/workspace/models/sft"
+
+# ============================================================================
+# LoRA policy (required for distributed PPO)
+# Each GPU holds the frozen bf16 policy + reward model (~32 GB) and DDP syncs
+# only the adapter and value-head gradients. checkpoint-final is merged back
+# into a full model for AWQ/vLLM.
+# ============================================================================
+lora:
+  enabled: true
+  r: 16
+  alpha: 32
+  dropout: 0.0  # must stay 0: dropout makes rollout and update log-probs differ
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+  bias: "none"
+
+# ============================================================================
+# Distributed Training
+# Launch with: torchrun --standalone --nproc_per_node 8 ... (or
+# scripts/launch_training.sh rlhf). A single process ignores this section.
+# ============================================================================
+distributed:
+  # none | ddp. Full-parameter PPO (lora.enabled: false) only runs single-process.
+  strategy: "ddp"
+  timeout_minutes: 60
 
 # ============================================================================
 # Data Configuration
@@ -46,8 +80,8 @@ data:
   # Maximum prompt length
   max_prompt_length: 512  # Chat-templated tokens; longer prompts are skipped
   
-  # Maximum generation length
-  max_response_length: 1024
+  # Maximum generation length (rollout time grows with it; HF generate, no vLLM)
+  max_response_length: 512
   
   # Data loading
   num_proc: 8
@@ -62,8 +96,11 @@ algorithm:
   
   # PPO-specific parameters
   ppo:
-    # Number of PPO epochs per batch
+    # Passes over the prompt set (total_steps usually stops training first)
     num_epochs: 4
+
+    # Optimizer passes over each rollout batch
+    ppo_epochs: 4
     
     # Clip range for policy ratio
     clip_range: 0.2
@@ -135,14 +172,15 @@ training:
   # Output directory
   output_dir: "/workspace/models/aligned"
   
-  # Total number of training steps
-  total_steps: 10000
+  # Total number of PPO steps (one rollout batch per step). Start short:
+  # each step generates up to max_response_length tokens with HF generate.
+  total_steps: 500
   
-  # Learning rate for policy
-  policy_learning_rate: 1.0e-6
+  # Learning rate for the policy (LoRA adapters; use ~1e-6 for full-parameter PPO)
+  policy_learning_rate: 1.0e-5
   
   # Learning rate for value function
-  value_learning_rate: 5.0e-6
+  value_learning_rate: 5.0e-5
   
   # Learning rate scheduler
   lr_scheduler_type: "cosine"
@@ -153,8 +191,8 @@ training:
   weight_decay: 0.01
   max_grad_norm: 1.0
   
-  # Batch size per device
-  per_device_batch_size: 4
+  # Prompts per GPU per step: 8 x 8 GPUs = 64 rollouts per PPO step
+  per_device_batch_size: 8
   
   # Gradient accumulation
   gradient_accumulation_steps: 8
@@ -220,23 +258,6 @@ verl:
     tensor_parallel_size: 1
     gpu_memory_utilization: 0.8
     max_num_batched_tokens: 8192
-
-# ============================================================================
-# Hardware Configuration
-# ============================================================================
-hardware:
-  # Number of GPUs
-  num_gpus: 4
-  gpu_ids: [0, 1, 2, 3]
-  
-  # Distributed backend
-  distributed_backend: "nccl"  # or "gloo" for CPU
-  
-  # DeepSpeed configuration
-  deepspeed:
-    enabled: true
-    stage: 2  # ZeRO Stage 2
-    config_file: null  # Path to custom DeepSpeed config
 
 # ============================================================================
 # Experiment Tracking

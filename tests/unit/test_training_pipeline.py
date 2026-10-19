@@ -2,13 +2,19 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from training.pipeline import (
+from training.pipeline import (  # noqa: E402
     TrainingPipeline,
     checksum_path,
+    load_stage_result,
+    torchrun_command,
     validate_checkpoint_artifact,
-)  # noqa: E402
+    write_stage_result,
+)
+from training.results import TrainingRunResult  # noqa: E402
 
 
 def test_pipeline_dry_run_builds_deterministic_plan():
@@ -176,3 +182,63 @@ def test_pipeline_resume_discovers_existing_checkpoint(tmp_path):
 
     assert plan["resume"] is True
     assert plan["resume_checkpoints"]["sft"]["exists"] is True
+
+
+def test_dry_run_plan_reports_launcher_without_resolving_gpus():
+    plan = TrainingPipeline("config/training_pipeline.yaml", dry_run=True).run()["plan"]
+
+    assert plan["distributed"] == {
+        "launcher": "auto",
+        "nproc_per_node": {"sft": "auto", "reward": "auto", "rlhf": "auto"},
+    }
+
+
+def test_launcher_and_nproc_overrides(monkeypatch):
+    pipeline = TrainingPipeline(
+        "config/training_pipeline.yaml", launcher="torchrun", nproc_per_node=4, dry_run=True
+    )
+    assert pipeline.launcher == "torchrun"
+    assert pipeline.resolve_nproc("sft") == 4
+    with pytest.raises(ValueError):
+        TrainingPipeline("config/training_pipeline.yaml", launcher="slurm")
+
+
+def test_inprocess_launcher_and_torchrun_ranks_run_stages_in_this_process(monkeypatch):
+    calls = []
+    pipeline = TrainingPipeline("config/training_pipeline.yaml", launcher="torchrun", nproc_per_node=8)
+    monkeypatch.setattr(pipeline, "_launch_stage", lambda stage, nproc: calls.append((stage, nproc)))
+
+    pipeline._execute_gpu_stage("sft", lambda: calls.append("inprocess"))
+    monkeypatch.setenv("WORLD_SIZE", "8")
+    pipeline._execute_gpu_stage("sft", lambda: calls.append("inprocess"))
+
+    assert calls == [("sft", 8), "inprocess"]
+
+
+def test_torchrun_job_cannot_run_several_pipeline_stages(monkeypatch):
+    monkeypatch.setenv("WORLD_SIZE", "8")
+    pipeline = TrainingPipeline("config/training_pipeline.yaml", stages="sft,reward")
+
+    with pytest.raises(ValueError, match="exactly one"):
+        pipeline.run()
+
+
+def test_stage_result_round_trips_through_json(tmp_path):
+    lifecycle = type("Lifecycle", (), {})()
+    lifecycle.__dict__.update(model_name="m", version="3", run_id="r", artifact_uri="u", validation_status="pending", promoted=False)
+    path = tmp_path / "stage_result.json"
+
+    write_stage_result(path, TrainingRunResult("ckpt", {"eval_loss": 1.5}, lifecycle))
+    loaded = load_stage_result(path)
+
+    assert loaded.checkpoint_path == "ckpt"
+    assert loaded.metrics == {"eval_loss": 1.5}
+    assert loaded.lifecycle_result.version == "3"
+
+
+def test_torchrun_command_uses_loopback_rendezvous():
+    command = torchrun_command(8)
+
+    assert command[1:3] == ["-m", "torch.distributed.run"]
+    assert "--nproc_per_node=8" in command
+    assert "--master_addr=127.0.0.1" in command

@@ -1,9 +1,11 @@
+import os
 import sys
 from pathlib import Path
 
 import pytest
-import torch
 import yaml
+
+torch = pytest.importorskip("torch")
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
@@ -108,3 +110,139 @@ def test_repo_training_configs_use_bf16_and_build_kwargs(config_name):
     assert kwargs["bf16"] is True
     assert kwargs["fp16"] is False
     assert kwargs["eval_strategy"] == "steps"
+
+
+def _distributed_config(strategy="fsdp", gradient_checkpointing=True, **fsdp):
+    config = _base_config()
+    config["model"]["gradient_checkpointing"] = gradient_checkpointing
+    config["distributed"] = {"strategy": strategy, "fsdp": fsdp}
+    return config
+
+
+def test_fsdp_kwargs_auto_wrap_llama_layers_and_move_checkpointing_into_fsdp():
+    kwargs = hf_config.build_training_arguments_kwargs(
+        _distributed_config(), output_dir="/tmp/out", has_eval=True, world_size=8
+    )
+
+    # Without auto_wrap accelerate wraps the whole model as one FSDP unit.
+    assert kwargs["fsdp"] == "full_shard auto_wrap"
+    assert kwargs["fsdp_config"]["transformer_layer_cls_to_wrap"] == ["LlamaDecoderLayer"]
+    assert kwargs["fsdp_config"]["use_orig_params"] is True
+    # Trainer raises if gradient_checkpointing and FSDP activation_checkpointing are both on.
+    assert kwargs["fsdp_config"]["activation_checkpointing"] is True
+    assert "gradient_checkpointing" not in kwargs
+    assert "gradient_checkpointing_kwargs" not in kwargs
+    assert kwargs["ddp_timeout"] == 3600
+
+
+def test_fsdp_offload_and_explicit_activation_checkpointing():
+    kwargs = hf_config.build_training_arguments_kwargs(
+        _distributed_config(offload=True, activation_checkpointing=False),
+        output_dir="/tmp/out",
+        has_eval=False,
+        world_size=8,
+    )
+
+    assert kwargs["fsdp"] == "full_shard auto_wrap offload"
+    assert kwargs["fsdp_config"]["activation_checkpointing"] is False
+    assert kwargs["gradient_checkpointing"] is True
+
+
+def test_ddp_kwargs_keep_gradient_checkpointing_and_disable_unused_parameter_search():
+    kwargs = hf_config.build_training_arguments_kwargs(
+        _distributed_config(strategy="ddp"), output_dir="/tmp/out", has_eval=True, world_size=8
+    )
+
+    assert kwargs["ddp_find_unused_parameters"] is False
+    assert "fsdp" not in kwargs
+    assert kwargs["gradient_checkpointing"] is True
+
+
+@pytest.mark.parametrize("strategy", ["ddp", "fsdp"])
+def test_single_process_ignores_distributed_strategy(strategy, monkeypatch):
+    monkeypatch.delenv("WORLD_SIZE", raising=False)
+    config = _distributed_config(strategy=strategy)
+
+    kwargs = hf_config.build_training_arguments_kwargs(config, output_dir="/tmp/out", has_eval=True)
+
+    assert not {"fsdp", "fsdp_config", "ddp_timeout", "ddp_find_unused_parameters"} & set(kwargs)
+    assert kwargs["gradient_checkpointing"] is True
+    assert hf_config.fsdp_environment(config, world_size=1) == {}
+
+
+def test_world_size_defaults_to_torchrun_environment(monkeypatch):
+    monkeypatch.setenv("WORLD_SIZE", "8")
+
+    kwargs = hf_config.build_training_arguments_kwargs(
+        _distributed_config(), output_dir="/tmp/out", has_eval=True
+    )
+
+    assert kwargs["fsdp"] == "full_shard auto_wrap"
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        _distributed_config(strategy="zero3"),
+        _distributed_config(version=2),
+        _distributed_config(sharding="no_shard"),
+        _distributed_config(cpu_ram_efficient_loading=True, sync_module_states=False),
+        {**_distributed_config(), "training": {"deepspeed": "ds.json"}},
+    ],
+)
+def test_invalid_distributed_settings_raise(config):
+    with pytest.raises(ValueError):
+        hf_config.build_training_arguments_kwargs(config, output_dir="/tmp/out", has_eval=True, world_size=8)
+
+
+def test_fsdp_environment_shards_intermediate_checkpoints():
+    assert hf_config.fsdp_environment(_distributed_config(), world_size=8) == {
+        "FSDP_STATE_DICT_TYPE": "SHARDED_STATE_DICT"
+    }
+    assert hf_config.fsdp_environment(
+        _distributed_config(checkpoint_state_dict_type="full"), world_size=8
+    ) == {"FSDP_STATE_DICT_TYPE": "FULL_STATE_DICT"}
+    assert hf_config.fsdp_environment(_distributed_config(strategy="ddp"), world_size=8) == {}
+
+
+@pytest.mark.parametrize("config_name", ["sft_config.yaml", "reward_config.yaml"])
+def test_repo_training_configs_shard_with_fsdp_on_eight_gpus(config_name):
+    raw_config = yaml.safe_load((CONFIG_DIR / config_name).read_text())
+
+    kwargs = hf_config.build_training_arguments_kwargs(
+        raw_config, output_dir="/tmp/out", has_eval=True, world_size=8
+    )
+
+    assert kwargs["fsdp"] == "full_shard auto_wrap"
+    assert kwargs["fsdp_config"]["activation_checkpointing"] is True
+    assert "gradient_checkpointing" not in kwargs
+
+
+@pytest.fixture
+def restore_environ():
+    saved = dict(os.environ)
+    yield
+    os.environ.clear()
+    os.environ.update(saved)
+
+
+def test_real_training_arguments_export_fsdp_settings_to_accelerate(restore_environ):
+    transformers = pytest.importorskip("transformers")
+    raw_config = yaml.safe_load((CONFIG_DIR / "sft_config.yaml").read_text())
+    raw_config["tracking"] = {}
+    kwargs = hf_config.build_training_arguments_kwargs(
+        raw_config, output_dir="/tmp/out", has_eval=True, world_size=8
+    )
+    os.environ.update(hf_config.fsdp_environment(raw_config, world_size=8))
+
+    args = transformers.TrainingArguments(use_cpu=True, **kwargs)
+
+    # accelerate builds its FSDP plugin from these variables (it needs a GPU to
+    # construct, so the plugin itself is only exercised on RunPod).
+    assert os.environ["ACCELERATE_USE_FSDP"] == "true"
+    assert os.environ["FSDP_AUTO_WRAP_POLICY"] == "TRANSFORMER_BASED_WRAP"
+    assert os.environ["FSDP_TRANSFORMER_CLS_TO_WRAP"] == "LlamaDecoderLayer"
+    assert os.environ["FSDP_USE_ORIG_PARAMS"] == "true"
+    assert os.environ["FSDP_STATE_DICT_TYPE"] == "SHARDED_STATE_DICT"
+    assert args.gradient_checkpointing is False
+    assert args.fsdp_config["activation_checkpointing"] is True

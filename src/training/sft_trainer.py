@@ -29,11 +29,23 @@ try:
         format_prompt,
         resize_embeddings_if_needed,
     )
+    from .distributed import (
+        barrier,
+        distributed_timeout_minutes,
+        init_distributed,
+        is_main_process,
+        main_process_first,
+        save_trainer_model,
+        world_size,
+    )
     from .hf_config import (
+        apply_lora,
         attention_implementation,
         build_training_arguments_kwargs,
         early_stopping_settings,
+        fsdp_environment,
         model_load_dtype,
+        precision_dtype,
         resolve_precision,
     )
     from .mlflow_lifecycle import (
@@ -50,11 +62,23 @@ except ImportError:  # pragma: no cover - supports direct script execution
         format_prompt,
         resize_embeddings_if_needed,
     )
+    from distributed import (  # type: ignore[no-redef]
+        barrier,
+        distributed_timeout_minutes,
+        init_distributed,
+        is_main_process,
+        main_process_first,
+        save_trainer_model,
+        world_size,
+    )
     from hf_config import (  # type: ignore[no-redef]
+        apply_lora,
         attention_implementation,
         build_training_arguments_kwargs,
         early_stopping_settings,
+        fsdp_environment,
         model_load_dtype,
+        precision_dtype,
         resolve_precision,
     )
     from mlflow_lifecycle import (  # type: ignore[no-redef]
@@ -62,18 +86,6 @@ except ImportError:  # pragma: no cover - supports direct script execution
         MLflowTrainingLifecycle,
         PromotionConfig,
     )
-
-# Llama attention + MLP projections; adapting only q/k/v/o leaves most of the
-# trainable capacity on the table.
-DEFAULT_LORA_TARGET_MODULES = [
-    "q_proj",
-    "k_proj",
-    "v_proj",
-    "o_proj",
-    "gate_proj",
-    "up_proj",
-    "down_proj",
-]
 
 # Configure logging
 logging.basicConfig(
@@ -350,30 +362,13 @@ class SFTTrainer:
 
     def _apply_lora(self, model):
         """Wrap the model with a LoRA adapter configured from the `lora:` YAML section."""
-        # peft is only needed for adapter runs, not full fine-tuning.
-        from peft import LoraConfig, TaskType, get_peft_model
-
         lora_settings = self.config.raw_config.get("lora") or {}
-        lora_config = LoraConfig(
-            task_type=TaskType.CAUSAL_LM,
-            r=int(lora_settings.get("r", 16)),
-            lora_alpha=int(lora_settings.get("alpha", 32)),
-            lora_dropout=float(lora_settings.get("dropout", 0.05)),
-            target_modules=list(
-                lora_settings.get("target_modules") or DEFAULT_LORA_TARGET_MODULES
-            ),
-            bias=lora_settings.get("bias", "none"),
-            modules_to_save=lora_settings.get("modules_to_save"),
-        )
-        if not {"embed_tokens", "lm_head"} <= set(lora_config.modules_to_save or ()):
+        if not {"embed_tokens", "lm_head"} <= set(lora_settings.get("modules_to_save") or ()):
             logger.warning(
                 "LoRA without embed_tokens/lm_head in lora.modules_to_save: the Llama 3 "
                 "base embeddings for the chat header/<|eot_id|> tokens stay untrained"
             )
-        logger.info("Applying LoRA configuration: %s", lora_config)
-        model = get_peft_model(model, lora_config)
-        model.print_trainable_parameters()
-        return model
+        return apply_lora(model, lora_settings)
 
     def _build_lifecycle(self) -> MLflowTrainingLifecycle:
         """Build the MLflow lifecycle controller for this training run."""
@@ -409,30 +404,40 @@ class SFTTrainer:
         return kwargs
 
     def train(self) -> TrainingRunResult:
-        """Execute SFT training"""
+        """Execute SFT training (single process or one rank under torchrun)."""
+        init_distributed(distributed_timeout_minutes(self.config.raw_config))
         lifecycle = self._build_lifecycle()
         with lifecycle:
+            # TrainingArguments sets up the accelerate state (FSDP/DDP), so build
+            # it before loading the model. FSDP settings it cannot take go
+            # through the environment first.
+            has_eval = bool(self.config.val_file)
+            os.environ.update(fsdp_environment(self.config.raw_config, world_size()))
+            training_args = TrainingArguments(**self._training_arguments_kwargs(has_eval=has_eval))
+
             # Load model and tokenizer
             model, tokenizer = self.load_model_and_tokenizer()
 
-            # Prepare datasets
+            # Rank 0 tokenizes first and fills the datasets cache for the rest.
             preprocessor = SFTDataPreprocessor(tokenizer, self.config.max_length)
-            train_dataset, val_dataset = preprocessor.prepare_datasets(
-                self.config.train_file,
-                self.config.val_file
-            )
+            with main_process_first():
+                train_dataset, val_dataset = preprocessor.prepare_datasets(
+                    self.config.train_file,
+                    self.config.val_file
+                )
             train_dataset, val_dataset = limit_debug_samples(
                 self.config.raw_config,
                 train_dataset,
                 val_dataset,
             )
-
-            training_args = TrainingArguments(**self._training_arguments_kwargs(
-                has_eval=bool(val_dataset),
-            ))
+            if has_eval and not val_dataset:
+                raise ValueError(
+                    f"Validation file {self.config.val_file} has no usable examples "
+                    f"within max_length={self.config.max_length}"
+                )
 
             callbacks = [MLflowMetricsCallback(lifecycle)]
-            early_stopping = early_stopping_settings(self.config.raw_config, bool(val_dataset))
+            early_stopping = early_stopping_settings(self.config.raw_config, has_eval)
             if early_stopping is not None:
                 callbacks.append(
                     EarlyStoppingCallback(early_stopping_patience=early_stopping["patience"])
@@ -458,15 +463,24 @@ class SFTTrainer:
             if val_dataset:
                 final_metrics.update(trainer.evaluate())
 
-            # Save final model
+            # Save final model. Every rank joins the save (it gathers FSDP shards);
+            # only rank 0 writes files.
             final_model_path = f"{self.config.output_dir}/final"
             logger.info(f"Saving final model to {final_model_path}")
-            trainer.save_model(final_model_path)
-            tokenizer.save_pretrained(final_model_path)
-            # Adapter-only saves skip generation_config.json; vLLM and generate()
-            # read the <|eot_id|> stop token from it.
-            model.generation_config.save_pretrained(final_model_path)
+            save_trainer_model(
+                trainer,
+                final_model_path,
+                dtype=precision_dtype(resolve_precision(self.config.raw_config.get("model"))),
+            )
+            if is_main_process():
+                tokenizer.save_pretrained(final_model_path)
+                # Adapter-only saves skip generation_config.json; vLLM and generate()
+                # read the <|eot_id|> stop token from it.
+                model.generation_config.save_pretrained(final_model_path)
+            barrier()
 
+            # Rank 0 only (the lifecycle is disabled elsewhere). No barrier after
+            # it: a long artifact upload must not hold the other ranks in NCCL.
             lifecycle_result = lifecycle.register_checkpoint(
                 final_model_path,
                 final_metrics=final_metrics,
