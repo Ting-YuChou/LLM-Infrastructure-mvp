@@ -101,6 +101,7 @@ README.pdf
 
 # Exclude guide markdown files (keep only README.md)
 agents.md
+CLAUDE.md
 GIT_GUIDE.md
 DEPLOYMENT.md
 SETUP.md
