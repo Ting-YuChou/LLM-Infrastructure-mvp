@@ -13,6 +13,12 @@ model:
   
   # Mixed precision (bf16, fp16, fp32); sets load dtype and Trainer flags
   precision: "bf16"
+
+  # Gradient checkpointing (FSDP activation checkpointing when sharded)
+  gradient_checkpointing: true
+
+  # Flash Attention 2 (falls back to sdpa when flash-attn is not installed)
+  use_flash_attention: true
   
   # Freeze base model layers (train only reward head)
   freeze_base: false  # Set true to only train reward head
@@ -58,11 +64,12 @@ training:
   num_train_epochs: 3
   
   # Batch sizes
-  per_device_train_batch_size: 4
+  per_device_train_batch_size: 2
   per_device_eval_batch_size: 4
   
-  # Gradient accumulation (effective batch size = batch_size * grad_accum)
-  gradient_accumulation_steps: 4
+  # Global batch = per_device * grad_accum * GPUs = 2 * 1 * 8 = 16 pairs.
+  # On a single GPU set this to 8 for the same batch.
+  gradient_accumulation_steps: 1
   
   # Learning rate
   learning_rate: 1.0e-5
@@ -125,17 +132,33 @@ architecture:
     init_std: 0.01
 
 # ============================================================================
-# Hardware Configuration
+# Distributed Training
+# Launch with: torchrun --standalone --nproc_per_node 8 ... (or
+# scripts/launch_training.sh). A single process ignores this section.
 # ============================================================================
-hardware:
-  # Number of GPUs
-  num_gpus: 1
-  gpu_ids: [0]
-  
-  # DeepSpeed configuration
-  deepspeed:
-    enabled: false
-    stage: 0
+distributed:
+  # none | ddp | fsdp. FSDP shards parameters, gradients and optimizer state
+  # across GPUs (needed for full fine-tuning 8B); ddp replicates the model and
+  # suits LoRA runs.
+  strategy: "fsdp"
+  timeout_minutes: 60
+  find_unused_parameters: false
+  fsdp:
+    version: 1  # FSDP2 is not selectable through transformers 4.57 TrainingArguments
+    sharding: "full_shard"  # full_shard | shard_grad_op | hybrid_shard
+    transformer_layer_cls_to_wrap: ["LlamaDecoderLayer"]
+    # null follows model.gradient_checkpointing; FSDP checkpoints each wrapped layer.
+    activation_checkpointing: null
+    use_orig_params: true
+    sync_module_states: true
+    cpu_ram_efficient_loading: false
+    limit_all_gathers: true
+    backward_prefetch: "backward_pre"
+    forward_prefetch: false
+    offload: false
+    # Intermediate checkpoints are sharded; final/ is always a
+    # full bf16 model written by rank 0.
+    checkpoint_state_dict_type: "sharded"
 
 # ============================================================================
 # Experiment Tracking
