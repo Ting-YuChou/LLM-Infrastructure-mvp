@@ -100,6 +100,8 @@ def main():
     config.baseline_metrics_path = args.baseline_metrics
     config.gate_config_path = args.gate_config
     config.skip_promotion = args.skip_promotion
+    if args.debug:
+        config.raw_config.setdefault("debug", {})["enabled"] = True
 
     # Setup logging
     logger = setup_logging(config.output_dir, args.verbose)

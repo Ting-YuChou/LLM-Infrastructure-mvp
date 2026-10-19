@@ -10,19 +10,25 @@ import logging
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 
-import torch
 from datasets import load_dataset, Dataset
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
+    EarlyStoppingCallback,
     TrainingArguments,
     Trainer,
     default_data_collator,
 )
-from peft import LoraConfig, get_peft_model, TaskType
 
 try:
     from .results import TrainingRunResult
+    from .hf_config import (
+        attention_implementation,
+        build_training_arguments_kwargs,
+        early_stopping_settings,
+        model_load_dtype,
+        resolve_precision,
+    )
     from .mlflow_lifecycle import (
         MLflowMetricsCallback,
         MLflowTrainingLifecycle,
@@ -30,11 +36,30 @@ try:
     )
 except ImportError:  # pragma: no cover - supports direct script execution
     from results import TrainingRunResult  # type: ignore[no-redef]
+    from hf_config import (  # type: ignore[no-redef]
+        attention_implementation,
+        build_training_arguments_kwargs,
+        early_stopping_settings,
+        model_load_dtype,
+        resolve_precision,
+    )
     from mlflow_lifecycle import (  # type: ignore[no-redef]
         MLflowMetricsCallback,
         MLflowTrainingLifecycle,
         PromotionConfig,
     )
+
+# Llama attention + MLP projections; adapting only q/k/v/o leaves most of the
+# trainable capacity on the table.
+DEFAULT_LORA_TARGET_MODULES = [
+    "q_proj",
+    "k_proj",
+    "v_proj",
+    "o_proj",
+    "gate_proj",
+    "up_proj",
+    "down_proj",
+]
 
 # Configure logging
 logging.basicConfig(
@@ -256,6 +281,30 @@ class SFTDataPreprocessor:
         return train_dataset, val_dataset
 
 
+def limit_debug_samples(
+    raw_config: Dict[str, Any],
+    train_dataset: Dataset,
+    val_dataset: Optional[Dataset],
+) -> tuple:
+    """Trim datasets to debug.max_train_samples/max_eval_samples when debug is enabled."""
+    debug = raw_config.get("debug") or {}
+    if not debug.get("enabled", False):
+        return train_dataset, val_dataset
+
+    max_train = debug.get("max_train_samples")
+    if max_train is not None:
+        train_dataset = train_dataset.select(range(min(int(max_train), len(train_dataset))))
+    max_eval = debug.get("max_eval_samples")
+    if val_dataset is not None and max_eval is not None:
+        val_dataset = val_dataset.select(range(min(int(max_eval), len(val_dataset))))
+    logger.info(
+        "Debug mode: using %d train / %s eval examples",
+        len(train_dataset),
+        len(val_dataset) if val_dataset is not None else 0,
+    )
+    return train_dataset, val_dataset
+
+
 class MLflowCallback(MLflowMetricsCallback):
     """Backward-compatible name for the shared MLflow metrics callback."""
 
@@ -272,7 +321,9 @@ class SFTTrainer:
             use_lora: Whether to use LoRA for parameter-efficient training
         """
         self.config = config
-        self.use_lora = use_lora
+        lora_config = config.raw_config.get("lora") or {}
+        self.use_lora = use_lora or bool(lora_config.get("enabled", False))
+        self.precision = resolve_precision(config.raw_config.get("model"))
 
         logger.info(f"Initializing SFT Trainer for model: {config.model_name}")
         logger.info(f"Output directory: {config.output_dir}")
@@ -292,29 +343,53 @@ class SFTTrainer:
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
 
-        logger.info(f"Loading model from {self.config.model_name}")
+        model_config = self.config.raw_config.get("model") or {}
+        torch_dtype = model_load_dtype(self.precision, full_fine_tune=not self.use_lora)
+        attn_implementation = attention_implementation(model_config)
+        logger.info(
+            "Loading model from %s (dtype=%s, attention=%s)",
+            self.config.model_name,
+            torch_dtype,
+            attn_implementation,
+        )
+        # No device_map: Trainer/accelerate place the model, which keeps
+        # torchrun, FSDP and DeepSpeed launches working.
         model = AutoModelForCausalLM.from_pretrained(
             self.config.model_name,
-            torch_dtype=torch.float16,
-            device_map="auto",
+            torch_dtype=torch_dtype,
+            attn_implementation=attn_implementation,
+            cache_dir=model_config.get("cache_dir"),
             trust_remote_code=False,
         )
+        if model_config.get("gradient_checkpointing", False):
+            model.config.use_cache = False
 
-        # Apply LoRA if enabled
         if self.use_lora:
-            logger.info("Applying LoRA configuration")
-            lora_config = LoraConfig(
-                task_type=TaskType.CAUSAL_LM,
-                r=8,  # LoRA rank
-                lora_alpha=16,
-                lora_dropout=0.05,
-                target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
-                bias="none",
-            )
-            model = get_peft_model(model, lora_config)
-            model.print_trainable_parameters()
+            model = self._apply_lora(model)
 
         return model, tokenizer
+
+    def _apply_lora(self, model):
+        """Wrap the model with a LoRA adapter configured from the `lora:` YAML section."""
+        # peft is only needed for adapter runs, not full fine-tuning.
+        from peft import LoraConfig, TaskType, get_peft_model
+
+        lora_settings = self.config.raw_config.get("lora") or {}
+        lora_config = LoraConfig(
+            task_type=TaskType.CAUSAL_LM,
+            r=int(lora_settings.get("r", 16)),
+            lora_alpha=int(lora_settings.get("alpha", 32)),
+            lora_dropout=float(lora_settings.get("dropout", 0.05)),
+            target_modules=list(
+                lora_settings.get("target_modules") or DEFAULT_LORA_TARGET_MODULES
+            ),
+            bias=lora_settings.get("bias", "none"),
+            modules_to_save=lora_settings.get("modules_to_save"),
+        )
+        logger.info("Applying LoRA configuration: %s", lora_config)
+        model = get_peft_model(model, lora_config)
+        model.print_trainable_parameters()
+        return model
 
     def _build_lifecycle(self) -> MLflowTrainingLifecycle:
         """Build the MLflow lifecycle controller for this training run."""
@@ -335,6 +410,20 @@ class SFTTrainer:
             },
         )
 
+    def _training_arguments_kwargs(self, has_eval: bool) -> Dict[str, Any]:
+        """Build TrainingArguments kwargs from the YAML config."""
+        kwargs = build_training_arguments_kwargs(
+            self.config.raw_config,
+            output_dir=self.config.output_dir,
+            has_eval=has_eval,
+        )
+        # The dataclass fields can be overridden after loading the YAML.
+        kwargs["num_train_epochs"] = self.config.num_train_epochs
+        kwargs["per_device_train_batch_size"] = self.config.per_device_train_batch_size
+        kwargs.setdefault("per_device_eval_batch_size", self.config.per_device_train_batch_size)
+        kwargs["learning_rate"] = self.config.learning_rate
+        return kwargs
+
     def train(self) -> TrainingRunResult:
         """Execute SFT training"""
         lifecycle = self._build_lifecycle()
@@ -348,27 +437,22 @@ class SFTTrainer:
                 self.config.train_file,
                 self.config.val_file
             )
-
-            # Define training arguments
-            training_args = TrainingArguments(
-                output_dir=self.config.output_dir,
-                num_train_epochs=self.config.num_train_epochs,
-                per_device_train_batch_size=self.config.per_device_train_batch_size,
-                per_device_eval_batch_size=self.config.per_device_train_batch_size,
-                learning_rate=self.config.learning_rate,
-                lr_scheduler_type="cosine",
-                warmup_ratio=0.03,
-                logging_steps=10,
-                save_steps=500,
-                eval_steps=500 if val_dataset else None,
-                evaluation_strategy="steps" if val_dataset else "no",
-                save_total_limit=3,
-                fp16=True,
-                gradient_accumulation_steps=8,
-                remove_unused_columns=False,
-                report_to=["tensorboard"],
-                logging_dir=f"{self.config.output_dir}/logs",
+            train_dataset, val_dataset = limit_debug_samples(
+                self.config.raw_config,
+                train_dataset,
+                val_dataset,
             )
+
+            training_args = TrainingArguments(**self._training_arguments_kwargs(
+                has_eval=bool(val_dataset),
+            ))
+
+            callbacks = [MLflowMetricsCallback(lifecycle)]
+            early_stopping = early_stopping_settings(self.config.raw_config, bool(val_dataset))
+            if early_stopping is not None:
+                callbacks.append(
+                    EarlyStoppingCallback(early_stopping_patience=early_stopping["patience"])
+                )
 
             # Initialize trainer
             trainer = Trainer(
@@ -377,12 +461,15 @@ class SFTTrainer:
                 train_dataset=train_dataset,
                 eval_dataset=val_dataset,
                 data_collator=default_data_collator,
-                callbacks=[MLflowMetricsCallback(lifecycle)],
+                callbacks=callbacks,
             )
 
             # Train
             logger.info("Starting training...")
-            train_output = trainer.train()
+            resume_from_checkpoint = (
+                self.config.raw_config.get("training") or {}
+            ).get("resume_from_checkpoint")
+            train_output = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
             final_metrics = dict(getattr(train_output, "metrics", {}) or {})
             if val_dataset:
                 final_metrics.update(trainer.evaluate())

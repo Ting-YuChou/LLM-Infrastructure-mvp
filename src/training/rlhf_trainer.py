@@ -23,9 +23,11 @@ import numpy as np
 
 try:
     from .results import TrainingRunResult
+    from .hf_config import model_load_dtype, resolve_precision
     from .mlflow_lifecycle import MLflowTrainingLifecycle, PromotionConfig
 except ImportError:  # pragma: no cover - supports direct script execution
     from results import TrainingRunResult  # type: ignore[no-redef]
+    from hf_config import model_load_dtype, resolve_precision  # type: ignore[no-redef]
     from mlflow_lifecycle import (  # type: ignore[no-redef]
         MLflowTrainingLifecycle,
         PromotionConfig,
@@ -143,7 +145,10 @@ class ValueHead(nn.Module):
         Returns:
             values: [batch_size, seq_len] - per-token value estimates
         """
-        # Apply value head to each token position
+        # The head stays in fp32 while the policy runs in bf16/fp16, and with
+        # device_map="auto" the last hidden state can sit on another GPU.
+        weight = self.value_head.weight
+        hidden_states = hidden_states.to(device=weight.device, dtype=weight.dtype)
         values = self.value_head(hidden_states).squeeze(-1)  # [batch_size, seq_len]
         return values
 
@@ -183,11 +188,25 @@ class RLHFTrainer:
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
+        # The policy is updated with a plain torch optimizer and no GradScaler,
+        # so precision "fp16" loads fp32 policy weights instead of running
+        # pure-fp16 Adam. bf16 (the Llama 3 default) trains directly in bf16.
+        policy_config = (config.raw_config.get("model") or {}).get("policy") or {}
+        self.precision = resolve_precision(policy_config)
+        self.policy_dtype = model_load_dtype(self.precision, full_fine_tune=True)
+        frozen_dtype = model_load_dtype(self.precision, full_fine_tune=False)
+        logger.info(
+            "Precision: %s (policy dtype=%s, frozen model dtype=%s)",
+            self.precision,
+            self.policy_dtype,
+            frozen_dtype,
+        )
+
         # Policy model (model being optimized)
         logger.info("Loading policy model...")
         self.policy_model = AutoModelForCausalLM.from_pretrained(
             config.policy_model_path,
-            torch_dtype=torch.float16,
+            torch_dtype=self.policy_dtype,
             device_map="auto"
         )
         self.policy_model.train()
@@ -196,7 +215,7 @@ class RLHFTrainer:
         logger.info("Loading reference model...")
         self.ref_model = AutoModelForCausalLM.from_pretrained(
             config.policy_model_path,
-            torch_dtype=torch.float16,
+            torch_dtype=frozen_dtype,
             device_map="auto"
         )
         self.ref_model.eval()
@@ -208,7 +227,7 @@ class RLHFTrainer:
         self.reward_model = AutoModelForSequenceClassification.from_pretrained(
             config.reward_model_path,
             num_labels=1,
-            torch_dtype=torch.float16,
+            torch_dtype=frozen_dtype,
             device_map="auto"
         )
         self.reward_model.config.pad_token_id = self.tokenizer.pad_token_id
@@ -216,9 +235,10 @@ class RLHFTrainer:
         for param in self.reward_model.parameters():
             param.requires_grad = False
 
-        # Value function
+        # Value function: kept in fp32 next to the policy's final hidden state.
         hidden_size = self.policy_model.config.hidden_size
-        self.value_head = ValueHead(hidden_size).to(self.device)
+        value_head_device = self.policy_model.get_output_embeddings().weight.device
+        self.value_head = ValueHead(hidden_size).to(value_head_device)
 
         # Optimizers
         self.policy_optimizer = torch.optim.Adam(
@@ -349,7 +369,7 @@ class RLHFTrainer:
             hidden_states = model_outputs.hidden_states[-1]  # [batch_size, seq_len, hidden_size]
 
             # Apply value head to get per-token values
-            all_values = self.value_head(hidden_states)  # [batch_size, seq_len]
+            all_values = self.value_head(hidden_states).to(self.device)  # [batch_size, seq_len]
 
             # Extract values for response positions only
             # The value at position t estimates V(s_t), which is the value before generating token t+1
@@ -622,7 +642,7 @@ class RLHFTrainer:
 
         # Compute per-token values from hidden states
         hidden_states = outputs.hidden_states[-1]  # [batch_size, seq_len, hidden_size]
-        all_values = self.value_head(hidden_states)  # [batch_size, seq_len]
+        all_values = self.value_head(hidden_states).to(self.device)  # [batch_size, seq_len]
 
         # Extract values for response positions
         # Value at position t estimates V(s_t) before generating token t+1
