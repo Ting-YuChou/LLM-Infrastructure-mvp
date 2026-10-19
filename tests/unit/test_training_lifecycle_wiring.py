@@ -87,6 +87,13 @@ class FakeTokenizer:
         self.events.append("tokenizer_save")
 
 
+class FakeModel:
+    def __init__(self, events):
+        self.generation_config = SimpleNamespace(
+            save_pretrained=lambda path: events.append("generation_config_save")
+        )
+
+
 class FakeHFTrainer:
     def __init__(self, *args, events=None, **kwargs):
         self.events = events
@@ -119,8 +126,9 @@ def test_sft_registers_only_after_final_checkpoint_save(monkeypatch, tmp_path):
     monkeypatch.setattr(
         trainer,
         "load_model_and_tokenizer",
-        lambda: (object(), FakeTokenizer(events)),
+        lambda: (FakeModel(events), FakeTokenizer(events)),
     )
+    monkeypatch.setattr(sft_trainer, "ensure_chat_tokenizer", lambda tokenizer: tokenizer)
     monkeypatch.setattr(
         sft_trainer.SFTDataPreprocessor,
         "prepare_datasets",
@@ -137,6 +145,7 @@ def test_sft_registers_only_after_final_checkpoint_save(monkeypatch, tmp_path):
 
     assert events.index("save_model") < _event_index(events, "register")
     assert events.index("tokenizer_save") < _event_index(events, "register")
+    assert events.index("generation_config_save") < _event_index(events, "register")
     assert result.checkpoint_path == str(tmp_path / "final")
     assert result.lifecycle_result.version == "1"
 
@@ -158,6 +167,7 @@ def test_reward_registers_only_after_final_checkpoint_save(monkeypatch, tmp_path
         "load_model_and_tokenizer",
         lambda: (object(), FakeTokenizer(events)),
     )
+    monkeypatch.setattr(reward_trainer, "ensure_chat_tokenizer", lambda tokenizer: tokenizer)
     monkeypatch.setattr(
         reward_trainer.RewardDataPreprocessor,
         "prepare_datasets",
@@ -191,7 +201,7 @@ def test_rlhf_registers_only_after_final_checkpoint_save(monkeypatch, tmp_path):
     trainer = rlhf_trainer.RLHFTrainer.__new__(rlhf_trainer.RLHFTrainer)
     trainer.config = config
     trainer.kl_coef = 0.05
-    trainer.tokenizer = object()
+    trainer.tokenizer = SimpleNamespace(pad_token_id=0)
 
     def fake_save_checkpoint(step):
         path = tmp_path / f"checkpoint-{step}"

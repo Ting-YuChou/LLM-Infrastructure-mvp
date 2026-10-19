@@ -44,7 +44,7 @@ data:
   batch_size: 128
   
   # Maximum prompt length
-  max_prompt_length: 512
+  max_prompt_length: 512  # Chat-templated tokens; longer prompts are skipped
   
   # Maximum generation length
   max_response_length: 1024

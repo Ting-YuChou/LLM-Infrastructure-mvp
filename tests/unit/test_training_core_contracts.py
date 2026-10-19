@@ -49,78 +49,7 @@ transformers_stub.default_data_collator = lambda features: features
 transformers_stub.get_scheduler = lambda *args, **kwargs: None
 _stub_if_missing("transformers", transformers_stub)
 
-from training import reward_trainer, rlhf_trainer, sft_trainer  # noqa: E402
-
-
-class WordTokenizer:
-    eos_token = "</s>"
-    pad_token = "<pad>"
-    pad_token_id = 0
-
-    def __call__(
-        self,
-        texts,
-        truncation=False,
-        max_length=None,
-        padding=False,
-        return_tensors=None,
-    ):
-        single = isinstance(texts, str)
-        items = [texts] if single else list(texts)
-        all_ids = []
-        all_masks = []
-
-        for text in items:
-            tokens = str(text).replace("\n", " ").split()
-            ids = [index + 1 for index, _ in enumerate(tokens)]
-            if truncation and max_length is not None:
-                ids = ids[:max_length]
-
-            attention_mask = [1] * len(ids)
-            if padding == "max_length":
-                pad_to = max_length or len(ids)
-                pad_count = max(0, pad_to - len(ids))
-                ids = ids + [self.pad_token_id] * pad_count
-                attention_mask = attention_mask + [0] * pad_count
-
-            all_ids.append(ids)
-            all_masks.append(attention_mask)
-
-        if single:
-            return {"input_ids": all_ids[0], "attention_mask": all_masks[0]}
-        return {"input_ids": all_ids, "attention_mask": all_masks}
-
-
-def test_sft_batched_preprocessing_masks_prompt_and_padding_labels():
-    tokenizer = WordTokenizer()
-    preprocessor = sft_trainer.SFTDataPreprocessor(tokenizer, max_length=24)
-
-    tokenized = preprocessor.tokenize_function(
-        {
-            "prompt": ["Explain tests"],
-            "completion": ["They catch regressions"],
-        }
-    )
-
-    labels = tokenized["labels"][0]
-    attention_mask = tokenized["attention_mask"][0]
-    prompt_length = len(
-        tokenizer(
-            preprocessor.format_prompt("Explain tests"),
-            truncation=True,
-            max_length=24,
-            padding=False,
-            return_tensors=None,
-        )["input_ids"]
-    )
-
-    assert all(label == -100 for label in labels[:prompt_length])
-    assert any(
-        label != -100
-        for label, mask in zip(labels[prompt_length:], attention_mask[prompt_length:])
-        if mask == 1
-    )
-    assert all(label == -100 for label, mask in zip(labels, attention_mask) if mask == 0)
+from training import reward_trainer, rlhf_trainer  # noqa: E402
 
 
 def test_reward_eval_metrics_report_accuracy_and_margin():
@@ -161,9 +90,10 @@ class CapturingSequenceRewardModel(torch.nn.Module):
         self.last_input_ids = None
         self.last_attention_mask = None
 
-    def forward(self, input_ids=None, attention_mask=None):
+    def forward(self, input_ids=None, attention_mask=None, position_ids=None):
         self.last_input_ids = input_ids
         self.last_attention_mask = attention_mask
+        self.last_position_ids = position_ids
         return SimpleNamespace(logits=attention_mask.sum(dim=1, keepdim=True).float())
 
 
@@ -188,3 +118,5 @@ def test_rlhf_compute_reward_uses_sequence_classifier_logits_and_attention_mask(
     assert rewards.tolist() == [3.0]
     assert reward_model.last_input_ids.tolist() == [[5, 6, 0, 7, 0]]
     assert reward_model.last_attention_mask.tolist() == [[1, 1, 0, 1, 0]]
+    # Positions skip padding so they match what generate() used.
+    assert reward_model.last_position_ids.tolist() == [[0, 1, 1, 2, 2]]

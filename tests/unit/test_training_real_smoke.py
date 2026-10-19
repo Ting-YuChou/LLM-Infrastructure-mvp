@@ -21,10 +21,6 @@ CONFIG_DIR = Path(__file__).parent.parent.parent / "config"
 sys.path.insert(0, str(SRC_DIR))
 
 _STUBBABLE_PREFIXES = ("transformers", "datasets", "peft", "training")
-WORDS = (
-    "explain tests they catch regressions write code good bad answer question "
-    "the a is and to of models train serve llama"
-).split()
 
 
 # Real modules imported by an earlier test, reused because datasets cannot be
@@ -75,36 +71,12 @@ def _use_cpu(module, training_arguments_cls):
 
 @pytest.fixture
 def tiny_llama_dir(real_training, tmp_path):
-    import torch
-    from tokenizers import Tokenizer, models, pre_tokenizers
+    """A plain base checkpoint: no chat tokens, pad or template, like Llama 3 base."""
+    from tiny_llama import build_tiny_llama, build_tiny_tokenizer
 
-    transformers = real_training["transformers"]
-    vocab = {"<unk>": 0, "<s>": 1, "</s>": 2}
-    for word in WORDS + ["###", "instruction:", "response:", "prompt:"]:
-        vocab.setdefault(word, len(vocab))
-    backend = Tokenizer(models.WordLevel(vocab=vocab, unk_token="<unk>"))
-    backend.pre_tokenizer = pre_tokenizers.Whitespace()
-    tokenizer = transformers.PreTrainedTokenizerFast(
-        tokenizer_object=backend,
-        unk_token="<unk>",
-        bos_token="<s>",
-        eos_token="</s>",
-    )
-
-    torch.manual_seed(0)
-    config = transformers.LlamaConfig(
-        vocab_size=len(vocab),
-        hidden_size=16,
-        intermediate_size=32,
-        num_hidden_layers=1,
-        num_attention_heads=2,
-        num_key_value_heads=1,
-        max_position_embeddings=64,
-        bos_token_id=1,
-        eos_token_id=2,
-    )
+    tokenizer = build_tiny_tokenizer()
     model_dir = tmp_path / "tiny-llama"
-    transformers.LlamaForCausalLM(config).save_pretrained(model_dir)
+    build_tiny_llama(len(tokenizer)).save_pretrained(model_dir)
     tokenizer.save_pretrained(model_dir)
     return model_dir
 
@@ -175,7 +147,12 @@ def test_sft_trains_and_evaluates_with_real_trainer(real_training, tiny_llama_di
     result = sft_trainer.SFTTrainer(config, use_lora=use_lora).train()
 
     assert "eval_loss" in result.metrics
-    assert Path(result.checkpoint_path, "tokenizer_config.json").exists()
+    saved_tokenizer = real_training["transformers"].AutoTokenizer.from_pretrained(result.checkpoint_path)
+    assert "<|start_header_id|>" in saved_tokenizer.chat_template
+    assert saved_tokenizer.eos_token == "<|eot_id|>"
+    assert saved_tokenizer.pad_token not in {"<|eot_id|>", "</s>"}
+    generation_config = json.loads(Path(result.checkpoint_path, "generation_config.json").read_text())
+    assert saved_tokenizer.convert_tokens_to_ids("<|eot_id|>") in generation_config["eos_token_id"]
     weights = "adapter_model.safetensors" if use_lora else "model.safetensors"
     assert Path(result.checkpoint_path, weights).exists()
 
@@ -220,6 +197,7 @@ def test_ppo_value_head_accepts_bf16_policy_hidden_states(real_training, tiny_ll
     rlhf_trainer = real_training["rlhf_trainer"]
     transformers = real_training["transformers"]
     trainer = rlhf_trainer.RLHFTrainer.__new__(rlhf_trainer.RLHFTrainer)
+    trainer.config = rlhf_trainer.RLHFConfig(policy_model_path="p", reward_model_path="r", output_dir="o")
     trainer.device = torch.device("cpu")
     trainer.policy_model = transformers.AutoModelForCausalLM.from_pretrained(
         tiny_llama_dir,
