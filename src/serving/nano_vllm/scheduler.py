@@ -157,24 +157,31 @@ class Scheduler:
         """
         scheduled: list[Sequence] = []
         budget = min(self.max_num_seqs, self.max_num_batched_tokens)
-        while self.running and len(scheduled) < budget:
-            seq = self.running.popleft()
-            while not self.block_manager.can_append(seq):
-                # Preempt the youngest request (vLLM's recompute policy); it may
-                # be ``seq`` itself. Already scheduled ones are off-limits.
-                victim = max([seq, *self.running], key=lambda item: item.seq_id)
-                if victim is seq:
-                    self.preempt(seq)
-                    seq = None
-                    break
-                self.running.remove(victim)
-                self.preempt(victim)
-            if seq is None:
-                continue
-            seq.num_scheduled_tokens = 1
-            seq.is_prefill = False
-            self.block_manager.may_append(seq)
-            scheduled.append(seq)
-
-        self.running.extend(scheduled)
+        current: Optional[Sequence] = None
+        try:
+            while self.running and len(scheduled) < budget:
+                seq = current = self.running.popleft()
+                while not self.block_manager.can_append(seq):
+                    # Preempt the youngest request (vLLM's recompute policy); it
+                    # may be ``seq`` itself. Already scheduled ones are off-limits.
+                    victim = max([seq, *self.running], key=lambda item: item.seq_id)
+                    if victim is seq:
+                        self.preempt(seq)
+                        seq = current = None
+                        break
+                    self.running.remove(victim)
+                    self.preempt(victim)
+                if seq is None:
+                    continue
+                seq.num_scheduled_tokens = 1
+                seq.is_prefill = False
+                self.block_manager.may_append(seq)
+                scheduled.append(seq)
+                current = None
+        finally:
+            # Never drop popped sequences, even if a step above raised, so the
+            # engine can still find (and fail) them.
+            if current is not None:
+                self.running.appendleft(current)
+            self.running.extend(scheduled)
         return scheduled
