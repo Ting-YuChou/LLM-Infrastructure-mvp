@@ -2,7 +2,9 @@ import asyncio
 import sys
 from pathlib import Path
 
-import torch
+import pytest
+
+torch = pytest.importorskip("torch")
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
