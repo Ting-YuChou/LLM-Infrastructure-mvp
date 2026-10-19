@@ -10,11 +10,16 @@ import torch
 
 @dataclass(frozen=True)
 class SamplingOptions:
-    max_tokens: int = 256
+    # None means "engine default" (NanoVLLMConfig.max_new_tokens, capped to fit
+    # max_model_len). An explicit value is never silently clamped.
+    max_tokens: Optional[int] = None
     temperature: float = 0.7
     top_p: float = 0.9
     top_k: int = -1
     stop: Optional[list[str]] = None
+    # Extra token ids that end generation (vLLM extension); always honored,
+    # unlike the model's EOS ids which ignore_eos can disable.
+    stop_token_ids: Optional[list[int]] = None
 
 
 def filter_logits(
