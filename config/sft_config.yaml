@@ -33,7 +33,9 @@ data:
   # Validation dataset path
   val_file: "/workspace/data/sft/val.json"
   
-  # Maximum sequence length (longer sequences truncated)
+  # Maximum tokens per example. Prompt and completion are rendered with the
+  # Llama 3 chat template (src/training/chat_format.py), which RM, PPO and
+  # serving reuse; examples whose prompt alone fills max_length are dropped.
   max_length: 2048
   
   # Input/output format
@@ -121,6 +123,13 @@ lora:
   
   # LoRA bias settings
   bias: "none"  # Options: none, all, lora_only
+
+  # Llama 3 base never trained the <|start_header_id|>/<|eot_id|> embeddings
+  # the chat template uses, so LoRA runs also train embeddings and lm_head
+  # (full copies: ~2 GB extra in the adapter). Full fine-tuning covers them already.
+  modules_to_save:
+    - "embed_tokens"
+    - "lm_head"
 
 # ============================================================================
 # Hardware Configuration

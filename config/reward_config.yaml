@@ -30,8 +30,9 @@ data:
   # Validation preference data
   val_file: "/workspace/data/preferences/val.json"
   
-  # Maximum sequence length
-  max_length: 512
+  # Maximum tokens for chat-templated prompt + response (incl. <|eot_id|>).
+  # Longer pairs are dropped, not truncated.
+  max_length: 1024
   
   # Expected JSON format:
   # [

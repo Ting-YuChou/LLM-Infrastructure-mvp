@@ -25,6 +25,13 @@ from transformers import (
 
 try:
     from .results import TrainingRunResult
+    from .chat_format import (
+        encode,
+        encode_prompt_and_completion,
+        ensure_chat_tokenizer,
+        format_completion,
+        resize_embeddings_if_needed,
+    )
     from .hf_config import (
         attention_implementation,
         build_training_arguments_kwargs,
@@ -39,6 +46,13 @@ try:
     )
 except ImportError:  # pragma: no cover - supports direct script execution
     from results import TrainingRunResult  # type: ignore[no-redef]
+    from chat_format import (  # type: ignore[no-redef]
+        encode,
+        encode_prompt_and_completion,
+        ensure_chat_tokenizer,
+        format_completion,
+        resize_embeddings_if_needed,
+    )
     from hf_config import (  # type: ignore[no-redef]
         attention_implementation,
         build_training_arguments_kwargs,
@@ -109,12 +123,8 @@ class RewardDataPreprocessor:
             tokenizer: HuggingFace tokenizer
             max_length: Maximum sequence length
         """
-        self.tokenizer = tokenizer
+        self.tokenizer = ensure_chat_tokenizer(tokenizer)
         self.max_length = max_length
-
-        # Ensure tokenizer has padding token
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
 
         logger.info(f"Initialized RewardDataPreprocessor with max_length={max_length}")
 
@@ -161,8 +171,14 @@ class RewardDataPreprocessor:
         Create paired comparisons for training
 
         For each example, we create:
-        - chosen_input_ids: tokenized prompt + chosen response
-        - rejected_input_ids: tokenized prompt + rejected response
+        - chosen_input_ids: chat-templated prompt + chosen response + <|eot_id|>
+        - rejected_input_ids: chat-templated prompt + rejected response + <|eot_id|>
+
+        This is the same token layout the PPO policy produces, so the reward
+        head is read at the response's closing <|eot_id|> in both places.
+        Pairs where either side exceeds max_length are dropped rather than
+        truncated: right truncation cuts the response tail the reward should
+        judge, and a long prompt can leave chosen and rejected identical.
 
         The model will be trained so that:
         reward(chosen) > reward(rejected)
@@ -171,48 +187,42 @@ class RewardDataPreprocessor:
             examples: Batch of examples with 'prompt', 'chosen', 'rejected'
 
         Returns:
-            Tokenized comparison pairs
+            Tokenized comparison pairs (possibly fewer rows than the input)
         """
-        chosen_texts = []
-        rejected_texts = []
+        pad_token_id = self.tokenizer.pad_token_id
+        batch: Dict[str, List] = {
+            'chosen_input_ids': [],
+            'chosen_attention_mask': [],
+            'rejected_input_ids': [],
+            'rejected_attention_mask': [],
+        }
+        dropped = 0
 
-        # Combine prompt with responses
         for prompt, chosen, rejected in zip(
             examples['prompt'],
             examples['chosen'],
             examples['rejected']
         ):
-            # Format: "Prompt: {prompt}\n\nResponse: {response}"
-            chosen_text = f"Prompt: {prompt}\n\nResponse: {chosen}"
-            rejected_text = f"Prompt: {prompt}\n\nResponse: {rejected}"
+            prompt_ids, chosen_ids = encode_prompt_and_completion(self.tokenizer, prompt, chosen)
+            rejected_ids = encode(self.tokenizer, format_completion(rejected))
+            chosen_full = prompt_ids + chosen_ids
+            rejected_full = prompt_ids + rejected_ids
+            if max(len(chosen_full), len(rejected_full)) > self.max_length:
+                dropped += 1
+                continue
 
-            chosen_texts.append(chosen_text)
-            rejected_texts.append(rejected_text)
+            for side, ids in (('chosen', chosen_full), ('rejected', rejected_full)):
+                padding = self.max_length - len(ids)
+                batch[f'{side}_input_ids'].append(ids + [pad_token_id] * padding)
+                batch[f'{side}_attention_mask'].append([1] * len(ids) + [0] * padding)
 
-        # Tokenize both chosen and rejected
-        chosen_encodings = self.tokenizer(
-            chosen_texts,
-            truncation=True,
-            padding='max_length',
-            max_length=self.max_length,
-            return_tensors=None,
-        )
-
-        rejected_encodings = self.tokenizer(
-            rejected_texts,
-            truncation=True,
-            padding='max_length',
-            max_length=self.max_length,
-            return_tensors=None,
-        )
-
-        # Return paired data
-        return {
-            'chosen_input_ids': chosen_encodings['input_ids'],
-            'chosen_attention_mask': chosen_encodings['attention_mask'],
-            'rejected_input_ids': rejected_encodings['input_ids'],
-            'rejected_attention_mask': rejected_encodings['attention_mask'],
-        }
+        if dropped:
+            logger.warning(
+                "Dropped %d preference pairs longer than max_length=%d",
+                dropped,
+                self.max_length,
+            )
+        return batch
 
     def prepare_datasets(
         self,
@@ -386,8 +396,7 @@ class RewardModelTrainer:
             trust_remote_code=False,
         )
 
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
+        tokenizer = ensure_chat_tokenizer(tokenizer)
 
         model_config = self.config.raw_config.get("model") or {}
         precision = resolve_precision(model_config)
@@ -407,6 +416,9 @@ class RewardModelTrainer:
             cache_dir=model_config.get("cache_dir"),
             trust_remote_code=False,
         )
+        resize_embeddings_if_needed(base_model, tokenizer)
+        # LlamaForSequenceClassification scores the last non-pad token, which
+        # is the closing <|eot_id|> now that pad is a dedicated token.
         base_model.config.pad_token_id = tokenizer.pad_token_id
         if model_config.get("gradient_checkpointing", False):
             base_model.config.use_cache = False

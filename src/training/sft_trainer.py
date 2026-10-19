@@ -22,6 +22,13 @@ from transformers import (
 
 try:
     from .results import TrainingRunResult
+    from .chat_format import (
+        apply_generation_config,
+        encode_prompt_and_completion,
+        ensure_chat_tokenizer,
+        format_prompt,
+        resize_embeddings_if_needed,
+    )
     from .hf_config import (
         attention_implementation,
         build_training_arguments_kwargs,
@@ -36,6 +43,13 @@ try:
     )
 except ImportError:  # pragma: no cover - supports direct script execution
     from results import TrainingRunResult  # type: ignore[no-redef]
+    from chat_format import (  # type: ignore[no-redef]
+        apply_generation_config,
+        encode_prompt_and_completion,
+        ensure_chat_tokenizer,
+        format_prompt,
+        resize_embeddings_if_needed,
+    )
     from hf_config import (  # type: ignore[no-redef]
         attention_implementation,
         build_training_arguments_kwargs,
@@ -118,12 +132,8 @@ class SFTDataPreprocessor:
             tokenizer: HuggingFace tokenizer
             max_length: Maximum sequence length
         """
-        self.tokenizer = tokenizer
+        self.tokenizer = ensure_chat_tokenizer(tokenizer)
         self.max_length = max_length
-
-        # Ensure tokenizer has padding token
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
 
         logger.info(f"Initialized SFTDataPreprocessor with max_length={max_length}")
 
@@ -164,82 +174,51 @@ class SFTDataPreprocessor:
         return dataset
 
     def format_prompt(self, prompt: str) -> str:
-        """Format the instruction prefix that should be masked from loss."""
-        return f"### Instruction:\n{prompt}\n\n### Response:\n"
-
-    def format_instruction(self, example: Dict[str, str]) -> str:
-        """
-        Format instruction-response pair into a single training sequence
-
-        Uses Alpaca-style formatting:
-        ### Instruction:
-        {prompt}
-
-        ### Response:
-        {completion}
-
-        Args:
-            example: Dict with 'prompt' and 'completion' keys
-
-        Returns:
-            Formatted text string
-        """
-        instruction = example.get('prompt', '')
-        response = example.get('completion', '')
-
-        return f"{self.format_prompt(instruction)}{response}{self.tokenizer.eos_token}"
+        """Render the chat-templated prompt that is masked from the loss."""
+        return format_prompt(self.tokenizer, prompt)
 
     def tokenize_function(self, examples: Dict[str, List]) -> Dict[str, List]:
         """
-        Tokenize examples for training
+        Tokenize prompt/completion pairs with the chat template.
+
+        Prompt tokens and padding get label -100. Examples whose completion is
+        cut off entirely by max_length are dropped: an all -100 row has no
+        tokens to average over and turns the loss into NaN.
 
         Args:
             examples: Batch of examples
 
         Returns:
-            Tokenized batch
+            Tokenized batch (possibly with fewer rows than the input)
         """
-        prompts = examples.get('prompt', [])
-        completions = examples.get('completion', [])
-        texts = []
-        prompt_lengths = []
+        pad_token_id = self.tokenizer.pad_token_id
+        batch: Dict[str, List] = {"input_ids": [], "attention_mask": [], "labels": []}
+        dropped = 0
 
-        for prompt, completion in zip(prompts, completions):
-            prompt_text = self.format_prompt(str(prompt or ""))
-            full_text = f"{prompt_text}{completion or ''}{self.tokenizer.eos_token}"
-            texts.append(full_text)
-            prompt_encoding = self.tokenizer(
-                prompt_text,
-                truncation=True,
-                max_length=self.max_length,
-                padding=False,
-                return_tensors=None,
+        for prompt, completion in zip(examples.get('prompt', []), examples.get('completion', [])):
+            prompt_ids, completion_ids = encode_prompt_and_completion(
+                self.tokenizer,
+                str(prompt or ""),
+                str(completion or ""),
             )
-            prompt_lengths.append(len(prompt_encoding['input_ids']))
+            input_ids = (prompt_ids + completion_ids)[:self.max_length]
+            labels = ([-100] * len(prompt_ids) + completion_ids)[:self.max_length]
+            if all(label == -100 for label in labels):
+                dropped += 1
+                continue
 
-        tokenized = self.tokenizer(
-            texts,
-            truncation=True,
-            padding='max_length',
-            max_length=self.max_length,
-            return_tensors=None,
-        )
+            padding = self.max_length - len(input_ids)
+            batch["input_ids"].append(input_ids + [pad_token_id] * padding)
+            batch["attention_mask"].append([1] * len(input_ids) + [0] * padding)
+            batch["labels"].append(labels + [-100] * padding)
 
-        labels = []
-        attention_masks = tokenized.get('attention_mask', [])
-        for input_ids, attention_mask, prompt_length in zip(
-            tokenized['input_ids'],
-            attention_masks,
-            prompt_lengths,
-        ):
-            example_labels = list(input_ids)
-            for index, mask_value in enumerate(attention_mask):
-                if index < prompt_length or mask_value == 0:
-                    example_labels[index] = -100
-            labels.append(example_labels)
-        tokenized['labels'] = labels
-
-        return tokenized
+        if dropped:
+            logger.warning(
+                "Dropped %d SFT examples whose prompt fills max_length=%d",
+                dropped,
+                self.max_length,
+            )
+        return batch
 
     def prepare_datasets(
         self,
@@ -339,9 +318,7 @@ class SFTTrainer:
             trust_remote_code=False,
         )
 
-        # Ensure tokenizer has padding token
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
+        tokenizer = ensure_chat_tokenizer(tokenizer)
 
         model_config = self.config.raw_config.get("model") or {}
         torch_dtype = model_load_dtype(self.precision, full_fine_tune=not self.use_lora)
@@ -363,6 +340,8 @@ class SFTTrainer:
         )
         if model_config.get("gradient_checkpointing", False):
             model.config.use_cache = False
+        resize_embeddings_if_needed(model, tokenizer)
+        apply_generation_config(model, tokenizer)
 
         if self.use_lora:
             model = self._apply_lora(model)
@@ -386,6 +365,11 @@ class SFTTrainer:
             bias=lora_settings.get("bias", "none"),
             modules_to_save=lora_settings.get("modules_to_save"),
         )
+        if not {"embed_tokens", "lm_head"} <= set(lora_config.modules_to_save or ()):
+            logger.warning(
+                "LoRA without embed_tokens/lm_head in lora.modules_to_save: the Llama 3 "
+                "base embeddings for the chat header/<|eot_id|> tokens stay untrained"
+            )
         logger.info("Applying LoRA configuration: %s", lora_config)
         model = get_peft_model(model, lora_config)
         model.print_trainable_parameters()
@@ -479,6 +463,9 @@ class SFTTrainer:
             logger.info(f"Saving final model to {final_model_path}")
             trainer.save_model(final_model_path)
             tokenizer.save_pretrained(final_model_path)
+            # Adapter-only saves skip generation_config.json; vLLM and generate()
+            # read the <|eot_id|> stop token from it.
+            model.generation_config.save_pretrained(final_model_path)
 
             lifecycle_result = lifecycle.register_checkpoint(
                 final_model_path,

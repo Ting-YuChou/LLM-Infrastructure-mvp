@@ -14,7 +14,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import yaml
 from fastapi import FastAPI, HTTPException
@@ -40,6 +40,11 @@ except ModuleNotFoundError as exc:
     AsyncEngineArgs = None  # type: ignore[assignment]
     AsyncLLMEngine = None  # type: ignore[assignment]
     VLLM_IMPORT_ERROR = exc
+
+# Llama 3 end-of-turn token. Training saves it in generation_config.json, which
+# vLLM already honors; adding it here also covers checkpoints converted
+# without that file.
+END_OF_TURN_TOKEN = "<|eot_id|>"
 
 # Configure logging
 logging.basicConfig(
@@ -462,7 +467,7 @@ class VLLMInferenceEngine:
     
     async def generate(
         self,
-        prompt: str,
+        prompt: Union[str, Dict[str, List[int]]],
         sampling_params: SamplingParams,
         request_id: Optional[str] = None,
     ) -> str:
@@ -495,7 +500,7 @@ class VLLMInferenceEngine:
     
     async def stream_generate(
         self,
-        prompt: str,
+        prompt: Union[str, Dict[str, List[int]]],
         sampling_params: SamplingParams,
         request_id: Optional[str] = None,
     ):
@@ -604,6 +609,8 @@ class VLLMServer:
             version="1.0.0"
         )
         self.engine = VLLMInferenceEngine(config)
+        self.chat_tokenizer: Any = None
+        self.stop_token_ids: List[int] = []
         self.admission = RequestAdmissionController(
             config.max_concurrent_requests,
             config.model_name,
@@ -638,6 +645,7 @@ class VLLMServer:
                     self._run_gpu_metrics_sampler()
                 )
             await self.engine.initialize()
+            self._load_chat_tokenizer()
 
         @self.app.on_event("shutdown")
         async def shutdown_event():
@@ -675,6 +683,7 @@ class VLLMServer:
                 presence_penalty=request.presence_penalty,
                 frequency_penalty=request.frequency_penalty,
                 stop=request.stop or [],
+                stop_token_ids=list(self.stop_token_ids),
             )
 
             model_name = request.model or self.config.model_name
@@ -767,14 +776,15 @@ class VLLMServer:
             Generates chat completion from messages
             """
             # Convert messages to prompt
-            prompt = self._format_chat_prompt(request.messages)
-            
+            prompt, prompt_tokens = self._build_chat_prompt(request.messages)
+
             # Create sampling parameters
             sampling_params = SamplingParams(
                 temperature=request.temperature,
                 top_p=request.top_p,
                 max_tokens=request.max_tokens,
                 stop=request.stop or [],
+                stop_token_ids=list(self.stop_token_ids),
             )
 
             model_name = request.model or self.config.model_name
@@ -784,6 +794,7 @@ class VLLMServer:
                 return StreamingResponse(
                     self._stream_chat_completion(
                         prompt=prompt,
+                        prompt_tokens=prompt_tokens,
                         sampling_params=sampling_params,
                         model_name=model_name,
                         request_start=request_start,
@@ -792,7 +803,6 @@ class VLLMServer:
                 )
 
             request_start = time.time()
-            prompt_tokens = 0
             completion_tokens = 0
 
             try:
@@ -803,7 +813,6 @@ class VLLMServer:
                         sampling_params,
                         request_id=f"chatcmpl-{uuid.uuid4()}",
                     )
-                prompt_tokens = self._estimate_tokens(prompt)
                 completion_tokens = self._estimate_tokens(text)
 
                 # Build response
@@ -849,9 +858,61 @@ class VLLMServer:
                 )
                 raise
     
+    def _load_chat_tokenizer(self):
+        """
+        Load the served checkpoint's tokenizer for its chat template and stop tokens.
+
+        SFT saves the Llama 3 chat template with the checkpoint tokenizer, so chat
+        requests are rendered exactly as the model was trained.
+        """
+        try:
+            from transformers import AutoTokenizer
+        except ModuleNotFoundError:
+            logger.warning("transformers is not installed; using the role-prefix chat format")
+            return
+
+        tokenizer = AutoTokenizer.from_pretrained(
+            self.config.tokenizer or self.config.model_name,
+            revision=self.config.tokenizer_revision or self.config.revision,
+            trust_remote_code=self.config.trust_remote_code,
+        )
+        if getattr(tokenizer, "chat_template", None):
+            self.chat_tokenizer = tokenizer
+        else:
+            logger.warning(
+                "Tokenizer for %s has no chat_template; using the role-prefix chat format, "
+                "which does not match models trained by this repo's SFT stage",
+                self.config.model_name,
+            )
+
+        vocab = tokenizer.get_vocab()
+        self.stop_token_ids = [vocab[END_OF_TURN_TOKEN]] if END_OF_TURN_TOKEN in vocab else []
+        logger.info("Extra stop token ids: %s", self.stop_token_ids)
+
+    def _build_chat_prompt(
+        self,
+        messages: List[ChatMessage],
+    ) -> Tuple[Union[str, Dict[str, List[int]]], int]:
+        """
+        Render chat messages into an engine prompt plus its token count.
+
+        With a chat template the prompt is passed as token ids: the template
+        already starts with BOS, and handing vLLM the text would add a second one.
+        """
+        if self.chat_tokenizer is None:
+            prompt = self._format_chat_prompt(messages)
+            return prompt, self._estimate_tokens(prompt)
+
+        prompt_token_ids = list(self.chat_tokenizer.apply_chat_template(
+            [{"role": message.role, "content": message.content} for message in messages],
+            tokenize=True,
+            add_generation_prompt=True,
+        ))
+        return {"prompt_token_ids": prompt_token_ids}, len(prompt_token_ids)
+
     def _format_chat_prompt(self, messages: List[ChatMessage]) -> str:
         """
-        Format chat messages into a prompt string
+        Role-prefix fallback for tokenizers without a chat template
         
         Args:
             messages: List of chat messages
@@ -859,7 +920,6 @@ class VLLMServer:
         Returns:
             Formatted prompt
         """
-        # Simple formatting (can be customized per model)
         prompt_parts = []
         
         for msg in messages:
@@ -1015,7 +1075,8 @@ class VLLMServer:
 
     async def _stream_chat_completion(
         self,
-        prompt: str,
+        prompt: Union[str, Dict[str, List[int]]],
+        prompt_tokens: int,
         sampling_params: SamplingParams,
         model_name: str,
         request_start: float,
@@ -1023,7 +1084,6 @@ class VLLMServer:
         """Stream chat completion chunks using JSON SSE payloads."""
         completion_id = f"chatcmpl-{int(time.time() * 1000)}"
         created = int(time.time())
-        prompt_tokens = self._estimate_tokens(prompt)
         completion_text = ""
         sent_role = False
         first_token_seen = False
