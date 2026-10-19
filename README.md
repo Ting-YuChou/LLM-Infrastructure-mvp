@@ -180,6 +180,33 @@ python scripts/train_pipeline.py --config config/training_pipeline.yaml --skip-p
 python scripts/train_pipeline.py --config config/training_pipeline.yaml --resume
 ```
 
+### Multi-GPU Training (single node, e.g. RunPod 8x H100/A100 80GB)
+
+```bash
+export HF_TOKEN=...                        # Llama 3 is gated
+scripts/launch_training.sh all             # every stage on every visible GPU
+scripts/launch_training.sh sft             # one stage: torchrun --standalone --nproc_per_node N
+NPROC_PER_NODE=4 scripts/launch_training.sh reward
+```
+
+`train_pipeline.py` starts one `torchrun` job per training stage
+(`training.stage_runner`), so GPU memory and FSDP state never carry over
+between stages. Each stage's `distributed:` YAML section picks the strategy:
+
+| Stage | Strategy | What each GPU holds |
+|---|---|---|
+| SFT (full) | `fsdp`: parameters, gradients and optimizer state sharded over decoder layers | ~30-35 GB |
+| SFT (LoRA) | `ddp` | frozen bf16 base + adapter |
+| Reward model | `fsdp` | ~25 GB |
+| PPO | `ddp` with a LoRA policy; the reference is the policy with its adapter disabled | policy + reward model, ~45-50 GB |
+
+Batch sizes in the YAML assume 8 GPUs (global batch = per-device x accumulation x
+GPUs). Intermediate FSDP checkpoints are sharded and resume with the same GPU
+count; every `final/` and PPO `checkpoint-final` is a full bf16 Hugging Face
+model (PPO merges its adapter; `scripts/merge_lora_adapter.py` does the same for
+a LoRA SFT run). Only rank 0 writes files and talks to MLflow. FSDP itself is
+only exercised on GPUs; CI covers DDP with two CPU processes.
+
 This pipeline still does not install a heavy AWQ converter by default. The AWQ
 handoff contract validates the source checkpoint, expected target path, and
 optional conversion command so a GPU conversion job can be run and audited
@@ -227,6 +254,7 @@ python -m src.training.rlhf_trainer \
 
 **Complete Features**:
 - ✅ Full PPO algorithm implementation
+- ✅ LoRA policy + DDP across GPUs (`lora:` / `distributed:` in `config/rlhf_config.yaml`)
 - ✅ GAE (Generalized Advantage Estimation)
 - ✅ Value Function training
 - ✅ Adaptive KL Penalty

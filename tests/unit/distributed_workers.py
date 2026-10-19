@@ -138,8 +138,6 @@ def _prepare_chat_models(tmp):
 
 
 def _checksum(parameters):
-    import torch
-
     return float(sum(param.detach().double().sum() for param in parameters))
 
 

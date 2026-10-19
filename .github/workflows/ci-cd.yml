@@ -273,7 +273,9 @@ jobs:
             tests/unit/test_training_chat_format.py \
             tests/unit/test_training_hf_config.py \
             tests/unit/test_training_core_contracts.py \
-            tests/unit/test_training_lifecycle_wiring.py | tee pytest-training.log
+            tests/unit/test_training_lifecycle_wiring.py \
+            tests/unit/test_training_distributed.py \
+            tests/unit/test_training_pipeline.py | tee pytest-training.log
           if grep -q '^SKIPPED' pytest-training.log; then
             echo "::error::Training tests skipped; the real-Trainer smoke tests must run in this job"
             exit 1
