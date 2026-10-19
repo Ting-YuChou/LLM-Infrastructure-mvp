@@ -9,8 +9,9 @@ import json
 import logging
 import os
 import time
-from contextlib import asynccontextmanager
-from typing import Any, List, Optional
+from contextlib import aclosing, asynccontextmanager
+from dataclasses import dataclass
+from typing import Any, AsyncIterator, Callable, List, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -35,7 +36,8 @@ except ModuleNotFoundError:
     )
 
 from .config import NanoVLLMConfig
-from .engine import GenerationResult, NanoLlamaEngine
+from .engine import GenerationResult, InvalidRequestError, NanoLlamaEngine
+from .engine import StreamOutput
 from .sampling import SamplingOptions
 
 
@@ -49,12 +51,14 @@ logger = logging.getLogger(__name__)
 class CompletionRequest(BaseModel):
     model: Optional[str] = None
     prompt: str | List[str]
-    max_tokens: int = Field(default=256, ge=1, le=4096)
+    # None -> engine default (max_new_tokens, capped to fit max_model_len).
+    max_tokens: Optional[int] = Field(default=None, ge=1, le=4096)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     top_p: float = Field(default=0.9, ge=0.0, le=1.0)
     top_k: int = Field(default=-1, ge=-1)
     stream: bool = False
-    stop: Optional[List[str]] = None
+    stop: Optional[str | List[str]] = None
+    stop_token_ids: Optional[List[int]] = None
 
 
 class ChatMessage(BaseModel):
@@ -65,12 +69,23 @@ class ChatMessage(BaseModel):
 class ChatCompletionRequest(BaseModel):
     model: Optional[str] = None
     messages: List[ChatMessage]
-    max_tokens: int = Field(default=256, ge=1, le=4096)
+    max_tokens: Optional[int] = Field(default=None, ge=1, le=4096)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     top_p: float = Field(default=0.9, ge=0.0, le=1.0)
     top_k: int = Field(default=-1, ge=-1)
     stream: bool = False
-    stop: Optional[List[str]] = None
+    stop: Optional[str | List[str]] = None
+    stop_token_ids: Optional[List[int]] = None
+
+
+@dataclass
+class _StreamState:
+    """What a finished stream reports in its final chunk and metrics."""
+
+    text: str = ""
+    finish_reason: str = "stop"
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
 
 
 class NanoVLLMServer:
@@ -149,6 +164,7 @@ class NanoVLLMServer:
             )
             model_name = request.model or self.config.served_model_name
             sampling = self._completion_sampling(request)
+            endpoint = "/v1/completions"
 
             if request.stream:
                 if len(prompts) != 1:
@@ -156,23 +172,25 @@ class NanoVLLMServer:
                         status_code=400,
                         detail="Streaming completions support a single prompt per request.",
                     )
-                request_start = start_request_tracking(model_name)
+                arrival = time.time()
+                open_stream = self._open_stream_or_400(
+                    prompts[0], sampling, model_name, endpoint, arrival
+                )
                 return StreamingResponse(
                     self._stream_completion(
-                        prompts[0], sampling, model_name, request_start
+                        open_stream, model_name, arrival, prompts[0]
                     ),
                     media_type="text/event-stream",
                 )
 
             request_start = start_request_tracking(model_name)
+            status, error_type = "error", None
+            prompt_tokens = 0
+            completion_tokens = 0
             try:
                 choices = []
-                prompt_tokens = 0
-                completion_tokens = 0
                 async with self._admitted():
-                    results = await asyncio.gather(
-                        *(self._generate(prompt, sampling) for prompt in prompts)
-                    )
+                    results = await self._generate_all(prompts, sampling)
                     for index, result in enumerate(results):
                         prompt_tokens += result.prompt_tokens
                         completion_tokens += result.completion_tokens
@@ -181,7 +199,7 @@ class NanoVLLMServer:
                                 "text": result.text,
                                 "index": index,
                                 "logprobs": None,
-                                "finish_reason": "stop",
+                                "finish_reason": _finish_reason(result),
                             }
                         )
 
@@ -197,23 +215,27 @@ class NanoVLLMServer:
                         "total_tokens": prompt_tokens + completion_tokens,
                     },
                 }
+                status = "success"
+                return JSONResponse(content=response)
+            except InvalidRequestError as exc:
+                error_type = type(exc).__name__
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            except asyncio.CancelledError:
+                status = "cancelled"
+                raise
+            except Exception as exc:
+                error_type = type(exc).__name__
+                raise
+            finally:
                 finish_request_tracking(
                     model_name=model_name,
-                    endpoint="/v1/completions",
+                    endpoint=endpoint,
                     start_time=request_start,
+                    status=status,
+                    error_type=error_type,
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
                 )
-                return JSONResponse(content=response)
-            except Exception as exc:
-                finish_request_tracking(
-                    model_name=model_name,
-                    endpoint="/v1/completions",
-                    start_time=request_start,
-                    status="error",
-                    error_type=type(exc).__name__,
-                )
-                raise
 
         @self.app.post("/v1/chat/completions")
         async def create_chat_completion(request: ChatCompletionRequest):
@@ -221,17 +243,23 @@ class NanoVLLMServer:
             prompt = self._format_chat_prompt(request.messages)
             model_name = request.model or self.config.served_model_name
             sampling = self._chat_sampling(request)
+            endpoint = "/v1/chat/completions"
 
             if request.stream:
-                request_start = start_request_tracking(model_name)
+                arrival = time.time()
+                open_stream = self._open_stream_or_400(
+                    prompt, sampling, model_name, endpoint, arrival
+                )
                 return StreamingResponse(
                     self._stream_chat_completion(
-                        prompt, sampling, model_name, request_start
+                        open_stream, model_name, arrival, prompt
                     ),
                     media_type="text/event-stream",
                 )
 
             request_start = start_request_tracking(model_name)
+            status, error_type = "error", None
+            result: Optional[GenerationResult] = None
             try:
                 async with self._admitted():
                     result = await self._generate(prompt, sampling)
@@ -244,7 +272,7 @@ class NanoVLLMServer:
                         {
                             "index": 0,
                             "message": {"role": "assistant", "content": result.text},
-                            "finish_reason": "stop",
+                            "finish_reason": _finish_reason(result),
                         }
                     ],
                     "usage": {
@@ -253,23 +281,27 @@ class NanoVLLMServer:
                         "total_tokens": result.prompt_tokens + result.completion_tokens,
                     },
                 }
-                finish_request_tracking(
-                    model_name=model_name,
-                    endpoint="/v1/chat/completions",
-                    start_time=request_start,
-                    prompt_tokens=result.prompt_tokens,
-                    completion_tokens=result.completion_tokens,
-                )
+                status = "success"
                 return JSONResponse(content=response)
+            except InvalidRequestError as exc:
+                error_type = type(exc).__name__
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            except asyncio.CancelledError:
+                status = "cancelled"
+                raise
             except Exception as exc:
+                error_type = type(exc).__name__
+                raise
+            finally:
                 finish_request_tracking(
                     model_name=model_name,
-                    endpoint="/v1/chat/completions",
+                    endpoint=endpoint,
                     start_time=request_start,
-                    status="error",
-                    error_type=type(exc).__name__,
+                    status=status,
+                    error_type=error_type,
+                    prompt_tokens=result.prompt_tokens if result else 0,
+                    completion_tokens=result.completion_tokens if result else 0,
                 )
-                raise
 
     def _ensure_ready(self) -> None:
         if self.startup_error:
@@ -289,19 +321,161 @@ class NanoVLLMServer:
             return await generate_async(prompt, sampling)
         return await asyncio.to_thread(self.engine.generate, prompt, sampling)
 
+    async def _generate_all(
+        self, prompts: List[str], sampling: SamplingOptions
+    ) -> List[GenerationResult]:
+        tasks = [
+            asyncio.ensure_future(self._generate(prompt, sampling)) for prompt in prompts
+        ]
+        try:
+            return await asyncio.gather(*tasks)
+        except BaseException:
+            # gather() leaves siblings running; cancel them so they free KV.
+            for task in tasks:
+                task.cancel()
+            raise
+
+    def _open_stream_or_400(
+        self,
+        prompt: str,
+        sampling: SamplingOptions,
+        model_name: str,
+        endpoint: str,
+        arrival: float,
+    ) -> Callable[[], AsyncIterator[str | StreamOutput]]:
+        """Validate a streaming request before the 200 response starts.
+
+        Returns a factory so nothing is submitted to the engine until the
+        response body is actually iterated.
+        """
+        prepare = getattr(self.engine, "prepare_request", None)
+        stream_request = getattr(self.engine, "stream_request", None)
+        if prepare is None or stream_request is None:
+            return lambda: self._stream_text(prompt, sampling)
+        try:
+            seq = prepare(prompt, sampling)
+        except InvalidRequestError as exc:
+            start_request_tracking(model_name)
+            finish_request_tracking(
+                model_name=model_name,
+                endpoint=endpoint,
+                start_time=arrival,
+                status="error",
+                error_type=type(exc).__name__,
+            )
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return lambda: stream_request(seq)
+
     async def _stream_text(
         self,
         prompt: str,
         sampling: SamplingOptions,
-    ):
+    ) -> AsyncIterator[str | StreamOutput]:
         stream_async = getattr(self.engine, "generate_stream_async", None)
         if stream_async is not None:
-            async for chunk in stream_async(prompt, sampling):
-                yield chunk
+            async with aclosing(stream_async(prompt, sampling)) as chunks:
+                async for chunk in chunks:
+                    yield chunk
             return
         result = await self._generate(prompt, sampling)
         for chunk in self._chunk_text(result.text):
             yield chunk
+        yield StreamOutput(
+            text="",
+            finished=True,
+            finish_reason=_finish_reason(result),
+            prompt_tokens=result.prompt_tokens,
+            completion_tokens=result.completion_tokens,
+        )
+
+    async def _stream_chunks(
+        self,
+        open_stream: Callable[[], AsyncIterator[str | StreamOutput]],
+        model_name: str,
+        arrival: float,
+        state: _StreamState,
+    ) -> AsyncIterator[str]:
+        """Yield non-empty text chunks, recording latency metrics and state."""
+        first_token_seen = False
+        last_token_time: Optional[float] = None
+        async with aclosing(open_stream()) as outputs:
+            async for output in outputs:
+                if isinstance(output, str):
+                    text = output
+                else:
+                    text = output.text
+                    if output.finished:
+                        state.finish_reason = output.finish_reason or "stop"
+                        state.prompt_tokens = output.prompt_tokens
+                        state.completion_tokens = output.completion_tokens
+                if not text:
+                    continue
+                state.text += text
+                now = time.time()
+                if not first_token_seen:
+                    record_time_to_first_token(model_name, now - arrival)
+                    first_token_seen = True
+                elif last_token_time is not None:
+                    record_inter_token_latency(model_name, now - last_token_time)
+                last_token_time = now
+                yield text
+        if not first_token_seen:
+            record_time_to_first_token(model_name, time.time() - arrival)
+
+    async def _tracked_stream(
+        self,
+        open_stream: Callable[[], AsyncIterator[str | StreamOutput]],
+        model_name: str,
+        endpoint: str,
+        arrival: float,
+        prompt_text: str,
+        format_chunk: Callable[[str], dict],
+        format_final: Callable[[str], dict],
+    ) -> AsyncIterator[str]:
+        """SSE body with request tracking that always balances.
+
+        Tracking starts inside the generator and finishes in ``finally``: a
+        client disconnect surfaces here as CancelledError or GeneratorExit
+        (neither is an Exception), and closing the inner streams aborts the
+        engine sequence so its KV blocks are freed.
+        """
+        start_request_tracking(model_name)
+        state = _StreamState()
+        status, error_type = "error", None
+        try:
+            async with self._admitted():
+                async with aclosing(
+                    self._stream_chunks(open_stream, model_name, arrival, state)
+                ) as chunks:
+                    async for text in chunks:
+                        yield self._format_sse_payload(format_chunk(text))
+            yield self._format_sse_payload(format_final(state.finish_reason))
+            yield "data: [DONE]\n\n"
+            status = "success"
+        except (asyncio.CancelledError, GeneratorExit):
+            status = "cancelled"
+            raise
+        except Exception as exc:
+            error_type = type(exc).__name__
+            raise
+        finally:
+            finish_request_tracking(
+                model_name=model_name,
+                endpoint=endpoint,
+                start_time=arrival,
+                status=status,
+                error_type=error_type,
+                prompt_tokens=(
+                    state.prompt_tokens
+                    if state.prompt_tokens is not None
+                    else self._estimate_prompt_tokens(prompt_text)
+                ),
+                completion_tokens=(
+                    state.completion_tokens
+                    if state.completion_tokens is not None
+                    else self._estimate_completion_tokens(state.text)
+                ),
+            )
 
     def _completion_sampling(self, request: CompletionRequest) -> SamplingOptions:
         return SamplingOptions(
@@ -309,7 +483,8 @@ class NanoVLLMServer:
             temperature=request.temperature,
             top_p=request.top_p,
             top_k=request.top_k,
-            stop=request.stop,
+            stop=_stop_list(request.stop),
+            stop_token_ids=request.stop_token_ids,
         )
 
     def _chat_sampling(self, request: ChatCompletionRequest) -> SamplingOptions:
@@ -318,7 +493,8 @@ class NanoVLLMServer:
             temperature=request.temperature,
             top_p=request.top_p,
             top_k=request.top_k,
-            stop=request.stop,
+            stop=_stop_list(request.stop),
+            stop_token_ids=request.stop_token_ids,
         )
 
     def _format_chat_prompt(self, messages: List[ChatMessage]) -> str:
@@ -330,153 +506,81 @@ class NanoVLLMServer:
     def _format_sse_payload(self, payload: dict) -> str:
         return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
-    async def _stream_completion(
+    def _stream_completion(
         self,
-        prompt: str,
-        sampling: SamplingOptions,
+        open_stream: Callable[[], AsyncIterator[str | StreamOutput]],
         model_name: str,
-        request_start: float,
-    ):
+        arrival: float,
+        prompt_text: str = "",
+    ) -> AsyncIterator[str]:
         completion_id = f"nano-cmpl-{int(time.time() * 1000)}"
         created = int(time.time())
-        result: Optional[GenerationResult] = None
-        first_token_seen = False
-        last_token_time: Optional[float] = None
-        try:
-            completion_text = ""
-            async with self._admitted():
-                async for chunk in self._stream_text(prompt, sampling):
-                    completion_text += chunk
-                    now = time.time()
-                    if not first_token_seen:
-                        record_time_to_first_token(model_name, now - request_start)
-                        first_token_seen = True
-                    elif last_token_time is not None:
-                        record_inter_token_latency(model_name, now - last_token_time)
-                    last_token_time = now
-                    yield self._format_sse_payload(
-                        {
-                            "id": completion_id,
-                            "object": "text_completion",
-                            "created": created,
-                            "model": model_name,
-                            "choices": [
-                                {
-                                    "text": chunk,
-                                    "index": 0,
-                                    "logprobs": None,
-                                    "finish_reason": None,
-                                }
-                            ],
-                        }
-                    )
-            prompt_tokens = self._estimate_prompt_tokens(prompt)
-            completion_tokens = self._estimate_completion_tokens(completion_text)
-            if result is not None:
-                prompt_tokens = result.prompt_tokens
-                completion_tokens = result.completion_tokens
-            if not first_token_seen:
-                now = time.time()
-                record_time_to_first_token(model_name, now - request_start)
-            yield self._format_sse_payload(
-                {
-                    "id": completion_id,
-                    "object": "text_completion",
-                    "created": created,
-                    "model": model_name,
-                    "choices": [
-                        {
-                            "text": "",
-                            "index": 0,
-                            "logprobs": None,
-                            "finish_reason": "stop",
-                        }
-                    ],
-                }
-            )
-            yield "data: [DONE]\n\n"
-            finish_request_tracking(
-                model_name=model_name,
-                endpoint="/v1/completions",
-                start_time=request_start,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-            )
-        except Exception as exc:
-            finish_request_tracking(
-                model_name=model_name,
-                endpoint="/v1/completions",
-                start_time=request_start,
-                status="error",
-                error_type=type(exc).__name__,
-            )
-            raise
 
-    async def _stream_chat_completion(
+        def chunk(text: str, finish_reason: Optional[str] = None) -> dict:
+            return {
+                "id": completion_id,
+                "object": "text_completion",
+                "created": created,
+                "model": model_name,
+                "choices": [
+                    {
+                        "text": text,
+                        "index": 0,
+                        "logprobs": None,
+                        "finish_reason": finish_reason,
+                    }
+                ],
+            }
+
+        return self._tracked_stream(
+            open_stream,
+            model_name,
+            "/v1/completions",
+            arrival,
+            prompt_text,
+            format_chunk=chunk,
+            format_final=lambda finish_reason: chunk("", finish_reason),
+        )
+
+    def _stream_chat_completion(
         self,
-        prompt: str,
-        sampling: SamplingOptions,
+        open_stream: Callable[[], AsyncIterator[str | StreamOutput]],
         model_name: str,
-        request_start: float,
-    ):
+        arrival: float,
+        prompt_text: str = "",
+    ) -> AsyncIterator[str]:
         completion_id = f"nano-chatcmpl-{int(time.time() * 1000)}"
         created = int(time.time())
         sent_role = False
-        result: Optional[GenerationResult] = None
-        try:
-            completion_text = ""
-            async with self._admitted():
-                async for chunk in self._stream_text(prompt, sampling):
-                    completion_text += chunk
-                    delta = {"content": chunk}
-                    if not sent_role:
-                        delta["role"] = "assistant"
-                        sent_role = True
-                    yield self._format_sse_payload(
-                        {
-                            "id": completion_id,
-                            "object": "chat.completion.chunk",
-                            "created": created,
-                            "model": model_name,
-                            "choices": [
-                                {"index": 0, "delta": delta, "finish_reason": None}
-                            ],
-                        }
-                    )
-            yield self._format_sse_payload(
-                {
-                    "id": completion_id,
-                    "object": "chat.completion.chunk",
-                    "created": created,
-                    "model": model_name,
-                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
-                }
-            )
-            yield "data: [DONE]\n\n"
-            finish_request_tracking(
-                model_name=model_name,
-                endpoint="/v1/chat/completions",
-                start_time=request_start,
-                prompt_tokens=(
-                    result.prompt_tokens
-                    if result is not None
-                    else self._estimate_prompt_tokens(prompt)
-                ),
-                completion_tokens=(
-                    result.completion_tokens
-                    if result is not None
-                    else self._estimate_completion_tokens(completion_text)
-                ),
-            )
-        except Exception as exc:
-            finish_request_tracking(
-                model_name=model_name,
-                endpoint="/v1/chat/completions",
-                start_time=request_start,
-                status="error",
-                error_type=type(exc).__name__,
-            )
-            raise
+
+        def chunk(delta: dict, finish_reason: Optional[str] = None) -> dict:
+            return {
+                "id": completion_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model_name,
+                "choices": [
+                    {"index": 0, "delta": delta, "finish_reason": finish_reason}
+                ],
+            }
+
+        def content_chunk(text: str) -> dict:
+            nonlocal sent_role
+            delta = {"content": text}
+            if not sent_role:
+                delta["role"] = "assistant"
+                sent_role = True
+            return chunk(delta)
+
+        return self._tracked_stream(
+            open_stream,
+            model_name,
+            "/v1/chat/completions",
+            arrival,
+            prompt_text,
+            format_chunk=content_chunk,
+            format_final=lambda finish_reason: chunk({}, finish_reason),
+        )
 
     def _chunk_text(self, text: str) -> List[str]:
         words = text.split()
@@ -501,6 +605,16 @@ class NanoVLLMServer:
         uvicorn.run(
             self.app, host=self.config.host, port=self.config.port, log_level="info"
         )
+
+
+def _finish_reason(result: GenerationResult) -> str:
+    return getattr(result, "finish_reason", None) or "stop"
+
+
+def _stop_list(stop: Optional[str | List[str]]) -> Optional[List[str]]:
+    if stop is None:
+        return None
+    return [stop] if isinstance(stop, str) else list(stop)
 
 
 class _SemaphoreContext:
