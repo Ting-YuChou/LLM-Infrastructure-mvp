@@ -57,6 +57,7 @@ _PASSTHROUGH_TRAINING_KEYS = (
     "save_strategy",
     "dataloader_num_workers",
     "dataloader_pin_memory",
+    "use_cpu",
     "seed",
     "data_seed",
 )

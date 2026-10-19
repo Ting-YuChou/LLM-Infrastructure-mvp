@@ -208,7 +208,41 @@ def run_ppo(tmp):
     }
 
 
+def run_pipeline_sft(tmp):
+    """Plain-python orchestrator that launches the SFT stage as a 2-process torchrun job."""
+    from training.pipeline import TrainingPipeline
+
+    model_dir = _prepare_tiny_llama(tmp)
+    rows = [{"prompt": "explain tests", "completion": "they catch regressions"} for _ in range(8)]
+    raw = _raw_config(
+        "sft_config.yaml",
+        model_dir,
+        tmp / "pipeline" / "models" / "sft",
+        _write_json(tmp / "train.json", rows),
+        _write_json(tmp / "val.json", rows[:4]),
+        strategy="ddp",
+    )
+    raw["training"]["use_cpu"] = True
+    raw["tracking"]["mlflow_enabled"] = False
+    (tmp / "sft.yaml").write_text(yaml.safe_dump(raw))
+    pipeline_config = {
+        "output_dir": str(tmp / "pipeline"),
+        "distributed": {"launcher": "torchrun", "nproc_per_node": 2},
+        "stages": {
+            "sft": {"config": str(tmp / "sft.yaml"), "output_dir": str(tmp / "pipeline" / "models" / "sft")},
+            # Only referenced by the execution plan; these stages do not run.
+            "reward": {"config": str(ROOT / "config" / "reward_config.yaml")},
+            "rlhf": {"config": str(ROOT / "config" / "rlhf_config.yaml")},
+        },
+    }
+    (tmp / "pipeline.yaml").write_text(yaml.safe_dump(pipeline_config))
+
+    result = TrainingPipeline(str(tmp / "pipeline.yaml"), stages="sft").run()
+    return {"sft": result["stages"]["sft"]}
+
+
 CASES = {
+    "pipeline_sft": run_pipeline_sft,
     "sft_ddp": lambda tmp: run_sft(tmp, use_lora=False),
     "sft_lora_ddp": lambda tmp: run_sft(tmp, use_lora=True),
     "ppo_lora_ddp": run_ppo,

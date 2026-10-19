@@ -87,16 +87,22 @@ def _run_workers(case, tmp_path, nproc=2):
     for required in ("transformers", "datasets", "tokenizers"):
         if importlib.util.find_spec(required) is None:
             pytest.skip(f"{required} is not installed")
-    # A static rendezvous on loopback: --standalone resolves the host name,
-    # which hangs on some macOS setups.
-    command = [
-        sys.executable,
-        "-m",
-        "torch.distributed.run",
-        "--nnodes=1",
-        f"--nproc_per_node={nproc}",
-        "--master_addr=127.0.0.1",
-        f"--master_port={_free_port()}",
+    if nproc == 0:  # plain python, no torchrun
+        launcher = [sys.executable]
+        nproc = 1
+    else:
+        # A static rendezvous on loopback: --standalone resolves the host name,
+        # which hangs on some macOS setups.
+        launcher = [
+            sys.executable,
+            "-m",
+            "torch.distributed.run",
+            "--nnodes=1",
+            f"--nproc_per_node={nproc}",
+            "--master_addr=127.0.0.1",
+            f"--master_port={_free_port()}",
+        ]
+    command = launcher + [
         str(WORKER),
         "--case",
         case,
@@ -155,3 +161,15 @@ def test_ppo_lora_ddp_keeps_ranks_in_sync_and_merges_final_model(tmp_path):
     assert (output_dir / "checkpoint-final-adapter" / "adapter_config.json").exists()
     assert (output_dir / "checkpoint-1" / "optimizer.pt").exists()
     assert rank0["merge_max_diff"] < 1e-4
+
+
+def test_pipeline_launches_each_training_stage_as_a_torchrun_job(tmp_path):
+    (result,) = _run_workers("pipeline_sft", tmp_path, nproc=0)
+
+    sft = result["sft"]
+    final = Path(sft["checkpoint_path"])
+    assert (final / "model.safetensors").exists()
+    assert "eval_loss" in sft["metrics"]
+    # Written by rank 0 of the torchrun job and read back by the orchestrator.
+    stage_result = json.loads((tmp_path / "pipeline" / "models" / "sft" / "stage_result.json").read_text())
+    assert stage_result["checkpoint_path"] == sft["checkpoint_path"]

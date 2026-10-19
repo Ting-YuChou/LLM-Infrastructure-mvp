@@ -4,6 +4,14 @@
 
 output_dir: "outputs/training_pipeline"
 
+# Each training stage runs as its own torchrun job (one process per GPU) so GPU
+# memory and FSDP state never carry over between stages. auto = torchrun when
+# more than one GPU is visible, otherwise in this process. A stage can set its
+# own nproc_per_node under stages.<name>.
+distributed:
+  launcher: "auto"  # auto | torchrun | inprocess
+  nproc_per_node: "auto"  # auto = every visible GPU
+
 stages:
   sft:
     config: "config/sft_config.yaml"

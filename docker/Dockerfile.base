@@ -127,8 +127,8 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONPATH=/workspace
 
-# Set default CUDA device (can be overridden)
-ENV CUDA_VISIBLE_DEVICES=0
+# No CUDA_VISIBLE_DEVICES default: torchrun gives each rank its own GPU and a
+# baked-in "0" would hide GPUs 1-7. Pin devices at run time if needed.
 
 # ============================================================================
 # GPU Verification

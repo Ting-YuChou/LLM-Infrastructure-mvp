@@ -38,6 +38,17 @@ def parse_args() -> argparse.Namespace:
         help="Reuse deterministic final checkpoints when they already exist",
     )
     parser.add_argument(
+        "--launcher",
+        choices=["auto", "torchrun", "inprocess"],
+        help="How to run sft/reward/rlhf: one torchrun job per stage, or in this process "
+        "(default: distributed.launcher in the pipeline YAML)",
+    )
+    parser.add_argument(
+        "--nproc-per-node",
+        type=int,
+        help="Processes (GPUs) per training stage (default: every visible GPU)",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Parse config and print the deterministic execution plan without training",
@@ -55,6 +66,8 @@ def main() -> int:
         skip_promotion=args.skip_promotion,
         resume=args.resume,
         dry_run=args.dry_run,
+        launcher=args.launcher,
+        nproc_per_node=args.nproc_per_node,
     )
     result = pipeline.run()
     print(json.dumps(result, indent=2, sort_keys=True))
