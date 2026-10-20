@@ -203,8 +203,7 @@ EOF
     DATA_DIR="${RUN_DIR}/verl_data" OUTPUT_DIR="${output}" VERL_DIR="${VERL_DIR}" NGPUS="${NPROC}" \
     BATCH="${BATCH}" STEPS="${STEPS}" PROMPT_LEN="${PROMPT_LEN}" RESPONSE_LEN="${RESPONSE_LEN}" \
     bash verl_ppo/run_ppo.sh &&
-  (cd "${VERL_DIR}" && uv run --frozen --all-packages --extra vllm --extra fsdp \
-    python "${REPO_DIR}/verl_ppo/verl_report.py" --run-dir "${output}" \
+  (cd "${VERL_DIR}" && .venv/bin/python "${REPO_DIR}/verl_ppo/verl_report.py" --run-dir "${output}" \
     --sft-ckpt "${RUN_DIR}/outputs/sft/final" --batch "${BATCH}" --output "${LOG_DIR}/verl_${mode}.json")
   local rc=$?
   # Actor + critic FSDP checkpoints with optimizer state; the merged actor stays.

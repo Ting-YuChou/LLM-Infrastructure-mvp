@@ -110,6 +110,16 @@ def test_run_ppo_full_trains_every_parameter_with_offload():
     assert overrides["critic.fsdp.optimizer_offload"] == "True"
 
 
+def test_run_ppo_runs_the_venv_python_not_uv_run():
+    completed = _dry_run("lora")
+    train, merge = completed.stdout.split("---\n")
+
+    # Under `uv run`, Ray launches its workers through `uv run` as well.
+    assert train.splitlines()[:3] == ["/verl/.venv/bin/python", "-m", "verl.trainer.main_ppo"]
+    assert merge.splitlines()[0] == "/verl/.venv/bin/python"
+    assert "uv" not in completed.stdout.split()
+
+
 def test_run_ppo_rejects_unknown_mode():
     assert _dry_run("dpo").returncode == 2
 

@@ -26,8 +26,11 @@ BATCH="${BATCH:-64}"
 PROMPT_LEN="${PROMPT_LEN:-256}"
 RESPONSE_LEN="${RESPONSE_LEN:-512}"
 STEPS="${STEPS:-6}"
-export UV_PYTHON="${UV_PYTHON:-3.12}"  # same interpreter setup_env.sh synced
-UV_RUN=(uv run --frozen --all-packages --extra vllm --extra fsdp)
+# The venv's own python, not `uv run`: under `uv run`, Ray starts each worker
+# through `uv run` as well, and the LoRA run's workers died with SIGBUS while
+# importing native libraries from the shared venv.
+VERL_PY="${VERL_DIR}/.venv/bin/python"
+export RAY_ENABLE_UV_RUN_RUNTIME_ENV=0
 
 case "${MODE}" in
   lora)
@@ -121,19 +124,19 @@ OVERRIDES=(
   trainer.resume_mode=disable
 )
 
-MERGE=(python -m verl.model_merger merge --backend fsdp
+MERGE=("${VERL_PY}" -m verl.model_merger merge --backend fsdp
   --local_dir "${OUTPUT_DIR}/checkpoints/global_step_${STEPS}/actor"
   --target_dir "${OUTPUT_DIR}/hf")
 
 if [[ "${VERL_DRY_RUN:-0}" == "1" ]]; then
-  printf '%s\n' "${UV_RUN[@]}" python -m verl.trainer.main_ppo "${MODE_ARGS[@]}" "${OVERRIDES[@]}"
+  printf '%s\n' "${VERL_PY}" -m verl.trainer.main_ppo "${MODE_ARGS[@]}" "${OVERRIDES[@]}"
   echo "---"
-  printf '%s\n' "${UV_RUN[@]}" "${MERGE[@]}"
+  printf '%s\n' "${MERGE[@]}"
   exit 0
 fi
 
 mkdir -p "${OUTPUT_DIR}"
 cd "${VERL_DIR}"
-PYTHONUNBUFFERED=1 "${UV_RUN[@]}" python -m verl.trainer.main_ppo "${MODE_ARGS[@]}" "${OVERRIDES[@]}" \
+PYTHONUNBUFFERED=1 "${VERL_PY}" -m verl.trainer.main_ppo "${MODE_ARGS[@]}" "${OVERRIDES[@]}" \
   2>&1 | tee "${OUTPUT_DIR}/train.log"
-"${UV_RUN[@]}" "${MERGE[@]}" 2>&1 | tee "${OUTPUT_DIR}/merge.log"
+"${MERGE[@]}" 2>&1 | tee "${OUTPUT_DIR}/merge.log"

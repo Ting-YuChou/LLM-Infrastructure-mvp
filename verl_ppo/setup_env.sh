@@ -5,7 +5,7 @@
 #
 #   VERL_DIR=/workspace/verl VERL_REF=v0.9.1 verl_ppo/setup_env.sh
 #
-# Afterwards run verl as: (cd "$VERL_DIR" && uv run --frozen --all-packages --extra vllm --extra fsdp ...)
+# Afterwards run verl with "$VERL_DIR/.venv/bin/python" (run_ppo.sh says why not `uv run`).
 set -euo pipefail
 
 VERL_REF="${VERL_REF:-v0.9.1}"
@@ -24,8 +24,8 @@ echo "verl $(git describe --tags --always) at ${VERL_DIR}"
 # torch 2.11 build lives on under a per-torch tag; the lock pins no hash.
 FLASH_ATTN_RELEASE="${FLASH_ATTN_RELEASE:-flash-attention-v2.8.3-py3.12-torch2.11.0}"
 sed -i.orig "s#releases/download/flash-attention-v2.8.3/#releases/download/${FLASH_ATTN_RELEASE}/#g" uv.lock
-uv sync --frozen --extra fsdp --extra vllm
-uv run --frozen --all-packages --extra vllm --extra fsdp python - <<'EOF'
+uv sync --frozen --all-packages --extra fsdp --extra vllm
+.venv/bin/python - <<'EOF'
 import torch, transformers, vllm, ray, verl
 print({"torch": torch.__version__, "cuda": torch.version.cuda, "transformers": transformers.__version__,
        "vllm": vllm.__version__, "ray": ray.__version__, "verl": verl.__version__,
