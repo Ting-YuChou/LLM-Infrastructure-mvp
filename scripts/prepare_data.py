@@ -129,7 +129,16 @@ def create_preference_dataset(output_dir: str, num_examples: int = 100) -> str:
     
     print(f"✓ Preference dataset saved to: {output_file}")
     print(f"  Total examples: {len(dataset)}")
-    
+
+    # config/reward_config.yaml and config/dpo_config.yaml read a val split.
+    val_dataset = dataset[:max(10, num_examples // 10)]
+    val_file = os.path.join(output_dir, "val.json")
+    with open(val_file, 'w') as f:
+        json.dump(val_dataset, f, indent=2)
+
+    print(f"✓ Preference validation set saved to: {val_file}")
+    print(f"  Total examples: {len(val_dataset)}")
+
     return output_file
 
 

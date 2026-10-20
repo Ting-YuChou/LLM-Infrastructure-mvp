@@ -46,6 +46,7 @@ try:
         build_training_arguments_kwargs,
         early_stopping_settings,
         fsdp_environment,
+        keep_fsdp_buffers_in_fp32,
         model_load_dtype,
         precision_dtype,
         resolve_precision,
@@ -78,6 +79,7 @@ except ImportError:  # pragma: no cover - supports direct script execution
         build_training_arguments_kwargs,
         early_stopping_settings,
         fsdp_environment,
+        keep_fsdp_buffers_in_fp32,
         model_load_dtype,
         precision_dtype,
         resolve_precision,
@@ -137,16 +139,19 @@ class RewardModelConfig:
 class RewardDataPreprocessor:
     """Handles data loading and preprocessing for reward model training"""
 
-    def __init__(self, tokenizer: AutoTokenizer, max_length: int = 512):
+    def __init__(self, tokenizer: AutoTokenizer, max_length: int = 512, include_labels: bool = False):
         """
         Initialize preprocessor
 
         Args:
             tokenizer: HuggingFace tokenizer
             max_length: Maximum sequence length
+            include_labels: Also emit {chosen,rejected}_labels with the prompt
+                and padding set to -100 (used by DPO)
         """
         self.tokenizer = ensure_chat_tokenizer(tokenizer)
         self.max_length = max_length
+        self.include_labels = include_labels
 
         logger.info(f"Initialized RewardDataPreprocessor with max_length={max_length}")
 
@@ -218,6 +223,9 @@ class RewardDataPreprocessor:
             'rejected_input_ids': [],
             'rejected_attention_mask': [],
         }
+        if self.include_labels:
+            batch['chosen_labels'] = []
+            batch['rejected_labels'] = []
         dropped = 0
 
         for prompt, chosen, rejected in zip(
@@ -227,16 +235,19 @@ class RewardDataPreprocessor:
         ):
             prompt_ids, chosen_ids = encode_prompt_and_completion(self.tokenizer, prompt, chosen)
             rejected_ids = encode(self.tokenizer, format_completion(rejected))
-            chosen_full = prompt_ids + chosen_ids
-            rejected_full = prompt_ids + rejected_ids
-            if max(len(chosen_full), len(rejected_full)) > self.max_length:
+            if len(prompt_ids) + max(len(chosen_ids), len(rejected_ids)) > self.max_length:
                 dropped += 1
                 continue
 
-            for side, ids in (('chosen', chosen_full), ('rejected', rejected_full)):
+            for side, response_ids in (('chosen', chosen_ids), ('rejected', rejected_ids)):
+                ids = prompt_ids + response_ids
                 padding = self.max_length - len(ids)
                 batch[f'{side}_input_ids'].append(ids + [pad_token_id] * padding)
                 batch[f'{side}_attention_mask'].append([1] * len(ids) + [0] * padding)
+                if self.include_labels:
+                    batch[f'{side}_labels'].append(
+                        [-100] * len(prompt_ids) + response_ids + [-100] * padding
+                    )
 
         if dropped:
             logger.warning(
@@ -519,6 +530,7 @@ class RewardModelTrainer:
                 compute_metrics=compute_reward_metrics,
                 callbacks=callbacks,
             )
+            keep_fsdp_buffers_in_fp32(trainer)
 
             # Train
             logger.info("Starting reward model training...")

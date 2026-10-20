@@ -189,8 +189,43 @@ def test_dry_run_plan_reports_launcher_without_resolving_gpus():
 
     assert plan["distributed"] == {
         "launcher": "auto",
-        "nproc_per_node": {"sft": "auto", "reward": "auto", "rlhf": "auto"},
+        "nproc_per_node": {"sft": "auto", "reward": "auto", "dpo": "auto", "rlhf": "auto"},
     }
+
+
+def test_dpo_stage_is_opt_in_and_trains_from_sft(tmp_path):
+    output_dir = tmp_path / "pipeline"
+    all_plan = TrainingPipeline("config/training_pipeline.yaml", stages="all", dry_run=True).run()["plan"]
+    assert "dpo" not in all_plan["stages"]
+
+    pipeline = TrainingPipeline(
+        "config/training_pipeline.yaml",
+        stages="dpo,sft",
+        output_dir=str(output_dir),
+        dry_run=True,
+    )
+    plan = pipeline.run()["plan"]
+
+    assert plan["stages"] == ["sft", "dpo"]
+    assert plan["configs"]["dpo"] == "config/dpo_config.yaml"
+    assert plan["path_checks"]["dpo_config_exists"] is True
+    assert plan["outputs"]["dpo"] == str(output_dir / "models" / "dpo")
+    assert plan["injections"]["dpo.model.name"] == "${sft.checkpoint_path}"
+    assert pipeline.stage_result_path("dpo") == output_dir / "models" / "dpo" / "stage_result.json"
+
+
+def test_pipeline_without_dpo_config_omits_dpo(tmp_path):
+    config = tmp_path / "pipeline.yaml"
+    config.write_text(
+        "stages:\n"
+        "  sft: {config: config/sft_config.yaml}\n"
+        "  reward: {config: config/reward_config.yaml}\n"
+        "  rlhf: {config: config/rlhf_config.yaml}\n"
+    )
+    plan = TrainingPipeline(str(config), dry_run=True).run()["plan"]
+
+    assert "dpo" not in plan["configs"]
+    assert set(plan["distributed"]["nproc_per_node"]) == {"sft", "reward", "rlhf"}
 
 
 def test_launcher_and_nproc_overrides(monkeypatch):
@@ -242,3 +277,22 @@ def test_torchrun_command_uses_loopback_rendezvous():
     assert command[1:3] == ["-m", "torch.distributed.run"]
     assert "--nproc_per_node=8" in command
     assert "--master_addr=127.0.0.1" in command
+
+
+def test_gpu_smoke_pipeline_config_plans_every_training_stage(tmp_path):
+    import yaml
+
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
+    import make_smoke_configs
+
+    pipeline_config = make_smoke_configs.write_configs("1b", tmp_path)
+    for name in ("sft", "reward", "dpo", "rlhf"):
+        assert yaml.safe_load((tmp_path / "configs" / f"{name}.yaml").read_text())
+
+    plan = TrainingPipeline(str(pipeline_config), stages="sft,reward,dpo,rlhf", dry_run=True).run()["plan"]
+
+    assert plan["stages"] == ["sft", "reward", "dpo", "rlhf"]
+    assert all(plan["path_checks"][f"{name}_config_exists"] for name in ("sft", "reward", "dpo", "rlhf"))
+    assert plan["outputs"]["dpo"] == str(tmp_path / "outputs" / "dpo")
+    assert plan["distributed"]["launcher"] == "torchrun"
+    assert plan["path_checks"]["gate_config_exists"] is True

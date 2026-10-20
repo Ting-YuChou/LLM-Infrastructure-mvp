@@ -1,6 +1,7 @@
 # Aggregated training pipeline configuration.
 # Entrypoint:
 #   python scripts/train_pipeline.py --config config/training_pipeline.yaml --stages all
+# ("all" is sft -> reward -> rlhf -> handoff; add dpo with --stages sft,dpo)
 
 output_dir: "outputs/training_pipeline"
 
@@ -21,6 +22,12 @@ stages:
   reward:
     config: "config/reward_config.yaml"
     output_dir: "outputs/training_pipeline/models/reward"
+
+  # Opt-in alternative to reward + PPO, trained from the SFT checkpoint:
+  #   python scripts/train_pipeline.py --config config/training_pipeline.yaml --stages sft,dpo
+  dpo:
+    config: "config/dpo_config.yaml"
+    output_dir: "outputs/training_pipeline/models/dpo"
 
   rlhf:
     config: "config/rlhf_config.yaml"

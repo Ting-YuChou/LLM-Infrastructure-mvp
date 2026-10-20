@@ -130,6 +130,16 @@ def main_process_only(fn: Callable[..., T]) -> Callable[..., Optional[T]]:
     return wrapper
 
 
+def all_gather_objects(obj: Any) -> list:
+    """Every rank's picklable obj, in rank order ([obj] without a process group)."""
+    dist = _dist()
+    if dist is None:
+        return [obj]
+    gathered: list = [None] * dist.get_world_size()
+    dist.all_gather_object(gathered, obj)
+    return gathered
+
+
 def all_reduce_mean(tensor):
     """Mean of a tensor across ranks (returned unchanged without a process group)."""
     dist = _dist()

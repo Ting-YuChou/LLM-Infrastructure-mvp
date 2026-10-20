@@ -206,6 +206,65 @@ def run_ppo(tmp):
     }
 
 
+def run_dpo(tmp):
+    """DDP DPO with lr=0, plus the sharded reference pass checked against per-row scores."""
+    import torch
+    from training import dpo_trainer
+
+    _use_cpu(dpo_trainer)
+    policy_dir, _ = _prepare_chat_models(tmp)
+    # 7 pairs: the reference pass splits them 4/3 across the two ranks.
+    pairs = [
+        {"prompt": f"answer question {i}", "chosen": "good answer", "rejected": "bad " * (i + 1)}
+        for i in range(7)
+    ]
+    if distributed.is_main_process():
+        _write_json(tmp / "pairs.json", pairs)
+    distributed.barrier()
+    raw = _raw_config(
+        "dpo_config.yaml",
+        policy_dir,
+        tmp / "dpo",
+        str(tmp / "pairs.json"),
+        str(tmp / "pairs.json"),
+        strategy="ddp",
+    )
+    config = dpo_trainer.DPOConfig(
+        model_name=str(policy_dir),
+        train_file=str(tmp / "pairs.json"),
+        val_file=str(tmp / "pairs.json"),
+        output_dir=str(tmp / "dpo"),
+        max_length=24,
+        per_device_train_batch_size=2,
+        learning_rate=0.0,
+        reference_batch_size=2,
+        raw_config=raw,
+    )
+    trainer = dpo_trainer.DPOModelTrainer(config)
+    result = trainer.train()
+
+    tokenizer = trainer.load_tokenizer()
+    preprocessor = dpo_trainer.RewardDataPreprocessor(tokenizer, 24, include_labels=True)
+    dataset, _ = preprocessor.prepare_datasets(str(tmp / "pairs.json"))
+    model = trainer.load_model(tokenizer)
+    (scored,) = dpo_trainer.compute_reference_log_probs(model, [dataset], 2, torch.device("cpu"))
+    expected = []
+    with torch.no_grad():
+        for index in range(len(dataset)):
+            row = dataset.select([index]).with_format("torch")
+            chosen, rejected = dpo_trainer.concatenated_log_probs(model, {key: row[key] for key in row.column_names})
+            expected += [float(chosen), float(rejected)]
+    return {
+        "checkpoint_path": result.checkpoint_path,
+        "eval_loss": result.metrics.get("eval_loss"),
+        # Flat [chosen0, rejected0, chosen1, ...] for pytest.approx.
+        "reference": [
+            logp for pair in zip(scored["ref_chosen_logps"], scored["ref_rejected_logps"]) for logp in pair
+        ],
+        "expected_reference": expected,
+    }
+
+
 def run_pipeline_sft(tmp):
     """Plain-python orchestrator that launches the SFT stage as a 2-process torchrun job."""
     from training.pipeline import TrainingPipeline
@@ -244,6 +303,7 @@ CASES = {
     "sft_ddp": lambda tmp: run_sft(tmp, use_lora=False),
     "sft_lora_ddp": lambda tmp: run_sft(tmp, use_lora=True),
     "ppo_lora_ddp": run_ppo,
+    "dpo_ddp": run_dpo,
 }
 
 

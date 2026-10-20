@@ -279,6 +279,26 @@ def build_distributed_kwargs(
     return kwargs
 
 
+def keep_fsdp_buffers_in_fp32(trainer: Any) -> None:
+    """
+    Keep module buffers (Llama's RoPE inv_freq) in fp32 under FSDP mixed precision.
+
+    accelerate's FSDP1 policy casts buffers to the compute dtype unless
+    buffer_autocast is set, so training would rotate positions with
+    bf16-rounded frequencies while a plain from_pretrained (inference, the DPO
+    reference pass) keeps them in fp32. Call after building the Trainer and
+    before train()/evaluate(), which wrap the model with the plugin's policy.
+    """
+    if not getattr(trainer, "is_fsdp_enabled", False):
+        return
+    precision = str(trainer.accelerator.state.mixed_precision)
+    if precision not in ("bf16", "fp16"):
+        return
+    trainer.accelerator.state.fsdp_plugin.set_mixed_precision(
+        precision, buffer_autocast=True, override=True
+    )
+
+
 def fsdp_environment(raw_config: Mapping[str, Any], world_size: int) -> Dict[str, str]:
     """
     Environment accelerate reads for FSDP settings TrainingArguments cannot pass.

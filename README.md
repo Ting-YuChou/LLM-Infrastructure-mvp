@@ -187,6 +187,7 @@ export HF_TOKEN=...                        # Llama 3 is gated
 scripts/launch_training.sh all             # every stage on every visible GPU
 scripts/launch_training.sh sft             # one stage: torchrun --standalone --nproc_per_node N
 NPROC_PER_NODE=4 scripts/launch_training.sh reward
+scripts/launch_training.sh dpo             # DPO from the SFT checkpoint (not part of "all")
 ```
 
 `train_pipeline.py` starts one `torchrun` job per training stage
@@ -198,6 +199,7 @@ between stages. Each stage's `distributed:` YAML section picks the strategy:
 | SFT (full) | `fsdp`: parameters, gradients and optimizer state sharded over decoder layers | ~30-35 GB |
 | SFT (LoRA) | `ddp` | frozen bf16 base + adapter |
 | Reward model | `fsdp` | ~25 GB |
+| DPO (full) | `fsdp`; reference log-probs come from a one-off pass with the SFT model before training | like full SFT, plus a full bf16 copy (~16 GB) during the reference pass |
 | PPO | `ddp` with a LoRA policy; the reference is the policy with its adapter disabled | policy + reward model, ~45-50 GB |
 
 Batch sizes in the YAML assume 8 GPUs (global batch = per-device x accumulation x
@@ -206,6 +208,28 @@ count; every `final/` and PPO `checkpoint-final` is a full bf16 Hugging Face
 model (PPO merges its adapter; `scripts/merge_lora_adapter.py` does the same for
 a LoRA SFT run). Only rank 0 writes files and talks to MLflow. FSDP itself is
 only exercised on GPUs; CI covers DDP with two CPU processes.
+
+#### GPU smoke test on RunPod
+
+`scripts/runpod_gpu_smoke.sh` is a pod start command that runs every stage
+(sft, reward, dpo, rlhf, plus an SFT resume from the sharded checkpoint) for a
+few steps and writes `summary.json` with exit codes, checkpoint checks, losses
+and peak GPU memory. It needs a volume at `/workspace` and `HF_TOKEN`; the
+configs come from `scripts/make_smoke_configs.py` (`--preset 1b` for
+Llama-3.2-1B on 2 GPUs, `--preset 8b` for Llama 3 8B on 4x 80 GB).
+If the NCCL all-reduce check hangs (seen on PCIe 2x A40 hosts), the script
+retries with `NCCL_P2P_DISABLE=1` and keeps it for every stage.
+
+Under FSDP with bf16/fp16, the trainers keep module buffers in fp32
+(`hf_config.keep_fsdp_buffers_in_fp32`): accelerate would otherwise cast
+Llama's RoPE `inv_freq` to bf16, so training would see different rotary
+frequencies than inference and the DPO reference pass.
+
+```bash
+# Pod image runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04, host CUDA >= 12.9,
+# env REPO_REF=<branch>, SMOKE_PRESET=1b|8b, HF_TOKEN={{ RUNPOD_SECRET_HF_TOKEN }}
+bash -c 'git clone --depth 1 --branch "$REPO_REF" https://github.com/Ting-YuChou/LLM-Infrastructure-mvp.git /root/repo && exec bash /root/repo/scripts/runpod_gpu_smoke.sh'
+```
 
 This pipeline still does not install a heavy AWQ converter by default. The AWQ
 handoff contract validates the source checkpoint, expected target path, and
@@ -243,7 +267,19 @@ python -m src.training.reward_trainer \
 ]
 ```
 
-### 3. RLHF Training (PPO)
+### 3. Direct Preference Optimization (DPO)
+
+```bash
+python -m src.training.dpo_trainer --config config/dpo_config.yaml
+python scripts/train_pipeline.py --config config/training_pipeline.yaml --stages sft,dpo
+```
+
+DPO trains the SFT checkpoint directly on the reward-model preference data
+(same `prompt`/`chosen`/`rejected` format) with the sigmoid loss, `dpo.beta` and
+`dpo.label_smoothing`. Eval reports the implicit-reward accuracy and margin
+(`eval_rewards_accuracy`, `eval_rewards_margin`).
+
+### 4. RLHF Training (PPO)
 
 ```bash
 python -m src.training.rlhf_trainer \
