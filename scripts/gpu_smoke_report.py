@@ -102,7 +102,8 @@ def prune_stage(run_dir: Path, stage: str) -> None:
     record = {"sharded": sharded_checkpoints(output_dir), "losses": training_losses(output_dir)}
     checkpoint_record_path(run_dir, stage).write_text(json.dumps(record))
     for path in output_dir.glob("checkpoint-*"):
-        shutil.rmtree(path)
+        if path.name != FINAL_DIR[stage]:  # PPO's final model is checkpoint-final
+            shutil.rmtree(path)
     print(f"pruned {stage}: {record['sharded'] or 'no'} intermediate checkpoints")
 
 
