@@ -14,6 +14,8 @@
 #
 # Env: HF_TOKEN (gated Llama weights), SMOKE_PRESET (1b | 8b), SMOKE_MODEL,
 # SMOKE_ROOT (default /workspace/smoke), SMOKE_STAGES, SMOKE_STAGE_TIMEOUT,
+# SMOKE_PRUNE (1: record then delete each stage's intermediate checkpoints
+# once it is done; an 8B one is ~80 GB),
 # SMOKE_IDLE_STOP (how long to keep the pod up after finishing so the logs can
 # be read, then stop it with runpodctl when available).
 set -uo pipefail
@@ -23,7 +25,9 @@ cd "${REPO_DIR}"
 
 SMOKE_ROOT="${SMOKE_ROOT:-/workspace/smoke}"
 SMOKE_PRESET="${SMOKE_PRESET:-1b}"
-SMOKE_STAGES="${SMOKE_STAGES:-sft reward dpo rlhf sft_resume}"
+# sft_resume runs right after sft so sft's checkpoints can be pruned early.
+SMOKE_STAGES="${SMOKE_STAGES:-sft sft_resume reward dpo rlhf}"
+SMOKE_PRUNE="${SMOKE_PRUNE:-1}"
 SMOKE_STAGE_TIMEOUT="${SMOKE_STAGE_TIMEOUT:-90m}"
 SMOKE_IDLE_STOP="${SMOKE_IDLE_STOP:-30m}"
 RUN_ID="$(git rev-parse --short HEAD)-${SMOKE_PRESET}"
@@ -161,6 +165,10 @@ if [[ ${rc} -ne 0 ]]; then
 fi
 
 # --- 4. Stages ---------------------------------------------------------------
+prune() {
+  [[ "${SMOKE_PRUNE}" == "1" ]] && python scripts/gpu_smoke_report.py --run-dir "${RUN_DIR}" --prune-stage "$1"
+}
+
 monitor_pid=""
 start_monitor() {
   nvidia-smi --query-gpu=index,memory.used --format=csv,noheader,nounits -l 5 \
@@ -187,6 +195,11 @@ for stage in ${SMOKE_STAGES}; do
     log "every later stage starts from the SFT checkpoint; stopping here"
     break
   fi
+  case "${stage}" in
+    sft) [[ " ${SMOKE_STAGES} " == *" sft_resume "* ]] || prune sft ;;  # resume reads them
+    sft_resume) prune sft; prune sft_resume ;;
+    *) prune "${stage}" ;;
+  esac
 done
 
 # --- 5. Report ---------------------------------------------------------------

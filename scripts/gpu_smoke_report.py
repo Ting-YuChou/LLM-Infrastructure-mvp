@@ -15,6 +15,7 @@ import argparse
 import csv
 import json
 import math
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -84,6 +85,27 @@ def sharded_checkpoints(output_dir: Path) -> List[str]:
     )
 
 
+def checkpoint_record_path(run_dir: Path, stage: str) -> Path:
+    return run_dir / "logs" / f"checkpoints_{stage}.json"
+
+
+def prune_stage(run_dir: Path, stage: str) -> None:
+    """
+    Record a finished stage's intermediate checkpoints, then delete them.
+
+    An 8B sharded checkpoint with optimizer state is ~80 GB, so keeping every
+    stage's would fill the pod disk; the report reads the record instead.
+    """
+    output_dir = stage_output_dirs(run_dir)[stage]
+    if not output_dir.is_dir():
+        return
+    record = {"sharded": sharded_checkpoints(output_dir), "losses": training_losses(output_dir)}
+    checkpoint_record_path(run_dir, stage).write_text(json.dumps(record))
+    for path in output_dir.glob("checkpoint-*"):
+        shutil.rmtree(path)
+    print(f"pruned {stage}: {record['sharded'] or 'no'} intermediate checkpoints")
+
+
 def run_checkpoint(stage: str, checkpoint: Path) -> Dict[str, Any]:
     """Reload the final checkpoint on one device and run it once."""
     import torch
@@ -129,14 +151,20 @@ def check_stage(run_dir: Path, timing: Dict[str, Any], output_dir: Path) -> Dict
     stage = timing["stage"]
     final = output_dir / FINAL_DIR[stage]
     validation = validate_checkpoint_artifact(final)
-    losses = training_losses(output_dir)
+    record_path = checkpoint_record_path(run_dir, stage)
+    if record_path.exists():  # intermediate checkpoints were pruned
+        record = json.loads(record_path.read_text())
+        losses, sharded = record["losses"], record["sharded"]
+    else:
+        losses = training_losses(output_dir)
+        sharded = sharded_checkpoints(output_dir) if output_dir.is_dir() else []
     report: Dict[str, Any] = {
         **timing,
         "output_dir": str(output_dir),
         "stage_result_json": (output_dir / "stage_result.json").exists(),
         "final_checkpoint": {key: validation[key] for key in ("exists", "config_json", "tokenizer", "weights")},
         "generation_config_json": (final / "generation_config.json").exists(),
-        "sharded_intermediate_checkpoints": sharded_checkpoints(output_dir) if output_dir.is_dir() else [],
+        "sharded_intermediate_checkpoints": sharded,
         "losses_first_last": [losses[0], losses[-1]] if losses else [],
         "losses_finite": all(math.isfinite(loss) for loss in losses),
         "peak_gpu_memory_mib": peak_memory_mib(run_dir, stage),
@@ -178,9 +206,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--run-dir", required=True)
     parser.add_argument("--fsdp", action="store_true", help="Require sharded intermediate checkpoints for FSDP stages")
+    parser.add_argument("--prune-stage", help="Record and delete this stage's intermediate checkpoints, then exit")
     args = parser.parse_args()
 
     run_dir = Path(args.run_dir)
+    if args.prune_stage:
+        prune_stage(run_dir, args.prune_stage)
+        return 0
     output_dirs = stage_output_dirs(run_dir)
     stages = []
     for timing in read_timings(run_dir):
