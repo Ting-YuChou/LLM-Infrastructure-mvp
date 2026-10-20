@@ -67,6 +67,9 @@ log "installing torch 2.10.0+cu129 and requirements.training-ci.txt"
 start=$(date +%s)
 {
   python -m pip install --upgrade pip &&
+  # Base images ship torchvision/torchaudio built for their own torch; with
+  # torch 2.10 transformers' torchvision import fails, and training needs neither.
+  python -m pip uninstall -y torchvision torchaudio &&
   python -m pip install --index-url https://download.pytorch.org/whl/cu129 \
     "$(grep '^torch==' requirements.training-ci.txt)" &&
   python -m pip install -r requirements.training-ci.txt
@@ -81,7 +84,8 @@ fi
 # --- 2. Environment and NCCL check ------------------------------------------
 NPROC="$(nvidia-smi -L | wc -l | tr -d ' ')"
 nvidia-smi
-python - <<'EOF' | tee "${RUN_DIR}/environment.json"
+start=$(date +%s)
+python - <<'EOF' > "${RUN_DIR}/environment.json"
 import json, platform, torch, transformers, accelerate, datasets, peft
 print(json.dumps({
     "python": platform.python_version(),
@@ -96,6 +100,13 @@ print(json.dumps({
     "bf16": torch.cuda.is_bf16_supported(),
 }))
 EOF
+rc=$?
+record environment "${rc}" "${start}"
+cat "${RUN_DIR}/environment.json"
+if [[ ${rc} -ne 0 ]]; then
+  log "training stack does not import; see the traceback above"
+  touch "${RUN_DIR}/DONE"; idle_then_stop
+fi
 
 cat > /tmp/nccl_check.py <<'EOF'
 import os, torch, torch.distributed as dist
