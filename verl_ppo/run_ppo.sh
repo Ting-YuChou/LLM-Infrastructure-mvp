@@ -26,6 +26,7 @@ BATCH="${BATCH:-64}"
 PROMPT_LEN="${PROMPT_LEN:-256}"
 RESPONSE_LEN="${RESPONSE_LEN:-512}"
 STEPS="${STEPS:-6}"
+export UV_PYTHON="${UV_PYTHON:-3.12}"  # same interpreter setup_env.sh synced
 UV_RUN=(uv run --frozen --all-packages --extra vllm --extra fsdp)
 
 case "${MODE}" in

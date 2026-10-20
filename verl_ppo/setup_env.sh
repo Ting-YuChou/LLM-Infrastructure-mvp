@@ -10,6 +10,8 @@ set -euo pipefail
 
 VERL_REF="${VERL_REF:-v0.9.1}"
 VERL_DIR="${VERL_DIR:?VERL_DIR}"
+# verl's uv.lock only resolves for Python >= 3.12; uv downloads it if the host lacks it.
+export UV_PYTHON="${UV_PYTHON:-3.12}"
 
 command -v uv >/dev/null 2>&1 || python -m pip install --quiet uv
 if [[ ! -d "${VERL_DIR}/.git" ]]; then
@@ -17,7 +19,6 @@ if [[ ! -d "${VERL_DIR}/.git" ]]; then
 fi
 cd "${VERL_DIR}"
 echo "verl $(git describe --tags --always) at ${VERL_DIR}"
-# uv downloads the Python it needs (verl requires >=3.10,<3.13).
 uv sync --frozen --extra fsdp --extra vllm
 uv run --frozen --all-packages --extra vllm --extra fsdp python - <<'EOF'
 import torch, transformers, vllm, ray, verl

@@ -37,7 +37,9 @@ SMOKE_STAGE_TIMEOUT="${SMOKE_STAGE_TIMEOUT:-90m}"
 SMOKE_IDLE_STOP="${SMOKE_IDLE_STOP:-30m}"
 VERL_REF="${VERL_REF:-v0.9.1}"
 VERL_DIR="${SMOKE_ROOT}/verl-${VERL_REF}"
-RUN_ID="$(git rev-parse --short HEAD)-${SMOKE_PRESET}"
+# SMOKE_RUN_ID reruns stages inside an earlier run (e.g. verl stages on its
+# SFT/RM checkpoints); new rows are appended and the report keeps the latest.
+RUN_ID="${SMOKE_RUN_ID:-$(git rev-parse --short HEAD)-${SMOKE_PRESET}}"
 RUN_DIR="${SMOKE_ROOT}/runs/${RUN_ID}"
 LOG_DIR="${RUN_DIR}/logs"
 
@@ -53,6 +55,7 @@ idle_then_stop() {
   sleep infinity
 }
 
+if [[ -n "${SMOKE_RUN_ID:-}" ]]; then rm -f "${RUN_DIR}/DONE"; fi
 if [[ -f "${RUN_DIR}/DONE" ]]; then
   log "run ${RUN_ID} already finished; summary:"
   cat "${RUN_DIR}/summary.json" || true
@@ -60,7 +63,7 @@ if [[ -f "${RUN_DIR}/DONE" ]]; then
 fi
 
 mkdir -p "${LOG_DIR}"
-: > "${RUN_DIR}/timings.tsv"
+[[ -n "${SMOKE_RUN_ID:-}" ]] || : > "${RUN_DIR}/timings.tsv"
 log "run ${RUN_ID} -> ${RUN_DIR}"
 
 export HF_HOME="${SMOKE_ROOT}/hf_cache"
@@ -70,6 +73,7 @@ export PYTHONUNBUFFERED=1
 export TOKENIZERS_PARALLELISM=false
 export UV_CACHE_DIR="${SMOKE_ROOT}/uv_cache"
 export UV_PYTHON_INSTALL_DIR="${SMOKE_ROOT}/uv_python"
+export UV_PYTHON=3.12  # verl's uv.lock needs >= 3.12; the image has 3.11
 
 record() {  # stage exit_code start_epoch
   printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$(date +%s)" >> "${RUN_DIR}/timings.tsv"

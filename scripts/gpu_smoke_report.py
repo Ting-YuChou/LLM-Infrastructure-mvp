@@ -34,13 +34,14 @@ DPO_LN2_TOLERANCE = 0.015
 
 
 def read_timings(run_dir: Path) -> List[Dict[str, Any]]:
-    rows = []
+    """One row per stage; a stage rerun into the same run (SMOKE_RUN_ID) keeps its latest row."""
+    rows: Dict[str, Dict[str, Any]] = {}
     path = run_dir / "timings.tsv"
     if path.exists():
         for line in path.read_text().splitlines():
             stage, code, start, end = line.split("\t")
-            rows.append({"stage": stage, "exit_code": int(code), "seconds": int(end) - int(start)})
-    return rows
+            rows[stage] = {"stage": stage, "exit_code": int(code), "seconds": int(end) - int(start)}
+    return list(rows.values())
 
 
 def stage_output_dirs(run_dir: Path) -> Dict[str, Path]:
