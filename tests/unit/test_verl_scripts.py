@@ -144,6 +144,19 @@ def test_verl_report_summarizes_console_metrics_like_rlhf_trainer():
     assert summary["gen_tokens_per_s"] == pytest.approx(2 * 100 * 64 / 22.0)
 
 
+def test_verl_report_leaves_checkpoint_saves_out_of_step_time():
+    steps = [
+        {"timing_s/gen": 10.0, "timing_s/step": 20.0},
+        {"timing_s/gen": 10.0, "timing_s/step": 20.0},
+        {"timing_s/gen": 10.0, "timing_s/step": 190.0, "timing_s/save_checkpoint": 170.0},
+    ]
+
+    summary = verl_report.summarize(steps, batch=1)
+
+    assert summary["timing_step_s_mean"] == pytest.approx(20.0)
+    assert summary["timing_score_s_mean"] == pytest.approx(10.0)
+
+
 def test_smoke_report_puts_rlhf_and_verl_timings_side_by_side(tmp_path):
     sys.path.insert(0, str(ROOT / "scripts"))
     sys.path.insert(0, str(ROOT / "src"))

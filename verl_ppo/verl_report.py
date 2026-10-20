@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Optional
 STEP_LINE = re.compile(r"step:(\d+) - (.*)")
 METRIC = re.compile(r"([\w/@.\-]+):(-?[\d.]+(?:e[-+]?\d+)?|nan|inf|-inf)")
 UPDATE_TIMERS = ("timing_s/update_actor", "timing_s/update_critic", "timing_s/update_weights")
+NON_STEP_TIMERS = ("timing_s/save_checkpoint", "timing_s/testing")
 PROMPT = "Explain what machine learning is in simple terms."
 
 
@@ -50,7 +51,8 @@ def summarize(steps: List[Dict[str, float]], batch: int) -> Dict[str, float]:
     for metrics in measured:
         gen = metrics.get("timing_s/gen", 0.0)
         update = sum(metrics.get(key, 0.0) for key in UPDATE_TIMERS)
-        step = metrics["timing_s/step"]
+        # rlhf_trainer's step clock stops before checkpointing; drop verl's save/val time too.
+        step = metrics["timing_s/step"] - sum(metrics.get(key, 0.0) for key in NON_STEP_TIMERS)
         phases.append({
             "gen_s": gen,
             "update_s": update,
