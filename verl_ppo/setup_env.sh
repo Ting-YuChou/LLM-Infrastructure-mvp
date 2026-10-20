@@ -19,6 +19,11 @@ if [[ ! -d "${VERL_DIR}/.git" ]]; then
 fi
 cd "${VERL_DIR}"
 echo "verl $(git describe --tags --always) at ${VERL_DIR}"
+# v0.9.1's uv.lock fetches flash-attn from the wheelhouse release
+# flash-attention-v2.8.3, which a later torch bump overwrote (now 404). The same
+# torch 2.11 build lives on under a per-torch tag; the lock pins no hash.
+FLASH_ATTN_RELEASE="${FLASH_ATTN_RELEASE:-flash-attention-v2.8.3-py3.12-torch2.11.0}"
+sed -i.orig "s#releases/download/flash-attention-v2.8.3/#releases/download/${FLASH_ATTN_RELEASE}/#g" uv.lock
 uv sync --frozen --extra fsdp --extra vllm
 uv run --frozen --all-packages --extra vllm --extra fsdp python - <<'EOF'
 import torch, transformers, vllm, ray, verl
