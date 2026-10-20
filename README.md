@@ -288,6 +288,11 @@ python -m src.training.rlhf_trainer \
     --eval-prompts Anthropic.Dataset/rl_prompts.json  # Optional
 ```
 
+`verl_ppo/` runs the same PPO stage with [verl](https://github.com/volcengine/verl)
+(vLLM rollouts, FSDP actor/critic, LoRA or full-parameter) in its own uv
+environment, from the SFT and reward checkpoints above; see
+`verl_ppo/README.md` for the setup and the GPU speed comparison.
+
 **Complete Features**:
 - ✅ Full PPO algorithm implementation
 - ✅ LoRA policy + DDP across GPUs (`lora:` / `distributed:` in `config/rlhf_config.yaml`)

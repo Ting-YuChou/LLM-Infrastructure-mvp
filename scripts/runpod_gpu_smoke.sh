@@ -18,6 +18,11 @@
 # once it is done; an 8B one is ~80 GB),
 # SMOKE_IDLE_STOP (how long to keep the pod up after finishing so the logs can
 # be read, then stop it with runpodctl when available).
+#
+# verl comparison (SMOKE_PRESET=8b_ppo_bench): add the stages
+# `verl_setup verl_lora verl_full` after `sft reward rlhf`. verl gets its own uv
+# environment (verl_ppo/setup_env.sh, VERL_REF, default v0.9.1) and trains PPO
+# from the same SFT/RM checkpoints with the rlhf stage's batch and lengths.
 set -uo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -30,6 +35,8 @@ SMOKE_STAGES="${SMOKE_STAGES:-sft sft_resume reward dpo rlhf}"
 SMOKE_PRUNE="${SMOKE_PRUNE:-1}"
 SMOKE_STAGE_TIMEOUT="${SMOKE_STAGE_TIMEOUT:-90m}"
 SMOKE_IDLE_STOP="${SMOKE_IDLE_STOP:-30m}"
+VERL_REF="${VERL_REF:-v0.9.1}"
+VERL_DIR="${SMOKE_ROOT}/verl-${VERL_REF}"
 RUN_ID="$(git rev-parse --short HEAD)-${SMOKE_PRESET}"
 RUN_DIR="${SMOKE_ROOT}/runs/${RUN_ID}"
 LOG_DIR="${RUN_DIR}/logs"
@@ -61,6 +68,8 @@ export PIP_CACHE_DIR="${SMOKE_ROOT}/pip_cache"
 export PYTHONPATH="${REPO_DIR}/src:${REPO_DIR}"
 export PYTHONUNBUFFERED=1
 export TOKENIZERS_PARALLELISM=false
+export UV_CACHE_DIR="${SMOKE_ROOT}/uv_cache"
+export UV_PYTHON_INSTALL_DIR="${SMOKE_ROOT}/uv_python"
 
 record() {  # stage exit_code start_epoch
   printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$(date +%s)" >> "${RUN_DIR}/timings.tsv"
@@ -147,8 +156,9 @@ if [[ ${rc} -ne 0 ]]; then
 fi
 
 # --- 3. Data, configs, gated-model access -----------------------------------
+RL_PROMPTS="$(python -c "import sys; sys.path.insert(0, 'scripts'); import make_smoke_configs as m; print(m.PRESETS['${SMOKE_PRESET}']['rl_prompts'])")"
 python scripts/prepare_data.py --output-dir "${RUN_DIR}/data" \
-  --sft-examples 400 --preference-examples 400 --rl-prompts 64 > "${LOG_DIR}/data.log" 2>&1
+  --sft-examples 400 --preference-examples 400 --rl-prompts "${RL_PROMPTS}" > "${LOG_DIR}/data.log" 2>&1
 python scripts/make_smoke_configs.py --preset "${SMOKE_PRESET}" --root "${RUN_DIR}" \
   ${SMOKE_MODEL:+--model "${SMOKE_MODEL}"}
 export PIPELINE_CONFIG="${RUN_DIR}/configs/training_pipeline.yaml"
@@ -169,6 +179,35 @@ prune() {
   [[ "${SMOKE_PRUNE}" == "1" ]] && python scripts/gpu_smoke_report.py --run-dir "${RUN_DIR}" --prune-stage "$1"
 }
 
+# verl PPO from the SFT/RM checkpoints, with the rlhf stage's prompts per step,
+# lengths and step count so its timings line up with ours.
+verl_stage() {  # lora | full
+  local mode="$1" output="${RUN_DIR}/outputs/verl_$1"
+  local bench
+  bench="$(python - "${RUN_DIR}/configs/rlhf.yaml" "${NPROC}" <<'EOF'
+import sys, yaml
+config = yaml.safe_load(open(sys.argv[1]))
+training, data = config["training"], config["data"]
+print(training["per_device_batch_size"] * int(sys.argv[2]), training["total_steps"],
+      data["max_prompt_length"], data["max_response_length"])
+EOF
+)"
+  read -r BATCH STEPS PROMPT_LEN RESPONSE_LEN <<< "${bench}"
+  python verl_ppo/prepare_prompts.py --input "${RUN_DIR}/data/prompts/rl_prompts.json" \
+    --output-dir "${RUN_DIR}/verl_data" &&
+  MODE="${mode}" SFT_CKPT="${RUN_DIR}/outputs/sft/final" RM_CKPT="${RUN_DIR}/outputs/reward/final" \
+    DATA_DIR="${RUN_DIR}/verl_data" OUTPUT_DIR="${output}" VERL_DIR="${VERL_DIR}" NGPUS="${NPROC}" \
+    BATCH="${BATCH}" STEPS="${STEPS}" PROMPT_LEN="${PROMPT_LEN}" RESPONSE_LEN="${RESPONSE_LEN}" \
+    bash verl_ppo/run_ppo.sh &&
+  (cd "${VERL_DIR}" && uv run --frozen --all-packages --extra vllm --extra fsdp \
+    python "${REPO_DIR}/verl_ppo/verl_report.py" --run-dir "${output}" \
+    --sft-ckpt "${RUN_DIR}/outputs/sft/final" --batch "${BATCH}" --output "${LOG_DIR}/verl_${mode}.json")
+  local rc=$?
+  # Actor + critic FSDP checkpoints with optimizer state; the merged actor stays.
+  if [[ "${SMOKE_PRUNE}" == "1" ]]; then rm -rf "${output}/checkpoints"; fi
+  return "${rc}"
+}
+
 monitor_pid=""
 start_monitor() {
   nvidia-smi --query-gpu=index,memory.used --format=csv,noheader,nounits -l 5 \
@@ -181,13 +220,22 @@ for stage in ${SMOKE_STAGES}; do
   log "=== stage ${stage} on ${NPROC} GPUs ==="
   start=$(date +%s)
   start_monitor "${stage}"
-  if [[ "${stage}" == "sft_resume" ]]; then
-    timeout "${SMOKE_STAGE_TIMEOUT}" torchrun --standalone --nproc_per_node "${NPROC}" \
-      -m training.sft_trainer --config "${RUN_DIR}/configs/sft_resume.yaml" 2>&1 | tee "${LOG_DIR}/${stage}.log"
-  else
-    timeout "${SMOKE_STAGE_TIMEOUT}" bash scripts/launch_training.sh "${stage}" 2>&1 | tee "${LOG_DIR}/${stage}.log"
-  fi
-  rc=${PIPESTATUS[0]}
+  case "${stage}" in
+    sft_resume)
+      timeout "${SMOKE_STAGE_TIMEOUT}" torchrun --standalone --nproc_per_node "${NPROC}" \
+        -m training.sft_trainer --config "${RUN_DIR}/configs/sft_resume.yaml" 2>&1 | tee "${LOG_DIR}/${stage}.log"
+      rc=${PIPESTATUS[0]} ;;
+    verl_setup)
+      VERL_DIR="${VERL_DIR}" VERL_REF="${VERL_REF}" timeout "${SMOKE_STAGE_TIMEOUT}" \
+        bash verl_ppo/setup_env.sh 2>&1 | tee "${LOG_DIR}/${stage}.log"
+      rc=${PIPESTATUS[0]} ;;
+    verl_lora|verl_full)
+      verl_stage "${stage#verl_}" 2>&1 | tee "${LOG_DIR}/${stage}.log"
+      rc=${PIPESTATUS[0]} ;;
+    *)
+      timeout "${SMOKE_STAGE_TIMEOUT}" bash scripts/launch_training.sh "${stage}" 2>&1 | tee "${LOG_DIR}/${stage}.log"
+      rc=${PIPESTATUS[0]} ;;
+  esac
   stop_monitor
   record "${stage}" "${rc}" "${start}"
   log "stage ${stage} exit ${rc} after $(( $(date +%s) - start ))s"
@@ -198,6 +246,7 @@ for stage in ${SMOKE_STAGES}; do
   case "${stage}" in
     sft) [[ " ${SMOKE_STAGES} " == *" sft_resume "* ]] || prune sft ;;  # resume reads them
     sft_resume) prune sft; prune sft_resume ;;
+    verl_*) ;;  # verl_stage prunes its own checkpoints
     *) prune "${stage}" ;;
   esac
 done

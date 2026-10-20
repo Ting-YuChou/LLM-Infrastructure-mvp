@@ -5,6 +5,7 @@ Implements reinforcement learning from human feedback for LLM alignment
 
 import os
 import logging
+import time
 from functools import partial
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
@@ -148,6 +149,36 @@ class RLHFConfig:
     baseline_metrics_path: Optional[str] = None
     gate_config_path: Optional[str] = None
     skip_promotion: bool = False
+
+
+def _cuda_clock() -> float:
+    """perf_counter after queued GPU work finishes, so phase timings are wall time."""
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    return time.perf_counter()
+
+
+def summarize_step_timings(timings: List[Dict[str, float]]) -> Dict[str, float]:
+    """
+    Mean per-step phase timings for the final metrics.
+
+    The first step is dropped when there are more (CUDA/NCCL warm-up), so
+    runs of different lengths compare like for like.
+    """
+    measured = timings[1:] if len(timings) > 1 else timings
+    if not measured:
+        return {}
+    summary = {
+        f"timing_{key}_mean": sum(step[key] for step in measured) / len(measured)
+        for key in ("gen_s", "score_s", "update_s", "step_s")
+    }
+    gen_seconds = sum(step["gen_s"] for step in measured)
+    summary["gen_tokens_per_s"] = (
+        sum(step["gen_tokens"] for step in measured) / gen_seconds if gen_seconds else 0.0
+    )
+    summary["response_length_mean"] = sum(step["response_length"] for step in measured) / len(measured)
+    summary["timing_steps"] = float(len(measured))
+    return summary
 
 
 class PromptDataset(Dataset):
@@ -1004,6 +1035,7 @@ class RLHFTrainer:
         training_reward_total = 0.0
         training_kl_total = 0.0
         training_metric_batches = 0
+        step_timings: List[Dict[str, float]] = []
 
         for epoch in range(self.config.num_epochs):
             logger.info(f"Epoch {epoch + 1}/{self.config.num_epochs}")
@@ -1016,6 +1048,7 @@ class RLHFTrainer:
 
                 prompt_ids = batch['input_ids'].to(self.device)
                 prompt_attention_mask = batch['attention_mask'].to(self.device)
+                step_start = _cuda_clock()
 
                 # ==================== Rollout Phase ====================
                 with torch.no_grad():
@@ -1025,6 +1058,7 @@ class RLHFTrainer:
                     # response_mask covers tokens up to and including the first
                     # stop token, so the EOS decision is trained and rewarded.
                     response_mask = response_attention_mask.float()
+                    gen_end = _cuda_clock()
 
                     input_ids = torch.cat([prompt_ids, response_ids], dim=1)
                     full_attention_mask = torch.cat(
@@ -1063,6 +1097,7 @@ class RLHFTrainer:
                         gamma=self.config.gamma,
                         gae_lambda=self.config.gae_lambda
                     )
+                    score_end = _cuda_clock()
 
                 # ==================== PPO Update Phase ====================
                 ppo_batch = {
@@ -1078,6 +1113,31 @@ class RLHFTrainer:
 
                 # PPO update
                 metrics = self.ppo_update(ppo_batch, num_ppo_epochs=ppo_epochs)
+                update_end = _cuda_clock()
+
+                # Phase wall times averaged over ranks (one all-reduce);
+                # generated tokens summed over ranks.
+                timing = reduce_scalar_metrics({
+                    "gen_s": gen_end - step_start,
+                    "score_s": score_end - gen_end,
+                    "update_s": update_end - score_end,
+                    "step_s": update_end - step_start,
+                    "gen_tokens": float(response_mask.sum().item()),
+                    "response_length": float(response_mask.sum(dim=1).mean().item()),
+                })
+                timing["gen_tokens"] *= world_size()
+                step_timings.append(timing)
+                logger.info(
+                    "Step %d timing: gen=%.2fs score=%.2fs update=%.2fs step=%.2fs "
+                    "(%.0f generated tokens, mean response %.1f)",
+                    global_step,
+                    timing["gen_s"],
+                    timing["score_s"],
+                    timing["update_s"],
+                    timing["step_s"],
+                    timing["gen_tokens"],
+                    timing["response_length"],
+                )
 
                 # ==================== Logging and Metrics ====================
                 # Mean KL/reward over every rank's batch: the adaptive KL
@@ -1161,6 +1221,7 @@ class RLHFTrainer:
             "latency_p95_ms": 0.0,
             "cost_per_1k_tokens_usd": 0.0,
             "artifact_checksum_ready": 1.0 if os.path.isdir(final_checkpoint_path) else 0.0,
+            **summarize_step_timings(step_timings),
         }
         # Rank 0 writes the metrics file; other ranks keep their local copy.
         final_metrics = self._write_promotion_metrics(

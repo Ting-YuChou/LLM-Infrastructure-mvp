@@ -218,7 +218,7 @@ def test_repo_training_configs_shard_with_fsdp_on_eight_gpus(config_name):
     assert "gradient_checkpointing" not in kwargs
 
 
-@pytest.mark.parametrize("preset", ["1b", "8b"])
+@pytest.mark.parametrize("preset", ["1b", "8b", "8b_ppo_bench"])
 def test_gpu_smoke_configs_shard_trainer_stages_and_keep_ppo_on_ddp(preset, tmp_path):
     sys.path.insert(0, str(CONFIG_DIR.parent / "scripts"))
     import make_smoke_configs
@@ -244,6 +244,20 @@ def test_gpu_smoke_configs_shard_trainer_stages_and_keep_ppo_on_ddp(preset, tmp_
     assert hf_config.resolve_distributed_strategy(configs["rlhf.yaml"], world_size=2) == "ddp"
     assert configs["rlhf.yaml"]["lora"]["enabled"] is True
     assert configs["rlhf.yaml"]["tracking"]["mlflow_enabled"] is False
+
+
+def test_ppo_bench_preset_sets_the_rollout_shape_verl_is_compared_on(tmp_path):
+    sys.path.insert(0, str(CONFIG_DIR.parent / "scripts"))
+    import make_smoke_configs
+
+    rlhf = make_smoke_configs.build_configs("8b_ppo_bench", tmp_path)["rlhf.yaml"]
+
+    # 16 prompts/GPU x 4 GPUs = 64 per step, 512-token responses, 6 steps.
+    assert rlhf["training"]["per_device_batch_size"] == 16
+    assert rlhf["training"]["total_steps"] == 6
+    assert rlhf["data"]["max_response_length"] == 512
+    # Enough prompts for 6 x 64 after verl holds out 16 for validation.
+    assert make_smoke_configs.PRESETS["8b_ppo_bench"]["rl_prompts"] >= 6 * 64 + 16
 
 
 class _FakePlugin:

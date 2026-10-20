@@ -42,6 +42,7 @@ PRESETS: Dict[str, Dict[str, Any]] = {
         "ppo_steps": 4,
         "max_prompt_length": 256,
         "max_response_length": 64,
+        "rl_prompts": 64,
     },
     # 4x 80GB: the target model.
     "8b": {
@@ -56,7 +57,19 @@ PRESETS: Dict[str, Dict[str, Any]] = {
         "ppo_steps": 4,
         "max_prompt_length": 256,
         "max_response_length": 64,
+        "rl_prompts": 64,
     },
+}
+# 8B PPO speed benchmark against verl (verl_ppo/run_ppo.sh reads the rlhf
+# settings back from rlhf.yaml): 16 prompts per GPU (64 on 4 GPUs) x 512
+# response tokens for 6 steps. verl holds out 16 prompts for validation, so
+# 400 prompts still leave 6 full batches of 64.
+PRESETS["8b_ppo_bench"] = {
+    **PRESETS["8b"],
+    "ppo_batch": 16,
+    "ppo_steps": 6,
+    "max_response_length": 512,
+    "rl_prompts": 400,
 }
 
 
