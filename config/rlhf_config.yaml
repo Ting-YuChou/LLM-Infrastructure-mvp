@@ -1,5 +1,6 @@
 # Reinforcement Learning from Human Feedback (RLHF) Configuration
-# This config defines parameters for PPO/DPO alignment training
+# This config defines parameters for PPO alignment training.
+# DPO is its own stage: config/dpo_config.yaml (src/training/dpo_trainer.py).
 
 # ============================================================================
 # Model Configuration
@@ -91,7 +92,7 @@ data:
 # RLHF Algorithm Configuration
 # ============================================================================
 algorithm:
-  # Algorithm type: "ppo" or "dpo"
+  # PPO is the only algorithm here; DPO runs from config/dpo_config.yaml.
   type: "ppo"
   
   # PPO-specific parameters
@@ -129,17 +130,7 @@ algorithm:
     
     # Mini-batch size for PPO updates
     mini_batch_size: 32
-  
-  # DPO-specific parameters (alternative to PPO)
-  dpo:
-    # Beta parameter for DPO loss
-    beta: 0.1
-    
-    # Label smoothing
-    label_smoothing: 0.0
-    
-    # Loss type: "sigmoid" or "hinge"
-    loss_type: "sigmoid"
+
 
 # ============================================================================
 # Generation Configuration

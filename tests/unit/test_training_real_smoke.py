@@ -51,7 +51,7 @@ def real_training():
                 pytest.skip(f"{required} is not installed")
         modules = {
             name: importlib.import_module(f"training.{name}")
-            for name in ("sft_trainer", "reward_trainer", "rlhf_trainer")
+            for name in ("sft_trainer", "reward_trainer", "dpo_trainer", "rlhf_trainer")
         }
         modules["transformers"] = importlib.import_module("transformers")
         yield modules
@@ -189,6 +189,96 @@ def test_reward_model_trains_and_reports_pairwise_metrics(real_training, tiny_ll
     assert 0.0 <= result.metrics["reward_accuracy"] <= 1.0
     assert "eval_reward_margin" in result.metrics
     assert Path(result.checkpoint_path, "model.safetensors").exists()
+
+
+@pytest.fixture
+def tiny_sft_dir(real_training, tiny_llama_dir, tmp_path):
+    """tiny_llama_dir after SFT: chat tokens already in the vocab, as in a real SFT checkpoint."""
+    from training.chat_format import ensure_chat_tokenizer, resize_embeddings_if_needed
+
+    transformers = real_training["transformers"]
+    tokenizer = ensure_chat_tokenizer(transformers.AutoTokenizer.from_pretrained(tiny_llama_dir))
+    model = transformers.AutoModelForCausalLM.from_pretrained(tiny_llama_dir)
+    resize_embeddings_if_needed(model, tokenizer)
+    sft_dir = tmp_path / "tiny-sft"
+    model.save_pretrained(sft_dir)
+    tokenizer.save_pretrained(sft_dir)
+    return sft_dir
+
+
+def _dpo_config(dpo_trainer, model_dir, tmp_path, learning_rate):
+    pairs = [
+        {"prompt": "answer question", "chosen": "good answer", "rejected": "bad answer"}
+        for _ in range(4)
+    ]
+    raw = _raw_config(
+        "dpo_config.yaml",
+        model_dir,
+        tmp_path / "dpo",
+        _write_json(tmp_path / "pairs_train.json", pairs),
+        _write_json(tmp_path / "pairs_val.json", pairs[:2]),
+    )
+    return dpo_trainer.DPOConfig(
+        model_name=raw["model"]["name"],
+        train_file=raw["data"]["train_file"],
+        val_file=raw["data"]["val_file"],
+        output_dir=raw["training"]["output_dir"],
+        max_length=24,
+        num_train_epochs=1,
+        per_device_train_batch_size=2,
+        learning_rate=learning_rate,
+        beta=0.1,
+        raw_config=raw,
+    )
+
+
+def test_dpo_loss_starts_at_ln2_against_its_own_reference(real_training, tiny_sft_dir, tmp_path):
+    import math
+
+    dpo_trainer = real_training["dpo_trainer"]
+    _use_cpu(dpo_trainer, real_training["transformers"].TrainingArguments)
+
+    # lr=0 keeps the policy equal to the reference, so every pair's DPO loss is
+    # -log(sigmoid(0)) = ln 2 and the implicit rewards are 0.
+    result = dpo_trainer.DPOModelTrainer(_dpo_config(dpo_trainer, tiny_sft_dir, tmp_path, 0.0)).train()
+
+    assert result.metrics["eval_loss"] == pytest.approx(math.log(2), abs=1e-4)
+    assert result.metrics["eval_rewards_chosen"] == pytest.approx(0.0, abs=1e-4)
+    assert result.metrics["dpo_reward_margin"] == pytest.approx(0.0, abs=1e-4)
+    checkpoint = Path(result.checkpoint_path)
+    assert (checkpoint / "model.safetensors").exists()
+    assert (checkpoint / "generation_config.json").exists()
+
+
+def test_dpo_training_moves_policy_towards_chosen(real_training, tiny_sft_dir, tmp_path):
+    dpo_trainer = real_training["dpo_trainer"]
+    _use_cpu(dpo_trainer, real_training["transformers"].TrainingArguments)
+    config = _dpo_config(dpo_trainer, tiny_sft_dir, tmp_path, 5e-2)
+    config.raw_config["training"].update(max_steps=8, lr_scheduler_type="constant", warmup_ratio=0.0)
+
+    result = dpo_trainer.DPOModelTrainer(config).train()
+
+    assert result.metrics["dpo_reward_margin"] > 0
+    assert result.metrics["dpo_reward_accuracy"] == 1.0
+
+
+def test_dpo_labels_mask_prompt_and_padding(real_training, tiny_sft_dir):
+    reward_trainer = real_training["reward_trainer"]
+    tokenizer = real_training["transformers"].AutoTokenizer.from_pretrained(tiny_sft_dir)
+    preprocessor = reward_trainer.RewardDataPreprocessor(tokenizer, max_length=24, include_labels=True)
+
+    batch = preprocessor.create_comparison_pairs(
+        {"prompt": ["answer question"], "chosen": ["good answer"], "rejected": ["bad"]}
+    )
+
+    for side in ("chosen", "rejected"):
+        ids, mask, labels = (batch[f"{side}_{key}"][0] for key in ("input_ids", "attention_mask", "labels"))
+        response = [label for label in labels if label != -100]
+        # Response tokens end with <|eot_id|> and sit right before the padding.
+        assert response[-1] == tokenizer.convert_tokens_to_ids("<|eot_id|>")
+        end = sum(mask)
+        assert labels[end - len(response):end] == ids[end - len(response):end]
+        assert all(label == -100 for label in labels[end:])
 
 
 def test_ppo_value_head_accepts_bf16_policy_hidden_states(real_training, tiny_llama_dir):

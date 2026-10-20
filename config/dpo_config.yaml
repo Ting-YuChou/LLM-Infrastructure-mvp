@@ -1,0 +1,138 @@
+# Direct Preference Optimization (DPO) Configuration
+# Full-parameter DPO from the SFT checkpoint (src/training/dpo_trainer.py):
+#   python -m src.training.dpo_trainer --config config/dpo_config.yaml
+#   scripts/launch_training.sh dpo
+# The SFT checkpoint is both the starting policy and the frozen reference. Its
+# log-probs are computed once before training, so only the policy is resident
+# (FSDP-sharded) while it trains.
+
+# ============================================================================
+# Model Configuration
+# ============================================================================
+model:
+  # SFT checkpoint (policy init and reference)
+  name: "/workspace/models/sft/final"
+  cache_dir: "/workspace/models/sft"
+
+  # Mixed precision (bf16, fp16, fp32); sets load dtype and Trainer flags
+  precision: "bf16"
+
+  # Gradient checkpointing (FSDP activation checkpointing when sharded)
+  gradient_checkpointing: true
+
+  # Flash Attention 2 (falls back to sdpa when flash-attn is not installed)
+  use_flash_attention: true
+
+# ============================================================================
+# Data Configuration
+# ============================================================================
+data:
+  # Same preference format as the reward model: prompt / chosen / rejected
+  train_file: "/workspace/data/preferences/train.json"
+  val_file: "/workspace/data/preferences/val.json"
+
+  # Maximum tokens for chat-templated prompt + response (incl. <|eot_id|>).
+  # Longer pairs are dropped, not truncated.
+  max_length: 1024
+
+# ============================================================================
+# DPO Objective
+# ============================================================================
+dpo:
+  # KL strength: higher keeps the policy closer to the SFT reference
+  beta: 0.1
+  # Conservative DPO: assumed fraction of flipped preference labels
+  label_smoothing: 0.0
+  # Only "sigmoid" is implemented
+  loss_type: "sigmoid"
+  # Pairs per forward in the one-off reference log-prob pass (per GPU)
+  reference_batch_size: 4
+
+# ============================================================================
+# Training Configuration
+# ============================================================================
+training:
+  output_dir: "/workspace/models/dpo"
+
+  num_train_epochs: 1
+
+  # Each step runs one forward over 2 * batch sequences (chosen + rejected).
+  # Global batch = per_device * grad_accum * GPUs = 2 * 4 * 8 = 64 pairs.
+  per_device_train_batch_size: 2
+  per_device_eval_batch_size: 4
+  gradient_accumulation_steps: 4
+
+  # DPO wants a much smaller LR than SFT
+  learning_rate: 5.0e-7
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.1
+
+  optimizer: "adamw_torch"
+  weight_decay: 0.0
+  max_grad_norm: 1.0
+
+  logging_steps: 10
+  eval_steps: 100
+  save_steps: 500
+  save_total_limit: 2
+  save_strategy: "steps"
+  eval_strategy: "steps"
+
+  dataloader_num_workers: 4
+  dataloader_pin_memory: true
+
+# ============================================================================
+# Distributed Training
+# Launch with scripts/launch_training.sh dpo. A single process ignores this.
+# ============================================================================
+distributed:
+  # none | ddp | fsdp. Full-parameter 8B DPO needs FSDP.
+  strategy: "fsdp"
+  timeout_minutes: 60
+  find_unused_parameters: false
+  fsdp:
+    version: 1  # FSDP2 is not selectable through transformers 4.57 TrainingArguments
+    sharding: "full_shard"
+    transformer_layer_cls_to_wrap: ["LlamaDecoderLayer"]
+    # null follows model.gradient_checkpointing
+    activation_checkpointing: null
+    use_orig_params: true
+    sync_module_states: true
+    cpu_ram_efficient_loading: false
+    limit_all_gathers: true
+    backward_prefetch: "backward_pre"
+    forward_prefetch: false
+    offload: false
+    # Intermediate checkpoints are sharded; final/ is a full bf16 model.
+    checkpoint_state_dict_type: "sharded"
+
+# ============================================================================
+# Experiment Tracking
+# ============================================================================
+tracking:
+  tensorboard_enabled: true
+  tensorboard_dir: "/workspace/outputs/tensorboard/dpo"
+
+  mlflow_enabled: true
+  mlflow_tracking_uri: "http://localhost:5000"
+  mlflow_experiment_name: "dpo-training"
+
+registry:
+  auto_register: true
+  model_name: "llama3-8b-dpo"
+  tags:
+    task: "preference-optimization"
+    base_model: "llama3-8b"
+    training_type: "dpo"
+
+safety:
+  early_stopping:
+    enabled: false
+    patience: 3
+    metric: "eval_rewards_accuracy"
+    mode: "max"
+
+debug:
+  enabled: false
+  max_train_samples: 100
+  max_eval_samples: 20

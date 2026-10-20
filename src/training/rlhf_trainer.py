@@ -176,11 +176,14 @@ class PromptDataset(Dataset):
         self.input_ids: List[List[int]] = []
         skipped = 0
         for item in data:
-            input_ids = encode(tokenizer, format_prompt(tokenizer, item['prompt']))
+            # Objects with a "prompt" key, or bare strings
+            # (Anthropic.Dataset/rl_prompts.json).
+            prompt = item if isinstance(item, str) else item['prompt']
+            input_ids = encode(tokenizer, format_prompt(tokenizer, prompt))
             if len(input_ids) > max_length:
                 skipped += 1
                 continue
-            self.prompts.append(item['prompt'])
+            self.prompts.append(prompt)
             self.input_ids.append(input_ids)
 
         if skipped:

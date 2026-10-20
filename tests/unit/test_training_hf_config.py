@@ -205,7 +205,7 @@ def test_fsdp_environment_shards_intermediate_checkpoints():
     assert hf_config.fsdp_environment(_distributed_config(strategy="ddp"), world_size=8) == {}
 
 
-@pytest.mark.parametrize("config_name", ["sft_config.yaml", "reward_config.yaml"])
+@pytest.mark.parametrize("config_name", ["sft_config.yaml", "reward_config.yaml", "dpo_config.yaml"])
 def test_repo_training_configs_shard_with_fsdp_on_eight_gpus(config_name):
     raw_config = yaml.safe_load((CONFIG_DIR / config_name).read_text())
 
@@ -216,6 +216,34 @@ def test_repo_training_configs_shard_with_fsdp_on_eight_gpus(config_name):
     assert kwargs["fsdp"] == "full_shard auto_wrap"
     assert kwargs["fsdp_config"]["activation_checkpointing"] is True
     assert "gradient_checkpointing" not in kwargs
+
+
+@pytest.mark.parametrize("preset", ["1b", "8b"])
+def test_gpu_smoke_configs_shard_trainer_stages_and_keep_ppo_on_ddp(preset, tmp_path):
+    sys.path.insert(0, str(CONFIG_DIR.parent / "scripts"))
+    import make_smoke_configs
+
+    configs = make_smoke_configs.build_configs(preset, tmp_path)
+
+    for name in ("sft.yaml", "sft_resume.yaml", "reward.yaml", "dpo.yaml"):
+        raw_config = configs[name]
+        kwargs = hf_config.build_training_arguments_kwargs(
+            raw_config, output_dir="/tmp/out", has_eval=True, world_size=2
+        )
+        assert kwargs["fsdp"] == "full_shard auto_wrap", name
+        assert kwargs["fsdp_config"]["cpu_ram_efficient_loading"] is True
+        assert kwargs["max_steps"] > kwargs["save_steps"], "needs an intermediate sharded checkpoint"
+        assert "load_best_model_at_end" not in kwargs
+        assert raw_config["tracking"]["mlflow_enabled"] is False
+        assert hf_config.fsdp_environment(raw_config, world_size=2) == {
+            "FSDP_STATE_DICT_TYPE": "SHARDED_STATE_DICT"
+        }
+    assert configs["sft_resume.yaml"]["training"]["resume_from_checkpoint"] == str(
+        tmp_path / "outputs" / "sft" / f"checkpoint-{configs['sft.yaml']['training']['save_steps']}"
+    )
+    assert hf_config.resolve_distributed_strategy(configs["rlhf.yaml"], world_size=2) == "ddp"
+    assert configs["rlhf.yaml"]["lora"]["enabled"] is True
+    assert configs["rlhf.yaml"]["tracking"]["mlflow_enabled"] is False
 
 
 @pytest.fixture

@@ -8,6 +8,7 @@ the stubs other test modules install.
 
 import importlib.util
 import json
+import math
 import socket
 import subprocess
 import sys
@@ -161,6 +162,22 @@ def test_ppo_lora_ddp_keeps_ranks_in_sync_and_merges_final_model(tmp_path):
     assert (output_dir / "checkpoint-final-adapter" / "adapter_config.json").exists()
     assert (output_dir / "checkpoint-1" / "optimizer.pt").exists()
     assert rank0["merge_max_diff"] < 1e-4
+
+
+def test_dpo_ddp_merges_sharded_reference_pass(tmp_path):
+    rank0, rank1 = _run_workers("dpo_ddp", tmp_path)
+
+    # Rows scored on different ranks land back at their own index on every rank.
+    assert rank0["reference"] == pytest.approx(rank0["expected_reference"], abs=1e-5)
+    assert rank1["reference"] == pytest.approx(rank0["reference"])
+    # lr=0: the policy stays equal to its reference, so the DPO loss is ln 2.
+    assert rank0["eval_loss"] == pytest.approx(math.log(2), abs=1e-4)
+    assert rank1["eval_loss"] == pytest.approx(rank0["eval_loss"])
+    assert rank0["events"] == ["start_run", "create_model_version"]
+    assert rank1["events"] == []
+    final = Path(rank0["checkpoint_path"])
+    assert (final / "model.safetensors").exists()
+    assert (final / "generation_config.json").exists()
 
 
 def test_pipeline_launches_each_training_stage_as_a_torchrun_job(tmp_path):

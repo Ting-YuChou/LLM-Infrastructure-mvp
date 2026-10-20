@@ -1,5 +1,6 @@
 """
-Aggregated training pipeline for SFT -> reward -> RLHF handoff.
+Aggregated training pipeline for SFT -> reward -> RLHF handoff, with DPO as an
+opt-in stage that trains from the SFT checkpoint (--stages sft,dpo).
 
 The module intentionally keeps heavyweight trainer imports lazy so dry-runs and
 host smoke checks can validate pipeline wiring without installing the full CUDA
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 PIPELINE_STAGE_ORDER = (
     "sft",
     "reward",
+    "dpo",
     "rlhf",
     "training_eval",
     "mlflow_promotion",
@@ -45,12 +47,13 @@ PIPELINE_STAGE_ORDER = (
     "serving_handoff",
 )
 
-GPU_STAGES = ("sft", "reward", "rlhf")
+GPU_STAGES = ("sft", "reward", "dpo", "rlhf")
 LAUNCHERS = ("auto", "torchrun", "inprocess")
 SRC_DIR = Path(__file__).resolve().parent.parent
 
 STAGE_ALIASES = {
-    "all": PIPELINE_STAGE_ORDER,
+    # DPO is an alternative to reward + PPO, so "all" leaves it out.
+    "all": tuple(stage for stage in PIPELINE_STAGE_ORDER if stage != "dpo"),
     "eval": ("training_eval",),
     "promotion": ("mlflow_promotion",),
     "manifest": ("artifact_manifest",),
@@ -67,6 +70,7 @@ class PipelineArtifacts:
     sft_output_dir: Path
     reward_output_dir: Path
     rlhf_output_dir: Path
+    dpo_output_dir: Path
     metrics_path: Path
     artifact_manifest_path: Path
     awq_handoff_path: Path
@@ -107,7 +111,7 @@ class TrainingPipeline:
 
     def build_execution_plan(self) -> Dict[str, Any]:
         """Return the deterministic stage plan used by dry-run and tests."""
-        return {
+        plan = {
             "config_path": str(self.config_path),
             "dry_run": self.dry_run,
             "resume": self.resume,
@@ -163,10 +167,16 @@ class TrainingPipeline:
                 "launcher": self.launcher,
                 "nproc_per_node": {
                     stage: self._stage_config(stage).get("nproc_per_node", self.nproc_per_node)
-                    for stage in GPU_STAGES
+                    for stage in self._configured_gpu_stages()
                 },
             },
         }
+        if self._has_stage_config("dpo"):
+            plan["configs"]["dpo"] = str(self._stage_config_path("dpo"))
+            plan["path_checks"]["dpo_config_exists"] = self._stage_config_path("dpo").exists()
+            plan["outputs"]["dpo"] = str(self.artifacts.dpo_output_dir)
+            plan["injections"]["dpo.model.name"] = "${sft.checkpoint_path}"
+        return plan
 
     def run(self) -> Dict[str, Any]:
         """Execute configured stages or return a dry-run plan."""
@@ -178,8 +188,8 @@ class TrainingPipeline:
             len(self.stages) != 1 or self.stages[0] not in GPU_STAGES
         ):
             raise ValueError(
-                "Under torchrun the pipeline runs exactly one of the sft, reward or rlhf "
-                "stages; launch scripts/train_pipeline.py with plain python to run several "
+                "Under torchrun the pipeline runs exactly one of the sft, reward, dpo or "
+                "rlhf stages; launch scripts/train_pipeline.py with plain python to run several "
                 "(it starts one torchrun per stage)"
             )
 
@@ -204,6 +214,16 @@ class TrainingPipeline:
             )
             stage_results["reward"] = reward_result
             results["stages"]["reward"] = result_to_dict(reward_result)
+
+        if "dpo" in self.stages:
+            sft_checkpoint = require_checkpoint(stage_results, "sft", self.artifacts.sft_output_dir / "final")
+            dpo_result = self._resume_or_run(
+                "dpo",
+                self.artifacts.dpo_output_dir / "final",
+                lambda: self._execute_gpu_stage("dpo", lambda: self._run_dpo(sft_checkpoint)),
+            )
+            stage_results["dpo"] = dpo_result
+            results["stages"]["dpo"] = result_to_dict(dpo_result)
 
         if "rlhf" in self.stages:
             sft_checkpoint = require_checkpoint(stage_results, "sft", self.artifacts.sft_output_dir / "final")
@@ -416,6 +436,8 @@ class TrainingPipeline:
             return self._run_sft()
         if stage == "reward":
             return self._run_reward(sft_checkpoint)
+        if stage == "dpo":
+            return self._run_dpo(sft_checkpoint)
         if stage == "rlhf":
             return self._run_rlhf(sft_checkpoint, reward_checkpoint)
         raise ValueError(f"Not a training stage: {stage}")
@@ -424,6 +446,7 @@ class TrainingPipeline:
         output_dirs = {
             "sft": self.artifacts.sft_output_dir,
             "reward": self.artifacts.reward_output_dir,
+            "dpo": self.artifacts.dpo_output_dir,
             "rlhf": self.artifacts.rlhf_output_dir,
         }
         return output_dirs[stage] / "stage_result.json"
@@ -508,6 +531,22 @@ class TrainingPipeline:
         )
         config.skip_promotion = True
         return RewardModelTrainer(config).train()
+
+    def _run_dpo(self, sft_checkpoint: str) -> TrainingRunResult:
+        from .dpo_trainer import DPOConfig, DPOModelTrainer
+
+        config = DPOConfig.from_yaml(str(self._stage_config_path("dpo")))
+        config.model_name = sft_checkpoint
+        config.output_dir = str(self.artifacts.dpo_output_dir)
+        config.raw_config = update_nested(
+            config.raw_config,
+            {
+                "model": {"name": sft_checkpoint},
+                "training": {"output_dir": str(self.artifacts.dpo_output_dir)},
+            },
+        )
+        config.skip_promotion = True
+        return DPOModelTrainer(config).train()
 
     def _run_rlhf(self, sft_checkpoint: str, reward_checkpoint: str) -> TrainingRunResult:
         from .rlhf_trainer import RLHFTrainer
@@ -598,6 +637,7 @@ class TrainingPipeline:
             sft_output = output_dir / "models" / "sft"
             reward_output = output_dir / "models" / "reward"
             rlhf_output = output_dir / "models" / "aligned"
+            dpo_output = output_dir / "models" / "dpo"
             metrics_path = output_dir / "eval" / "training_candidate.json"
             artifact_manifest_path = output_dir / "model_artifact_manifest.json"
             awq_handoff_path = output_dir / "awq_handoff.json"
@@ -606,6 +646,7 @@ class TrainingPipeline:
             sft_output = Path(stages.get("sft", {}).get("output_dir", output_dir / "models" / "sft"))
             reward_output = Path(stages.get("reward", {}).get("output_dir", output_dir / "models" / "reward"))
             rlhf_output = Path(stages.get("rlhf", {}).get("output_dir", output_dir / "models" / "aligned"))
+            dpo_output = Path(stages.get("dpo", {}).get("output_dir", output_dir / "models" / "dpo"))
             metrics_path = Path(promotion.get("metrics_path", output_dir / "eval" / "training_candidate.json"))
             artifact_manifest_path = Path(
                 artifact.get("manifest_path", output_dir / "model_artifact_manifest.json")
@@ -619,6 +660,7 @@ class TrainingPipeline:
             sft_output_dir=sft_output,
             reward_output_dir=reward_output,
             rlhf_output_dir=rlhf_output,
+            dpo_output_dir=dpo_output,
             metrics_path=metrics_path,
             artifact_manifest_path=artifact_manifest_path,
             awq_handoff_path=awq_handoff_path,
@@ -629,6 +671,13 @@ class TrainingPipeline:
 
     def _stage_config(self, stage: str) -> Dict[str, Any]:
         return dict((self.config.get("stages") or {}).get(stage) or {})
+
+    def _has_stage_config(self, stage: str) -> bool:
+        return "config" in self._stage_config(stage)
+
+    def _configured_gpu_stages(self) -> List[str]:
+        """GPU stages with a config; dpo is optional in the pipeline YAML."""
+        return [stage for stage in GPU_STAGES if stage != "dpo" or self._has_stage_config(stage)]
 
     def _stage_config_path(self, stage: str) -> Path:
         stage_config = self._stage_config(stage)
@@ -663,7 +712,7 @@ class TrainingPipeline:
 
     def _dataset_fingerprints(self) -> Dict[str, Any]:
         fingerprints: Dict[str, Any] = {}
-        for stage in ("sft", "reward", "rlhf"):
+        for stage in self._configured_gpu_stages():
             try:
                 stage_yaml = self._load_yaml(self._stage_config_path(stage))
             except Exception:
