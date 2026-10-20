@@ -150,7 +150,8 @@ python scripts/make_smoke_configs.py --preset "${SMOKE_PRESET}" --root "${RUN_DI
 export PIPELINE_CONFIG="${RUN_DIR}/configs/training_pipeline.yaml"
 BASE_MODEL="$(python -c "import yaml; print(yaml.safe_load(open('${RUN_DIR}/configs/sft.yaml'))['model']['name'])")"
 start=$(date +%s)
-python -c "from huggingface_hub import model_info; model_info('${BASE_MODEL}'); print('HF access ok: ${BASE_MODEL}')" \
+# model_info is public even for gated repos; downloading a file proves access.
+python -c "from huggingface_hub import hf_hub_download; hf_hub_download('${BASE_MODEL}', 'config.json'); print('HF access ok: ${BASE_MODEL}')" \
   2>&1 | tail -3
 rc=${PIPESTATUS[0]}
 record hf_access "${rc}" "${start}"
@@ -182,6 +183,10 @@ for stage in ${SMOKE_STAGES}; do
   stop_monitor
   record "${stage}" "${rc}" "${start}"
   log "stage ${stage} exit ${rc} after $(( $(date +%s) - start ))s"
+  if [[ "${stage}" == "sft" && ${rc} -ne 0 ]]; then
+    log "every later stage starts from the SFT checkpoint; stopping here"
+    break
+  fi
 done
 
 # --- 5. Report ---------------------------------------------------------------
