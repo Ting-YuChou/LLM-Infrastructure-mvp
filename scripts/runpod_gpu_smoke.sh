@@ -121,9 +121,26 @@ if rank == 0:
     print(f"NCCL all_reduce ok across {dist.get_world_size()} GPUs")
 dist.destroy_process_group()
 EOF
+nccl_check() {
+  timeout 120 torchrun --standalone --nproc_per_node "${NPROC}" /tmp/nccl_check.py 2>&1 | tee -a "${LOG_DIR}/nccl.log"
+  return "${PIPESTATUS[0]}"
+}
 start=$(date +%s)
-torchrun --standalone --nproc_per_node "${NPROC}" /tmp/nccl_check.py 2>&1 | tee "${LOG_DIR}/nccl.log"
-record nccl_check "${PIPESTATUS[0]}" "${start}"
+nccl_check
+rc=$?
+if [[ ${rc} -ne 0 ]]; then
+  # PCIe hosts where GPU peer-to-peer hangs: route NCCL through host memory.
+  log "NCCL check failed (exit ${rc}); retrying with NCCL_P2P_DISABLE=1"
+  export NCCL_P2P_DISABLE=1
+  nccl_check
+  rc=$?
+fi
+record nccl_check "${rc}" "${start}"
+echo "NCCL_P2P_DISABLE=${NCCL_P2P_DISABLE:-0}" >> "${LOG_DIR}/nccl.log"
+if [[ ${rc} -ne 0 ]]; then
+  log "NCCL all_reduce fails even without P2P"
+  touch "${RUN_DIR}/DONE"; idle_then_stop
+fi
 
 # --- 3. Data, configs, gated-model access -----------------------------------
 python scripts/prepare_data.py --output-dir "${RUN_DIR}/data" \
