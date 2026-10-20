@@ -217,6 +217,13 @@ few steps and writes `summary.json` with exit codes, checkpoint checks, losses
 and peak GPU memory. It needs a volume at `/workspace` and `HF_TOKEN`; the
 configs come from `scripts/make_smoke_configs.py` (`--preset 1b` for
 Llama-3.2-1B on 2 GPUs, `--preset 8b` for Llama 3 8B on 4x 80 GB).
+If the NCCL all-reduce check hangs (seen on PCIe 2x A40 hosts), the script
+retries with `NCCL_P2P_DISABLE=1` and keeps it for every stage.
+
+Under FSDP with bf16/fp16, the trainers keep module buffers in fp32
+(`hf_config.keep_fsdp_buffers_in_fp32`): accelerate would otherwise cast
+Llama's RoPE `inv_freq` to bf16, so training would see different rotary
+frequencies than inference and the DPO reference pass.
 
 ```bash
 # Pod image runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04, host CUDA >= 12.9,

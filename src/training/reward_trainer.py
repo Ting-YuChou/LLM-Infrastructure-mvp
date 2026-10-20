@@ -46,6 +46,7 @@ try:
         build_training_arguments_kwargs,
         early_stopping_settings,
         fsdp_environment,
+        keep_fsdp_buffers_in_fp32,
         model_load_dtype,
         precision_dtype,
         resolve_precision,
@@ -78,6 +79,7 @@ except ImportError:  # pragma: no cover - supports direct script execution
         build_training_arguments_kwargs,
         early_stopping_settings,
         fsdp_environment,
+        keep_fsdp_buffers_in_fp32,
         model_load_dtype,
         precision_dtype,
         resolve_precision,
@@ -528,6 +530,7 @@ class RewardModelTrainer:
                 compute_metrics=compute_reward_metrics,
                 callbacks=callbacks,
             )
+            keep_fsdp_buffers_in_fp32(trainer)
 
             # Train
             logger.info("Starting reward model training...")

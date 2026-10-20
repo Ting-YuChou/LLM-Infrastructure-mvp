@@ -246,6 +246,51 @@ def test_gpu_smoke_configs_shard_trainer_stages_and_keep_ppo_on_ddp(preset, tmp_
     assert configs["rlhf.yaml"]["tracking"]["mlflow_enabled"] is False
 
 
+class _FakePlugin:
+    def __init__(self):
+        self.calls = []
+
+    def set_mixed_precision(self, mixed_precision, buffer_autocast=False, override=False):
+        self.calls.append((mixed_precision, buffer_autocast, override))
+
+
+def _fake_trainer(is_fsdp, precision):
+    from types import SimpleNamespace
+
+    plugin = _FakePlugin()
+    state = SimpleNamespace(mixed_precision=precision, fsdp_plugin=plugin)
+    return SimpleNamespace(is_fsdp_enabled=is_fsdp, accelerator=SimpleNamespace(state=state)), plugin
+
+
+@pytest.mark.parametrize(
+    "is_fsdp,precision,expected",
+    [(True, "bf16", [("bf16", True, True)]), (True, "no", []), (False, "bf16", [])],
+)
+def test_keep_fsdp_buffers_in_fp32_only_overrides_fsdp_mixed_precision(is_fsdp, precision, expected):
+    trainer, plugin = _fake_trainer(is_fsdp, precision)
+
+    hf_config.keep_fsdp_buffers_in_fp32(trainer)
+
+    assert plugin.calls == expected
+
+
+def test_accelerate_buffer_autocast_keeps_fsdp1_buffers_fp32():
+    from types import SimpleNamespace
+
+    accelerate_dataclasses = pytest.importorskip("accelerate.utils.dataclasses")
+    plugin = SimpleNamespace(fsdp_version=1, mixed_precision_policy=None)
+
+    # The plugin itself needs a GPU to construct, so call the method on a stand-in.
+    accelerate_dataclasses.FullyShardedDataParallelPlugin.set_mixed_precision(
+        plugin, "bf16", buffer_autocast=True, override=True
+    )
+
+    policy = plugin.mixed_precision_policy
+    assert policy.param_dtype is torch.bfloat16
+    assert policy.reduce_dtype is torch.bfloat16
+    assert policy.buffer_dtype is torch.float32
+
+
 @pytest.fixture
 def restore_environ():
     saved = dict(os.environ)

@@ -28,6 +28,8 @@ from training.pipeline import validate_checkpoint_artifact  # noqa: E402
 
 FINAL_DIR = {"sft": "final", "sft_resume": "final", "reward": "final", "dpo": "final", "rlhf": "checkpoint-final"}
 PROMPT = "Explain what machine learning is in simple terms."
+# bf16 policy (FSDP) vs bf16 reference (plain model): kernel-level noise only.
+DPO_LN2_TOLERANCE = 0.015
 
 
 def read_timings(run_dir: Path) -> List[Dict[str, Any]]:
@@ -139,6 +141,11 @@ def check_stage(run_dir: Path, timing: Dict[str, Any], output_dir: Path) -> Dict
         "losses_finite": all(math.isfinite(loss) for loss in losses),
         "peak_gpu_memory_mib": peak_memory_mib(run_dir, stage),
     }
+    if stage == "dpo" and losses:
+        # Step 1 runs at lr=0 (warmup), so the policy still equals its
+        # reference and the loss is ln 2 unless the two forwards disagree
+        # numerically (e.g. FSDP casting RoPE buffers to bf16).
+        report["initial_loss_minus_ln2"] = losses[0] - math.log(2)
     if stage == "rlhf" and (output_dir / "stage_result.json").exists():
         report["metrics"] = json.loads((output_dir / "stage_result.json").read_text()).get("metrics", {})
     reload: Optional[Dict[str, Any]] = None
@@ -161,6 +168,8 @@ def check_stage(run_dir: Path, timing: Dict[str, Any], output_dir: Path) -> Dict
         checks.append(bool(losses))
     if stage != "reward":
         checks.append(report["generation_config_json"])
+    if "initial_loss_minus_ln2" in report:
+        checks.append(abs(report["initial_loss_minus_ln2"]) < DPO_LN2_TOLERANCE)
     report["passed"] = all(checks)
     return report
 
