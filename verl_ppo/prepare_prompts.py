@@ -51,10 +51,10 @@ def to_rows(prompts: List[str], split: str) -> List[Dict[str, Any]]:
 
 def write_parquet(prompts: List[str], output_dir: Path, val_count: int) -> Dict[str, Path]:
     """Write train.parquet and val.parquet (the last val_count prompts) to output_dir."""
-    import pandas as pd
-
     if not 0 < val_count < len(prompts):
         raise ValueError(f"val_count must be between 1 and {len(prompts) - 1}, got {val_count}")
+    import pandas as pd
+
     output_dir.mkdir(parents=True, exist_ok=True)
     paths = {}
     for split, subset in (("train", prompts[:-val_count]), ("val", prompts[-val_count:])):
