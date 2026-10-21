@@ -37,7 +37,9 @@ data:
   val_file: "/workspace/data/preferences/val.json"
   
   # Maximum tokens for chat-templated prompt + response (incl. <|eot_id|>).
-  # Longer pairs are dropped, not truncated.
+  # Longer pairs are dropped, not truncated. PPO scores up to
+  # max_prompt_length + max_response_length (512 + 512) tokens. Batches are
+  # padded to their longest pair, so a higher limit only costs on long pairs.
   max_length: 1024
   
   # Expected JSON format:
@@ -48,6 +50,8 @@ data:
   #     "rejected": "less preferred response"
   #   }
   # ]
+  # "prompt" can also be a conversation ([system,] user, assistant, ...
+  # ending with user) that both responses continue.
   
   # Data preprocessing
   num_proc: 8

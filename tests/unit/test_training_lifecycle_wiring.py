@@ -77,6 +77,7 @@ class FakeLifecycle:
 
 class FakeTokenizer:
     pad_token = "<pad>"
+    pad_token_id = 0
     eos_token = "</s>"
 
     def __init__(self, events):

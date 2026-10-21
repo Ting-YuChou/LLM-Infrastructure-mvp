@@ -33,14 +33,19 @@ data:
   # Validation dataset path
   val_file: "/workspace/data/sft/val.json"
   
-  # Maximum tokens per example. Prompt and completion are rendered with the
-  # Llama 3 chat template (src/training/chat_format.py), which RM, PPO and
-  # serving reuse; examples whose prompt alone fills max_length are dropped.
+  # Maximum tokens per example, rendered with the Llama 3 chat template
+  # (src/training/chat_format.py) that RM, PPO and serving reuse. Longer
+  # conversations are cut after the last assistant reply that fits; examples
+  # whose prompt alone fills max_length are dropped. Batches are padded to
+  # their longest row, not to max_length.
   max_length: 2048
   
-  # Input/output format
-  # Expected JSON format:
+  # Expected JSON format, either per row:
   # {"prompt": "instruction here", "completion": "expected response"}
+  # {"messages": [{"role": "system", "content": "..."},     # optional
+  #               {"role": "user", "content": "..."},
+  #               {"role": "assistant", "content": "..."}, ...]}   # ends with assistant
+  # Every assistant reply in a conversation is trained on.
   prompt_key: "prompt"
   completion_key: "completion"
   

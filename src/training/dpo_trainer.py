@@ -32,6 +32,7 @@ from transformers import (
 try:
     from .results import TrainingRunResult
     from .chat_format import (
+        PaddingCollator,
         apply_generation_config,
         ensure_chat_tokenizer,
         resize_embeddings_if_needed,
@@ -67,6 +68,7 @@ try:
 except ImportError:  # pragma: no cover - supports direct script execution
     from results import TrainingRunResult  # type: ignore[no-redef]
     from chat_format import (  # type: ignore[no-redef]
+        PaddingCollator,
         apply_generation_config,
         ensure_chat_tokenizer,
         resize_embeddings_if_needed,
@@ -240,21 +242,24 @@ def compute_reference_log_probs(
     datasets: List[Dataset],
     batch_size: int,
     device: torch.device,
+    pad_token_id: int,
 ) -> List[Dataset]:
     """
     Add ref_chosen_logps/ref_rejected_logps columns to each dataset.
 
     Every rank scores rows rank, rank + world_size, ... and the results are
     all-gathered by row index, so every rank ends up with identical columns.
+    Rows are unpadded; each chunk is padded like a training batch.
     """
     model.eval()
+    collate = PaddingCollator(pad_token_id)
     results = []
     for dataset in datasets:
         indices = list(range(rank(), len(dataset), world_size()))
         local: Dict[int, Tuple[float, float]] = {}
         for start in range(0, len(indices), batch_size):
             chunk = indices[start:start + batch_size]
-            rows = dataset.select(chunk).with_format("torch")
+            rows = collate([dataset[index] for index in chunk])
             inputs = {
                 key: rows[key].to(device)
                 for key in (
@@ -404,6 +409,7 @@ class DPOModelTrainer:
             datasets,
             batch_size=self.config.reference_batch_size,
             device=device,
+            pad_token_id=tokenizer.pad_token_id,
         )
         del reference
         gc.collect()
@@ -492,6 +498,7 @@ class DPOModelTrainer:
                 args=training_args,
                 train_dataset=train_dataset,
                 eval_dataset=val_dataset,
+                data_collator=PaddingCollator(tokenizer.pad_token_id, pad_to_multiple_of=8),
                 compute_metrics=compute_dpo_metrics,
                 callbacks=callbacks,
                 beta=self.config.beta,

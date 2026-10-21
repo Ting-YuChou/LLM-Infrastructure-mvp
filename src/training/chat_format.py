@@ -14,7 +14,7 @@ embed_tokens/lm_head in modules_to_save.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Mapping, NamedTuple, Optional, Sequence, Union
 
 logger = logging.getLogger(__name__)
 
@@ -116,10 +116,42 @@ def user_messages(prompt: str, system: Optional[str] = None) -> List[Dict[str, s
     return messages
 
 
-def format_prompt(tokenizer: Any, prompt: str, system: Optional[str] = None) -> str:
-    """Render a prompt up to and including the assistant header."""
+def validate_messages(messages: Sequence[Mapping[str, Any]], last_role: str) -> List[Dict[str, str]]:
+    """
+    Check a conversation and return it as plain {"role", "content"} dicts.
+
+    An optional system message comes first, then user and assistant turns
+    alternate starting with user, and the last message has role `last_role`
+    ("user" for a prompt, "assistant" for a training conversation).
+    """
+    turns = [{"role": str(message["role"]), "content": str(message["content"])} for message in messages]
+    body = turns[1:] if turns and turns[0]["role"] == "system" else turns
+    expected = [("user", "assistant")[index % 2] for index in range(len(body))]
+    if not body or [turn["role"] for turn in body] != expected or body[-1]["role"] != last_role:
+        roles = [turn["role"] for turn in turns]
+        raise ValueError(
+            f"Conversation roles must be [system,] user, assistant, ... ending with {last_role}; got {roles}"
+        )
+    return turns
+
+
+def prompt_messages(prompt: Union[str, Sequence[Mapping[str, Any]]], system: Optional[str] = None) -> List[Dict[str, str]]:
+    """Messages for a prompt given as text or as a conversation that ends with a user turn."""
+    if isinstance(prompt, str):
+        return user_messages(prompt, system)
+    if system:
+        raise ValueError("Pass the system message inside the conversation")
+    return validate_messages(prompt, last_role="user")
+
+
+def format_prompt(
+    tokenizer: Any,
+    prompt: Union[str, Sequence[Mapping[str, Any]]],
+    system: Optional[str] = None,
+) -> str:
+    """Render a prompt (text or conversation) up to and including the assistant header."""
     return tokenizer.apply_chat_template(
-        user_messages(prompt, system),
+        prompt_messages(prompt, system),
         tokenize=False,
         add_generation_prompt=True,
     )
@@ -135,9 +167,47 @@ def encode(tokenizer: Any, text: str) -> List[int]:
     return list(tokenizer(text, add_special_tokens=False)["input_ids"])
 
 
+class EncodedConversation(NamedTuple):
+    input_ids: List[int]
+    labels: List[int]
+    # len(input_ids) after each assistant turn: the places a conversation can be cut.
+    turn_ends: List[int]
+
+
+def encode_conversation(tokenizer: Any, messages: Sequence[Mapping[str, Any]]) -> EncodedConversation:
+    """
+    Token ids and SFT labels for a conversation that ends with an assistant turn.
+
+    Every assistant reply (its content and closing <|eot_id|>) is labelled; the
+    system and user turns and the assistant headers are -100. Each piece ends
+    or starts at a template special token, so tokenizing the pieces separately
+    gives the same ids as tokenizing the whole rendered conversation, and a
+    reply's ids are the format_completion ids that RM and PPO use.
+    """
+    turns = validate_messages(messages, last_role="assistant")
+    input_ids: List[int] = []
+    labels: List[int] = []
+    turn_ends: List[int] = []
+    rendered = ""
+    for index, turn in enumerate(turns):
+        if turn["role"] != "assistant":
+            continue
+        prompt = tokenizer.apply_chat_template(turns[:index], tokenize=False, add_generation_prompt=True)
+        if not prompt.startswith(rendered):
+            raise ValueError("The chat template does not render a conversation as a prefix of its continuation")
+        prompt_ids = encode(tokenizer, prompt[len(rendered):])
+        reply = format_completion(turn["content"])
+        reply_ids = encode(tokenizer, reply)
+        input_ids += prompt_ids + reply_ids
+        labels += [-100] * len(prompt_ids) + reply_ids
+        turn_ends.append(len(input_ids))
+        rendered = prompt + reply
+    return EncodedConversation(input_ids, labels, turn_ends)
+
+
 def encode_prompt_and_completion(
     tokenizer: Any,
-    prompt: str,
+    prompt: Union[str, Sequence[Mapping[str, Any]]],
     completion: str,
 ) -> tuple[List[int], List[int]]:
     """
@@ -163,3 +233,46 @@ def pad_to_length(
         padding = [pad_value] * (length - len(sequence))
         padded.append(padding + list(sequence) if left else list(sequence) + padding)
     return padded
+
+
+class PaddingCollator:
+    """
+    Pad each batch to its longest row instead of padding every row to max_length.
+
+    All list-valued features in a batch share one length, so the chosen and
+    rejected halves of a preference batch can be concatenated. *input_ids pad
+    with the pad token, *labels with -100 and the rest (attention masks) with 0,
+    on the right; scalar features such as DPO reference log-probs are stacked.
+    """
+
+    def __init__(self, pad_token_id: int, pad_to_multiple_of: Optional[int] = None):
+        self.pad_token_id = pad_token_id
+        self.pad_to_multiple_of = pad_to_multiple_of
+
+    def pad_value(self, key: str) -> int:
+        if key.endswith("input_ids"):
+            return self.pad_token_id
+        if key.endswith("labels"):
+            return -100
+        return 0
+
+    def __call__(self, features: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
+        import torch
+
+        rows = [
+            {key: value.tolist() if hasattr(value, "tolist") else value for key, value in feature.items()}
+            for feature in features
+        ]
+        sequence_keys = [key for key, value in rows[0].items() if isinstance(value, (list, tuple))]
+        length = max((len(row[key]) for row in rows for key in sequence_keys), default=0)
+        if self.pad_to_multiple_of:
+            length = -(-length // self.pad_to_multiple_of) * self.pad_to_multiple_of
+
+        batch: Dict[str, Any] = {}
+        for key in rows[0]:
+            if key in sequence_keys:
+                padded = pad_to_length([row[key] for row in rows], length, self.pad_value(key))
+                batch[key] = torch.tensor(padded, dtype=torch.long)
+            else:
+                batch[key] = torch.tensor([row[key] for row in rows])
+        return batch

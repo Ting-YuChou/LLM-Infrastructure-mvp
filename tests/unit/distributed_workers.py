@@ -211,6 +211,7 @@ def run_dpo(tmp):
     """DDP DPO with lr=0, plus the sharded reference pass checked against per-row scores."""
     import torch
     from training import dpo_trainer
+    from training.chat_format import PaddingCollator
 
     _use_cpu(dpo_trainer)
     policy_dir, _ = _prepare_chat_models(tmp)
@@ -248,12 +249,14 @@ def run_dpo(tmp):
     preprocessor = dpo_trainer.RewardDataPreprocessor(tokenizer, 24, include_labels=True)
     dataset, _ = preprocessor.prepare_datasets(str(tmp / "pairs.json"))
     model = trainer.load_model(tokenizer)
-    (scored,) = dpo_trainer.compute_reference_log_probs(model, [dataset], 2, torch.device("cpu"))
+    (scored,) = dpo_trainer.compute_reference_log_probs(
+        model, [dataset], 2, torch.device("cpu"), pad_token_id=tokenizer.pad_token_id
+    )
     expected = []
     with torch.no_grad():
         for index in range(len(dataset)):
-            row = dataset.select([index]).with_format("torch")
-            chosen, rejected = dpo_trainer.concatenated_log_probs(model, {key: row[key] for key in row.column_names})
+            row = PaddingCollator(tokenizer.pad_token_id)([dataset[index]])
+            chosen, rejected = dpo_trainer.concatenated_log_probs(model, row)
             expected += [float(chosen), float(rejected)]
     return {
         "checkpoint_path": result.checkpoint_path,
