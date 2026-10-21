@@ -23,6 +23,13 @@
 # `verl_setup verl_lora verl_full` after `sft reward rlhf`. verl gets its own uv
 # environment (verl_ppo/setup_env.sh, VERL_REF, default v0.9.1) and trains PPO
 # from the same SFT/RM checkpoints with the rlhf stage's batch and lengths.
+#
+# Real training (SMOKE_PRESET=8b_real): UltraChat/UltraFeedback data, one epoch
+# of SFT and RM, then PPO on the verl backend through the pipeline's rlhf stage:
+#   SMOKE_STAGES="sft reward verl_setup rlhf" SMOKE_STAGE_TIMEOUT=4h
+# HF_UPLOAD_REPO_PREFIX=user/name uploads each stage's final model, as soon as
+# the stage passes, to the private repo <prefix>-<stage> with HF_WRITE_TOKEN
+# (scripts/upload_checkpoint.py).
 set -uo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -36,7 +43,8 @@ SMOKE_PRUNE="${SMOKE_PRUNE:-1}"
 SMOKE_STAGE_TIMEOUT="${SMOKE_STAGE_TIMEOUT:-90m}"
 SMOKE_IDLE_STOP="${SMOKE_IDLE_STOP:-30m}"
 VERL_REF="${VERL_REF:-v0.9.1}"
-VERL_DIR="${SMOKE_ROOT}/verl-${VERL_REF}"
+# Exported for the pipeline's verl rlhf backend (stages.rlhf.verl.dir is null).
+export VERL_DIR="${SMOKE_ROOT}/verl-${VERL_REF}"
 # SMOKE_RUN_ID reruns stages inside an earlier run (e.g. verl stages on its
 # SFT/RM checkpoints); new rows are appended and the report keeps the latest.
 RUN_ID="${SMOKE_RUN_ID:-$(git rev-parse --short HEAD)-${SMOKE_PRESET}}"
@@ -160,9 +168,18 @@ if [[ ${rc} -ne 0 ]]; then
 fi
 
 # --- 3. Data, configs, gated-model access -----------------------------------
-RL_PROMPTS="$(python -c "import sys; sys.path.insert(0, 'scripts'); import make_smoke_configs as m; print(m.PRESETS['${SMOKE_PRESET}']['rl_prompts'])")"
+# The preset picks synthetic examples or real Hub data (prepare_data.py --source
+# hf, which also writes data/data_stats.json with token-length percentiles).
+start=$(date +%s)
+# shellcheck disable=SC2046  # the preset's arguments are separate words
 python scripts/prepare_data.py --output-dir "${RUN_DIR}/data" \
-  --sft-examples 400 --preference-examples 400 --rl-prompts "${RL_PROMPTS}" > "${LOG_DIR}/data.log" 2>&1
+  $(python scripts/make_smoke_configs.py --preset "${SMOKE_PRESET}" --data-args) > "${LOG_DIR}/data.log" 2>&1
+rc=$?
+record data "${rc}" "${start}"
+if [[ ${rc} -ne 0 ]]; then
+  log "data preparation failed:"; tail -30 "${LOG_DIR}/data.log"
+  touch "${RUN_DIR}/DONE"; idle_then_stop
+fi
 python scripts/make_smoke_configs.py --preset "${SMOKE_PRESET}" --root "${RUN_DIR}" \
   ${SMOKE_MODEL:+--model "${SMOKE_MODEL}"}
 export PIPELINE_CONFIG="${RUN_DIR}/configs/training_pipeline.yaml"
@@ -211,6 +228,22 @@ EOF
   return "${rc}"
 }
 
+upload_stage() {  # stage
+  [[ -n "${HF_UPLOAD_REPO_PREFIX:-}" ]] || return 0
+  local final
+  case "$1" in
+    sft|reward|dpo) final="${RUN_DIR}/outputs/$1/final" ;;
+    rlhf) final="${RUN_DIR}/outputs/aligned/checkpoint-final" ;;
+    *) return 0 ;;
+  esac
+  local start
+  start=$(date +%s)
+  log "uploading $1 (${final}) to ${HF_UPLOAD_REPO_PREFIX}-$1"
+  python scripts/upload_checkpoint.py --repo "${HF_UPLOAD_REPO_PREFIX}-$1" --path "${final}" \
+    --message "${RUN_ID} $1" 2>&1 | tee -a "${LOG_DIR}/upload.log"
+  record "upload_$1" "${PIPESTATUS[0]}" "${start}"
+}
+
 monitor_pid=""
 start_monitor() {
   nvidia-smi --query-gpu=index,memory.used --format=csv,noheader,nounits -l 5 \
@@ -246,6 +279,7 @@ for stage in ${SMOKE_STAGES}; do
     log "every later stage starts from the SFT checkpoint; stopping here"
     break
   fi
+  if [[ ${rc} -eq 0 ]]; then upload_stage "${stage}"; fi
   case "${stage}" in
     sft) [[ " ${SMOKE_STAGES} " == *" sft_resume "* ]] || prune sft ;;  # resume reads them
     sft_resume) prune sft; prune sft_resume ;;

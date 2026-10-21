@@ -105,6 +105,9 @@ def prune_stage(run_dir: Path, stage: str) -> None:
     for path in output_dir.glob("checkpoint-*"):
         if path.name != FINAL_DIR[stage]:  # PPO's final model is checkpoint-final
             shutil.rmtree(path)
+    # The verl rlhf backend's actor and critic FSDP checkpoints (with optimizer
+    # state); its merged actor is already checkpoint-final.
+    shutil.rmtree(output_dir / "verl" / "checkpoints", ignore_errors=True)
     print(f"pruned {stage}: {record['sharded'] or 'no'} intermediate checkpoints")
 
 

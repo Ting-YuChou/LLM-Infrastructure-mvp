@@ -19,7 +19,7 @@ from __future__ import annotations
 import argparse
 import copy
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, Dict, List, Mapping
 
 import yaml
 
@@ -71,6 +71,46 @@ PRESETS["8b_ppo_bench"] = {
     "max_response_length": 512,
     "rl_prompts": 400,
 }
+# The first real training run: UltraChat / UltraFeedback (prepare_data.py
+# --source hf), one epoch each of SFT and RM at the stage YAMLs' own max
+# lengths (2048), then 30 PPO steps of 64 prompts on the verl backend
+# (full-parameter). Micro-batches are halved with gradient accumulation 2 so a
+# batch of 2048-token rows fits in 80 GB. verl filters the ~7% of prompts over
+# 512 tokens and holds out 16, so 2400 prompts still cover 30 x 64.
+PRESETS["8b_real"] = {
+    **PRESETS["8b"],
+    "max_length": None,
+    "steps": None,
+    "save_steps": 500,
+    "eval_steps": 500,
+    "logging_steps": 10,
+    "sft_batch": 2,
+    "reward_batch": 1,
+    "dpo_batch": 1,
+    "grad_accum": 2,
+    "ppo_batch": 16,
+    "ppo_steps": 30,
+    "max_prompt_length": 512,
+    "max_response_length": 512,
+    "rl_prompts": 2400,
+    "data": {"source": "hf", "sft_examples": 20000, "preference_examples": 20000},
+    "rlhf_backend": "verl",
+    "dataset_version": "ultrachat200k-ultrafeedback-20k-seed0",
+}
+# Smoke presets repeat prepare_data.py's synthetic examples.
+SYNTHETIC_DATA = {"source": "synthetic", "sft_examples": 400, "preference_examples": 400}
+
+
+def data_args(preset_name: str) -> List[str]:
+    """scripts/prepare_data.py arguments for a preset (besides --output-dir)."""
+    preset = PRESETS[preset_name]
+    data = {**SYNTHETIC_DATA, **preset.get("data", {})}
+    return [
+        "--source", data["source"],
+        "--sft-examples", str(data["sft_examples"]),
+        "--preference-examples", str(data["preference_examples"]),
+        "--rl-prompts", str(preset["rl_prompts"]),
+    ]
 
 
 def deep_update(base: Mapping[str, Any], updates: Mapping[str, Any]) -> Dict[str, Any]:
@@ -88,23 +128,29 @@ def _load(name: str) -> Dict[str, Any]:
 
 
 def _trainer_overrides(preset: Mapping[str, Any], batch: int, output_dir: Path) -> Dict[str, Any]:
-    """Overrides shared by the HF Trainer stages (SFT, reward, DPO)."""
+    """
+    Overrides shared by the HF Trainer stages (SFT, reward, DPO).
+
+    max_length None keeps the stage YAML's limit; steps None trains one epoch.
+    """
+    training: Dict[str, Any] = {
+        "output_dir": str(output_dir),
+        "num_train_epochs": 1,
+        "per_device_train_batch_size": batch,
+        "per_device_eval_batch_size": batch,
+        "gradient_accumulation_steps": preset.get("grad_accum", 1),
+        "logging_steps": preset.get("logging_steps", 1),
+        "eval_steps": preset.get("eval_steps", preset["save_steps"]),
+        "save_steps": preset["save_steps"],
+        "save_total_limit": 2,
+        "dataloader_num_workers": 2,
+    }
+    if preset["steps"] is not None:
+        training["max_steps"] = preset["steps"]
     return {
         "model": {"precision": "bf16", "gradient_checkpointing": True},
-        "data": {"max_length": preset["max_length"]},
-        "training": {
-            "output_dir": str(output_dir),
-            "num_train_epochs": 1,
-            "max_steps": preset["steps"],
-            "per_device_train_batch_size": batch,
-            "per_device_eval_batch_size": batch,
-            "gradient_accumulation_steps": 1,
-            "logging_steps": 1,
-            "eval_steps": preset["save_steps"],
-            "save_steps": preset["save_steps"],
-            "save_total_limit": 2,
-            "dataloader_num_workers": 2,
-        },
+        "data": {} if preset["max_length"] is None else {"max_length": preset["max_length"]},
+        "training": training,
         "distributed": {"fsdp": {"cpu_ram_efficient_loading": True}},
         "tracking": {"mlflow_enabled": False, "tensorboard_enabled": False, "wandb_enabled": False},
         "safety": {"early_stopping": {"enabled": False}},
@@ -202,13 +248,16 @@ def build_configs(preset_name: str, root: Path, model: str | None = None) -> Dic
                     "config": str(configs / "rlhf.yaml"),
                     "output_dir": str(outputs / "aligned"),
                     "prompts_file": str(data / "prompts" / "rl_prompts.json"),
+                    # verl's checkout comes from $VERL_DIR (runpod_gpu_smoke.sh exports it).
+                    "backend": preset.get("rlhf_backend", "native"),
+                    "verl": {"mode": "full", "dir": None},
                 },
             },
             "promotion": {
                 "metrics_path": str(outputs / "eval" / "training_candidate.json"),
                 "gate_config": str(CONFIG_DIR / "eval_gate.training.json"),
             },
-            "artifact": {"manifest_path": str(outputs / "model_artifact_manifest.json"), "dataset_version": "gpu-smoke"},
+            "artifact": {"manifest_path": str(outputs / "model_artifact_manifest.json"), "dataset_version": preset.get("dataset_version", "gpu-smoke")},
             "awq": {"handoff_path": str(outputs / "awq_handoff.json")},
             "serving": {"handoff_path": str(outputs / "serving_handoff.json")},
         },
@@ -235,9 +284,15 @@ def write_configs(preset_name: str, root: Path, model: str | None = None) -> Pat
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--preset", choices=sorted(PRESETS), default="1b")
-    parser.add_argument("--root", required=True, help="Smoke run directory (configs/, data/, outputs/ under it)")
+    parser.add_argument("--root", help="Smoke run directory (configs/, data/, outputs/ under it)")
     parser.add_argument("--model", help="Override the preset's base model")
+    parser.add_argument("--data-args", action="store_true", help="Print the preset's prepare_data.py arguments and exit")
     args = parser.parse_args()
+    if args.data_args:
+        print(" ".join(data_args(args.preset)))
+        return
+    if not args.root:
+        parser.error("--root is required")
     print(write_configs(args.preset, Path(args.root), args.model))
 
 

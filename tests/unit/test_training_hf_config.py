@@ -260,6 +260,41 @@ def test_ppo_bench_preset_sets_the_rollout_shape_verl_is_compared_on(tmp_path):
     assert make_smoke_configs.PRESETS["8b_ppo_bench"]["rl_prompts"] >= 6 * 64 + 16
 
 
+def test_real_training_preset_trains_one_epoch_on_hub_data_and_runs_ppo_on_verl(tmp_path):
+    sys.path.insert(0, str(CONFIG_DIR.parent / "scripts"))
+    sys.path.insert(0, str(CONFIG_DIR.parent / "src"))
+    import make_smoke_configs
+    from training.verl_backend import bench_env, rlhf_backend
+
+    configs = make_smoke_configs.build_configs("8b_real", tmp_path)
+
+    for name, base in (("sft.yaml", "sft_config.yaml"), ("reward.yaml", "reward_config.yaml")):
+        raw_config = configs[name]
+        kwargs = hf_config.build_training_arguments_kwargs(
+            raw_config, output_dir="/tmp/out", has_eval=True, world_size=4
+        )
+        assert kwargs["fsdp"] == "full_shard auto_wrap", name
+        assert kwargs["num_train_epochs"] == 1 and kwargs.get("max_steps", -1) == -1, name
+        assert kwargs["gradient_accumulation_steps"] == 2, name
+        # The stage YAML's own max length (2048), not the smoke presets' 512.
+        base_config = yaml.safe_load((CONFIG_DIR / base).read_text())
+        assert raw_config["data"]["max_length"] == base_config["data"]["max_length"] == 2048, name
+    assert configs["sft.yaml"]["data"]["train_file"] == str(tmp_path / "data" / "sft" / "train.json")
+
+    rlhf_stage = configs["training_pipeline.yaml"]["stages"]["rlhf"]
+    assert rlhf_backend(rlhf_stage) == "verl"
+    assert configs["training_pipeline.yaml"]["artifact"]["dataset_version"].startswith("ultrachat")
+    sizes = bench_env(configs["rlhf.yaml"], nproc=4)
+    assert (sizes["BATCH"], sizes["STEPS"], sizes["PROMPT_LEN"]) == ("64", "30", "512")
+    # verl drops prompts over 512 tokens (7.1% of the UltraFeedback prompts)
+    # and holds out 16; the rest must still cover every step.
+    prompts = make_smoke_configs.PRESETS["8b_real"]["rl_prompts"]
+    assert int(prompts * (1 - 0.071)) - 16 >= 30 * 64
+
+    assert make_smoke_configs.data_args("8b_real")[:2] == ["--source", "hf"]
+    assert make_smoke_configs.data_args("8b")[:2] == ["--source", "synthetic"]
+
+
 class _FakePlugin:
     def __init__(self):
         self.calls = []

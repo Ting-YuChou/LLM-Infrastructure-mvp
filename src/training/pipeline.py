@@ -561,7 +561,10 @@ class TrainingPipeline:
             # verl is one process that starts its own Ray workers on every GPU.
             if int(os.environ.get("WORLD_SIZE", 1)) > 1:
                 raise ValueError(VERL_UNDER_TORCHRUN)
-            return self._run_rlhf_verl(sft_checkpoint, reward_checkpoint)
+            result = self._run_rlhf_verl(sft_checkpoint, reward_checkpoint)
+            # Same record the torchrun stage runner leaves for the native backend.
+            write_stage_result(self.stage_result_path("rlhf"), result)
+            return result
         return self._execute_gpu_stage("rlhf", lambda: self._run_rlhf(sft_checkpoint, reward_checkpoint))
 
     def _run_rlhf_verl(self, sft_checkpoint: str, reward_checkpoint: str) -> TrainingRunResult:
