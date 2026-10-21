@@ -45,6 +45,8 @@ case "${MODE}" in
       # flag on the shared batch, so the (non-LoRA) critic then calls
       # disable_adapter and fails. The legacy trainer builds fresh metadata per call.
       trainer.use_v1=False
+      # Gather the base weights one layer at a time when syncing them to vLLM.
+      actor_rollout_ref.rollout.layered_summon=True
     )
     ;;
   full)
@@ -53,8 +55,6 @@ case "${MODE}" in
       actor_rollout_ref.actor.fsdp_config.param_offload=True
       actor_rollout_ref.actor.fsdp_config.optimizer_offload=True
       actor_rollout_ref.ref.fsdp_config.param_offload=True
-      critic.fsdp.param_offload=True
-      critic.fsdp.optimizer_offload=True
     )
     ;;
   *)
@@ -64,6 +64,10 @@ case "${MODE}" in
 esac
 
 OVERRIDES=(
+  # The critic is a full-parameter 8B model in both modes (fp32 Adam state); without
+  # offload it left too little room for the LoRA actor's weight sync to vLLM.
+  critic.fsdp.param_offload=True
+  critic.fsdp.optimizer_offload=True
   # Data: chat-message prompts; verl applies the SFT tokenizer's chat template.
   data.train_files="${DATA_DIR}/train.parquet"
   data.val_files="${DATA_DIR}/val.parquet"

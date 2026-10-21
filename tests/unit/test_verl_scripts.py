@@ -102,6 +102,9 @@ def test_run_ppo_lora_matches_rlhf_config_adapter():
     assert overrides["actor_rollout_ref.rollout.load_format"] == "safetensors"
     # V1 trainer bug: the critic inherits the reference pass's no_lora_adapter flag.
     assert overrides["trainer.use_v1"] == "False"
+    assert overrides["actor_rollout_ref.rollout.layered_summon"] == "True"
+    # The critic trains all parameters in both modes, so it is offloaded in both.
+    assert overrides["critic.fsdp.optimizer_offload"] == "True"
 
 
 def test_run_ppo_full_trains_every_parameter_with_offload():
