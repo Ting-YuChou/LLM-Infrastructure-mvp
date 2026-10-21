@@ -108,6 +108,27 @@ def test_sft_labels_cover_completion_and_eot_and_drop_truncated_prompts():
     assert mask == [1] * length + [0] * (24 - length)
 
 
+def test_verl_reward_model_input_matches_reward_training_tokens(chat_tokenizer):
+    """verl_ppo scores rollouts with our RM through verl's reward loop; it must see training's tokens."""
+    prompt, response = "answer question", "good answer"
+    prompt_ids, response_ids = chat_format.encode_prompt_and_completion(chat_tokenizer, prompt, response)
+
+    # verl v0.9.1 reward_loop._preprocess_reward_inputs: decode the rollout, drop
+    # the eos text, re-apply the RM tokenizer's template, strip the leading BOS
+    # text; the vLLM classify server then tokenizes and adds BOS back.
+    rollout = chat_tokenizer.decode(response_ids).replace(chat_tokenizer.eos_token, "")
+    rm_prompt = chat_tokenizer.apply_chat_template(
+        [{"role": "user", "content": prompt}, {"role": "assistant", "content": rollout}],
+        add_generation_prompt=False,
+        tokenize=False,
+    )
+    bos = chat_tokenizer.bos_token
+    assert rm_prompt.startswith(bos)
+    served = [chat_tokenizer.bos_token_id] + chat_format.encode(chat_tokenizer, rm_prompt[len(bos):])
+
+    assert served == prompt_ids + response_ids
+
+
 def test_reward_pairs_end_on_eot_and_drop_overlong():
     pytest.importorskip("datasets")
     from training import reward_trainer

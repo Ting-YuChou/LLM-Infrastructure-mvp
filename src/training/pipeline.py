@@ -28,9 +28,11 @@ import yaml
 try:
     from .distributed import is_main_process
     from .results import TrainingRunResult
+    from .verl_backend import rlhf_backend
 except ImportError:  # pragma: no cover - supports direct script execution
     from distributed import is_main_process  # type: ignore[no-redef]
     from results import TrainingRunResult  # type: ignore[no-redef]
+    from verl_backend import rlhf_backend  # type: ignore[no-redef]
 
 
 logger = logging.getLogger(__name__)
@@ -50,6 +52,10 @@ PIPELINE_STAGE_ORDER = (
 GPU_STAGES = ("sft", "reward", "dpo", "rlhf")
 LAUNCHERS = ("auto", "torchrun", "inprocess")
 SRC_DIR = Path(__file__).resolve().parent.parent
+VERL_UNDER_TORCHRUN = (
+    "stages.rlhf.backend=verl runs from scripts/train_pipeline.py as one process "
+    "(verl starts its own Ray workers), not under torchrun"
+)
 
 STAGE_ALIASES = {
     # DPO is an alternative to reward + PPO, so "all" leaves it out.
@@ -107,6 +113,7 @@ class TrainingPipeline:
         if self.launcher not in LAUNCHERS:
             raise ValueError(f"Unknown launcher {self.launcher!r}; expected one of {', '.join(LAUNCHERS)}")
         self.nproc_per_node = nproc_per_node or distributed.get("nproc_per_node", "auto")
+        self.rlhf_backend = rlhf_backend(self._stage_config("rlhf"))
         self.artifacts = self._resolve_artifacts()
 
     def build_execution_plan(self) -> Dict[str, Any]:
@@ -162,6 +169,7 @@ class TrainingPipeline:
                 "storage_uri": self._artifact_config().get("storage_uri", ""),
             },
             "awq_handoff": self._awq_config(),
+            "rlhf_backend": self.rlhf_backend,
             "distributed": {
                 # "auto" is resolved from the visible GPUs only when stages run.
                 "launcher": self.launcher,
@@ -236,9 +244,7 @@ class TrainingPipeline:
             rlhf_result = self._resume_or_run(
                 "rlhf",
                 self.artifacts.rlhf_output_dir / "checkpoint-final",
-                lambda: self._execute_gpu_stage(
-                    "rlhf", lambda: self._run_rlhf(sft_checkpoint, reward_checkpoint)
-                ),
+                lambda: self._run_rlhf_stage(sft_checkpoint, reward_checkpoint),
             )
             stage_results["rlhf"] = rlhf_result
             results["stages"]["rlhf"] = result_to_dict(rlhf_result)
@@ -439,6 +445,8 @@ class TrainingPipeline:
         if stage == "dpo":
             return self._run_dpo(sft_checkpoint)
         if stage == "rlhf":
+            if self.rlhf_backend == "verl":
+                raise ValueError(VERL_UNDER_TORCHRUN)
             return self._run_rlhf(sft_checkpoint, reward_checkpoint)
         raise ValueError(f"Not a training stage: {stage}")
 
@@ -548,6 +556,52 @@ class TrainingPipeline:
         config.skip_promotion = True
         return DPOModelTrainer(config).train()
 
+    def _run_rlhf_stage(self, sft_checkpoint: str, reward_checkpoint: str) -> TrainingRunResult:
+        if self.rlhf_backend == "verl":
+            # verl is one process that starts its own Ray workers on every GPU.
+            if int(os.environ.get("WORLD_SIZE", 1)) > 1:
+                raise ValueError(VERL_UNDER_TORCHRUN)
+            return self._run_rlhf_verl(sft_checkpoint, reward_checkpoint)
+        return self._execute_gpu_stage("rlhf", lambda: self._run_rlhf(sft_checkpoint, reward_checkpoint))
+
+    def _run_rlhf_verl(self, sft_checkpoint: str, reward_checkpoint: str) -> TrainingRunResult:
+        from .mlflow_lifecycle import PromotionConfig
+        from .verl_backend import run_verl_rlhf, verl_settings
+
+        config_path = self._stage_config_path("rlhf")
+        raw_config = update_nested(
+            self._load_yaml(config_path),
+            {
+                "model": {
+                    "policy": {"name": sft_checkpoint},
+                    "reference": {"name": sft_checkpoint},
+                    "reward": {"name": reward_checkpoint},
+                },
+                "training": {"output_dir": str(self.artifacts.rlhf_output_dir)},
+            },
+        )
+        return run_verl_rlhf(
+            sft_checkpoint=sft_checkpoint,
+            reward_checkpoint=reward_checkpoint,
+            prompts_file=self._rlhf_prompts_file(raw_config),
+            output_dir=self.artifacts.rlhf_output_dir,
+            raw_config=raw_config,
+            config_path=str(config_path),
+            settings=verl_settings(self._stage_config("rlhf"), self.resolve_nproc("rlhf")),
+            promotion=PromotionConfig(
+                metrics_path=str(self.artifacts.metrics_path),
+                baseline_metrics_path=self.baseline_metrics,
+                gate_config_path=str(self.artifacts.gate_config_path),
+                skip_promotion=self.skip_promotion,
+            ),
+        )
+
+    def _rlhf_prompts_file(self, raw_config: Mapping[str, Any]) -> str:
+        prompts_file = self._stage_config("rlhf").get("prompts_file") or raw_config.get("data", {}).get("prompt_file")
+        if not prompts_file:
+            raise ValueError("RLHF prompts_file is required")
+        return str(prompts_file)
+
     def _run_rlhf(self, sft_checkpoint: str, reward_checkpoint: str) -> TrainingRunResult:
         from .rlhf_trainer import RLHFTrainer
 
@@ -572,13 +626,7 @@ class TrainingPipeline:
         config.gate_config_path = str(self.artifacts.gate_config_path)
         config.skip_promotion = self.skip_promotion
 
-        prompts_file = (
-            self._stage_config("rlhf").get("prompts_file")
-            or config.raw_config.get("data", {}).get("prompt_file")
-        )
-        if not prompts_file:
-            raise ValueError("RLHF prompts_file is required")
-        return RLHFTrainer(config).train(str(prompts_file))
+        return RLHFTrainer(config).train(self._rlhf_prompts_file(config.raw_config))
 
     def _write_training_metrics_seed(
         self,
@@ -588,25 +636,17 @@ class TrainingPipeline:
         aligned_checkpoint: Optional[str] = None,
     ) -> Dict[str, Any]:
         metrics = load_json_if_exists(self.artifacts.metrics_path)
-        metrics.update(
-            {
-                "sft_eval_loss": float_metric(
-                    sft_metrics,
-                    ("eval_loss", "train_loss", "sft_eval_loss"),
-                    default=0.0,
-                ),
-                "reward_accuracy": float_metric(
-                    reward_metrics,
-                    ("reward_accuracy", "eval_reward_accuracy"),
-                    default=0.0,
-                ),
-                "reward_margin": float_metric(
-                    reward_metrics,
-                    ("reward_margin", "eval_reward_margin"),
-                    default=0.0,
-                ),
-            }
+        seeds = (
+            ("sft_eval_loss", sft_metrics, ("eval_loss", "train_loss", "sft_eval_loss")),
+            ("reward_accuracy", reward_metrics, ("reward_accuracy", "eval_reward_accuracy")),
+            ("reward_margin", reward_metrics, ("reward_margin", "eval_reward_margin")),
         )
+        for key, stage_metrics, sources in seeds:
+            # A stage not run in this process keeps what an earlier run recorded.
+            if stage_metrics:
+                metrics[key] = float_metric(stage_metrics, sources, default=0.0)
+            else:
+                metrics.setdefault(key, 0.0)
         if rlhf_metrics:
             metrics.update(
                 {

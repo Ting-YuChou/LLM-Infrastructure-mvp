@@ -162,6 +162,13 @@ def test_ppo_lora_ddp_keeps_ranks_in_sync_and_merges_final_model(tmp_path):
     assert (output_dir / "checkpoint-final-adapter" / "adapter_config.json").exists()
     assert (output_dir / "checkpoint-1" / "optimizer.pt").exists()
     assert rank0["merge_max_diff"] < 1e-4
+    # Per-phase timings are reduced across ranks, so both report the same numbers.
+    timing = rank0["timing"]
+    for key in ("timing_gen_s_mean", "timing_score_s_mean", "timing_update_s_mean", "timing_step_s_mean"):
+        assert timing[key] > 0
+    assert timing["timing_step_s_mean"] >= timing["timing_gen_s_mean"]
+    assert timing["gen_tokens_per_s"] > 0
+    assert rank1["timing"] == pytest.approx(timing)
 
 
 def test_dpo_ddp_merges_sharded_reference_pass(tmp_path):

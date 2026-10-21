@@ -34,13 +34,14 @@ DPO_LN2_TOLERANCE = 0.015
 
 
 def read_timings(run_dir: Path) -> List[Dict[str, Any]]:
-    rows = []
+    """One row per stage; a stage rerun into the same run (SMOKE_RUN_ID) keeps its latest row."""
+    rows: Dict[str, Dict[str, Any]] = {}
     path = run_dir / "timings.tsv"
     if path.exists():
         for line in path.read_text().splitlines():
             stage, code, start, end = line.split("\t")
-            rows.append({"stage": stage, "exit_code": int(code), "seconds": int(end) - int(start)})
-    return rows
+            rows[stage] = {"stage": stage, "exit_code": int(code), "seconds": int(end) - int(start)}
+    return list(rows.values())
 
 
 def stage_output_dirs(run_dir: Path) -> Dict[str, Path]:
@@ -203,6 +204,41 @@ def check_stage(run_dir: Path, timing: Dict[str, Any], output_dir: Path) -> Dict
     return report
 
 
+PPO_COMPARISON_KEYS = (
+    "timing_gen_s_mean",
+    "timing_score_s_mean",
+    "timing_update_s_mean",
+    "timing_step_s_mean",
+    "gen_tokens_per_s",
+    "response_length_mean",
+    "timing_steps",
+)
+
+
+def verl_stage_report(run_dir: Path, timing: Dict[str, Any]) -> Dict[str, Any]:
+    """verl_lora / verl_full: merge verl_ppo/verl_report.py's JSON into the stage row."""
+    path = run_dir / "logs" / f"{timing['stage']}.json"
+    report = json.loads(path.read_text()) if path.exists() else {"passed": False, "error": f"missing {path}"}
+    return {
+        **timing,
+        **report,
+        "peak_gpu_memory_mib": peak_memory_mib(run_dir, timing["stage"]),
+        "passed": timing["exit_code"] == 0 and bool(report.get("passed")),
+    }
+
+
+def ppo_comparison(stages: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """Per-step PPO timings of our trainer (rlhf) next to the verl runs, same prompts/lengths."""
+    table = {}
+    for stage in stages:
+        if stage["stage"] in ("rlhf", "verl_lora", "verl_full"):
+            source = stage.get("metrics", {}) if stage["stage"] == "rlhf" else stage
+            row = {key: source.get(key) for key in PPO_COMPARISON_KEYS}
+            row["peak_gpu_memory_mib"] = max((stage.get("peak_gpu_memory_mib") or {}).values(), default=None)
+            table[stage["stage"]] = row
+    return table
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--run-dir", required=True)
@@ -217,6 +253,9 @@ def main() -> int:
     output_dirs = stage_output_dirs(run_dir)
     stages = []
     for timing in read_timings(run_dir):
+        if timing["stage"] in ("verl_lora", "verl_full"):
+            stages.append(verl_stage_report(run_dir, timing))
+            continue
         if timing["stage"] not in output_dirs:
             stages.append({**timing, "passed": timing["exit_code"] == 0})
             continue
@@ -235,6 +274,9 @@ def main() -> int:
         "stages": stages,
         "passed": bool(stages) and all(stage["passed"] for stage in stages),
     }
+    comparison = ppo_comparison(stages)
+    if len(comparison) > 1:
+        summary["ppo_comparison"] = comparison
     (run_dir / "summary.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps(summary, indent=2))
     return 0 if summary["passed"] else 1
