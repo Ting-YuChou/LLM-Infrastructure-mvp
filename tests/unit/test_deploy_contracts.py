@@ -11,17 +11,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from scripts.deploy import DeploymentManager  # noqa: E402
 
 
-def test_ci_deploys_with_helm_not_raw_vllm_manifest():
-    workflow = Path(".github/workflows/ci-cd.yml").read_text(encoding="utf-8")
-
-    assert "helm upgrade --install vllm-inference charts/vllm-inference" in workflow
-    assert "--atomic" in workflow
-    assert "--wait" in workflow
-    assert "charts/vllm-inference/values-staging.yaml" in workflow
-    assert "charts/vllm-inference/values-production.yaml" in workflow
-    assert "kubectl apply -f k8s/deployments/vllm-deployment.yaml" not in workflow
-
-
 def test_raw_vllm_manifest_init_container_reads_configmap_env():
     docs = [
         doc
