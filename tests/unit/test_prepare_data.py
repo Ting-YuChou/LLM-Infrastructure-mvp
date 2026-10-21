@@ -94,9 +94,11 @@ def test_build_hf_datasets_writes_trainer_files_and_keeps_ppo_prompts_out_of_rm_
     assert set(pairs[0]) == {"id", "prompt", "chosen", "rejected"}
     assert len({row["prompt"] for row in pairs}) == 10
     prompts = json.loads((tmp_path / "prompts" / "rl_prompts.json").read_text())
-    # The tie was skipped as a pair, so PPO may use its prompt; RM training prompts never.
-    assert not {row["prompt"] for row in prompts} & {row["prompt"] for row in pairs}
-    assert "prompt 99" in {row["prompt"] for row in prompts}
+    # PPO prompts come from the rows after those the pair pass examined: no RM
+    # training prompt, and not the tie the pair pass skipped either.
+    rm_prompts = {row["prompt"] for row in pairs}
+    assert rm_prompts == {f"prompt {i}" for i in range(10)}
+    assert [row["prompt"] for row in prompts] == [f"prompt {i}" for i in range(10, 18)]
     val = json.loads((tmp_path / "preferences" / "val.json").read_text())
     assert all(row["prompt"].startswith("prompt 2") for row in val)
 

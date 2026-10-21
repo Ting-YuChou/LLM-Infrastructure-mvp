@@ -249,8 +249,14 @@ def load_hf_split(name: str, split: str, seed: int) -> Iterable[Mapping[str, Any
 
     # Both datasets store split <s> as data/<s>-*.parquet. Naming the files
     # downloads only this split; otherwise datasets fetches and prepares every
-    # split (1.6 GB for UltraChat instead of 0.7 GB for train_sft).
-    return load_dataset(name, data_files={split: f"data/{split}-*.parquet"}, split=split).shuffle(seed=seed)
+    # split (1.6 GB for UltraChat instead of 0.7 GB for train_sft). The dataset
+    # card still lists every split, so datasets 2.16's split check must be off.
+    return load_dataset(
+        name,
+        data_files={split: f"data/{split}-*.parquet"},
+        split=split,
+        verification_mode="no_checks",
+    ).shuffle(seed=seed)
 
 
 def sft_conversation(row: Mapping[str, Any]) -> Optional[List[Dict[str, str]]]:
@@ -309,22 +315,25 @@ def take(
     """
     The first `count` rows that convert, one per prompt and none whose prompt is in `exclude`.
 
-    Returns the converted rows (with an "id"), their prompt keys and how many rows were skipped.
+    Returns the converted rows (with an "id"), the prompt keys of every row
+    examined (taken or skipped) and how many rows were skipped.
     """
     taken: List[Dict[str, Any]] = []
-    keys: Set[str] = set()
+    taken_keys: Set[str] = set()
+    examined: Set[str] = set()
     skipped = 0
     for row in rows:
         if len(taken) >= count:
             break
         key = _prompt_key(row)
-        converted = convert(row) if key not in keys and key not in exclude else None
+        examined.add(key)
+        converted = convert(row) if key not in taken_keys and key not in exclude else None
         if converted is None:
             skipped += 1
             continue
-        keys.add(key)
+        taken_keys.add(key)
         taken.append({"id": str(row.get("prompt_id") or len(taken)), **converted})
-    return taken, keys, skipped
+    return taken, examined, skipped
 
 
 def _write_rows(path: Path, rows: Sequence[Mapping[str, Any]]) -> str:
@@ -357,15 +366,17 @@ def build_hf_datasets(
     sources["sft"] = {"dataset": SFT_DATASET, "splits": list(SFT_SPLITS), "skipped": sft_skipped + sft_val_skipped}
 
     # The preference split is read twice in the same seeded order: RM/DPO pairs
-    # first, then PPO prompts the reward model was not trained on.
-    pref_train, pref_keys, pref_skipped = take(
+    # first, then PPO prompts from the rows after the ones the pair pass
+    # examined. Excluding only the taken pairs would hand PPO the prompts the
+    # pair pass skipped (mostly score ties) instead of a random sample.
+    pref_train, pref_examined, pref_skipped = take(
         load_split(PREFERENCE_DATASET, PREFERENCE_SPLITS[0], seed), preference_pair, preference_examples
     )
     pref_val, _, pref_val_skipped = take(
         load_split(PREFERENCE_DATASET, PREFERENCE_SPLITS[1], seed), preference_pair, val_count(preference_examples)
     )
     prompts, _, prompt_skipped = take(
-        load_split(PREFERENCE_DATASET, PREFERENCE_SPLITS[0], seed), rl_prompt, rl_prompts, exclude=pref_keys
+        load_split(PREFERENCE_DATASET, PREFERENCE_SPLITS[0], seed), rl_prompt, rl_prompts, exclude=pref_examined
     )
     _write_rows(out / "preferences" / "train.json", pref_train)
     _write_rows(out / "preferences" / "val.json", pref_val)
@@ -378,7 +389,7 @@ def build_hf_datasets(
     sources["prompts"] = {
         "dataset": PREFERENCE_DATASET,
         "splits": [PREFERENCE_SPLITS[0]],
-        # Includes the prompts held back because the preference set uses them.
+        # Includes the rows the preference pass examined.
         "skipped": prompt_skipped,
     }
 
