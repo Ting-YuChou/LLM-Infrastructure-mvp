@@ -33,6 +33,13 @@ stages:
     config: "config/rlhf_config.yaml"
     output_dir: "outputs/training_pipeline/models/aligned"
     prompts_file: "/workspace/data/prompts/rl_prompts.json"
+    # native: src/training/rlhf_trainer.py (LoRA + DDP, HF generate) under torchrun.
+    # verl: verl_ppo/run_ppo.sh (Ray + vLLM rollouts + FSDP) in verl's own env from
+    # verl_ppo/setup_env.sh; batch, lengths and steps come from rlhf_config.yaml.
+    backend: native
+    verl:
+      mode: full  # full | lora (full was faster on 8B, see verl_ppo/README.md)
+      dir: null   # verl checkout from setup_env.sh; defaults to $VERL_DIR
 
 promotion:
   metrics_path: "outputs/training_pipeline/eval/training_candidate.json"

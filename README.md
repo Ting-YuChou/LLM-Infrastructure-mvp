@@ -138,8 +138,9 @@ pip install -r requirements.txt
 # Optional: Flash Attention (for faster training)
 pip install flash-attn --no-build-isolation
 
-# Optional: For RLHF training
-pip install git+https://github.com/volcengine/verl.git
+# Optional: PPO with verl. It needs transformers 5.x, so it gets its own uv
+# environment; never pip install it here.
+VERL_DIR=/workspace/verl verl_ppo/setup_env.sh
 ```
 
 4. **Prepare data**
@@ -290,8 +291,10 @@ python -m src.training.rlhf_trainer \
 
 `verl_ppo/` runs the same PPO stage with [verl](https://github.com/volcengine/verl)
 (vLLM rollouts, FSDP actor/critic, LoRA or full-parameter) in its own uv
-environment, from the SFT and reward checkpoints above; see
-`verl_ppo/README.md` for the setup and the GPU speed comparison.
+environment, from the SFT and reward checkpoints above. Set
+`stages.rlhf.backend: verl` in `config/training_pipeline.yaml` to use it as the
+pipeline's rlhf stage; see `verl_ppo/README.md` for the setup and the GPU speed
+comparison.
 
 **Complete Features**:
 - ✅ Full PPO algorithm implementation

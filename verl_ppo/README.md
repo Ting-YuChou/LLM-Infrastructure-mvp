@@ -25,6 +25,29 @@ MODE=lora SFT_CKPT=models/sft/final RM_CKPT=models/reward/final DATA_DIR=data/ve
 
 The host needs a CUDA 13 driver (cu130 torch).
 
+## As the pipeline's rlhf stage
+
+`src/training/verl_backend.py` runs `run_ppo.sh` as the pipeline's rlhf stage:
+
+```yaml
+# config/training_pipeline.yaml
+stages:
+  rlhf:
+    backend: verl            # native (default) | verl
+    verl: {mode: full, dir: /workspace/verl}   # dir defaults to $VERL_DIR
+```
+
+`scripts/launch_training.sh rlhf` (or `train_pipeline.py --stages ...`) then
+runs verl as one process; Ray spreads it over the stage's GPUs, so it never
+runs under torchrun. Prompts per step (`per_device_batch_size` x GPUs), prompt
+and response lengths and the step count come from `config/rlhf_config.yaml`,
+as for the native backend. Afterwards the stage leaves what the native backend
+does: `models/aligned/checkpoint-final` (verl's merged actor plus the SFT
+tokenizer and generation config), `rlhf_mean_reward` / `rlhf_mean_kl` and the
+timing metrics in the promotion metrics file, and an MLflow registration
+tagged `rlhf_backend=verl`, so training_eval, the artifact manifest and the
+AWQ/serving handoffs need no changes.
+
 ## How our checkpoints plug in
 
 | verl role | Checkpoint | Notes |
