@@ -25,7 +25,7 @@ from transformers import (
 import numpy as np
 
 try:
-    from .results import TrainingRunResult
+    from .results import TrainingRunResult, merge_metrics_file
     from .chat_format import (
         encode,
         ensure_chat_tokenizer,
@@ -59,7 +59,7 @@ try:
     )
     from .mlflow_lifecycle import MLflowTrainingLifecycle, PromotionConfig
 except ImportError:  # pragma: no cover - supports direct script execution
-    from results import TrainingRunResult  # type: ignore[no-redef]
+    from results import TrainingRunResult, merge_metrics_file  # type: ignore[no-redef]
     from chat_format import (  # type: ignore[no-redef]
         encode,
         ensure_chat_tokenizer,
@@ -522,20 +522,7 @@ class RLHFTrainer:
         """Merge final RLHF metrics into the pipeline promotion metrics file."""
         if not self.config.promotion_metrics_path:
             return final_metrics
-
-        metrics_path = self.config.promotion_metrics_path
-        metrics: Dict[str, Any] = {}
-        if os.path.exists(metrics_path):
-            with open(metrics_path, "r") as f:
-                metrics = json.load(f)
-
-        metrics.update(final_metrics)
-        metrics["artifact_ready"] = 1.0 if os.path.isdir(checkpoint_path) else 0.0
-
-        os.makedirs(os.path.dirname(metrics_path) or ".", exist_ok=True)
-        with open(metrics_path, "w") as f:
-            json.dump(metrics, f, indent=2, sort_keys=True)
-        return metrics
+        return merge_metrics_file(self.config.promotion_metrics_path, checkpoint_path, final_metrics)
 
     @property
     def logit_temperature(self) -> float:

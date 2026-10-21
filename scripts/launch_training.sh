@@ -5,6 +5,7 @@
 #   scripts/launch_training.sh sft              # one stage under torchrun
 #   scripts/launch_training.sh sft,reward       # several stages via the pipeline
 #   scripts/launch_training.sh dpo              # DPO from the SFT checkpoint
+#   scripts/launch_training.sh rlhf             # PPO (stages.rlhf.backend: native | verl)
 #
 # Env: HF_TOKEN (required for gated Llama 3), NPROC_PER_NODE (default: all
 # GPUs), PIPELINE_CONFIG, and any extra train_pipeline.py flags after the stage.
@@ -37,7 +38,9 @@ export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
 echo "Stages: ${STAGES} | GPUs: ${NPROC} | config: ${PIPELINE_CONFIG}"
 
 case "${STAGES}" in
-  sft|reward|dpo|rlhf)
+  # rlhf goes through the pipeline, which starts torchrun for the native backend
+  # and runs verl (stages.rlhf.backend: verl) as one process.
+  sft|reward|dpo)
     exec torchrun --standalone --nproc_per_node "${NPROC}" \
       -m training.stage_runner --pipeline-config "${PIPELINE_CONFIG}" --stage "${STAGES}" "$@"
     ;;
