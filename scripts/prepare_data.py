@@ -1,14 +1,61 @@
 #!/usr/bin/env python3
 """
 Data Preparation Script
-Creates sample datasets for SFT and RLHF training
+
+Writes the SFT, preference and RL prompt files the training configs read:
+
+    <output-dir>/sft/{train,val}.json            SFT (prompt/completion or messages)
+    <output-dir>/preferences/{train,val}.json    reward model and DPO
+    <output-dir>/prompts/rl_prompts.json         PPO
+
+--source synthetic (the default) repeats a few hand-written examples, for smoke
+runs. --source hf converts real data from the Hugging Face Hub, the datasets
+Zephyr was trained on:
+
+- SFT: HuggingFaceH4/ultrachat_200k, multi-turn conversations as {"messages": [...]}.
+- Reward model / DPO: HuggingFaceH4/ultrafeedback_binarized, single-turn pairs
+  with a strictly higher chosen score.
+- PPO: UltraFeedback prompts that are not in the preference training set.
+
+Validation rows come from each dataset's test split. With --source hf the
+script also tokenizes everything with the chat template (--tokenizer, default
+the Llama 3 8B base) and writes data_stats.json: token length percentiles and
+how many rows exceed each stage's max_length, using the same rules as the
+trainers (SFT cuts after the last reply that fits; RM/DPO drop the pair).
+
+    python scripts/prepare_data.py --source hf --output-dir data \
+        --sft-examples 20000 --preference-examples 20000 --rl-prompts 2000
 """
 
 import json
 import os
 import argparse
+import sys
 from pathlib import Path
-from typing import List, Dict
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
+
+import yaml
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT_DIR / "src"))
+
+from training.chat_format import (  # noqa: E402
+    encode,
+    encode_conversation,
+    encode_prompt_and_completion,
+    ensure_chat_tokenizer,
+    format_completion,
+    format_prompt,
+    validate_messages,
+)
+
+SFT_DATASET = "HuggingFaceH4/ultrachat_200k"
+SFT_SPLITS = ("train_sft", "test_sft")
+PREFERENCE_DATASET = "HuggingFaceH4/ultrafeedback_binarized"
+PREFERENCE_SPLITS = ("train_prefs", "test_prefs")
+DEFAULT_TOKENIZER = "meta-llama/Meta-Llama-3-8B"
+# Token lengths reported in data_stats.json besides each stage's own limit.
+REPORTED_LIMITS = (512, 1024, 2048, 4096)
 
 
 def create_sft_dataset(output_dir: str, num_examples: int = 100) -> str:
@@ -191,56 +238,375 @@ def create_rl_prompts(output_dir: str, num_prompts: int = 50) -> str:
     return output_file
 
 
+# ============================================================================
+# --source hf
+# ============================================================================
+
+
+def load_hf_split(name: str, split: str, seed: int) -> Iterable[Mapping[str, Any]]:
+    """One split of a Hub dataset in a seeded random order."""
+    from datasets import load_dataset
+
+    # Both datasets store split <s> as data/<s>-*.parquet. Naming the files
+    # downloads only this split; otherwise datasets fetches and prepares every
+    # split (1.6 GB for UltraChat instead of 0.7 GB for train_sft). The dataset
+    # card still lists every split, so datasets 2.16's split check must be off.
+    return load_dataset(
+        name,
+        data_files={split: f"data/{split}-*.parquet"},
+        split=split,
+        verification_mode="no_checks",
+    ).shuffle(seed=seed)
+
+
+def sft_conversation(row: Mapping[str, Any]) -> Optional[List[Dict[str, str]]]:
+    """An UltraChat row as a conversation ending with an assistant reply, or None if unusable."""
+    messages = [
+        {"role": str(message["role"]), "content": str(message["content"]).strip()}
+        for message in row.get("messages") or []
+    ]
+    while messages and messages[-1]["role"] != "assistant":
+        messages.pop()
+    if not messages or not all(message["content"] for message in messages):
+        return None
+    try:
+        return validate_messages(messages, last_role="assistant")
+    except ValueError:
+        return None
+
+
+def preference_pair(row: Mapping[str, Any]) -> Optional[Dict[str, str]]:
+    """
+    An UltraFeedback row as {"prompt", "chosen", "rejected"}, or None.
+
+    Rows are skipped when they are not a single user turn plus one reply on each
+    side, when a reply is empty, when both replies are the same text, or when
+    the chosen score is not strictly higher (a tie carries no preference).
+    """
+    chosen, rejected = list(row.get("chosen") or []), list(row.get("rejected") or [])
+    if len(chosen) != 2 or len(rejected) != 2 or chosen[0] != rejected[0]:
+        return None
+    if [chosen[0]["role"], chosen[1]["role"], rejected[1]["role"]] != ["user", "assistant", "assistant"]:
+        return None
+    prompt, good, bad = (str(text).strip() for text in (chosen[0]["content"], chosen[1]["content"], rejected[1]["content"]))
+    if not (prompt and good and bad) or good == bad:
+        return None
+    score_chosen, score_rejected = row.get("score_chosen"), row.get("score_rejected")
+    if score_chosen is not None and score_rejected is not None and score_chosen <= score_rejected:
+        return None
+    return {"prompt": prompt, "chosen": good, "rejected": bad}
+
+
+def rl_prompt(row: Mapping[str, Any]) -> Optional[Dict[str, str]]:
+    prompt = str(row.get("prompt") or "").strip()
+    return {"prompt": prompt} if prompt else None
+
+
+def _prompt_key(row: Mapping[str, Any]) -> str:
+    return " ".join(str(row.get("prompt") or "").split())
+
+
+def take(
+    rows: Iterable[Mapping[str, Any]],
+    convert: Callable[[Mapping[str, Any]], Optional[Dict[str, Any]]],
+    count: int,
+    exclude: Set[str] = frozenset(),
+) -> Tuple[List[Dict[str, Any]], Set[str], int]:
+    """
+    The first `count` rows that convert, one per prompt and none whose prompt is in `exclude`.
+
+    Returns the converted rows (with an "id"), the prompt keys of every row
+    examined (taken or skipped) and how many rows were skipped.
+    """
+    taken: List[Dict[str, Any]] = []
+    taken_keys: Set[str] = set()
+    examined: Set[str] = set()
+    skipped = 0
+    for row in rows:
+        if len(taken) >= count:
+            break
+        key = _prompt_key(row)
+        examined.add(key)
+        converted = convert(row) if key not in taken_keys and key not in exclude else None
+        if converted is None:
+            skipped += 1
+            continue
+        taken_keys.add(key)
+        taken.append({"id": str(row.get("prompt_id") or len(taken)), **converted})
+    return taken, examined, skipped
+
+
+def _write_rows(path: Path, rows: Sequence[Mapping[str, Any]]) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(list(rows), ensure_ascii=False), encoding="utf-8")
+    print(f"✓ {path}: {len(rows)} rows")
+    return str(path)
+
+
+def build_hf_datasets(
+    output_dir: str,
+    sft_examples: int,
+    preference_examples: int,
+    rl_prompts: int,
+    seed: int = 0,
+    val_fraction: float = 0.05,
+    load_split: Callable[[str, str, int], Iterable[Mapping[str, Any]]] = load_hf_split,
+) -> Dict[str, Any]:
+    """Convert UltraChat and UltraFeedback into the training files; returns a summary."""
+    out = Path(output_dir)
+
+    def val_count(count: int) -> int:
+        return max(10, int(count * val_fraction))
+
+    sources: Dict[str, Any] = {}
+    sft_train, _, sft_skipped = take(load_split(SFT_DATASET, SFT_SPLITS[0], seed), _sft_row, sft_examples)
+    sft_val, _, sft_val_skipped = take(load_split(SFT_DATASET, SFT_SPLITS[1], seed), _sft_row, val_count(sft_examples))
+    _write_rows(out / "sft" / "train.json", sft_train)
+    _write_rows(out / "sft" / "val.json", sft_val)
+    sources["sft"] = {"dataset": SFT_DATASET, "splits": list(SFT_SPLITS), "skipped": sft_skipped + sft_val_skipped}
+
+    # The preference split is read twice in the same seeded order: RM/DPO pairs
+    # first, then PPO prompts from the rows after the ones the pair pass
+    # examined. Excluding only the taken pairs would hand PPO the prompts the
+    # pair pass skipped (mostly score ties) instead of a random sample.
+    pref_train, pref_examined, pref_skipped = take(
+        load_split(PREFERENCE_DATASET, PREFERENCE_SPLITS[0], seed), preference_pair, preference_examples
+    )
+    pref_val, _, pref_val_skipped = take(
+        load_split(PREFERENCE_DATASET, PREFERENCE_SPLITS[1], seed), preference_pair, val_count(preference_examples)
+    )
+    prompts, _, prompt_skipped = take(
+        load_split(PREFERENCE_DATASET, PREFERENCE_SPLITS[0], seed), rl_prompt, rl_prompts, exclude=pref_examined
+    )
+    _write_rows(out / "preferences" / "train.json", pref_train)
+    _write_rows(out / "preferences" / "val.json", pref_val)
+    _write_rows(out / "prompts" / "rl_prompts.json", prompts)
+    sources["preferences"] = {
+        "dataset": PREFERENCE_DATASET,
+        "splits": list(PREFERENCE_SPLITS),
+        "skipped": pref_skipped + pref_val_skipped,
+    }
+    sources["prompts"] = {
+        "dataset": PREFERENCE_DATASET,
+        "splits": [PREFERENCE_SPLITS[0]],
+        # Includes the rows the preference pass examined.
+        "skipped": prompt_skipped,
+    }
+
+    counts = {
+        "sft_train": len(sft_train),
+        "sft_val": len(sft_val),
+        "preference_train": len(pref_train),
+        "preference_val": len(pref_val),
+        "rl_prompts": len(prompts),
+    }
+    for name, wanted in (("sft_train", sft_examples), ("preference_train", preference_examples), ("rl_prompts", rl_prompts)):
+        if counts[name] < wanted:
+            print(f"! {name}: only {counts[name]} usable rows, {wanted} requested")
+    return {"seed": seed, "sources": sources, "counts": counts}
+
+
+def _sft_row(row: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+    messages = sft_conversation(row)
+    return {"messages": messages} if messages else None
+
+
+def length_summary(lengths: Sequence[int], limits: Iterable[int]) -> Dict[str, Any]:
+    """Percentiles of `lengths` and the fraction of rows longer than each limit."""
+    ordered = sorted(lengths)
+    if not ordered:
+        return {"count": 0}
+
+    def percentile(fraction: float) -> int:
+        return ordered[min(len(ordered) - 1, int(fraction * len(ordered)))]
+
+    return {
+        "count": len(ordered),
+        "mean": round(sum(ordered) / len(ordered), 1),
+        "p50": percentile(0.5),
+        "p90": percentile(0.9),
+        "p99": percentile(0.99),
+        "max": ordered[-1],
+        "over": {str(limit): round(sum(length > limit for length in ordered) / len(ordered), 4) for limit in sorted(set(limits))},
+    }
+
+
+def _stage_limits(config_dir: Path) -> Dict[str, int]:
+    def data(name: str) -> Dict[str, Any]:
+        return yaml.safe_load((config_dir / name).read_text())["data"]
+
+    return {
+        "sft_max_length": int(data("sft_config.yaml")["max_length"]),
+        "reward_max_length": int(data("reward_config.yaml")["max_length"]),
+        "dpo_max_length": int(data("dpo_config.yaml")["max_length"]),
+        "rl_max_prompt_length": int(data("rlhf_config.yaml")["max_prompt_length"]),
+    }
+
+
+def data_stats(output_dir: str, tokenizer: Any, limits: Mapping[str, int]) -> Dict[str, Any]:
+    """Chat-templated token lengths of the written files, measured the way the trainers measure them."""
+    out = Path(output_dir)
+    tokenizer = ensure_chat_tokenizer(tokenizer)
+
+    def read(path: str) -> List[Dict[str, Any]]:
+        return json.loads((out / path).read_text(encoding="utf-8"))
+
+    sft_max = limits["sft_max_length"]
+    sft_lengths, turns, cut_inside_first_reply = [], [], 0
+    for row in read("sft/train.json"):
+        encoded = encode_conversation(tokenizer, row["messages"])
+        sft_lengths.append(len(encoded.input_ids))
+        turns.append(len(encoded.turn_ends))
+        if encoded.turn_ends[0] > sft_max:
+            cut_inside_first_reply += 1
+
+    pair_lengths, prompt_lengths = [], []
+    for row in read("preferences/train.json"):
+        prompt_ids, chosen_ids = encode_prompt_and_completion(tokenizer, row["prompt"], row["chosen"])
+        rejected_ids = encode(tokenizer, format_completion(row["rejected"]))
+        pair_lengths.append(len(prompt_ids) + max(len(chosen_ids), len(rejected_ids)))
+    for row in read("prompts/rl_prompts.json"):
+        prompt_lengths.append(len(encode(tokenizer, format_prompt(tokenizer, row["prompt"]))))
+
+    sft = length_summary(sft_lengths, (*REPORTED_LIMITS, sft_max))
+    sft["turns"] = length_summary(turns, ())
+    sft["cut_inside_first_reply"] = round(cut_inside_first_reply / max(1, len(sft_lengths)), 4)
+    return {
+        "limits": dict(limits),
+        "sft_conversation_tokens": sft,
+        "preference_pair_tokens": length_summary(
+            pair_lengths, (*REPORTED_LIMITS, limits["reward_max_length"], limits["dpo_max_length"])
+        ),
+        "rl_prompt_tokens": length_summary(prompt_lengths, (*REPORTED_LIMITS, limits["rl_max_prompt_length"])),
+    }
+
+
+def print_stats(stats: Mapping[str, Any]) -> None:
+    limits = stats["limits"]
+    rows = (
+        ("SFT conversation", "sft_conversation_tokens", "sft_max_length",
+         "longer ones are cut after the last reply that fits"),
+        ("RM/DPO pair (prompt + longer reply)", "preference_pair_tokens", "reward_max_length",
+         "longer pairs are dropped"),
+        ("PPO prompt", "rl_prompt_tokens", "rl_max_prompt_length", "longer prompts are skipped"),
+    )
+    print("\nChat-templated token lengths:")
+    for title, key, limit_key, rule in rows:
+        summary = stats[key]
+        if not summary.get("count"):
+            print(f"  {title}: no rows")
+            continue
+        over = ", ".join(f">{limit}: {fraction:.1%}" for limit, fraction in summary["over"].items())
+        print(
+            f"  {title}: n={summary['count']} p50={summary['p50']} p90={summary['p90']} "
+            f"p99={summary['p99']} max={summary['max']}"
+        )
+        print(f"    {over}  ({limit_key}={limits[limit_key]}; {rule})")
+    sft = stats["sft_conversation_tokens"]
+    if sft.get("count"):
+        print(
+            f"  SFT assistant turns: mean={sft['turns']['mean']} max={sft['turns']['max']}; "
+            f"first reply alone over sft_max_length: {sft['cut_inside_first_reply']:.1%}"
+        )
+
+
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(
         description="Prepare datasets for LLM training",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    
+
+    parser.add_argument(
+        "--source",
+        choices=("synthetic", "hf"),
+        default="synthetic",
+        help="synthetic: repeated hand-written examples; hf: UltraChat and UltraFeedback from the Hub"
+    )
+
     parser.add_argument(
         "--output-dir",
         type=str,
         default="./data",
         help="Base output directory for datasets"
     )
-    
+
     parser.add_argument(
         "--sft-examples",
         type=int,
         default=100,
         help="Number of SFT examples to generate"
     )
-    
+
     parser.add_argument(
         "--preference-examples",
         type=int,
         default=100,
         help="Number of preference examples to generate"
     )
-    
+
     parser.add_argument(
         "--rl-prompts",
         type=int,
         default=50,
         help="Number of RL prompts to generate"
     )
-    
+
+    parser.add_argument("--seed", type=int, default=0, help="--source hf: shuffle seed")
+    parser.add_argument(
+        "--val-fraction",
+        type=float,
+        default=0.05,
+        help="--source hf: validation rows per training row (at least 10)"
+    )
+    parser.add_argument(
+        "--tokenizer",
+        default=DEFAULT_TOKENIZER,
+        help="--source hf: tokenizer for data_stats.json (the model you will train)"
+    )
+    parser.add_argument("--skip-stats", action="store_true", help="--source hf: do not tokenize for data_stats.json")
+    parser.add_argument(
+        "--config-dir",
+        default=str(ROOT_DIR / "config"),
+        help="--source hf: stage YAMLs whose max lengths data_stats.json checks"
+    )
+
     args = parser.parse_args()
-    
+
     print("=" * 80)
     print("Data Preparation for LLM Training")
     print("=" * 80)
-    
+
+    if args.source == "hf":
+        summary = build_hf_datasets(
+            args.output_dir,
+            args.sft_examples,
+            args.preference_examples,
+            args.rl_prompts,
+            seed=args.seed,
+            val_fraction=args.val_fraction,
+        )
+        if not args.skip_stats:
+            from transformers import AutoTokenizer
+
+            tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
+            summary["tokenizer"] = args.tokenizer
+            summary["stats"] = data_stats(args.output_dir, tokenizer, _stage_limits(Path(args.config_dir)))
+            print_stats(summary["stats"])
+        stats_path = Path(args.output_dir) / "data_stats.json"
+        stats_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        print(f"\n✓ {stats_path}")
+        return
+
     # Create datasets
     sft_dir = os.path.join(args.output_dir, "sft")
     pref_dir = os.path.join(args.output_dir, "preferences")
     prompt_dir = os.path.join(args.output_dir, "prompts")
-    
+
     create_sft_dataset(sft_dir, args.sft_examples)
     create_preference_dataset(pref_dir, args.preference_examples)
     create_rl_prompts(prompt_dir, args.rl_prompts)
-    
+
     print("\n" + "=" * 80)
     print("Data preparation complete!")
     print("=" * 80)

@@ -152,6 +152,23 @@ python scripts/prepare_data.py \
     --rl-prompts 200
 ```
 
+That writes repeated hand-written examples, enough for smoke runs. For real
+data, `--source hf` converts the Zephyr datasets from the Hugging Face Hub:
+multi-turn UltraChat 200k conversations for SFT, UltraFeedback binarized pairs
+for the reward model and DPO, and UltraFeedback prompts the reward model is not
+trained on for PPO. It also writes `data_stats.json` with chat-templated token
+lengths and the share of rows over each stage's `max_length` (the tokenizer is
+gated, so set `HF_TOKEN`):
+
+```bash
+python scripts/prepare_data.py --source hf --output-dir ./data \
+    --sft-examples 20000 --preference-examples 20000 --rl-prompts 2000
+```
+
+SFT rows are either `{"prompt", "completion"}` or `{"messages": [...]}`
+(optional system message, then alternating user/assistant turns ending with
+assistant); every assistant reply is trained on.
+
 ## 🎓 Training Pipeline
 
 ### Aggregated SFT -> Reward -> RLHF Pipeline

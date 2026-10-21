@@ -157,14 +157,57 @@ def test_sft_trains_and_evaluates_with_real_trainer(real_training, tiny_llama_di
     assert Path(result.checkpoint_path, weights).exists()
 
 
+def test_sft_trains_on_multi_turn_conversations(real_training, tiny_llama_dir, tmp_path):
+    sft_trainer = real_training["sft_trainer"]
+    _use_cpu(sft_trainer, real_training["transformers"].TrainingArguments)
+    rows = [
+        {"messages": [
+            {"role": "system", "content": "be brief"},
+            {"role": "user", "content": "explain tests"},
+            {"role": "assistant", "content": "they catch regressions"},
+            {"role": "user", "content": "and more"},
+            {"role": "assistant", "content": "they document code"},
+        ]},
+        {"messages": [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+        ]},
+    ] * 2
+    raw = _raw_config(
+        "sft_config.yaml",
+        tiny_llama_dir,
+        tmp_path / "sft",
+        _write_json(tmp_path / "train.json", rows),
+        _write_json(tmp_path / "val.json", rows[:2]),
+    )
+    raw["data"]["max_length"] = 128
+    config = sft_trainer.SFTConfig(
+        model_name=raw["model"]["name"],
+        train_file=raw["data"]["train_file"],
+        val_file=raw["data"]["val_file"],
+        output_dir=raw["training"]["output_dir"],
+        max_length=128,
+        num_train_epochs=1,
+        per_device_train_batch_size=2,
+        learning_rate=1e-3,
+        raw_config=raw,
+    )
+
+    result = sft_trainer.SFTTrainer(config).train()
+
+    assert result.metrics["eval_loss"] > 0
+    assert Path(result.checkpoint_path, "model.safetensors").exists()
+
+
 def test_reward_model_trains_and_reports_pairwise_metrics(real_training, tiny_llama_dir, tmp_path):
     reward_trainer = real_training["reward_trainer"]
     _use_cpu(reward_trainer, real_training["transformers"].TrainingArguments)
 
+    # Mixed lengths, so PaddingCollator pads chosen and rejected within each batch.
     pairs = [
-        {"prompt": "answer question", "chosen": "good answer", "rejected": "bad answer"}
-        for _ in range(4)
-    ]
+        {"prompt": "answer question", "chosen": "good answer", "rejected": "bad answer"},
+        {"prompt": "answer question", "chosen": "good", "rejected": "bad answer here"},
+    ] * 2
     raw = _raw_config(
         "reward_config.yaml",
         tiny_llama_dir,
@@ -208,9 +251,9 @@ def tiny_sft_dir(real_training, tiny_llama_dir, tmp_path):
 
 def _dpo_config(dpo_trainer, model_dir, tmp_path, learning_rate):
     pairs = [
-        {"prompt": "answer question", "chosen": "good answer", "rejected": "bad answer"}
-        for _ in range(4)
-    ]
+        {"prompt": "answer question", "chosen": "good answer", "rejected": "bad answer"},
+        {"prompt": "answer question", "chosen": "good answer", "rejected": "bad"},
+    ] * 2
     raw = _raw_config(
         "dpo_config.yaml",
         model_dir,

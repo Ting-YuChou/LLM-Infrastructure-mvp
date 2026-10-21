@@ -26,6 +26,7 @@ from transformers import (
 try:
     from .results import TrainingRunResult
     from .chat_format import (
+        PaddingCollator,
         encode,
         encode_prompt_and_completion,
         ensure_chat_tokenizer,
@@ -59,6 +60,7 @@ try:
 except ImportError:  # pragma: no cover - supports direct script execution
     from results import TrainingRunResult  # type: ignore[no-redef]
     from chat_format import (  # type: ignore[no-redef]
+        PaddingCollator,
         encode,
         encode_prompt_and_completion,
         ensure_chat_tokenizer,
@@ -168,6 +170,8 @@ class RewardDataPreprocessor:
             },
             ...
         ]
+        "prompt" can also be a conversation ([system,] user, assistant, ...
+        ending with user) that both responses continue.
 
         Args:
             data_file: Path to data file
@@ -206,17 +210,18 @@ class RewardDataPreprocessor:
         Pairs where either side exceeds max_length are dropped rather than
         truncated: right truncation cuts the response tail the reward should
         judge, and a long prompt can leave chosen and rejected identical.
+        Rows are not padded; PaddingCollator pads each batch to its longest row.
 
         The model will be trained so that:
         reward(chosen) > reward(rejected)
 
         Args:
-            examples: Batch of examples with 'prompt', 'chosen', 'rejected'
+            examples: Batch of examples with 'prompt' (text, or a conversation
+                ending with a user turn), 'chosen' and 'rejected'
 
         Returns:
             Tokenized comparison pairs (possibly fewer rows than the input)
         """
-        pad_token_id = self.tokenizer.pad_token_id
         batch: Dict[str, List] = {
             'chosen_input_ids': [],
             'chosen_attention_mask': [],
@@ -241,13 +246,10 @@ class RewardDataPreprocessor:
 
             for side, response_ids in (('chosen', chosen_ids), ('rejected', rejected_ids)):
                 ids = prompt_ids + response_ids
-                padding = self.max_length - len(ids)
-                batch[f'{side}_input_ids'].append(ids + [pad_token_id] * padding)
-                batch[f'{side}_attention_mask'].append([1] * len(ids) + [0] * padding)
+                batch[f'{side}_input_ids'].append(ids)
+                batch[f'{side}_attention_mask'].append([1] * len(ids))
                 if self.include_labels:
-                    batch[f'{side}_labels'].append(
-                        [-100] * len(prompt_ids) + response_ids + [-100] * padding
-                    )
+                    batch[f'{side}_labels'].append([-100] * len(prompt_ids) + response_ids)
 
         if dropped:
             logger.warning(
@@ -527,6 +529,7 @@ class RewardModelTrainer:
                 args=training_args,
                 train_dataset=train_dataset,
                 eval_dataset=val_dataset,
+                data_collator=PaddingCollator(tokenizer.pad_token_id, pad_to_multiple_of=8),
                 compute_metrics=compute_reward_metrics,
                 callbacks=callbacks,
             )

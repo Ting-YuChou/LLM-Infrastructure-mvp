@@ -98,14 +98,112 @@ def test_sft_labels_cover_completion_and_eot_and_drop_truncated_prompts():
 
     assert len(batch["input_ids"]) == 1  # the second prompt fills max_length
     input_ids, labels, mask = batch["input_ids"][0], batch["labels"][0], batch["attention_mask"][0]
-    length = len(prompt_ids) + len(completion_ids)
-    assert input_ids[:length] == prompt_ids + completion_ids
-    assert labels[:len(prompt_ids)] == [-100] * len(prompt_ids)
-    assert labels[len(prompt_ids):length] == completion_ids
-    assert labels[length - 1] == _token_id(tokenizer, "<|eot_id|>")
-    assert input_ids[length:] == [tokenizer.pad_token_id] * (24 - length)
-    assert labels[length:] == [-100] * (24 - length)
-    assert mask == [1] * length + [0] * (24 - length)
+    # Rows are unpadded; PaddingCollator pads each batch.
+    assert input_ids == prompt_ids + completion_ids
+    assert labels == [-100] * len(prompt_ids) + completion_ids
+    assert labels[-1] == _token_id(tokenizer, "<|eot_id|>")
+    assert mask == [1] * len(input_ids)
+
+
+CONVERSATION = [
+    {"role": "system", "content": "be brief"},
+    {"role": "user", "content": "explain tests"},
+    {"role": "assistant", "content": " they catch regressions "},
+    {"role": "user", "content": "and more"},
+    {"role": "assistant", "content": "they document code"},
+]
+
+
+def test_conversation_ids_match_the_full_template_and_label_every_reply(chat_tokenizer):
+    encoded = chat_format.encode_conversation(chat_tokenizer, CONVERSATION)
+
+    full = chat_tokenizer.apply_chat_template(CONVERSATION, tokenize=False)
+    assert encoded.input_ids == chat_format.encode(chat_tokenizer, full)
+    assert encoded.input_ids.count(chat_tokenizer.bos_token_id) == 1
+    # Exactly the replies are labelled, as the same ids RM and PPO use for a response.
+    replies = [
+        chat_format.encode(chat_tokenizer, chat_format.format_completion(text))
+        for text in (" they catch regressions ", "they document code")
+    ]
+    assert [label for label in encoded.labels if label != -100] == replies[0] + replies[1]
+    assert encoded.turn_ends[-1] == len(encoded.input_ids)
+    first_reply_end = encoded.turn_ends[0]
+    assert encoded.labels[first_reply_end - len(replies[0]):first_reply_end] == replies[0]
+
+
+def test_single_turn_conversation_matches_prompt_and_completion(chat_tokenizer):
+    prompt_ids, completion_ids = chat_format.encode_prompt_and_completion(chat_tokenizer, "explain tests", "ok")
+
+    encoded = chat_format.encode_conversation(
+        chat_tokenizer,
+        [{"role": "user", "content": "explain tests"}, {"role": "assistant", "content": "ok"}],
+    )
+
+    assert encoded.input_ids == prompt_ids + completion_ids
+    assert encoded.labels == [-100] * len(prompt_ids) + completion_ids
+
+
+@pytest.mark.parametrize(
+    "roles",
+    [
+        ["assistant", "user"],
+        ["user", "user", "assistant"],
+        ["user", "system", "assistant"],
+        ["user"],
+        [],
+    ],
+)
+def test_conversations_with_bad_role_order_are_rejected(chat_tokenizer, roles):
+    messages = [{"role": role, "content": "x"} for role in roles]
+
+    with pytest.raises(ValueError, match="roles"):
+        chat_format.encode_conversation(chat_tokenizer, messages)
+
+
+def test_prompt_can_be_a_conversation_ending_with_user(chat_tokenizer):
+    context = CONVERSATION[:4]
+
+    assert chat_format.format_prompt(chat_tokenizer, context) == chat_tokenizer.apply_chat_template(
+        context, tokenize=False, add_generation_prompt=True
+    )
+    with pytest.raises(ValueError, match="roles"):
+        chat_format.format_prompt(chat_tokenizer, CONVERSATION)
+
+
+def test_sft_cuts_long_conversations_after_the_last_reply_that_fits():
+    pytest.importorskip("datasets")
+    from training import sft_trainer
+
+    tokenizer = chat_format.ensure_chat_tokenizer(build_tiny_tokenizer())
+    encoded = chat_format.encode_conversation(tokenizer, CONVERSATION)
+    first_end = encoded.turn_ends[0]
+    preprocessor = sft_trainer.SFTDataPreprocessor(tokenizer, max_length=len(encoded.input_ids) - 1)
+
+    batch = preprocessor.tokenize_function({"messages": [CONVERSATION]})
+
+    assert batch["input_ids"] == [encoded.input_ids[:first_end]]
+    assert batch["labels"] == [encoded.labels[:first_end]]
+
+
+def test_padding_collator_pads_every_sequence_to_one_length():
+    collate = chat_format.PaddingCollator(pad_token_id=7, pad_to_multiple_of=4)
+
+    batch = collate(
+        [
+            {"chosen_input_ids": [1, 2, 3], "chosen_attention_mask": [1, 1, 1], "chosen_labels": [-100, 2, 3],
+             "rejected_input_ids": [1, 2], "rejected_attention_mask": [1, 1], "rejected_labels": [-100, 2],
+             "ref_chosen_logps": -1.5},
+            {"chosen_input_ids": [1, 2, 3, 4, 5], "chosen_attention_mask": [1] * 5, "chosen_labels": [-100] + [2] * 4,
+             "rejected_input_ids": [1], "rejected_attention_mask": [1], "rejected_labels": [-100],
+             "ref_chosen_logps": -2.0},
+        ]
+    )
+
+    assert {tuple(value.shape) for key, value in batch.items() if key != "ref_chosen_logps"} == {(2, 8)}
+    assert batch["chosen_input_ids"][0].tolist() == [1, 2, 3] + [7] * 5
+    assert batch["chosen_attention_mask"][0].tolist() == [1, 1, 1] + [0] * 5
+    assert batch["rejected_labels"][1].tolist() == [-100] * 8
+    assert batch["ref_chosen_logps"].tolist() == [-1.5, -2.0]
 
 
 def test_verl_reward_model_input_matches_reward_training_tokens(chat_tokenizer):
@@ -148,9 +246,28 @@ def test_reward_pairs_end_on_eot_and_drop_overlong():
     eot = _token_id(tokenizer, "<|eot_id|>")
     for side in ("chosen", "rejected"):
         ids, mask = batch[f"{side}_input_ids"][0], batch[f"{side}_attention_mask"][0]
-        last = sum(mask) - 1
-        assert ids[last] == eot
-        assert all(token == tokenizer.pad_token_id for token in ids[last + 1:])
+        # Unpadded: the pair ends on <|eot_id|>; PaddingCollator pads each batch.
+        assert ids[-1] == eot
+        assert mask == [1] * len(ids)
+
+
+def test_reward_pairs_accept_a_conversation_prompt():
+    pytest.importorskip("datasets")
+    from training import reward_trainer
+
+    preprocessor = reward_trainer.RewardDataPreprocessor(build_tiny_tokenizer(), max_length=128)
+    tokenizer = preprocessor.tokenizer
+    context = CONVERSATION[:4]
+
+    batch = preprocessor.create_comparison_pairs(
+        {"prompt": [context], "chosen": ["good answer"], "rejected": ["bad"]}
+    )
+
+    prompt_ids = chat_format.encode(tokenizer, chat_format.format_prompt(tokenizer, context))
+    assert batch["chosen_input_ids"][0] == prompt_ids + chat_format.encode(
+        tokenizer, chat_format.format_completion("good answer")
+    )
+    assert batch["rejected_input_ids"][0][:len(prompt_ids)] == prompt_ids
 
 
 def test_collate_prompts_left_pads():

@@ -37,8 +37,12 @@ data:
   val_file: "/workspace/data/preferences/val.json"
   
   # Maximum tokens for chat-templated prompt + response (incl. <|eot_id|>).
-  # Longer pairs are dropped, not truncated.
-  max_length: 1024
+  # Longer pairs are dropped, not truncated. On UltraFeedback 1024 dropped
+  # 5.3% of pairs and 2048 drops 0.1% (scripts/prepare_data.py --source hf
+  # writes these numbers to data_stats.json). Batches are padded to their
+  # longest pair, so the higher limit only costs on the long pairs. PPO itself
+  # scores at most max_prompt_length + max_response_length (512 + 512) tokens.
+  max_length: 2048
   
   # Expected JSON format:
   # [
@@ -48,6 +52,8 @@ data:
   #     "rejected": "less preferred response"
   #   }
   # ]
+  # "prompt" can also be a conversation ([system,] user, assistant, ...
+  # ending with user) that both responses continue.
   
   # Data preprocessing
   num_proc: 8

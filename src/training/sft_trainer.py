@@ -17,14 +17,14 @@ from transformers import (
     EarlyStoppingCallback,
     TrainingArguments,
     Trainer,
-    default_data_collator,
 )
 
 try:
     from .results import TrainingRunResult
     from .chat_format import (
+        PaddingCollator,
         apply_generation_config,
-        encode_prompt_and_completion,
+        encode_conversation,
         ensure_chat_tokenizer,
         format_prompt,
         resize_embeddings_if_needed,
@@ -57,8 +57,9 @@ try:
 except ImportError:  # pragma: no cover - supports direct script execution
     from results import TrainingRunResult  # type: ignore[no-redef]
     from chat_format import (  # type: ignore[no-redef]
+        PaddingCollator,
         apply_generation_config,
-        encode_prompt_and_completion,
+        encode_conversation,
         ensure_chat_tokenizer,
         format_prompt,
         resize_embeddings_if_needed,
@@ -155,9 +156,10 @@ class SFTDataPreprocessor:
         """
         Load dataset from JSON/JSONL file
 
-        Expected format:
+        Expected format, one of:
         [
             {"prompt": "instruction", "completion": "response"},
+            {"messages": [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}, ...]},
             ...
         ]
 
@@ -193,11 +195,16 @@ class SFTDataPreprocessor:
 
     def tokenize_function(self, examples: Dict[str, List]) -> Dict[str, List]:
         """
-        Tokenize prompt/completion pairs with the chat template.
+        Tokenize conversations with the chat template, without padding.
 
-        Prompt tokens and padding get label -100. Examples whose completion is
-        cut off entirely by max_length are dropped: an all -100 row has no
-        tokens to average over and turns the loss into NaN.
+        Rows are either {"messages": [...]} conversations ([system,] user,
+        assistant, ... ending with assistant) or single-turn prompt/completion
+        pairs. Every assistant reply and its <|eot_id|> is labelled; the other
+        turns get -100. A conversation longer than max_length is cut after the
+        last assistant turn that fits, or at max_length when even the first
+        reply does not fit. Rows left with no labelled tokens are dropped: an
+        all -100 row has no tokens to average over and turns the loss into NaN.
+        PaddingCollator pads each batch.
 
         Args:
             examples: Batch of examples
@@ -205,32 +212,31 @@ class SFTDataPreprocessor:
         Returns:
             Tokenized batch (possibly with fewer rows than the input)
         """
-        pad_token_id = self.tokenizer.pad_token_id
         batch: Dict[str, List] = {"input_ids": [], "attention_mask": [], "labels": []}
-        dropped = 0
+        dropped = truncated = 0
 
-        for prompt, completion in zip(examples.get('prompt', []), examples.get('completion', [])):
-            prompt_ids, completion_ids = encode_prompt_and_completion(
-                self.tokenizer,
-                str(prompt or ""),
-                str(completion or ""),
-            )
-            input_ids = (prompt_ids + completion_ids)[:self.max_length]
-            labels = ([-100] * len(prompt_ids) + completion_ids)[:self.max_length]
+        for messages in conversations(examples):
+            encoded = encode_conversation(self.tokenizer, messages)
+            input_ids, labels = encoded.input_ids, encoded.labels
+            if len(input_ids) > self.max_length:
+                truncated += 1
+                fitting = [end for end in encoded.turn_ends if end <= self.max_length]
+                cut = fitting[-1] if fitting else self.max_length
+                input_ids, labels = input_ids[:cut], labels[:cut]
             if all(label == -100 for label in labels):
                 dropped += 1
                 continue
 
-            padding = self.max_length - len(input_ids)
-            batch["input_ids"].append(input_ids + [pad_token_id] * padding)
-            batch["attention_mask"].append([1] * len(input_ids) + [0] * padding)
-            batch["labels"].append(labels + [-100] * padding)
+            batch["input_ids"].append(input_ids)
+            batch["attention_mask"].append([1] * len(input_ids))
+            batch["labels"].append(labels)
 
-        if dropped:
+        if truncated:
             logger.warning(
-                "Dropped %d SFT examples whose prompt fills max_length=%d",
-                dropped,
+                "Cut %d SFT examples to max_length=%d (%d of them dropped: their prompt fills it)",
+                truncated,
                 self.max_length,
+                dropped,
             )
         return batch
 
@@ -272,6 +278,19 @@ class SFTDataPreprocessor:
             )
 
         return train_dataset, val_dataset
+
+
+def conversations(examples: Dict[str, List]) -> List[List[Dict[str, Any]]]:
+    """The batch's rows as message lists: its messages column, else prompt/completion pairs."""
+    if "messages" in examples:
+        return list(examples["messages"])
+    return [
+        [
+            {"role": "user", "content": str(prompt or "")},
+            {"role": "assistant", "content": str(completion or "")},
+        ]
+        for prompt, completion in zip(examples.get("prompt", []), examples.get("completion", []))
+    ]
 
 
 def limit_debug_samples(
@@ -451,7 +470,7 @@ class SFTTrainer:
                 args=training_args,
                 train_dataset=train_dataset,
                 eval_dataset=val_dataset,
-                data_collator=default_data_collator,
+                data_collator=PaddingCollator(tokenizer.pad_token_id, pad_to_multiple_of=8),
                 callbacks=callbacks,
             )
             keep_fsdp_buffers_in_fp32(trainer)
