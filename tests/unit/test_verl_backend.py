@@ -126,6 +126,9 @@ def test_pipeline_rlhf_stage_runs_verl_and_produces_a_native_shaped_result(tmp_p
     final = out / "aligned" / "checkpoint-final"
     rlhf = results["stages"]["rlhf"]
     assert rlhf["checkpoint_path"] == str(final)
+    stage_result = json.loads((out / "aligned" / "stage_result.json").read_text())
+    assert stage_result["checkpoint_path"] == str(final)
+    assert stage_result["metrics"]["rlhf_mean_reward"] == pytest.approx(-1.0)
     assert (final / "tokenizer.json").read_text() == '{"sft": true}'
     assert (final / "generation_config.json").exists()
     metrics = rlhf["metrics"]
