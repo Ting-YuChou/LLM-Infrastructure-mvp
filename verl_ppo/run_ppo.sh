@@ -41,6 +41,10 @@ case "${MODE}" in
       actor_rollout_ref.model.target_modules=all-linear
       actor_rollout_ref.rollout.load_format=safetensors
       actor_rollout_ref.actor.optim.lr=1e-5
+      # verl v0.9.1's V1 trainer leaves the reference pass's no_lora_adapter
+      # flag on the shared batch, so the (non-LoRA) critic then calls
+      # disable_adapter and fails. The legacy trainer builds fresh metadata per call.
+      trainer.use_v1=False
     )
     ;;
   full)
