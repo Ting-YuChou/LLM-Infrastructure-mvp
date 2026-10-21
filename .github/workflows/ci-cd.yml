@@ -286,15 +286,53 @@ jobs:
   # ==========================================================================
   # Docker Build
   # ==========================================================================
+  # The CUDA images take 15-35 min each. A pull request rebuilds only the images
+  # whose Dockerfile or docker/requirements.<image>.txt changed (base copies no
+  # repo files; the others copy src/ and config/, which cannot break the build).
+  # Pushes and manual runs build all of them, as the deploy jobs expect.
+  docker-changes:
+    name: Select Docker Images
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.select.outputs.images }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Select images to build
+        id: select
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          images=(base serving gateway mock-serving)
+          if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+            changed="$(git diff --name-only "${BASE_SHA}" "${GITHUB_SHA}")"
+            selected=()
+            for image in "${images[@]}"; do
+              if grep -qxE "docker/(Dockerfile\.${image}|requirements\.${image}\.txt)" <<< "${changed}"; then
+                selected+=("${image}")
+              fi
+            done
+            images=("${selected[@]}")
+          fi
+          json="$(printf '%s\n' "${images[@]}" | python3 -c 'import json, sys; print(json.dumps([l for l in sys.stdin.read().split() if l]))')"
+          echo "Images to build: ${json}"
+          echo "images=${json}" >> "${GITHUB_OUTPUT}"
+
   build-docker:
     name: Build Docker Images
     runs-on: ubuntu-latest
-    needs: [lint, test, training-cpu]
+    needs: [lint, test, training-cpu, docker-changes]
+    if: needs.docker-changes.outputs.images != '[]'
     
     strategy:
       fail-fast: false
       matrix:
-        image: [base, serving, gateway, mock-serving]
+        image: ${{ fromJSON(needs.docker-changes.outputs.images) }}
     
     steps:
       - name: Checkout code
@@ -340,6 +378,9 @@ jobs:
   security:
     name: Security Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write  # upload-sarif; without it main fails "Resource not accessible"
     
     steps:
       - name: Checkout code
@@ -354,7 +395,7 @@ jobs:
           output: 'trivy-results.sarif'
       
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
 
