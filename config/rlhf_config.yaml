@@ -136,6 +136,15 @@ algorithm:
 # Generation Configuration
 # ============================================================================
 generation:
+  # Who samples the rollouts: "hf" (policy.generate()) or "vllm", a vLLM engine
+  # colocated on each rank's GPU that gets base + LoRA delta copied into its
+  # LoRA-targeted layers before every rollout (needs lora.enabled without
+  # modules_to_save, and the vllm package; see training/vllm_rollout.py).
+  engine: "hf"
+  vllm:
+    gpu_memory_utilization: 0.3  # of the GPU, for vLLM's weights and KV cache
+    sleep_between_rollouts: true  # free that memory during the PPO update
+
   # Sampling parameters during RL rollouts
   temperature: 0.7
   top_p: 0.9
@@ -188,8 +197,12 @@ training:
   # Gradient accumulation
   gradient_accumulation_steps: 8
   
-  # Evaluation and logging
+  # Evaluation and logging. Reward, KL, response length and EOT rate are
+  # logged every step; the PPO losses every logging_steps; num_samples decoded
+  # rollouts every sample_steps (also appended to <output_dir>/samples.jsonl, 0 = off).
   logging_steps: 10
+  sample_steps: 10
+  num_samples: 2
   eval_steps: 100
   save_steps: 500
   

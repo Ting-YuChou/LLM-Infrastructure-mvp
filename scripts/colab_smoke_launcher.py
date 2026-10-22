@@ -24,6 +24,8 @@ import time
 from pathlib import Path
 
 TARBALL = Path(os.environ.get("COLAB_REPO_TARBALL", "/content/repo.tgz"))
+# KEY=VALUE lines (HF tokens) the driver uploads instead of `colab exec --env`.
+SECRETS = Path("/content/.smoke_secrets")
 REPO_DIR = Path("/content/repo")
 VENV_DIR = Path("/content/venv")
 SMOKE_ROOT = Path(os.environ.setdefault("SMOKE_ROOT", "/content/smoke"))
@@ -50,6 +52,17 @@ def unpack_repo() -> None:
     with tarfile.open(TARBALL) as tar:
         tar.extractall(REPO_DIR, filter="data")
     say(f"unpacked {TARBALL} -> {REPO_DIR}")
+
+
+def load_secrets() -> None:
+    if not SECRETS.exists():
+        return
+    for line in SECRETS.read_text().splitlines():
+        key, sep, value = line.partition("=")
+        if sep:
+            os.environ[key] = value
+    SECRETS.unlink()
+    say("loaded the uploaded tokens")
 
 
 def make_venv() -> None:
@@ -110,6 +123,7 @@ def write_report() -> None:
 
 
 def main() -> None:
+    load_secrets()
     unpack_repo()
     make_venv()
     rc = stream_smoke()

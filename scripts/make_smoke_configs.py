@@ -71,6 +71,16 @@ PRESETS["8b_ppo_bench"] = {
     "max_response_length": 512,
     "rl_prompts": 400,
 }
+# 1B rollout-engine benchmark on one GPU (SMOKE_ROLLOUT=hf vs vllm): 1b_real's
+# PPO shape, 16 prompts x up to 512 response tokens per step, on the short
+# synthetic SFT/RM so it takes minutes.
+PRESETS["1b_ppo_bench"] = {
+    **PRESETS["1b"],
+    "ppo_batch": 16,
+    "ppo_steps": 6,
+    "max_response_length": 512,
+    "rl_prompts": 400,
+}
 # The first real training run: UltraChat / UltraFeedback (prepare_data.py
 # --source hf), one epoch each of SFT and RM at the stage YAMLs' own max
 # lengths (2048), then 30 PPO steps of 64 prompts on the verl backend
@@ -97,12 +107,32 @@ PRESETS["8b_real"] = {
     "rlhf_backend": "verl",
     "dataset_version": "ultrachat200k-ultrafeedback-20k-seed0",
 }
+# 8b_real's data and global batch sizes on Llama-3.2-1B and one GPU (a Colab
+# A100 40GB): gradient accumulation 8 keeps 16 SFT rows and 8 preference pairs
+# per optimizer step. PPO runs on the native backend, whose update takes the
+# whole rollout at once with fp32 log-softmax over the 128k vocabulary, so 16
+# prompts per step instead of 64; 120 steps see the same 1920 prompts.
+PRESETS["1b_real"] = {
+    **PRESETS["8b_real"],
+    "model": "meta-llama/Llama-3.2-1B",
+    "sft_batch": 2,
+    "reward_batch": 1,
+    "grad_accum": 8,
+    "ppo_batch": 16,
+    "ppo_steps": 120,
+    "rlhf_backend": "native",
+}
 # Smoke presets repeat prepare_data.py's synthetic examples.
 SYNTHETIC_DATA = {"source": "synthetic", "sft_examples": 400, "preference_examples": 400}
 
 
-def data_args(preset_name: str) -> List[str]:
-    """scripts/prepare_data.py arguments for a preset (besides --output-dir)."""
+def data_args(preset_name: str, model: str | None = None) -> List[str]:
+    """
+    scripts/prepare_data.py arguments for a preset (besides --output-dir).
+
+    data_stats.json is tokenized with the model being trained, not
+    prepare_data.py's gated default.
+    """
     preset = PRESETS[preset_name]
     data = {**SYNTHETIC_DATA, **preset.get("data", {})}
     return [
@@ -110,6 +140,7 @@ def data_args(preset_name: str) -> List[str]:
         "--sft-examples", str(data["sft_examples"]),
         "--preference-examples", str(data["preference_examples"]),
         "--rl-prompts", str(preset["rl_prompts"]),
+        "--tokenizer", model or preset["model"],
     ]
 
 
@@ -158,8 +189,14 @@ def _trainer_overrides(preset: Mapping[str, Any], batch: int, output_dir: Path) 
     }
 
 
-def build_configs(preset_name: str, root: Path, model: str | None = None) -> Dict[str, Dict[str, Any]]:
-    """Return {file name: YAML mapping} for one smoke run rooted at root."""
+def build_configs(
+    preset_name: str, root: Path, model: str | None = None, rollout: str | None = None
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Return {file name: YAML mapping} for one smoke run rooted at root.
+
+    rollout overrides the native PPO's generation.engine (hf | vllm).
+    """
     preset = dict(PRESETS[preset_name])
     if model:
         preset["model"] = model
@@ -222,6 +259,7 @@ def build_configs(preset_name: str, root: Path, model: str | None = None) -> Dic
                 "max_response_length": preset["max_response_length"],
             },
             "algorithm": {"ppo": {"ppo_epochs": 2}},
+            "generation": {"engine": rollout or "hf"},
             "training": {
                 "output_dir": str(outputs / "aligned"),
                 "total_steps": preset["ppo_steps"],
@@ -273,10 +311,10 @@ def build_configs(preset_name: str, root: Path, model: str | None = None) -> Dic
     }
 
 
-def write_configs(preset_name: str, root: Path, model: str | None = None) -> Path:
+def write_configs(preset_name: str, root: Path, model: str | None = None, rollout: str | None = None) -> Path:
     config_dir = root / "configs"
     config_dir.mkdir(parents=True, exist_ok=True)
-    for name, mapping in build_configs(preset_name, root, model).items():
+    for name, mapping in build_configs(preset_name, root, model, rollout).items():
         (config_dir / name).write_text(yaml.safe_dump(mapping, sort_keys=False), encoding="utf-8")
     return config_dir / "training_pipeline.yaml"
 
@@ -286,14 +324,15 @@ def main() -> None:
     parser.add_argument("--preset", choices=sorted(PRESETS), default="1b")
     parser.add_argument("--root", help="Smoke run directory (configs/, data/, outputs/ under it)")
     parser.add_argument("--model", help="Override the preset's base model")
+    parser.add_argument("--rollout", choices=("hf", "vllm"), help="Native PPO rollout engine (default hf)")
     parser.add_argument("--data-args", action="store_true", help="Print the preset's prepare_data.py arguments and exit")
     args = parser.parse_args()
     if args.data_args:
-        print(" ".join(data_args(args.preset)))
+        print(" ".join(data_args(args.preset, args.model)))
         return
     if not args.root:
         parser.error("--root is required")
-    print(write_configs(args.preset, Path(args.root), args.model))
+    print(write_configs(args.preset, Path(args.root), args.model, args.rollout))
 
 
 if __name__ == "__main__":

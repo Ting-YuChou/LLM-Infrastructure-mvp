@@ -170,6 +170,18 @@ def test_ppo_lora_ddp_keeps_ranks_in_sync_and_merges_final_model(tmp_path):
     assert timing["gen_tokens_per_s"] > 0
     assert rank1["timing"] == pytest.approx(timing)
 
+    # Rollout stats are reduced the same way; at most 4 new tokens per response.
+    rollout = rank0["rollout"]
+    assert 0 < rollout["response_length_mean"] <= 4
+    assert 0.0 <= rollout["eot_rate_mean"] <= 1.0
+    assert rank1["rollout"] == pytest.approx(rollout)
+    # Rank 0 writes num_samples (2) decoded rollouts at step 0 (sample_steps 10).
+    samples = [json.loads(line) for line in (output_dir / "samples.jsonl").read_text().splitlines()]
+    assert [row["step"] for row in samples] == [0, 0]
+    for row in samples:
+        assert set(row) == {"step", "prompt", "response", "reward", "response_length", "ended_with_eot"}
+        assert 0 < row["response_length"] <= 4
+
 
 def test_dpo_ddp_merges_sharded_reference_pass(tmp_path):
     rank0, rank1 = _run_workers("dpo_ddp", tmp_path)

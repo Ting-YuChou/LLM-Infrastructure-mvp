@@ -16,6 +16,8 @@
 # SMOKE_ROOT (default /workspace/smoke), SMOKE_STAGES, SMOKE_STAGE_TIMEOUT,
 # SMOKE_PRUNE (1: record then delete each stage's intermediate checkpoints
 # once it is done; an 8B one is ~80 GB),
+# SMOKE_ROLLOUT (hf | vllm: the native PPO's rollout engine; vllm also
+# installs the vllm pin from requirements.txt),
 # SMOKE_IDLE_STOP (how long to keep the pod up after finishing so the logs can
 # be read, then stop it with runpodctl when available; 0 exits right away).
 #
@@ -49,7 +51,7 @@ VERL_REF="${VERL_REF:-v0.9.1}"
 export VERL_DIR="${SMOKE_ROOT}/verl-${VERL_REF}"
 # SMOKE_RUN_ID reruns stages inside an earlier run (e.g. verl stages on its
 # SFT/RM checkpoints); new rows are appended and the report keeps the latest.
-RUN_ID="${SMOKE_RUN_ID:-$(git rev-parse --short HEAD)-${SMOKE_PRESET}}"
+RUN_ID="${SMOKE_RUN_ID:-$(git rev-parse --short HEAD)-${SMOKE_PRESET}${SMOKE_ROLLOUT:+-${SMOKE_ROLLOUT}}}"
 RUN_DIR="${SMOKE_ROOT}/runs/${RUN_ID}"
 LOG_DIR="${RUN_DIR}/logs"
 
@@ -101,7 +103,20 @@ start=$(date +%s)
   python -m pip uninstall -y torchvision torchaudio &&
   python -m pip install --index-url https://download.pytorch.org/whl/cu129 \
     "$(grep '^torch==' requirements.training-ci.txt)" &&
-  python -m pip install -r requirements.training-ci.txt
+  python -m pip install -r requirements.training-ci.txt &&
+  if [[ "${SMOKE_ROLLOUT:-hf}" == "vllm" ]]; then
+    # vllm pins torchvision/torchaudio for torch 2.10; take them from the same
+    # CUDA 12.9 index as torch, not PyPI's default CUDA build.
+    python -m pip install --index-url https://download.pytorch.org/whl/cu129 \
+      torchvision==0.25.0 torchaudio==2.10.0 &&
+    # vllm without its opencv (needs numpy 2; scripts/vllm_requirements.py),
+    # the rest of its dependencies under the training pins as constraints
+    # (pip rejects extras there), so vllm cannot move numpy, torch or transformers.
+    python -m pip install --no-deps "$(grep '^vllm==' requirements.txt)" &&
+    python scripts/vllm_requirements.py > "${RUN_DIR}/vllm_requirements.txt" &&
+    sed -E 's/\[[^]]*\]//' requirements.training-ci.txt > "${RUN_DIR}/constraints.txt" &&
+    python -m pip install -r "${RUN_DIR}/vllm_requirements.txt" -c "${RUN_DIR}/constraints.txt"
+  fi
 } > "${LOG_DIR}/install.log" 2>&1
 rc=$?
 record install "${rc}" "${start}"
@@ -177,7 +192,8 @@ fi
 start=$(date +%s)
 # shellcheck disable=SC2046  # the preset's arguments are separate words
 python scripts/prepare_data.py --output-dir "${RUN_DIR}/data" \
-  $(python scripts/make_smoke_configs.py --preset "${SMOKE_PRESET}" --data-args) > "${LOG_DIR}/data.log" 2>&1
+  $(python scripts/make_smoke_configs.py --preset "${SMOKE_PRESET}" --data-args \
+    ${SMOKE_MODEL:+--model "${SMOKE_MODEL}"}) > "${LOG_DIR}/data.log" 2>&1
 rc=$?
 record data "${rc}" "${start}"
 if [[ ${rc} -ne 0 ]]; then
@@ -185,7 +201,7 @@ if [[ ${rc} -ne 0 ]]; then
   touch "${RUN_DIR}/DONE"; idle_then_stop
 fi
 python scripts/make_smoke_configs.py --preset "${SMOKE_PRESET}" --root "${RUN_DIR}" \
-  ${SMOKE_MODEL:+--model "${SMOKE_MODEL}"}
+  ${SMOKE_MODEL:+--model "${SMOKE_MODEL}"} ${SMOKE_ROLLOUT:+--rollout "${SMOKE_ROLLOUT}"}
 export PIPELINE_CONFIG="${RUN_DIR}/configs/training_pipeline.yaml"
 BASE_MODEL="$(python -c "import yaml; print(yaml.safe_load(open('${RUN_DIR}/configs/sft.yaml'))['model']['name'])")"
 start=$(date +%s)

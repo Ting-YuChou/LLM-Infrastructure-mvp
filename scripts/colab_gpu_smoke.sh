@@ -4,8 +4,11 @@
 # first command asks you to sign in once in a browser).
 #
 # Colab runtimes have a single GPU, so this runs the same
-# scripts/runpod_gpu_smoke.sh with one process per stage. The 1b preset fits
-# one A100/H100; the 8b presets need 4x 80 GB and stay on RunPod.
+# scripts/runpod_gpu_smoke.sh with one process per stage. The 1b presets fit
+# one A100/H100; the 8b presets need 4x 80 GB and stay on RunPod. Real data on
+# 1B (about 3-4 hours on an A100 40GB):
+#   SMOKE_PRESET=1b_real SMOKE_STAGES="sft reward rlhf" SMOKE_STAGE_TIMEOUT=4h \
+#     bash scripts/colab_gpu_smoke.sh
 #
 #   bash scripts/colab_gpu_smoke.sh            # new VM, upload, run, fetch the report, stop the VM
 #   bash scripts/colab_gpu_smoke.sh tail       # last lines of the running smoke log
@@ -23,8 +26,9 @@
 # (seconds without output before `colab exec` gives up, default 900; the run
 # itself goes on and `tail` / `fetch` still work). SMOKE_* (see
 # runpod_gpu_smoke.sh), HF_TOKEN, HF_UPLOAD_REPO_PREFIX and HF_WRITE_TOKEN
-# are forwarded to the VM when set. SMOKE_MODEL defaults to the ungated
-# unsloth/Llama-3.2-1B copy of meta-llama/Llama-3.2-1B when HF_TOKEN is unset.
+# are forwarded to the VM when set (the tokens as a file, not on the command
+# line). SMOKE_MODEL defaults to the ungated unsloth/Llama-3.2-1B copy of
+# meta-llama/Llama-3.2-1B for the 1b presets when HF_TOKEN is unset.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -34,7 +38,11 @@ OUT_DIR="${COLAB_OUT_DIR:-${REPO_DIR}/outputs/colab_smoke/${SESSION}}"
 SMOKE_ROOT="${SMOKE_ROOT:-/content/smoke}"
 SMOKE_PRESET="${SMOKE_PRESET:-1b}"
 FORWARDED_ENV=(SMOKE_PRESET SMOKE_MODEL SMOKE_STAGES SMOKE_STAGE_TIMEOUT SMOKE_PRUNE SMOKE_RUN_ID
-  HF_TOKEN HF_UPLOAD_REPO_PREFIX HF_WRITE_TOKEN)
+  SMOKE_ROLLOUT HF_UPLOAD_REPO_PREFIX)
+# `colab exec --env` sends values as code, which the CLI keeps in plain text in
+# ~/.config/colab-cli/history; tokens go up as a file the launcher deletes.
+SECRET_ENV=(HF_TOKEN HF_WRITE_TOKEN)
+SECRETS_REMOTE=/content/.smoke_secrets
 
 log() { echo "[colab-smoke $(date +%H:%M:%S)] $*"; }
 
@@ -52,7 +60,7 @@ fetch() {
 
 start() {
   if [[ -z "${HF_TOKEN:-}" && -z "${SMOKE_MODEL:-}" ]]; then
-    if [[ "${SMOKE_PRESET}" != "1b" ]]; then
+    if [[ "${SMOKE_PRESET}" != 1b* ]]; then
       log "preset ${SMOKE_PRESET} needs HF_TOKEN (gated Meta Llama 3 weights)"; exit 1
     fi
     export SMOKE_MODEL=unsloth/Llama-3.2-1B
@@ -63,6 +71,11 @@ start() {
     if [[ -n "${!name:-}" ]]; then env_args+=(--env "${name}=${!name}"); fi
   done
   env_args+=(--env "SMOKE_ROOT=${SMOKE_ROOT}")
+  local secrets
+  secrets="$(mktemp)"  # mode 600
+  for name in "${SECRET_ENV[@]}"; do
+    if [[ -n "${!name:-}" ]]; then printf '%s=%s\n' "${name}" "${!name}" >> "${secrets}"; fi
+  done
 
   local tarball
   tarball="$(mktemp -d)/repo.tgz"
@@ -77,6 +90,8 @@ start() {
   colab status -s "${SESSION}"
   colab upload -s "${SESSION}" "${tarball}" /content/repo.tgz
   rm -f "${tarball}"
+  if [[ -s "${secrets}" ]]; then colab upload -s "${SESSION}" "${secrets}" "${SECRETS_REMOTE}"; fi
+  rm -f "${secrets}"
 
   mkdir -p "${OUT_DIR}"
   log "running the smoke (preset ${SMOKE_PRESET}); output also in ${OUT_DIR}/launcher.log"

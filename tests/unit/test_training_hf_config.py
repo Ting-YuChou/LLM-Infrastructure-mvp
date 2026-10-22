@@ -295,6 +295,42 @@ def test_real_training_preset_trains_one_epoch_on_hub_data_and_runs_ppo_on_verl(
     assert make_smoke_configs.data_args("8b")[:2] == ["--source", "synthetic"]
 
 
+def test_1b_real_preset_keeps_8b_real_data_and_global_batches_on_one_gpu(tmp_path):
+    sys.path.insert(0, str(CONFIG_DIR.parent / "scripts"))
+    sys.path.insert(0, str(CONFIG_DIR.parent / "src"))
+    import make_smoke_configs
+    from training.verl_backend import rlhf_backend
+
+    real_1b = make_smoke_configs.build_configs("1b_real", tmp_path)
+    real_8b = make_smoke_configs.build_configs("8b_real", tmp_path)
+
+    for name in ("sft.yaml", "reward.yaml"):
+        one_gpu = hf_config.build_training_arguments_kwargs(
+            real_1b[name], output_dir="/tmp/out", has_eval=True, world_size=1
+        )
+        four_gpus = hf_config.build_training_arguments_kwargs(
+            real_8b[name], output_dir="/tmp/out", has_eval=True, world_size=4
+        )
+        global_batch = lambda kwargs, gpus: (  # noqa: E731
+            kwargs["per_device_train_batch_size"] * kwargs["gradient_accumulation_steps"] * gpus
+        )
+        assert global_batch(one_gpu, 1) == global_batch(four_gpus, 4), name
+        assert one_gpu["num_train_epochs"] == 1 and one_gpu.get("max_steps", -1) == -1, name
+        assert real_1b[name]["data"]["max_length"] == 2048, name
+    assert real_1b["sft.yaml"]["model"]["name"] == "meta-llama/Llama-3.2-1B"
+
+    assert rlhf_backend(real_1b["training_pipeline.yaml"]["stages"]["rlhf"]) == "native"
+    training = real_1b["rlhf.yaml"]["training"]
+    ppo_prompts = training["per_device_batch_size"] * training["total_steps"]
+    assert ppo_prompts == 30 * 64  # 8b_real: 30 steps x 64 prompts
+    assert ppo_prompts <= make_smoke_configs.PRESETS["1b_real"]["rl_prompts"] * (1 - 0.071)
+    data_1b, data_8b = make_smoke_configs.data_args("1b_real"), make_smoke_configs.data_args("8b_real")
+    assert data_1b[:-1] == data_8b[:-1]
+    # Token-length stats use the model being trained (ungated overrides too).
+    assert data_1b[-2:] == ["--tokenizer", "meta-llama/Llama-3.2-1B"]
+    assert make_smoke_configs.data_args("1b_real", "unsloth/Llama-3.2-1B")[-1] == "unsloth/Llama-3.2-1B"
+
+
 class _FakePlugin:
     def __init__(self):
         self.calls = []
@@ -368,3 +404,19 @@ def test_real_training_arguments_export_fsdp_settings_to_accelerate(restore_envi
     assert os.environ["FSDP_STATE_DICT_TYPE"] == "SHARDED_STATE_DICT"
     assert args.gradient_checkpointing is False
     assert args.fsdp_config["activation_checkpointing"] is True
+
+
+def test_smoke_configs_pick_the_ppo_rollout_engine(tmp_path):
+    sys.path.insert(0, str(CONFIG_DIR.parent / "scripts"))
+    sys.path.insert(0, str(CONFIG_DIR.parent / "src"))
+    import make_smoke_configs
+    from training.rlhf_trainer import rlhf_config_from_dict
+
+    default = make_smoke_configs.build_configs("1b", tmp_path)["rlhf.yaml"]
+    vllm = make_smoke_configs.build_configs("1b", tmp_path, rollout="vllm")["rlhf.yaml"]
+
+    assert rlhf_config_from_dict(default).rollout_engine == "hf"
+    assert rlhf_config_from_dict(vllm).rollout_engine == "vllm"
+    # The rest of the generation section still comes from config/rlhf_config.yaml.
+    assert vllm["generation"]["vllm"]["gpu_memory_utilization"] == 0.3
+    assert vllm["lora"]["enabled"] is True

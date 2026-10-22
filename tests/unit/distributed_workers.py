@@ -198,6 +198,7 @@ def run_ppo(tmp):
         "merge_max_diff": merge_max_diff,
         "checkpoint_path": result.checkpoint_path,
         "timing": {key: value for key, value in result.metrics.items() if key.startswith(("timing_", "gen_tokens"))},
+        "rollout": {key: result.metrics[key] for key in ("response_length_mean", "eot_rate_mean")},
         "kl_means": kl_means,
         "kl_coef": trainer.kl_coef,
         "lora_before": lora_before,

@@ -58,6 +58,7 @@ try:
         resolve_precision,
     )
     from .mlflow_lifecycle import MLflowTrainingLifecycle, PromotionConfig
+    from .vllm_rollout import build_vllm_rollout, responses_to_tensor, rollout_engine, unpadded_prompts
 except ImportError:  # pragma: no cover - supports direct script execution
     from results import TrainingRunResult, merge_metrics_file  # type: ignore[no-redef]
     from chat_format import (  # type: ignore[no-redef]
@@ -94,6 +95,12 @@ except ImportError:  # pragma: no cover - supports direct script execution
     from mlflow_lifecycle import (  # type: ignore[no-redef]
         MLflowTrainingLifecycle,
         PromotionConfig,
+    )
+    from vllm_rollout import (  # type: ignore[no-redef]
+        build_vllm_rollout,
+        responses_to_tensor,
+        rollout_engine,
+        unpadded_prompts,
     )
 
 # Configure logging
@@ -141,6 +148,15 @@ class RLHFConfig:
     max_response_length: int = 512
     temperature: float = 0.7
     top_p: float = 0.9
+    top_k: int = 50
+    # hf: policy.generate(); vllm: a colocated vLLM engine (LoRA policy only).
+    rollout_engine: str = "hf"
+
+    # Monitoring: the loss line every logging_steps, and num_samples decoded
+    # rollouts every sample_steps (0 turns samples off).
+    logging_steps: int = 10
+    sample_steps: int = 10
+    num_samples: int = 2
 
     # MLflow lifecycle
     raw_config: Dict[str, Any] = field(default_factory=dict)
@@ -177,6 +193,7 @@ def summarize_step_timings(timings: List[Dict[str, float]]) -> Dict[str, float]:
         sum(step["gen_tokens"] for step in measured) / gen_seconds if gen_seconds else 0.0
     )
     summary["response_length_mean"] = sum(step["response_length"] for step in measured) / len(measured)
+    summary["eot_rate_mean"] = sum(step["eot_rate"] for step in measured) / len(measured)
     summary["timing_steps"] = float(len(measured))
     return summary
 
@@ -276,6 +293,17 @@ def response_mask_from_stops(response_ids: torch.Tensor, stop_ids: List[int]) ->
     return (stops_before == 0).long()
 
 
+def ended_with_stop(response_ids: torch.Tensor, stop_ids: List[int]) -> torch.Tensor:
+    """
+    Per response, whether it emitted a stop token (EOT) before max_response_length.
+
+    A falling rate means the policy has learned to ramble until it is cut off,
+    usually because the reward model prefers longer answers.
+    """
+    stops = torch.tensor(stop_ids, device=response_ids.device)
+    return torch.isin(response_ids, stops).any(dim=-1)
+
+
 class ValueHead(nn.Module):
     """
     Value function head for PPO
@@ -347,6 +375,9 @@ class RLHFTrainer:
     4. Update policy with PPO objective
     5. Update value function
     """
+
+    # VLLMRollout with generation.engine: vllm, else policy.generate().
+    rollout = None
 
     def __init__(self, config: RLHFConfig):
         """
@@ -490,6 +521,16 @@ class RLHFTrainer:
         # KL coefficient (adaptive)
         self.kl_coef = config.init_kl_coef
 
+        if config.rollout_engine == "vllm":
+            if not self.use_lora:
+                raise ValueError(
+                    "generation.engine vllm needs lora.enabled: true: the engine keeps "
+                    "the base weights and is synced only in the LoRA-wrapped layers"
+                )
+            self.rollout = build_vllm_rollout(
+                config, raw_config, self.stop_token_ids, rank(), is_distributed(), frozen_dtype
+            )
+
         logger.info("RLHF Trainer initialized successfully")
 
     def _trainable_policy_parameters(self) -> List[nn.Parameter]:
@@ -536,9 +577,10 @@ class RLHFTrainer:
         attention_mask: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Sample responses from the policy model
+        Sample responses from the policy model (policy.generate(), or the
+        colocated vLLM engine with generation.engine: vllm)
 
-        Log-probs and values are not taken from generate(): its scores are
+        Log-probs and values are not taken from the sampler: its scores are
         already temperature/top-p processed, which skews the PPO ratio. The
         rollout recomputes them with a forward pass instead.
 
@@ -550,6 +592,11 @@ class RLHFTrainer:
             response_ids: Generated token IDs [batch_size, response_len]
             response_mask: 1 up to and including the first stop token [batch_size, response_len]
         """
+        if self.rollout is not None:
+            responses = self.rollout.generate(self.policy_model, unpadded_prompts(prompt_ids, attention_mask))
+            response_ids = responses_to_tensor(responses, self.tokenizer.pad_token_id, prompt_ids.device)
+            return response_ids, response_mask_from_stops(response_ids, self.stop_token_ids)
+
         # Generate on the unwrapped policy (DDP only wraps forward). Eval mode
         # keeps the KV cache on when gradient checkpointing is enabled.
         was_training = self.policy_model.training
@@ -561,6 +608,7 @@ class RLHFTrainer:
                 max_new_tokens=self.config.max_response_length,
                 temperature=self.config.temperature,
                 top_p=self.config.top_p,
+                top_k=self.config.top_k,
                 do_sample=True,
                 use_cache=True,
                 eos_token_id=self.stop_token_ids,
@@ -1016,9 +1064,6 @@ class RLHFTrainer:
 
         # Training metrics
         global_step = 0
-        running_reward = 0.0
-        running_kl = 0.0
-        num_batches = 0
         training_reward_total = 0.0
         training_kl_total = 0.0
         training_metric_batches = 0
@@ -1102,8 +1147,9 @@ class RLHFTrainer:
                 metrics = self.ppo_update(ppo_batch, num_ppo_epochs=ppo_epochs)
                 update_end = _cuda_clock()
 
-                # Phase wall times averaged over ranks (one all-reduce);
-                # generated tokens summed over ranks.
+                # Phase wall times and rollout stats averaged over ranks (one
+                # all-reduce); generated tokens summed over ranks.
+                ended = ended_with_stop(response_ids, self.stop_token_ids)
                 timing = reduce_scalar_metrics({
                     "gen_s": gen_end - step_start,
                     "score_s": score_end - gen_end,
@@ -1111,20 +1157,10 @@ class RLHFTrainer:
                     "step_s": update_end - step_start,
                     "gen_tokens": float(response_mask.sum().item()),
                     "response_length": float(response_mask.sum(dim=1).mean().item()),
+                    "eot_rate": float(ended.float().mean().item()),
                 })
                 timing["gen_tokens"] *= world_size()
                 step_timings.append(timing)
-                logger.info(
-                    "Step %d timing: gen=%.2fs score=%.2fs update=%.2fs step=%.2fs "
-                    "(%.0f generated tokens, mean response %.1f)",
-                    global_step,
-                    timing["gen_s"],
-                    timing["score_s"],
-                    timing["update_s"],
-                    timing["step_s"],
-                    timing["gen_tokens"],
-                    timing["response_length"],
-                )
 
                 # ==================== Logging and Metrics ====================
                 # Mean KL/reward over every rank's batch: the adaptive KL
@@ -1133,42 +1169,54 @@ class RLHFTrainer:
                     mean_kl = masked_global_mean(kl_per_token, response_mask)
                     mean_reward = all_reduce_mean(rm_scores.float().mean())
 
-                running_reward += mean_reward.item()
-                running_kl += mean_kl.item()
-                num_batches += 1
                 training_reward_total += mean_reward.item()
                 training_kl_total += mean_kl.item()
                 training_metric_batches += 1
 
-                # Log metrics
-                if global_step % 10 == 0 or global_step == 0:
-                    avg_reward = running_reward / num_batches if num_batches > 0 else 0
-                    avg_kl = running_kl / num_batches if num_batches > 0 else 0
-                    step_metrics = {
-                        "reward_mean": avg_reward,
-                        "kl_mean": avg_kl,
+                # Every step: what the policy produces and what it costs, so a
+                # drifting run (reward up, EOT rate down, lengths at the cap)
+                # shows up while it trains.
+                logger.info(
+                    "Step %d: reward=%.3f kl=%.4f response_length=%.1f eot_rate=%.2f | "
+                    "gen=%.2fs score=%.2fs update=%.2fs step=%.2fs (%.0f generated tokens)",
+                    global_step,
+                    mean_reward.item(),
+                    mean_kl.item(),
+                    timing["response_length"],
+                    timing["eot_rate"],
+                    timing["gen_s"],
+                    timing["score_s"],
+                    timing["update_s"],
+                    timing["step_s"],
+                    timing["gen_tokens"],
+                )
+                lifecycle.log_metrics(
+                    {
+                        "reward_mean": mean_reward.item(),
+                        "kl_mean": mean_kl.item(),
+                        "response_length": timing["response_length"],
+                        "eot_rate": timing["eot_rate"],
                         "policy_loss": metrics["policy_loss"],
                         "value_loss": metrics["value_loss"],
                         "entropy": metrics["entropy"],
                         "approx_kl": metrics["approx_kl"],
                         "clip_frac": metrics["clip_frac"],
                         "kl_coef": self.kl_coef,
-                    }
+                    },
+                    step=global_step,
+                )
+                if self.config.logging_steps and global_step % self.config.logging_steps == 0:
                     logger.info(
-                        f"Step {global_step}: "
-                        f"reward={avg_reward:.3f}, "
-                        f"kl={avg_kl:.4f}, "
+                        f"Step {global_step} losses: "
                         f"policy_loss={metrics['policy_loss']:.4f}, "
                         f"value_loss={metrics['value_loss']:.4f}, "
                         f"entropy={metrics['entropy']:.4f}, "
+                        f"approx_kl={metrics['approx_kl']:.4f}, "
                         f"clip_frac={metrics['clip_frac']:.3f}, "
                         f"kl_coef={self.kl_coef:.4f}"
                     )
-                    lifecycle.log_metrics(step_metrics, step=global_step)
-                    # Reset running metrics
-                    running_reward = 0.0
-                    running_kl = 0.0
-                    num_batches = 0
+                if self.config.sample_steps and global_step % self.config.sample_steps == 0:
+                    self._log_samples(global_step, batch['prompt_text'], response_ids, response_mask, rm_scores, ended)
 
                 # ==================== Adaptive KL Coefficient ====================
                 current_kl = mean_kl.item()
@@ -1229,6 +1277,45 @@ class RLHFTrainer:
             metrics=final_metrics,
             lifecycle_result=lifecycle_result,
         )
+
+    @main_process_only
+    def _log_samples(
+        self,
+        step: int,
+        prompts: List[str],
+        response_ids: torch.Tensor,
+        response_mask: torch.Tensor,
+        rm_scores: torch.Tensor,
+        ended: torch.Tensor,
+    ) -> None:
+        """
+        Log the first num_samples rollouts of rank 0's batch and append them,
+        untruncated, to <output_dir>/samples.jsonl.
+        """
+        rows = []
+        for i in range(min(self.config.num_samples, len(prompts))):
+            length = int(response_mask[i].sum().item())
+            rows.append({
+                "step": step,
+                "prompt": prompts[i],
+                "response": self.tokenizer.decode(response_ids[i, :length], skip_special_tokens=True),
+                "reward": float(rm_scores[i].item()),
+                "response_length": length,
+                "ended_with_eot": bool(ended[i].item()),
+            })
+        for row in rows:
+            logger.info(
+                "Sample (step %d, reward=%.3f, length=%d, eot=%s)\n  prompt: %s\n  response: %s",
+                step,
+                row["reward"],
+                row["response_length"],
+                row["ended_with_eot"],
+                row["prompt"][-300:].replace("\n", " "),
+                row["response"][:600].replace("\n", " "),
+            )
+        with open(os.path.join(self.config.output_dir, "samples.jsonl"), "a", encoding="utf-8") as handle:
+            for row in rows:
+                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
     def save_checkpoint(self, step):
         """
@@ -1414,6 +1501,13 @@ def rlhf_config_from_dict(
         max_response_length=data_config.get('max_response_length', 512),
         temperature=generation_config.get('temperature', 0.7),
         top_p=generation_config.get('top_p', 0.9),
+        top_k=generation_config.get('top_k', 50),
+        rollout_engine=rollout_engine(generation_config),
+
+        # Monitoring
+        logging_steps=training_config.get('logging_steps', 10),
+        sample_steps=training_config.get('sample_steps', 10),
+        num_samples=training_config.get('num_samples', 2),
         raw_config=config_dict,
         config_path=config_path,
     )

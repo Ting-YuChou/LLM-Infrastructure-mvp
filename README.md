@@ -265,6 +265,16 @@ COLAB_GPU=A100 bash scripts/colab_gpu_smoke.sh
 bash scripts/colab_gpu_smoke.sh tail   # if the local connection dropped
 ```
 
+`SMOKE_ROLLOUT=vllm` runs the native PPO's rollouts on a colocated vLLM engine
+(`generation.engine: vllm` in `config/rlhf_config.yaml`). Before each rollout
+the trainer copies base + LoRA delta into the engine's LoRA-targeted layers
+(`training/vllm_rollout.py`); vLLM's own LoRA path was ~9x slower. On one Colab
+A100 40GB, `SMOKE_PRESET=1b_ppo_bench` (16 prompts x up to 512 tokens per step)
+went from 28.9 s per PPO step with `policy.generate()` to 5.3 s (generation
+26.5 s to 2.9 s). vllm 0.19.1 wants an opencv that needs numpy 2, so the smoke
+installs it without opencv (`scripts/vllm_requirements.py`), keeping the
+training pins.
+
 This pipeline still does not install a heavy AWQ converter by default. The AWQ
 handoff contract validates the source checkpoint, expected target path, and
 optional conversion command so a GPU conversion job can be run and audited

@@ -350,3 +350,96 @@ def test_ppo_value_head_accepts_bf16_policy_hidden_states(real_training, tiny_ll
     assert values.shape == response_ids.shape
     assert log_probs.shape == response_ids.shape
     assert torch.isfinite(values).all()
+
+
+def test_ppo_samples_rollouts_with_the_vllm_engine(real_training, tmp_path, monkeypatch):
+    """generation.engine vllm end to end, with a fake vllm package standing in for the GPU engine."""
+    if importlib.util.find_spec("peft") is None:
+        pytest.skip("peft is not installed")
+    from test_vllm_rollout import install_fake_vllm
+    from tiny_llama import build_tiny_llama, build_tiny_tokenizer
+    from training.chat_format import ensure_chat_tokenizer
+
+    fake_llm = install_fake_vllm(monkeypatch)
+    rlhf_trainer = real_training["rlhf_trainer"]
+    tokenizer = ensure_chat_tokenizer(build_tiny_tokenizer())
+    policy_dir, reward_dir = tmp_path / "sft-final", tmp_path / "reward-final"
+    for model_dir, causal_lm in ((policy_dir, True), (reward_dir, False)):
+        build_tiny_llama(len(tokenizer), causal_lm=causal_lm).save_pretrained(model_dir)
+        tokenizer.save_pretrained(model_dir)
+    prompts = _write_json(tmp_path / "prompts.json", [{"prompt": f"explain tests {i}"} for i in range(4)])
+    eot = tokenizer.convert_tokens_to_ids("<|eot_id|>")
+    # One response stops after two tokens, the other runs to max_response_length.
+    fake_llm.responses = [[5, 6, eot], [7, 7, 7, 7]]
+
+    raw = yaml.safe_load((CONFIG_DIR / "rlhf_config.yaml").read_text())
+    raw["model"]["policy"].update(name=str(policy_dir), precision="fp32", use_flash_attention=False)
+    raw["model"]["reward"]["name"] = str(reward_dir)
+    raw["lora"].update(r=4, alpha=8)
+    raw["generation"]["engine"] = "vllm"
+    raw["tracking"].update(mlflow_enabled=False, tensorboard_enabled=False, wandb_enabled=False)
+    output_dir = tmp_path / "aligned"
+    config = rlhf_trainer.rlhf_config_from_dict(
+        raw,
+        output_dir=str(output_dir),
+        num_epochs=1,
+        ppo_epochs=1,
+        num_steps=2,
+        batch_size=2,
+        max_response_length=4,
+        save_steps=0,
+        learning_rate=1e-2,
+    )
+    trainer = rlhf_trainer.RLHFTrainer(config)
+    result = trainer.train(prompts)
+
+    llm = fake_llm.instances[0]
+    assert llm.kwargs["model"] == str(policy_dir)
+    generations = [call for call in llm.calls if call[0] == "generate"]
+    assert len(generations) == 2
+    # Weights are synced before every rollout.
+    assert [call[0] for call in llm.calls].count("apply_model") == 2
+    # Prompts reach vLLM as unpadded, chat-templated token ids.
+    assert all(ids[0] == tokenizer.bos_token_id for ids in generations[0][1])
+    # Exactly the LoRA-targeted projections of every layer, under Hugging Face names.
+    num_layers = trainer.policy_model.get_base_model().config.num_hidden_layers
+    expected = {
+        f"model.layers.{layer}.{block}.{proj}.weight"
+        for layer in range(num_layers)
+        for block, projs in (("self_attn", ("q_proj", "k_proj", "v_proj", "o_proj")), ("mlp", ("gate_proj", "up_proj", "down_proj")))
+        for proj in projs
+    }
+    assert set(llm.model.loaded) == expected
+    assert result.metrics["eot_rate_mean"] == pytest.approx(0.5)
+    assert result.metrics["response_length_mean"] == pytest.approx(3.5)
+    samples = [json.loads(line) for line in (output_dir / "samples.jsonl").read_text().splitlines()]
+    assert [row["ended_with_eot"] for row in samples] == [True, False]
+    assert [row["response_length"] for row in samples] == [3, 4]
+    assert (Path(result.checkpoint_path) / "model.safetensors").exists()
+
+
+def test_merged_lora_weights_match_peft_merge(real_training, tiny_llama_dir):
+    """The vLLM weight sync sends exactly what merge_and_unload() would produce, without touching the policy."""
+    if importlib.util.find_spec("peft") is None:
+        pytest.skip("peft is not installed")
+    import torch
+    from training.hf_config import apply_lora
+    from training.vllm_rollout import merged_lora_weights
+
+    transformers = real_training["transformers"]
+    model = transformers.AutoModelForCausalLM.from_pretrained(tiny_llama_dir, torch_dtype=torch.float32)
+    policy = apply_lora(model, {"r": 4, "alpha": 8, "target_modules": ["q_proj", "down_proj"]}, default_dropout=0.0)
+    torch.manual_seed(0)
+    for name, param in policy.named_parameters():
+        if "lora_B" in name:
+            param.data.normal_()  # a trained adapter, not the zero init
+    before = {name: param.detach().clone() for name, param in policy.named_parameters()}
+
+    merged = dict(merged_lora_weights(policy))
+
+    after = {name: param.detach() for name, param in policy.named_parameters()}
+    assert all(torch.equal(before[name], after[name]) for name in before)
+    reference = policy.merge_and_unload().state_dict()
+    assert set(merged) == {name for name in reference if name.endswith(("q_proj.weight", "down_proj.weight"))}
+    for name, tensor in merged.items():
+        assert torch.allclose(tensor, reference[name], atol=1e-6), name

@@ -32,6 +32,22 @@ def test_smoke_env_puts_the_venv_first_and_exits_when_done(launcher):
     assert env["SMOKE_IDLE_STOP"] == "0"
 
 
+def test_uploaded_tokens_reach_the_environment_and_the_file_is_deleted(launcher, tmp_path, monkeypatch):
+    secrets = tmp_path / ".smoke_secrets"
+    secrets.write_text("HF_WRITE_TOKEN=hf_abc=123\nHF_TOKEN=hf_read\n")
+    monkeypatch.setattr(launcher, "SECRETS", secrets)
+    # Restored after the test: load_secrets writes os.environ directly.
+    monkeypatch.setenv("HF_WRITE_TOKEN", "")
+    monkeypatch.setenv("HF_TOKEN", "")
+
+    launcher.load_secrets()
+
+    assert launcher.os.environ["HF_WRITE_TOKEN"] == "hf_abc=123"
+    assert launcher.os.environ["HF_TOKEN"] == "hf_read"
+    assert not secrets.exists()
+    launcher.load_secrets()  # no file: nothing to do
+
+
 def test_stream_smoke_logs_output_and_returns_the_exit_code(launcher, capsys):
     script = launcher.REPO_DIR / "scripts" / "runpod_gpu_smoke.sh"
     script.parent.mkdir(parents=True)
