@@ -130,3 +130,109 @@ docker run --rm -v "$PWD":/repo:ro nano-triton-interp python /repo/benchmarks/ph
 - **修正**：用到 `tl.dot` 的 kernel 改用 fp16 測，結果 29/29 通過。
 - **同一個坑又踩一次**：檢查腳本用 `from kernels import linear` 時，拿到的是 re-export 的函式，不是 submodule（和 M0 碰到 `silu_mul` 時一樣）。改成從 `sys.modules["kernels.linear"]` 取。
 - **interpreter 測不到的**：bf16 在 GPU 上的實際精度、效能、CUDA graph capture，這些要到 Colab 才能確認。
+
+## 2026-10-22 19:37 — 第一次上 GPU（run `20261022-p1-run1`，Colab A100-SXM4-40GB）
+
+`BENCH_PHASE=phase1 P1_STEPS="installs tests kbench summarize" COLAB_KEEP=1 ... colab_phase0.sh start`。VM 是新開的，vLLM venv 和模型都重新裝；`install_vllm` 84 秒，`download_model` 70 秒。
+
+### tests：198 passed，11 failed
+
+- **`tests/gpu` 全部通過**：Triton decode 和 prefill attention、RoPE + KV 寫入、fused norm、silu_and_mul、GEMV 對 reference；CUDA graph replay 對 eager（包含 batch 超過 graph 上限、torch backend）；`set_sync_debug_mode("error")` 底下的 decode forward 沒有 sync；bf16 + Triton 對 fp32 的端到端 parity。
+- **失敗的 11 個全是和 transformers 對照的測試**：
+  - **原因**：VM 的 vLLM venv 裝的是 transformers 5.20.2（vLLM 0.19.1 的依賴），不是 repo pin 的 4.57.6。transformers 5 存 config 時把 `rope_theta` 和 `rope_scaling` 改成放在 `rope_parameters` 底下，nano 的 `NanoLlamaConfig.from_pretrained` 讀不到，於是用了預設的 theta 10000、也沒有 scaling，結果 logits 和 HF 對不起來。`test_rope_matches_transformers_rotate_half_layout` 則是測試本身讀了 `config.rope_theta`，transformers 5 已經沒有這個屬性。
+  - **修正**：`NanoLlamaConfig.from_pretrained` 改成也能讀 `rope_parameters`（verl 的 checkpoint 也是 transformers 5 存的，所以這本來就該支援），並加了一個測試。kernel 測試改用常數 500000.0，不讀 `config.rope_theta`。
+  - **為什麼本機沒抓到**：本機和 CI 的 transformers 都是 4.57。
+
+### kbench：兩類假失敗
+
+- **`rope_cache_write` 的 Triton 版每個 shape 都 mismatch**，最大誤差 12.6。
+  - **原因**：kbench 的 cos/sin 是隨機數，前後兩半不相同；kernel 照約定只讀前半（`rope_cos_sin` 的 table 兩半一樣），reference 則讀了整條 128 維。GPU 測試用的是真的 table，所以有過。
+  - **修正**：kbench 改成用 `cat(angles, angles)` 算出真的 cos/sin。
+- **「reference 太慢、刻意不計時」被算成失敗**：kbench 在 GPU 上把所有 `Unavailable` 都當失敗。
+  - **修正**：新增 `NotApplicable`（`Unavailable` 的子類別），刻意略過的 shape 會在列上標 `by_design`，不算失敗。CUDA GEMV 超過 8 列的情況也用它。
+
+### 第一批數字（kbench，CUDA graph replay，輸入輪替超過 L2）
+
+**Decode attention**（對照 vLLM 的 FA2 `flash_attn_varlen_func`，block_table 和 vLLM 的 backend 呼叫方式相同）：
+
+| B | ctx | FA2 µs | Triton µs | Triton 佔峰值 | 對 FA2 |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 128 | 6.9 | 12.0 | 3% | 0.58× |
+| 1 | 1024 | 15.7 | 13.6 | 20% | 1.15× |
+| 1 | 4096 | 30.2 | 22.4 | 48% | 1.35× |
+| 16 | 1024 | 75.7 | 64.4 | 67% | 1.17× |
+| 16 | 4096 | 225 | 222 | 78% | 1.01× |
+| 64 | 1024 | 221 | 222 | 78% | 1.00× |
+| 64 | 4096 | 813 | 862 | 80% | 0.94× |
+| 128 | 1024 | 404 | 389 | 89% | 1.04× |
+| 128 | 4096 | 1524 | 1510 | 91% | 1.01× |
+
+- 大部分點和 FA2 打平或更快。B=1、ctx 夠長時，split-KV 讓 Triton 版快到 1.35×。
+- B=1/ctx=128 比較慢：S=32 的 split 只有一個有工作，還要多跑一個 reduce kernel。換算成每個 token 大約多 0.17 ms，約佔 1%。
+- PyTorch reference 只有 FA2 的 0.06–0.18×（也就是 M1 的 torch 路徑）。
+
+**Prefill attention**（TFLOPs，佔 312 的比例）：Triton 版只有 FA2 的 0.55–0.67×。例如 1×4096 時，FA2 是 162 TFLOPs（52%），Triton 是 90（29%）。沒達到 0.7× 的目標，所以改成兩段迴圈（只有對角線那幾個 tile 做 mask），並把 launch 設定改成可以調，交給 `tune.py` 去掃。
+
+**GEMV（M=1）**：
+
+| layer | cuBLAS | Triton | 對 cuBLAS |
+|---|---:|---:|---:|
+| qkv | 79% | 77% | 0.97× |
+| o_proj | 76% | 70% | 0.92× |
+| gate_up | 85% | 88% | 1.04× |
+| down | 81% | 83% | 1.02× |
+| lm_head | 94% | 95% | 1.02× |
+
+- kbench 量到的 cuBLAS o_proj 是 76%，比 Phase 0 的 63% 高。Phase 0 用的是一般 launch 加上 CUDA event 計時，kbench 是 graph replay，launch 的間隔不會算進去。
+- Triton GEMV 在短而寬的 qkv 和 o_proj 上輸給 cuBLAS，接下來交給 `tune.py` 調，另外再寫 CUDA 版對照。
+
+**小 kernel**：fused_add_rms_norm 和 rms_norm 的 Triton 版是 torch 的 6–12×；silu_and_mul 是 2–3.4×。M=2048 時都到峰值的 83–89%。
+
+## 2026-10-22 19:30 — run `20261022-p1-run2`（同一台 VM，`COLAB_KEEP=1`）
+
+`P1_STEPS="cuda129 tests kbench tune e2e summarize"`。這一輪帶了 run 1 的修正、兩段式 prefill 迴圈、CUDA GEMV v1（每個 warp 4 列）和第一版 `tune.py`。
+
+### tests：225 passed，1 failed
+
+- `cuda129` 裝好 CUDA 12.8 的 nvcc，`test_cuda_extension_builds` 通過，CUDA GEMV 的 JIT 編譯在 VM 上可以用。
+- **剩下的 1 個失敗**：transformers 5 會直接改寫傳進去的 `rope_scaling` dict，測試 helper 的 module 層級常數 `LLAMA3_SCALING` 被改掉，之後的測試就讀到錯的 scaling。只在測試順序剛好時出現。
+  - **修正**：`_save_tiny_hf_llama` 改成 `copy.deepcopy(overrides)` 之後再傳。
+
+### kbench
+
+- **prefill 兩段迴圈**：從 FA2 的 0.55–0.67× 變成 0.63–0.70×，1×4096 從 29% 升到 33% 峰值，還是沒到 0.7×。
+- **CUDA GEMV v1**：M=1 時和 cuBLAS 打平（qkv 1.00×、gate_up 1.06×、lm_head 1.00×），但 o_proj 0.92×、down 0.93×；M=8 時掉到 0.73–0.96×。
+  - **推測原因**：一是每個 x 列都重新把權重從 bf16 轉成 fp32，M=8 時轉換次數是 M=1 的 8 倍；二是每個 block 管 16 列，o_proj 只有 256 個 block（108 個 SM 跑不滿 3 個 wave），最後一個 wave 拖慢。
+  - **v2 的改法**：權重每個元素只轉換一次；每個 warp 的列數改成 template 參數（1、2、4），交給 `tune.py` 掃。
+
+### tune：decode 和 prefill 跑完，GEMV 崩潰
+
+- **崩潰原因**：`tune.py` 用 `from src.serving.nano_vllm.kernels import linear as linear_mod`，拿到的是 re-export 的 `linear()` 函式，不是 submodule。這是第三次踩到同一個坑（M0 的 `silu_mul`、interpreter 檢查的 `linear`）。
+  - **修正**：改用 `importlib.import_module("src.serving.nano_vllm.kernels.linear")`。另外 `tune.py` 改成每掃完一個 kernel 就寫一次 `tune.json`，每個 shape 的 log 行也帶上所有 config 的時間，之後再崩潰也不會丟掉已經跑完的部分。
+- **decode**（µs，舊預設是 block_n=64、4 warps、2 stages）：
+
+  | B | ctx | 最佳 config | 最佳 | 舊預設 | 加速 |
+  |---:|---:|---|---:|---:|---:|
+  | 1 | 1024 | 32 / 4 / 1 | 14.6 | 16.4 | 1.13× |
+  | 1 | 4096 | 64 / 8 / 1 | 20.9 | 22.4 | 1.07× |
+  | 16 | 1024 | 32 / 4 / 3 | 61.3 | 64.6 | 1.05× |
+  | 64 | 1024 | 128 / 4 / 3 | 200.1 | 219.4 | 1.10× |
+  | 64 | 4096 | 128 / 4 / 3 | 767.3 | 860.7 | 1.12× |
+  | 128 | 1024 | 128 / 4 / 3 | 379.9 | 386.4 | 1.02× |
+
+  B 小的時候每條 sequence 切成很多 split，短的 tile 讓每個 split 都有事做；B≥64 時 S=1，一個 program 掃完整條 context，長 tile 加 3 段 pipeline 比較快。B=64/ctx=4096 從 FA2 的 0.94× 變成約 1.06×。
+
+- **prefill**（µs，舊預設是 block_m=64、block_n=64、4 warps、2 stages）：
+
+  | shape | 最佳 config | 最佳 | 舊預設 | 加速 | 換算對 FA2 |
+  |---|---|---:|---:|---:|---:|
+  | 1×1024 | 128 / 64 / 8 / 2 | 105.3 | 129.6 | 1.23× | 0.80× |
+  | 1×4096 | 128 / 128 / 8 / 2 | 940.8 | 1333.5 | 1.42× | 0.90× |
+  | 4×1024 | 128 / 32 / 4 / 2 | 295.3 | 402.5 | 1.36× | 0.88× |
+
+  block_m=128 是主要差別：每個 program 載入一次 K/V tile，給兩倍的 query 列用，K/V 的讀取量減半。
+
+- **新的預設**（`paged_attention.py`）：
+  - `decode_config(B)`：B<32 用 32 / 4 / 3，B≥32 用 128 / 4 / 3。只看 batch 大小，所以每個 CUDA graph 的設定是固定的。
+  - `PREFILL_CONFIG` 改成 128 / 64 / 8 / 2。
+  - 這是從 run 2 的「最佳值」挑出來的規則，沒有每個點都量過，run 3 的 `tune.py` 會把「目前規則」和最佳值並排列出來。interpreter 檢查多了大 batch config 的 decode case，31/31 通過。

@@ -46,7 +46,7 @@ from bandwidth import SHAPES as LINEAR_SHAPES  # noqa: E402
 from bandwidth import copy_bandwidth  # noqa: E402
 # By module: kernels/__init__.py re-exports silu_mul the function over the submodule.
 from src.serving.nano_vllm.kernels.rmsnorm import TRITON_AVAILABLE  # noqa: E402
-from src.serving.nano_vllm.kernels.linear import linear  # noqa: E402
+from src.serving.nano_vllm.kernels.linear import linear, load_cuda_extension  # noqa: E402
 from src.serving.nano_vllm.kernels.paged_attention import (  # noqa: E402
     paged_decode_attention,
     paged_decode_attention_reference,
@@ -80,6 +80,11 @@ REPLAYS = 20
 
 class Unavailable(Exception):
     """An implementation cannot run here (no Triton, no GPU)."""
+
+
+class NotApplicable(Unavailable):
+    """An implementation is left out of this shape on purpose (too slow to time,
+    outside its row limit); unlike Unavailable it does not fail a GPU run."""
 
 
 @dataclass
@@ -253,6 +258,8 @@ def bench_kernel(kernel: Kernel, device: str, env: dict) -> list[dict]:
                         row["x_base"] = base_us / us
             except Unavailable as e:
                 row["skipped"] = str(e)
+                if isinstance(e, NotApplicable):
+                    row["by_design"] = True
             except Exception as e:
                 traceback.print_exc()
                 row.update(ok=False, error=f"{type(e).__name__}: {str(e).splitlines()[0][:200]}")
@@ -406,7 +413,12 @@ def main() -> None:
     (args.out / "kbench.md").write_text(text + "\n")
     print(text)
     # On the GPU every impl must run, like the tests step's no-skip rule.
-    failed = [r for r in rows if ("skipped" in r and args.device == "cuda") or not r.get("ok", True)]
+    failed = [
+        r
+        for r in rows
+        if ("skipped" in r and args.device == "cuda" and not r.get("by_design"))
+        or not r.get("ok", True)
+    ]
     for r in failed:
         print(f"FAILED {r['kernel']} {r['impl']} {r['label']}: {r.get('error') or r.get('skipped') or 'mismatch'}")
     sys.exit(1 if failed else 0)
@@ -476,11 +488,23 @@ register(
         impls={
             "cublas": op_impl(lambda i: F.linear(i["x"], i["w"])),
             "triton": triton_impl(lambda i: linear(i["x"], i["w"], backend="triton")),
+            "cuda": lambda i: _cuda_gemv(i),
         },
         reference=lambda i: i["x"].float() @ i["w"].float().t(),
         bytes=lambda s: 2 * (s["N"] * s["K"] + s["M"] * s["K"] + s["M"] * s["N"]),
     )
 )
+
+def _cuda_gemv(i: dict):
+    if not i["x"].is_cuda:
+        raise Unavailable("needs a GPU")
+    if i["x"].shape[0] > 8:
+        raise NotApplicable("the CUDA GEMV takes up to 8 rows")
+    extension = load_cuda_extension()
+    if extension is None:
+        raise RuntimeError("building kernels/csrc/gemv_bf16.cu failed (see the log)")
+    return lambda: extension.gemv_bf16(i["x"], i["w"])
+
 
 register(
     Kernel(
@@ -531,10 +555,14 @@ def _rope_inputs(s: dict, dev: str) -> dict:
     num_blocks = max(64, 2 * n // PAGE + 1)
     shape = (num_blocks + 1, PAGE, KV_HEADS, HEAD_DIM)
     slots = torch.randperm(num_blocks * PAGE, device=dev)[:n]
+    # Real cos/sin rows: both halves equal, which the kernel relies on (it
+    # reads the first half only, like rope_cos_sin's tables).
+    angles = torch.rand(n, HEAD_DIM // 2, device=dev) * 1000
+    angles = torch.cat((angles, angles), dim=-1)
     return {
         "qkv": randn(n, (Q_HEADS + 2 * KV_HEADS) * HEAD_DIM, device=dev),
-        "cos": randn(n, HEAD_DIM, device=dev),
-        "sin": randn(n, HEAD_DIM, device=dev),
+        "cos": angles.cos().to(BF16),
+        "sin": angles.sin().to(BF16),
         "k_cache": torch.zeros(shape, dtype=BF16, device=dev),
         "v_cache": torch.zeros(shape, dtype=BF16, device=dev),
         "slots": slots,
@@ -618,7 +646,7 @@ def _small_only(op, too_big: Callable[[dict], bool]):
 
     def factory(inputs: dict):
         if too_big(inputs):
-            raise Unavailable("reference too slow to time at this size")
+            raise NotApplicable("reference too slow to time at this size")
         return lambda: op(inputs)
 
     return factory

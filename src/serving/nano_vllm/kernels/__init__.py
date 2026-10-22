@@ -3,6 +3,7 @@
 from .attention import causal_attention, decode_attention
 from .linear import linear, load_cuda_extension
 from .paged_attention import (
+    decode_config,
     decode_num_splits,
     paged_decode_attention,
     paged_decode_attention_reference,
@@ -25,6 +26,7 @@ __all__ = [
     "apply_rope_cos_sin",
     "causal_attention",
     "decode_attention",
+    "decode_config",
     "decode_num_splits",
     "fused_add_rms_norm",
     "fused_add_rms_norm_reference",

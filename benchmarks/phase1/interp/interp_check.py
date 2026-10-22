@@ -68,7 +68,7 @@ def tables(ctxs, page, num_blocks):
     return torch.tensor([r + [num_blocks] * (w - len(r)) for r in rows], dtype=torch.int32)
 
 
-def decode_case(heads, page, ctxs, splits, dtype):
+def decode_case(heads, page, ctxs, splits, dtype, config=None):
     qh, kvh, d = heads
     nb = sum((c + page - 1) // page for c in ctxs) + 2
     k, v = cache(nb, page, kvh, d, dtype)
@@ -76,10 +76,12 @@ def decode_case(heads, page, ctxs, splits, dtype):
     q = torch.randn(len(ctxs), qh, d).to(dtype)
     lens = torch.tensor(ctxs, dtype=torch.int32)
     scale = 1 / math.sqrt(d)
-    out = PA._paged_decode_attention_triton(q, k, v, t, lens, scale, splits)
+    out = PA._paged_decode_attention_triton(
+        q, k, v, t, lens, scale, splits, config or PA.decode_config(len(lens))
+    )
     ref = PA.paged_decode_attention_reference(q, k, v, t, lens, scale)
     tol = 1e-4 if dtype == torch.float32 else 2e-2
-    check(f"decode heads={heads} page={page} ctx={ctxs} S={splits} {dtype}", out, ref, tol, tol)
+    check(f"decode heads={heads} page={page} ctx={ctxs} S={splits} {dtype} {config or ''}", out, ref, tol, tol)
 
 
 def prefill_case(heads, page, shapes, dtype):
@@ -93,7 +95,7 @@ def prefill_case(heads, page, shapes, dtype):
     cu = torch.tensor([0] + qlens).cumsum(0).to(torch.int32)
     lens = torch.tensor(ctxs, dtype=torch.int32)
     scale = 1 / math.sqrt(d)
-    out = PA._paged_prefill_attention_triton(q, k, v, t, cu, lens, max(qlens), scale)
+    out = PA._paged_prefill_attention_triton(q, k, v, t, cu, lens, max(qlens), scale, PA.PREFILL_CONFIG)
     ref = PA.paged_prefill_attention_reference(q, k, v, t, qlens, ctxs, scale)
     tol = 1e-4 if dtype == torch.float32 else 2e-2
     check(f"prefill heads={heads} page={page} shapes={shapes} {dtype}", out, ref, tol, tol)
@@ -159,6 +161,8 @@ for heads in (TINY, LLAMA):
         for splits in (1, 4):
             run("decode", lambda: decode_case(heads, page, [1, 15, 17, 70, 0], splits, torch.float32))
     run("decode fp16", lambda: decode_case(heads, 16, [5, 130], 2, torch.float16))
+    run("decode large-batch config", lambda: decode_case(
+        heads, 16, [1, 129, 300, 0], 2, torch.float32, PA.DECODE_CONFIG_LARGE_BATCH))
     run("prefill", lambda: prefill_case(heads, 4, [(5, 5), (3, 10), (1, 7), (70, 70)], torch.float32))
     run("prefill fp16", lambda: prefill_case(heads, 16, [(20, 40), (65, 65)], torch.float16))
     for n in (1, 5):

@@ -31,12 +31,20 @@ except ModuleNotFoundError:  # pragma: no cover
     tl = None
     TRITON_AVAILABLE = False
 
-# Context tokens per inner-loop tile, independent of the cache block size.
-DECODE_BLOCK_N = 64
 MAX_DECODE_SPLITS = 32
-# Prefill tiles: query rows x context tokens per program iteration.
-PREFILL_BLOCK_M = 64
-PREFILL_BLOCK_N = 64
+# Launch settings, from benchmarks/phase1/tune.py on an A100 (LOG.md, run 2).
+# Decode: block_n is the context tokens per inner-loop tile, independent of
+# the cache block size. Small batches split every context many ways and a
+# short tile keeps those splits busy; from DECODE_LARGE_BATCH on there are
+# few splits per sequence and a long, deeper-pipelined tile wins (1.10x at
+# B=64). The choice depends only on the batch size, so it is fixed per CUDA
+# graph.
+DECODE_CONFIG = {"block_n": 32, "num_warps": 4, "num_stages": 3}
+DECODE_CONFIG_LARGE_BATCH = {"block_n": 128, "num_warps": 4, "num_stages": 3}
+DECODE_LARGE_BATCH = 32
+# Prefill: query rows x context tokens per program iteration (1.23-1.42x
+# over 64 x 64 with four warps).
+PREFILL_CONFIG = {"block_m": 128, "block_n": 64, "num_warps": 8, "num_stages": 2}
 
 
 if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
@@ -199,6 +207,63 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
         )
 
     @triton.jit
+    def _prefill_tile(
+        acc,
+        m_i,
+        l_i,
+        q,
+        q_pos,
+        table,
+        k_cache_ptr,
+        v_cache_ptr,
+        tile_start,
+        kv_end,
+        kv_head,
+        scale_log2e,
+        stride_kb,
+        stride_kt,
+        stride_kh,
+        stride_vb,
+        stride_vt,
+        stride_vh,
+        HEAD_DIM: tl.constexpr,
+        PAGE_SIZE: tl.constexpr,
+        BLOCK_N: tl.constexpr,
+        MASKED: tl.constexpr,
+        INPUT_PRECISION: tl.constexpr,
+    ):
+        """One BLOCK_N context tile of the online softmax. MASKED tiles (the
+        diagonal and the context end) apply the causal and bounds masks."""
+        offs_n = tile_start + tl.arange(0, BLOCK_N)
+        offs_d = tl.arange(0, HEAD_DIM)
+        if MASKED:
+            n_mask = offs_n < kv_end
+            blocks = tl.load(table + offs_n // PAGE_SIZE, mask=n_mask, other=0)
+        else:
+            blocks = tl.load(table + offs_n // PAGE_SIZE)
+        within = (offs_n % PAGE_SIZE).to(tl.int64)
+        k_rows = blocks.to(tl.int64) * stride_kb + within * stride_kt + kv_head * stride_kh
+        v_rows = blocks.to(tl.int64) * stride_vb + within * stride_vt + kv_head * stride_vh
+        if MASKED:
+            k = tl.load(k_cache_ptr + k_rows[:, None] + offs_d[None, :], mask=n_mask[:, None], other=0.0)
+        else:
+            k = tl.load(k_cache_ptr + k_rows[:, None] + offs_d[None, :])
+        scores = tl.dot(q, tl.trans(k), input_precision=INPUT_PRECISION) * scale_log2e
+        if MASKED:
+            visible = n_mask[None, :] & (offs_n[None, :] <= q_pos[:, None])
+            scores = tl.where(visible, scores, float("-inf"))
+        m_new = tl.maximum(m_i, tl.max(scores, axis=1))
+        alpha = tl.exp2(m_i - m_new)
+        p = tl.exp2(scores - m_new[:, None])
+        l_i = l_i * alpha + tl.sum(p, axis=1)
+        if MASKED:
+            v = tl.load(v_cache_ptr + v_rows[:, None] + offs_d[None, :], mask=n_mask[:, None], other=0.0)
+        else:
+            v = tl.load(v_cache_ptr + v_rows[:, None] + offs_d[None, :])
+        acc = acc * alpha[:, None] + tl.dot(p.to(v.dtype), v, input_precision=INPUT_PRECISION)
+        return acc, m_new, l_i
+
+    @triton.jit
     def _paged_prefill_kernel(
         q_ptr,
         k_cache_ptr,
@@ -253,38 +318,25 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
         # BLOCK_M - 1. Programs past the end of a short sequence do no work.
         kv_end = tl.minimum(context_len, prefix + row0 + BLOCK_M)
         kv_end = tl.where(row0 < q_len, kv_end, 0)
+        # Keys below prefix + row0 + 1 are visible to every row of the tile:
+        # those whole tiles skip the masks.
+        full_end = tl.minimum((prefix + row0 + 1) // BLOCK_N * BLOCK_N, kv_end)
         m_i = tl.full([BLOCK_M], float("-inf"), dtype=tl.float32)
         l_i = tl.zeros([BLOCK_M], dtype=tl.float32)
         acc = tl.zeros([BLOCK_M, HEAD_DIM], dtype=tl.float32)
         table = block_tables_ptr + seq.to(tl.int64) * stride_bt
-        for tile_start in range(0, kv_end, BLOCK_N):
-            offs_n = tile_start + tl.arange(0, BLOCK_N)
-            n_mask = offs_n < kv_end
-            blocks = tl.load(table + offs_n // PAGE_SIZE, mask=n_mask, other=0)
-            within = (offs_n % PAGE_SIZE).to(tl.int64)
-            k_rows = blocks.to(tl.int64) * stride_kb + within * stride_kt + kv_head * stride_kh
-            v_rows = blocks.to(tl.int64) * stride_vb + within * stride_vt + kv_head * stride_vh
-            k = tl.load(
-                k_cache_ptr + k_rows[:, None] + offs_d[None, :],
-                mask=n_mask[:, None],
-                other=0.0,
+        for tile_start in range(0, full_end, BLOCK_N):
+            acc, m_i, l_i = _prefill_tile(
+                acc, m_i, l_i, q, q_pos, table, k_cache_ptr, v_cache_ptr, tile_start, kv_end,
+                kv_head, scale_log2e, stride_kb, stride_kt, stride_kh, stride_vb, stride_vt,
+                stride_vh, HEAD_DIM, PAGE_SIZE, BLOCK_N, False, INPUT_PRECISION,
             )
-            scores = tl.dot(q, tl.trans(k), input_precision=INPUT_PRECISION) * scale_log2e
-            visible = n_mask[None, :] & (offs_n[None, :] <= q_pos[:, None])
-            scores = tl.where(visible, scores, float("-inf"))
-            m_new = tl.maximum(m_i, tl.max(scores, axis=1))
-            alpha = tl.exp2(m_i - m_new)
-            p = tl.exp2(scores - m_new[:, None])
-            l_i = l_i * alpha + tl.sum(p, axis=1)
-            v = tl.load(
-                v_cache_ptr + v_rows[:, None] + offs_d[None, :],
-                mask=n_mask[:, None],
-                other=0.0,
+        for tile_start in range(full_end, kv_end, BLOCK_N):
+            acc, m_i, l_i = _prefill_tile(
+                acc, m_i, l_i, q, q_pos, table, k_cache_ptr, v_cache_ptr, tile_start, kv_end,
+                kv_head, scale_log2e, stride_kb, stride_kt, stride_kh, stride_vb, stride_vt,
+                stride_vh, HEAD_DIM, PAGE_SIZE, BLOCK_N, True, INPUT_PRECISION,
             )
-            acc = acc * alpha[:, None] + tl.dot(
-                p.to(v.dtype), v, input_precision=INPUT_PRECISION
-            )
-            m_i = m_new
 
         inv_l = tl.where(l_i > 0, 1.0 / l_i, 0.0)
         tl.store(
@@ -308,6 +360,11 @@ def decode_num_splits(batch_size: int, kv_heads: int, device: torch.device) -> i
     device_index = device.index if device.index is not None else torch.cuda.current_device()
     wanted = math.ceil(4 * _num_sms(device_index) / (batch_size * kv_heads))
     return min(MAX_DECODE_SPLITS, triton.next_power_of_2(max(1, wanted)))
+
+
+def decode_config(batch_size: int) -> dict:
+    """Launch settings of the Triton decode kernel for a batch size."""
+    return DECODE_CONFIG_LARGE_BATCH if batch_size >= DECODE_LARGE_BATCH else DECODE_CONFIG
 
 
 def _gather_blocks(cache: torch.Tensor, block_table: torch.Tensor) -> torch.Tensor:
@@ -403,11 +460,13 @@ def paged_decode_attention(
     scale: float,
     use_triton: bool = False,
     num_splits: Optional[int] = None,
+    config: Optional[dict] = None,
 ) -> torch.Tensor:
     """[batch, q_heads, head_dim] decode queries -> attention output, same shape."""
     if use_triton and TRITON_AVAILABLE and query.is_cuda:  # pragma: no cover
         return _paged_decode_attention_triton(
-            query, key_cache, value_cache, block_tables, context_lens, scale, num_splits
+            query, key_cache, value_cache, block_tables, context_lens, scale, num_splits,
+            config or decode_config(query.shape[0]),
         )
     return paged_decode_attention_reference(
         query, key_cache, value_cache, block_tables, context_lens, scale
@@ -422,6 +481,7 @@ def _paged_decode_attention_triton(  # pragma: no cover - depends on CUDA/Triton
     context_lens: torch.Tensor,
     scale: float,
     num_splits: Optional[int],
+    config: dict,
 ) -> torch.Tensor:
     batch, q_heads, head_dim = query.shape
     _, page_size, kv_heads, cache_head_dim = key_cache.shape
@@ -481,11 +541,11 @@ def _paged_decode_attention_triton(  # pragma: no cover - depends on CUDA/Triton
         BLOCK_H=max(16, triton.next_power_of_2(group)),
         HEAD_DIM=head_dim,
         PAGE_SIZE=page_size,
-        BLOCK_N=DECODE_BLOCK_N,
+        BLOCK_N=config["block_n"],
         NUM_SPLITS=num_splits,
         INPUT_PRECISION="ieee" if query.dtype == torch.float32 else "tf32",
-        num_warps=4,
-        num_stages=2,
+        num_warps=config["num_warps"],
+        num_stages=config["num_stages"],
     )
     if num_splits > 1:
         _paged_decode_reduce_kernel[(batch, q_heads)](
@@ -514,6 +574,7 @@ def paged_prefill_attention(
     context_lens_host: list[int],
     scale: float,
     use_triton: bool = False,
+    config: Optional[dict] = None,
 ) -> torch.Tensor:
     """Causal attention for packed queries [num_tokens, q_heads, head_dim].
 
@@ -530,6 +591,7 @@ def paged_prefill_attention(
             context_lens,
             max(query_lens_host, default=0),
             scale,
+            config or PREFILL_CONFIG,
         )
     return paged_prefill_attention_reference(
         query, key_cache, value_cache, block_tables, query_lens_host, context_lens_host, scale
@@ -545,6 +607,7 @@ def _paged_prefill_attention_triton(  # pragma: no cover - depends on CUDA/Trito
     context_lens: torch.Tensor,
     max_query_len: int,
     scale: float,
+    config: dict,
 ) -> torch.Tensor:
     num_tokens, q_heads, head_dim = query.shape
     _, page_size, kv_heads, cache_head_dim = key_cache.shape
@@ -558,7 +621,7 @@ def _paged_prefill_attention_triton(  # pragma: no cover - depends on CUDA/Trito
     num_seqs = cu_seqlens_q.numel() - 1
     if num_tokens == 0 or num_seqs == 0:
         return out
-    grid = (num_seqs, triton.cdiv(max_query_len, PREFILL_BLOCK_M), q_heads)
+    grid = (num_seqs, triton.cdiv(max_query_len, config["block_m"]), q_heads)
     _paged_prefill_kernel[grid](
         query,
         key_cache,
@@ -582,10 +645,10 @@ def _paged_prefill_attention_triton(  # pragma: no cover - depends on CUDA/Trito
         GROUP=q_heads // kv_heads,
         HEAD_DIM=head_dim,
         PAGE_SIZE=page_size,
-        BLOCK_M=PREFILL_BLOCK_M,
-        BLOCK_N=PREFILL_BLOCK_N,
+        BLOCK_M=config["block_m"],
+        BLOCK_N=config["block_n"],
         INPUT_PRECISION="ieee" if query.dtype == torch.float32 else "tf32",
-        num_warps=4,
-        num_stages=2,
+        num_warps=config["num_warps"],
+        num_stages=config["num_stages"],
     )
     return out

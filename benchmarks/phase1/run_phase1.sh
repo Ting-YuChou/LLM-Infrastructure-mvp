@@ -14,6 +14,7 @@
 #             written to <P0_ROOT>/cuda129.env, which every later step sources
 #   tests     tests/gpu + tests/unit/test_nano_vllm_*.py; any SKIPPED fails it
 #   kbench    kbench.py: correctness, then time / GB/s / % of peak per shape
+#   tune      tune.py: sweep the Triton kernels' launch settings (not in the default)
 #   ncu       ncu on each kbench kernel (kbench.py --ncu-mode), analyze_ncu.py
 #   e2e       nano_bench.py per nano config and vllm_offline.py at the same
 #             points; nsys on the last nano config
@@ -21,7 +22,8 @@
 #
 # Env: P0_ROOT (default /workspace/p0), P0_RUN_ID (default: UTC timestamp),
 # P0_REPO_DIR (default: the checkout holding this script), P1_STEPS,
-# P1_MODEL (default unsloth/Meta-Llama-3.1-8B-Instruct), P1_KERNELS (kbench and
+# P1_MODEL (default unsloth/Meta-Llama-3.1-8B-Instruct), P1_TUNE (tune.py
+# kernels: decode,prefill,gemv,cuda_gemv), P1_KERNELS (kbench and
 # ncu filter, comma-separated), P1_E2E_RUNS (nano_bench kind:batch:in:out list;
 # vLLM runs the paged ones), P1_NANO_CONFIGS (label:attention:linear:eager|graph
 # per nano_bench run, default: the Phase 1 milestones in order), P1_NCU_LAUNCHES (cap per kbench kernel, default
@@ -118,6 +120,11 @@ kbench() {
   return "${rc}"
 }
 
+tune() {
+  "${PY}" "${CODE_DIR}/tune.py" --out "${OUT}/tune" ${P1_TUNE:+--kernels "${P1_TUNE}"} &&
+  cat "${OUT}/tune/tune.md" >&3
+}
+
 ncu_kbench() {  # one ncu report per kbench kernel, limited to its --kernel-name regex
   local rc=0 listing name regex
   listing="$("${PY}" "${CODE_DIR}/kbench.py" --list ${KERNELS:+--kernels "${KERNELS}"})" || return 1
@@ -203,6 +210,7 @@ want cuda129 && run_step cuda129 cuda129
 if [[ -f "${CUDA_ENV}" ]]; then source "${CUDA_ENV}"; fi
 want tests && run_step tests gpu_tests
 want kbench && run_step kbench kbench
+want tune && run_step tune tune
 want ncu && run_step ncu ncu_kbench
 want e2e && run_step e2e e2e
 run_step environment environment
