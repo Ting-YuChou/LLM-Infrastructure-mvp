@@ -7,7 +7,7 @@
 #   scripts/launch_training.sh dpo              # DPO from the SFT checkpoint
 #   scripts/launch_training.sh rlhf             # PPO (stages.rlhf.backend: native | verl)
 #
-# Env: HF_TOKEN (required for gated Llama 3), NPROC_PER_NODE (default: all
+# Env: HF_TOKEN (needed for gated Llama 3), NPROC_PER_NODE (default: all
 # GPUs), PIPELINE_CONFIG, and any extra train_pipeline.py flags after the stage.
 set -euo pipefail
 
@@ -16,9 +16,9 @@ STAGES="${1:-all}"
 shift || true
 PIPELINE_CONFIG="${PIPELINE_CONFIG:-${ROOT_DIR}/config/training_pipeline.yaml}"
 
+# A warning, not an error: ungated copies (e.g. unsloth/Llama-3.2-1B) need no token.
 if [[ -z "${HF_TOKEN:-}" && -z "${HUGGING_FACE_HUB_TOKEN:-}" ]]; then
-  echo "HF_TOKEN is not set; meta-llama/Meta-Llama-3-8B is gated and will not download." >&2
-  exit 1
+  echo "HF_TOKEN is not set; gated models such as meta-llama/Meta-Llama-3-8B will not download." >&2
 fi
 
 if command -v nvidia-smi >/dev/null 2>&1; then

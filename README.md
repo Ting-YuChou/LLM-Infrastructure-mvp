@@ -249,6 +249,22 @@ frequencies than inference and the DPO reference pass.
 bash -c 'git clone --depth 1 --branch "$REPO_REF" https://github.com/Ting-YuChou/LLM-Infrastructure-mvp.git /root/repo && exec bash /root/repo/scripts/runpod_gpu_smoke.sh'
 ```
 
+#### GPU smoke test on Google Colab
+
+Colab runtimes have one GPU, so only the `1b` preset fits there (one A100 or
+H100); the 8B presets need 4x 80 GB. `scripts/colab_gpu_smoke.sh` drives it
+from your machine with the [Colab CLI](https://github.com/googlecolab/google-colab-cli):
+it allocates a VM, uploads this checkout, runs `runpod_gpu_smoke.sh` there in a
+Python 3.11 venv, downloads the report to `outputs/colab_smoke/<session>/` and
+releases the VM. Without `HF_TOKEN` it trains the ungated
+`unsloth/Llama-3.2-1B` copy of Llama-3.2-1B.
+
+```bash
+uv tool install google-colab-cli   # the first colab command signs you in once
+COLAB_GPU=A100 bash scripts/colab_gpu_smoke.sh
+bash scripts/colab_gpu_smoke.sh tail   # if the local connection dropped
+```
+
 This pipeline still does not install a heavy AWQ converter by default. The AWQ
 handoff contract validates the source checkpoint, expected target path, and
 optional conversion command so a GPU conversion job can be run and audited

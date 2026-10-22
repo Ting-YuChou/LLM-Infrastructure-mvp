@@ -17,7 +17,9 @@
 # SMOKE_PRUNE (1: record then delete each stage's intermediate checkpoints
 # once it is done; an 8B one is ~80 GB),
 # SMOKE_IDLE_STOP (how long to keep the pod up after finishing so the logs can
-# be read, then stop it with runpodctl when available).
+# be read, then stop it with runpodctl when available; 0 exits right away).
+#
+# On one Colab GPU, scripts/colab_gpu_smoke.sh runs this script on the VM.
 #
 # verl comparison (SMOKE_PRESET=8b_ppo_bench): add the stages
 # `verl_setup verl_lora verl_full` after `sft reward rlhf`. verl gets its own uv
@@ -54,6 +56,8 @@ LOG_DIR="${RUN_DIR}/logs"
 log() { echo "[smoke $(date -u +%H:%M:%S)] $*"; }
 
 idle_then_stop() {
+  # 0 exits at once (Colab: the driver reads the logs and stops the VM itself).
+  if [[ "${SMOKE_IDLE_STOP}" == "0" ]]; then exit 0; fi
   log "idle for ${SMOKE_IDLE_STOP} so the logs can be read"
   sleep "${SMOKE_IDLE_STOP}"
   if command -v runpodctl >/dev/null 2>&1 && [[ -n "${RUNPOD_POD_ID:-}" ]]; then
@@ -290,7 +294,11 @@ done
 
 # --- 5. Report ---------------------------------------------------------------
 log "=== SMOKE SUMMARY ${RUN_ID} ==="
-python scripts/gpu_smoke_report.py --run-dir "${RUN_DIR}" --fsdp 2>&1 | tee "${LOG_DIR}/report.log"
+# One GPU trains single-process (hf_config.resolve_distributed_strategy), so
+# there are no FSDP-sharded checkpoints to require.
+FSDP_FLAG=()
+if [[ ${NPROC} -gt 1 ]]; then FSDP_FLAG=(--fsdp); fi
+python scripts/gpu_smoke_report.py --run-dir "${RUN_DIR}" "${FSDP_FLAG[@]}" 2>&1 | tee "${LOG_DIR}/report.log"
 log "=== SMOKE SUMMARY END (exit ${PIPESTATUS[0]}) ==="
 cp "${RUN_DIR}/summary.json" "${SMOKE_ROOT}/latest_summary.json" 2>/dev/null || true
 touch "${RUN_DIR}/DONE"
