@@ -127,6 +127,7 @@ def main() -> None:
     mean = statistics.fmean(decode)
     result = {
         "engine": "vllm",
+        "quantization": llm.llm_engine.model_config.quantization,
         "cuda_graphs": not args.eager,
         "batch": args.batch,
         "input_len": args.input_len,

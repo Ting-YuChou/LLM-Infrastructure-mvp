@@ -17,7 +17,8 @@
 #   tune      tune.py: sweep the kernels' launch settings (not in the default)
 #   ncu       ncu on each kbench kernel (kbench.py --ncu-mode), analyze_ncu.py
 #   e2e       nano_bench.py per nano config and vllm_offline.py at the same
-#             points; nsys on the last nano config
+#             points (also on P1_VLLM_W4_MODEL when a config is w4a16); nsys on
+#             the last nano config
 #   quality   quality.py: wikitext-2 perplexity and top-1 agreement of the torch,
 #             Triton and W4A16 paths on the real model
 #   summarize summary.md
@@ -40,6 +41,10 @@ RUN_ID="${P0_RUN_ID:-$(date -u +%Y%m%d-%H%M%S)}"
 OUT="${ROOT}/results/${RUN_ID}"
 MODEL_ID="${P1_MODEL:-unsloth/Meta-Llama-3.1-8B-Instruct}"
 MODEL="${ROOT}/models/$(basename "${MODEL_ID}")"
+# vLLM's baseline for the w4a16 nano configs: the same model as AWQ int4
+# (group 128), which vLLM runs with its Marlin kernel.
+W4_MODEL_ID="${P1_VLLM_W4_MODEL:-hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4}"
+W4_MODEL="${ROOT}/models/$(basename "${W4_MODEL_ID}")"
 VENVS="${ROOT}/venvs"
 PY="${VENVS}/vllm/bin/python"
 VLLM_VERSION="${P0_VLLM_VERSION:-0.19.1}"
@@ -162,6 +167,12 @@ e2e() {
     "${PY}" "${P0_DIR}/vllm_offline.py" --model "${MODEL}" --batch "${batch}" \
       --input-len "${input}" --output-len "${output}" \
       --out "${OUT}/offline/vllm_b${batch}_in${input}_out${output}.json" || rc=1
+    if [[ "${NANO_CONFIGS}" == *:w4a16* ]]; then
+      { [[ -d "${W4_MODEL}" ]] || download_w4_model; } &&
+      "${PY}" "${P0_DIR}/vllm_offline.py" --model "${W4_MODEL}" --batch "${batch}" \
+        --input-len "${input}" --output-len "${output}" \
+        --out "${OUT}/offline/vllmw4_b${batch}_in${input}_out${output}.json" || rc=1
+    fi
   done
   grep -h 'NANO_BENCH\|VLLM_OFFLINE' "${OUT}/logs/e2e.log" >&3
   label="${last%%:*}"
@@ -176,7 +187,14 @@ e2e() {
   return "${rc}"
 }
 
+download_w4_model() {  # download_model reads MODEL_ID and MODEL
+  local MODEL_ID="${W4_MODEL_ID}" MODEL="${W4_MODEL}"
+  download_model
+}
+
 quality() {
+  # wikitext-2 comes as parquet; the vLLM venv has neither datasets nor pyarrow.
+  "${PY}" -c "import pyarrow" 2>/dev/null || uv pip install -p "${PY}" pyarrow || return 1
   PYTHONPATH="${REPO_DIR}" "${PY}" "${CODE_DIR}/quality.py" --model "${MODEL}" --out "${OUT}/quality" &&
   cat "${OUT}/quality/quality.md" >&3
 }

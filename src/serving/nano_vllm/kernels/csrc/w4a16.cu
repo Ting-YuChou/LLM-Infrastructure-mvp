@@ -17,11 +17,31 @@
 // staged in shared memory, and the K loop needs no barriers.
 //
 // One launch handles up to 8 rows of x; the op loops over 8-row chunks.
+//
+// gemm_w4a16_mma is the tensor-core version for up to 64 rows (Marlin's
+// idea, with a simpler layout). It reads the same qweight. mma.m16n8k16
+// gives thread (g = lane / 4, c = lane % 4) the B values of column g at
+// k = {2c, 2c+1, 2c+8, 2c+9} and the A values of rows g and g+8 at the same
+// k. A dot product does not care how K is ordered, so inside each
+// 128-wide group (one scale) the kernel maps those k to thread c's own 32
+// contiguous k (32c .. 32c+31): step t (0..3) of the group uses
+// 32c + 8t .. +7, which is one int32 word of qweight (pairs (0,1), (2,3),
+// (4,5), (6,7) = b0 and b1 of the two k16 tiles) and one 128-bit load of
+// each x row. Per group the products of q - 8 accumulate in fp32 and are
+// scaled once, as in the GEMV. A block owns 32 output columns (four n8
+// tiles); its four warps take interleaved groups and reduce through shared
+// memory. When there are too few blocks to fill the GPU, gridDim.y splits K
+// further and the splits meet in an fp32 workspace with atomicAdd. From 33
+// rows on a block owns 16 columns instead, to stay within 255 registers.
 
 #include <torch/extension.h>
+#include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAStream.h>
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
+
+#include <algorithm>
+#include <type_traits>
 
 namespace {
 
@@ -182,6 +202,172 @@ __global__ void dequantize_w4a16_kernel(
   *reinterpret_cast<uint4*>(out + i * 8) = *reinterpret_cast<const uint4*>(values);
 }
 
+// One pair of codes (mask shift 4i) as the packed T2 bits of q - 8.
+template <typename T>
+__device__ __forceinline__ uint32_t dequant_pair(uint32_t word, int i) {
+  using Tr = Traits<T>;
+  const uint32_t bits = ((word >> (4 * i)) & 0x000F000Fu) | Tr::kMagic;
+  const typename Tr::T2 v = __hsub2(as_t2<T>(bits), as_t2<T>(Tr::kBias));
+  return *reinterpret_cast<const uint32_t*>(&v);
+}
+
+template <typename T>
+__device__ __forceinline__ void mma16816(float d[4], const uint32_t a[4], uint32_t b0, uint32_t b1) {
+  if constexpr (std::is_same_v<T, __nv_bfloat16>) {
+    asm volatile(
+        "mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32 "
+        "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};\n"
+        : "+f"(d[0]), "+f"(d[1]), "+f"(d[2]), "+f"(d[3])
+        : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "r"(b0), "r"(b1));
+  } else {
+    asm volatile(
+        "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32 "
+        "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};\n"
+        : "+f"(d[0]), "+f"(d[1]), "+f"(d[2]), "+f"(d[3])
+        : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "r"(b0), "r"(b1));
+  }
+}
+
+constexpr int kMmaGroup = 128;  // K per scale group and per kernel step
+
+// MT m16 tiles (up to 16 * MT rows of x) by NT n8 tiles (8 * NT output
+// columns per block). Two fp32 accumulators of MT * NT * 4 values per thread
+// (the running sum and the current group's) bound MT * NT: 4 x 4 spills.
+template <typename T, int MT, int NT>
+__global__ void __launch_bounds__(kThreads) gemm_w4a16_mma_kernel(
+    const T* __restrict__ x,
+    const uint32_t* __restrict__ qweight,
+    const T* __restrict__ scales,
+    T* __restrict__ y,
+    float* __restrict__ workspace,
+    int m,
+    int n,
+    int k,
+    int groups_per_split) {
+  using Tr = Traits<T>;
+  const int warp = threadIdx.x / 32;
+  const int lane = threadIdx.x % 32;
+  const int g = lane / 4;
+  const int c = lane % 4;
+  const int n0 = blockIdx.x * 8 * NT;
+  const int groups = k / kMmaGroup;
+  const int words_per_row = k / 8;
+  const int group_begin = blockIdx.y * groups_per_split;
+  const int group_end = min(group_begin + groups_per_split, groups);
+
+  float acc[MT][NT][4];
+#pragma unroll
+  for (int mt = 0; mt < MT; ++mt)
+#pragma unroll
+    for (int j = 0; j < NT; ++j)
+#pragma unroll
+      for (int r = 0; r < 4; ++r) acc[mt][j][r] = 0.f;
+
+  // B: thread (g, c) reads column g of each n8 tile, words 16s + 4c .. +3.
+  auto load_b = [&](int s, uint4 (&bq)[NT]) {
+#pragma unroll
+    for (int j = 0; j < NT; ++j) {
+      const int row = n0 + 8 * j + g;
+      bq[j] = row < n ? __ldg(reinterpret_cast<const uint4*>(
+                            qweight + static_cast<int64_t>(row) * words_per_row + s * 16 + 4 * c))
+                      : make_uint4(0, 0, 0, 0);
+    }
+  };
+
+  uint4 bq[NT], bq_next[NT];
+  int s = group_begin + warp;
+  if (s < group_end) load_b(s, bq);
+  for (; s < group_end; s += kWarps) {
+    if (s + kWarps < group_end) load_b(s + kWarps, bq_next);  // prefetch the next group
+    // The accumulator rows hold output columns 2c and 2c+1 of each tile.
+    float scale[NT][2];
+#pragma unroll
+    for (int j = 0; j < NT; ++j)
+#pragma unroll
+      for (int e = 0; e < 2; ++e) {
+        const int col = n0 + 8 * j + 2 * c + e;
+        scale[j][e] = col < n ? Tr::to_float(scales[static_cast<int64_t>(col) * groups + s]) : 0.f;
+      }
+    float part[MT][NT][4];
+#pragma unroll
+    for (int mt = 0; mt < MT; ++mt)
+#pragma unroll
+      for (int j = 0; j < NT; ++j)
+#pragma unroll
+        for (int r = 0; r < 4; ++r) part[mt][j][r] = 0.f;
+#pragma unroll
+    for (int t = 0; t < 4; ++t) {
+      // A: rows g and g+8 of each m16 tile, x[row][128s + 32c + 8t .. +7].
+      uint4 xa[MT][2];
+#pragma unroll
+      for (int mt = 0; mt < MT; ++mt)
+#pragma unroll
+        for (int h = 0; h < 2; ++h) {
+          const int row = 16 * mt + g + 8 * h;
+          xa[mt][h] = row < m ? __ldg(reinterpret_cast<const uint4*>(
+                                    x + static_cast<int64_t>(row) * k + s * kMmaGroup + 32 * c + 8 * t))
+                              : make_uint4(0, 0, 0, 0);
+        }
+#pragma unroll
+      for (int j = 0; j < NT; ++j) {
+        const uint32_t word = reinterpret_cast<const uint32_t*>(&bq[j])[t];
+        uint32_t b[4];
+#pragma unroll
+        for (int i = 0; i < 4; ++i) b[i] = dequant_pair<T>(word, i);
+#pragma unroll
+        for (int u = 0; u < 2; ++u)  // the two k16 tiles of this step
+#pragma unroll
+          for (int mt = 0; mt < MT; ++mt) {
+            const uint32_t* lo = reinterpret_cast<const uint32_t*>(&xa[mt][0]);
+            const uint32_t* hi = reinterpret_cast<const uint32_t*>(&xa[mt][1]);
+            const uint32_t a[4] = {lo[2 * u], hi[2 * u], lo[2 * u + 1], hi[2 * u + 1]};
+            mma16816<T>(part[mt][j], a, b[2 * u], b[2 * u + 1]);
+          }
+      }
+    }
+#pragma unroll
+    for (int mt = 0; mt < MT; ++mt)
+#pragma unroll
+      for (int j = 0; j < NT; ++j)
+#pragma unroll
+        for (int r = 0; r < 4; ++r) acc[mt][j][r] = fmaf(part[mt][j][r], scale[j][r & 1], acc[mt][j][r]);
+#pragma unroll
+    for (int j = 0; j < NT; ++j) bq[j] = bq_next[j];
+  }
+
+  // Sum the four warps' partial tiles; each warp then writes a quarter.
+  constexpr int kValues = MT * NT * 4;
+  __shared__ float reduce[kWarps][kValues][32];
+#pragma unroll
+  for (int mt = 0; mt < MT; ++mt)
+#pragma unroll
+    for (int j = 0; j < NT; ++j)
+#pragma unroll
+      for (int r = 0; r < 4; ++r) reduce[warp][(mt * NT + j) * 4 + r][lane] = acc[mt][j][r];
+  __syncthreads();
+  for (int v = warp; v < kValues; v += kWarps) {
+    const float sum = reduce[0][v][lane] + reduce[1][v][lane] + reduce[2][v][lane] + reduce[3][v][lane];
+    const int r = v % 4;
+    const int j = (v / 4) % NT;
+    const int mt = v / (4 * NT);
+    const int row = 16 * mt + g + 8 * (r / 2);
+    const int col = n0 + 8 * j + 2 * c + (r % 2);
+    if (row < m && col < n) {
+      if (workspace == nullptr) {
+        y[static_cast<int64_t>(row) * n + col] = Tr::from_float(sum);
+      } else {
+        atomicAdd(workspace + static_cast<int64_t>(row) * n + col, sum);
+      }
+    }
+  }
+}
+
+template <typename T>
+__global__ void cast_workspace_kernel(const float* __restrict__ in, T* __restrict__ out, int64_t count) {
+  const int64_t i = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (i < count) out[i] = Traits<T>::from_float(in[i]);
+}
+
 struct Problem {
   const void* x;
   const void* qweight;
@@ -266,6 +452,79 @@ torch::Tensor gemv_w4a16(torch::Tensor x, torch::Tensor qweight, torch::Tensor s
   return y;
 }
 
+namespace {
+
+// Four n8 tiles per block up to two m16 tiles, two beyond (see the kernel).
+constexpr int mma_tiles_n(int mt) { return mt <= 2 ? 4 : 2; }
+
+template <typename T, int MT>
+void launch_mma(const torch::Tensor& x, const torch::Tensor& qweight, const torch::Tensor& scales,
+                torch::Tensor& y, int64_t splits, cudaStream_t stream) {
+  constexpr int NT = mma_tiles_n(MT);
+  const int m = static_cast<int>(x.size(0));
+  const int n = static_cast<int>(qweight.size(0));
+  const int k = static_cast<int>(qweight.size(1) * 8);
+  const int groups = k / kMmaGroup;
+  const int per_split = (groups + splits - 1) / splits;
+  const int grid_y = (groups + per_split - 1) / per_split;
+  const dim3 grid((n + 8 * NT - 1) / (8 * NT), grid_y);
+  torch::Tensor workspace;
+  if (grid_y > 1) workspace = torch::zeros({m, n}, x.options().dtype(torch::kFloat32));
+  gemm_w4a16_mma_kernel<T, MT, NT><<<grid, kThreads, 0, stream>>>(
+      static_cast<const T*>(x.data_ptr()), static_cast<const uint32_t*>(qweight.data_ptr()),
+      static_cast<const T*>(scales.data_ptr()), static_cast<T*>(y.data_ptr()),
+      grid_y > 1 ? workspace.data_ptr<float>() : nullptr, m, n, k, per_split);
+  if (grid_y > 1) {
+    const int64_t count = static_cast<int64_t>(m) * n;
+    cast_workspace_kernel<T><<<static_cast<unsigned>((count + 255) / 256), 256, 0, stream>>>(
+        workspace.data_ptr<float>(), static_cast<T*>(y.data_ptr()), count);
+  }
+}
+
+template <typename T>
+void launch_mma_rows(const torch::Tensor& x, const torch::Tensor& qweight, const torch::Tensor& scales,
+                     torch::Tensor& y, int64_t splits, cudaStream_t stream) {
+  switch ((x.size(0) + 15) / 16) {
+    case 1: launch_mma<T, 1>(x, qweight, scales, y, splits, stream); break;
+    case 2: launch_mma<T, 2>(x, qweight, scales, y, splits, stream); break;
+    case 3: launch_mma<T, 3>(x, qweight, scales, y, splits, stream); break;
+    default: launch_mma<T, 4>(x, qweight, scales, y, splits, stream); break;
+  }
+}
+
+}  // namespace
+
+torch::Tensor gemm_w4a16_mma(torch::Tensor x, torch::Tensor qweight, torch::Tensor scales,
+                             int64_t group_size, int64_t splits) {
+  check_weight(qweight, scales, group_size);
+  TORCH_CHECK(group_size == kMmaGroup, "gemm_w4a16_mma: group_size must be 128");
+  TORCH_CHECK(x.is_cuda() && x.dim() == 2 && x.is_contiguous(), "gemm_w4a16_mma: contiguous CUDA x expected");
+  TORCH_CHECK(x.scalar_type() == scales.scalar_type(), "gemm_w4a16_mma: x and scales must share a dtype");
+  const int64_t m = x.size(0);
+  const int64_t n = qweight.size(0);
+  const int64_t k = qweight.size(1) * 8;
+  TORCH_CHECK(x.size(1) == k, "gemm_w4a16_mma: shape mismatch");
+  TORCH_CHECK(m >= 1 && m <= 64, "gemm_w4a16_mma: 1 to 64 rows supported");
+  if (splits <= 0) {  // enough blocks for about four per SM, at least one group per warp
+    const int64_t cols = 8 * mma_tiles_n(static_cast<int>((m + 15) / 16));
+    const int64_t blocks = (n + cols - 1) / cols;
+    // Not ATen/cuda/CUDAContext.h: it needs the cuSPARSE/cuBLAS headers, and
+    // the build only has nvcc, cudart and cccl.
+    int device = 0, sms = 0;
+    C10_CUDA_CHECK(cudaGetDevice(&device));
+    C10_CUDA_CHECK(cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, device));
+    splits = std::max<int64_t>(1, std::min<int64_t>((4 * sms + blocks - 1) / blocks, k / kMmaGroup / kWarps));
+  }
+  auto y = torch::empty({m, n}, x.options());
+  const auto stream = c10::cuda::getCurrentCUDAStream();
+  if (x.scalar_type() == torch::kBFloat16) {
+    launch_mma_rows<__nv_bfloat16>(x, qweight, scales, y, splits, stream);
+  } else {
+    launch_mma_rows<__half>(x, qweight, scales, y, splits, stream);
+  }
+  return y;
+}
+
 torch::Tensor dequantize_w4a16(torch::Tensor qweight, torch::Tensor scales, int64_t group_size) {
   check_weight(qweight, scales, group_size);
   const int64_t n = qweight.size(0);
@@ -296,6 +555,9 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, module) {
   module.def("gemv_w4a16", &gemv_w4a16, "W4A16 GEMV (y = x @ dequant(qweight, scales).T)",
              pybind11::arg("x"), pybind11::arg("qweight"), pybind11::arg("scales"),
              pybind11::arg("group_size") = 128, pybind11::arg("rows_per_warp") = 4);
+  module.def("gemm_w4a16_mma", &gemm_w4a16_mma, "W4A16 tensor-core GEMM for 1-64 rows",
+             pybind11::arg("x"), pybind11::arg("qweight"), pybind11::arg("scales"),
+             pybind11::arg("group_size") = 128, pybind11::arg("splits") = 0);
   module.def("dequantize_w4a16", &dequantize_w4a16, "int4 weight -> scales dtype",
              pybind11::arg("qweight"), pybind11::arg("scales"), pybind11::arg("group_size") = 128);
 }

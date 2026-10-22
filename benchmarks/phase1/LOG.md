@@ -299,3 +299,19 @@ decode ms/step（`nano_bench.py` 和 `vllm_offline.py`，相同的 batch / in / 
   - prefill 改成單一的 128 / 32 / 4 warps / 2 stages：在三個 shape 上都在最佳值的 1.3% 以內（4×1024 從 319.5 降到 295.7 µs）。
   - Triton GEMV 改成 block_n=32、block_k=128、4 warps、3 stages：每個 shape 都在最佳值的 2% 以內。
   - CUDA GEMV 的分派上限從 8 列改成 2 列，只在贏 cuBLAS 的地方用。kernel 本身還是支援 8 列，GPU 測試直接呼叫它測 3 和 8 列。
+
+## 2026-10-22 20:38 — run `20261022-p1-run4`：W4A16 第一次上 GPU，三個問題
+
+`P1_STEPS="tests kbench tune e2e quality summarize"`，`P1_TUNE=w4a16`，e2e 只跑 gemv_graph、cuda_gemv_graph、w4a16_graph。
+
+1. **tests 在收集階段就失敗**：`tests/unit/test_nano_vllm_w4a16.py` 和 `tests/gpu/test_nano_vllm_w4a16.py` 同名，兩個目錄都沒有 `__init__.py`，pytest 把它們當成同一個 module（`import file mismatch`）。一個測試都沒跑。
+   - **修正**：GPU 那個改名成 `test_nano_vllm_w4a16_kernels.py`。
+2. **`w4a16.cu` 編不過**：`fatal error: cusparse.h: No such file or directory`。為了拿 SM 數量 include 了 `ATen/cuda/CUDAContext.h`，它會連帶 include cuSPARSE 和 cuBLAS 的 header，可是 `cuda129` step 只裝了 nvcc、cudart-dev 和 cccl。
+   - **修正**：改用 `cudaDeviceGetAttribute(cudaDevAttrMultiProcessorCount)`。
+   - **以後不必上 GPU 才發現編譯錯誤**：新增 `benchmarks/phase1/nvcc/`，用 Docker（linux/arm64）裝 NVIDIA 的 arm64 nvcc 12.8（和 VM 一樣只裝 nvcc、cudart-dev、cccl）加上 CPU 版 torch 2.10.0 的 header，用 cpp_extension 的參數對 sm_80 跑 `nvcc -c`，並用 `-Xptxas -v` 列出暫存器和 spill。CPU wheel 少一個生成的 header（`c10/cuda/impl/cuda_cmake_macros.h`），腳本會補一個一行的 stub。
+   - **ptxas 抓到的問題**：tensor-core kernel 在 3–4 個 m16 tile 時用滿 255 個暫存器，spill 192–208 bytes。原因是每個 thread 有兩組 fp32 累加器（總和和這一組的），各 MT×NT×4 個。改成 MT≥3 時每個 block 只放 2 個 n8 tile（16 欄），暫存器降到 140–188，沒有 spill。
+3. **w4a16 的 e2e 在 CUDA graph capture 時失敗**（`operation failed due to a previous error during capture`）：extension 沒編起來，`dequantize_w4a16` 退回 PyTorch 版，而 `unpack_w4a16` 用 Python list 做 index，torch 會先在 host 建 index tensor 再複製到 GPU，capture 期間不允許。
+   - **修正**：shift 量改用 `torch.arange` 直接在 device 上算（k=2i 在 bit 4i，k=2i+1 在 bit 16+4i），不再有 host-to-device 複製。
+4. **quality 跑不起來**：vLLM 的 venv 沒有 `datasets`，也沒有 `pyarrow`。改成 quality step 需要時才用 uv 裝 `pyarrow`，再從 HF hub 下載 wikitext-2 的 parquet。
+
+**bf16 的 e2e 照常跑完**，這是第一次用 run 3 調出來的全部預設值：gemv_graph b=1 12.32 / b=16 **14.63（vLLM 14.83，0.99×）**/ b=64 23.77 ms；cuda_gemv_graph b=1 12.15 / 14.87 / 23.51 ms。b=64 這兩組的 kernel 完全一樣（列數都超過 GEMV 上限），卻差 0.26 ms，所以 e2e 的 run-to-run 差異大約是 1%。

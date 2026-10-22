@@ -70,6 +70,8 @@ from src.serving.nano_vllm.kernels.silu_mul import (  # noqa: E402
     silu_mul_reference,
 )
 from src.serving.nano_vllm.kernels.w4a16 import (  # noqa: E402
+    W4A16_GEMV_MAX_ROWS,
+    W4A16_MMA_MAX_ROWS,
     W4A16Weight,
     dequantize_w4a16,
     quantize_w4a16,
@@ -728,13 +730,18 @@ register(
 # vLLM's Marlin gets those codes repacked into its layout. GB/s counts the
 # 4-bit weight, its scales, x and y, so the cublas_bf16 row (F.linear on the
 # dequantized bf16 weight) reads as the bandwidth W4A16 would need to match it.
-def _w4a16_cuda(i: dict):
-    if not i["x"].is_cuda:
-        raise Unavailable("needs a GPU")
-    if load_cuda_extension("w4a16") is None:
-        raise RuntimeError("building kernels/csrc/w4a16.cu failed (see the log)")
-    weight = quantize_w4a16(i["w"])
-    return lambda: w4a16_linear(i["x"], weight)
+def _w4a16_cuda(kernel: str, max_rows: int):
+    def factory(i: dict):
+        if not i["x"].is_cuda:
+            raise Unavailable("needs a GPU")
+        if i["x"].shape[0] > max_rows:
+            raise NotApplicable(f"the {kernel} kernel takes up to {max_rows} rows")
+        if load_cuda_extension("w4a16") is None:
+            raise RuntimeError("building kernels/csrc/w4a16.cu failed (see the log)")
+        weight = quantize_w4a16(i["w"])
+        return lambda: w4a16_linear(i["x"], weight, config={"kernel": kernel})
+
+    return factory
 
 
 def _marlin_weight(weight: W4A16Weight, device: torch.device):
@@ -791,13 +798,14 @@ register(
         },
         impls={
             "vllm_marlin": _vllm_marlin,
-            "cuda": _w4a16_cuda,
+            "cuda_gemv": _w4a16_cuda("gemv", W4A16_GEMV_MAX_ROWS),
+            "cuda_mma": _w4a16_cuda("mma", W4A16_MMA_MAX_ROWS),
             "cublas_bf16": _cublas_dequantized,
         },
         reference=lambda i: w4a16_linear_reference(i["x"], quantize_w4a16(i["w"])),
         bytes=lambda s: s["N"] * s["K"] // 2 + 2 * s["N"] * s["K"] // 128
         + 2 * s["M"] * (s["K"] + s["N"]),
-        ncu="gemv_w4a16|dequantize_w4a16|Marlin|marlin",
+        ncu="gemv_w4a16|gemm_w4a16_mma|cast_workspace|Marlin|marlin",
     )
 )
 

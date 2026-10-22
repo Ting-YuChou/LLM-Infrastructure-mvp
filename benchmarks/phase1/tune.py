@@ -171,11 +171,15 @@ def tune_w4a16():
             "qkv": (6144, 4096), "o_proj": (4096, 4096), "gate_up": (28672, 4096),
             "down": (4096, 14336),
         }.items()
-        for m in (1, 4, 8)
+        for m in (1, 2, 4, 8, 16, 32, 64)
     ]
-    configs = grid(rows_per_warp=[1, 2, 4])
+    configs = [{"kernel": "gemv", "rows_per_warp": r} for r in (1, 2, 4)] + [
+        {"kernel": "mma", "splits": s} for s in (0, 1, 2, 4, 8)
+    ]
 
     def make_call(shape, config):
+        if config.get("kernel") == "gemv" and shape["M"] > w4a16.W4A16_GEMV_MAX_ROWS:
+            raise ValueError("outside the GEMV's row limit")
         x = randn(shape["M"], shape["K"], device="cuda")
         w = w4a16.quantize_w4a16(randn(shape["N"], shape["K"], device="cuda", scale=shape["K"] ** -0.5))
         return lambda: w4a16.w4a16_linear(x, w, config=config)

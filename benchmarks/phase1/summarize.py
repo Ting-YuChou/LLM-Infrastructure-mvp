@@ -69,24 +69,31 @@ def main() -> None:
         if not path.stem.endswith("_nsys")
         for d in (load_json(path) or [])
     ]
-    vllm = {
-        (d["batch"], d["input_len"], d["output_len"]): d
-        for d in filter(None, (load_json(p) for p in sorted((run / "offline").glob("vllm_*.json"))))
-    }
-    if nano or vllm:
+    def vllm_runs(pattern: str) -> dict:
+        return {
+            (d["batch"], d["input_len"], d["output_len"]): d
+            for d in filter(None, (load_json(p) for p in sorted((run / "offline").glob(pattern))))
+        }
+
+    vllm = vllm_runs("vllm_*.json")
+    # w4a16 nano configs are compared with vLLM on the AWQ int4 checkpoint.
+    vllm_w4 = vllm_runs("vllmw4_*.json")
+    if nano or vllm or vllm_w4:
         lines += [
             "## End to end decode (nano_vllm vs vLLM CUDA graph)",
             "",
-            "| nano config | path | batch | in | out | nano ms/step | nano tok/s | vLLM ms/step "
+            "| nano config | path | batch | in | out | nano ms/step | nano tok/s | vLLM | vLLM ms/step "
             "| vLLM tok/s | nano / vLLM time |",
-            "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "|---|---|---:|---:|---:|---:|---:|---|---:|---:|---:|",
         ]
         for config, d in nano:
-            v = vllm.get((d["batch"], d["input_len"], d["output_len"]), {})
+            quantized = d.get("weight_quant", "none") != "none"
+            v = (vllm_w4 if quantized else vllm).get((d["batch"], d["input_len"], d["output_len"]), {})
+            baseline = f"{v.get('quantization') or 'bf16'}" if v else "-"
             ratio = d["decode_ms_per_step"] / v["decode_ms_per_step"] if v else None
             lines.append(
                 f"| {config} | {d['path']} | {d['batch']} | {d['input_len']} | {d['output_len']} "
-                f"| {fmt(d['decode_ms_per_step'])} | {fmt(d['decode_tok_per_s'], 0)} "
+                f"| {fmt(d['decode_ms_per_step'])} | {fmt(d['decode_tok_per_s'], 0)} | {baseline} "
                 f"| {fmt(v.get('decode_ms_per_step'))} | {fmt(v.get('decode_tok_per_s'), 0)} "
                 f"| {fmt(ratio)}{'x' if ratio else ''} |"
             )
