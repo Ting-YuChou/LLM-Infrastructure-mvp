@@ -1,3 +1,4 @@
+import copy
 import sys
 from pathlib import Path
 
@@ -165,7 +166,9 @@ def _save_tiny_hf_llama(path, **overrides):
         max_position_embeddings=128,
         tie_word_embeddings=False,
     )
-    values.update(overrides)
+    # Copies: transformers 5 adds rope_theta to the rope_scaling dict it gets,
+    # which would change the module-level LLAMA3_SCALING for later tests.
+    values.update(copy.deepcopy(overrides))
     torch.manual_seed(1234)
     hf_model = LlamaForCausalLM(LlamaConfig(**values, attn_implementation="eager"))
     hf_model.eval()
@@ -451,3 +454,20 @@ def test_unsupported_rope_scaling_config_is_rejected(tmp_path):
 
     with pytest.raises(ValueError, match="dynamic"):
         NanoLlamaConfig.from_pretrained(tmp_path)
+
+
+def test_config_reads_transformers5_rope_parameters(tmp_path):
+    import json
+
+    _save_tiny_hf_llama(tmp_path)
+    config_path = tmp_path / "config.json"
+    data = json.loads(config_path.read_text())
+    data.pop("rope_theta", None)
+    data.pop("rope_scaling", None)
+    data["rope_parameters"] = {"rope_theta": 500000.0, **LLAMA3_SCALING}
+    config_path.write_text(json.dumps(data))
+
+    config = NanoLlamaConfig.from_pretrained(tmp_path)
+
+    assert config.rope_theta == 500000.0
+    assert config.rope_scaling == LLAMA3_SCALING

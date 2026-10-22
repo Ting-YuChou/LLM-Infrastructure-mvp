@@ -91,7 +91,13 @@ class NanoLlamaConfig:
                 f"got model_type={model_type!r}"
             )
         heads = int(data["num_attention_heads"])
+        # transformers >= 5 writes rope_theta and the scaling keys together
+        # under "rope_parameters" instead of "rope_theta" / "rope_scaling".
+        rope_parameters = dict(data.get("rope_parameters") or {})
+        rope_theta = data.get("rope_theta", rope_parameters.pop("rope_theta", 10000.0))
         rope_scaling = data.get("rope_scaling")
+        if not rope_scaling and rope_parameters.get("rope_type", "default") != "default":
+            rope_scaling = rope_parameters
         return cls(
             vocab_size=int(data["vocab_size"]),
             hidden_size=int(data["hidden_size"]),
@@ -101,7 +107,7 @@ class NanoLlamaConfig:
             num_key_value_heads=int(data.get("num_key_value_heads", heads)),
             max_position_embeddings=int(data.get("max_position_embeddings", 2048)),
             rms_norm_eps=float(data.get("rms_norm_eps", 1e-6)),
-            rope_theta=float(data.get("rope_theta", 10000.0)),
+            rope_theta=float(rope_theta),
             rope_scaling=dict(rope_scaling) if rope_scaling else None,
             # LlamaConfig defaults to untied; only tie when the checkpoint says so.
             tie_word_embeddings=bool(data.get("tie_word_embeddings", False)),
