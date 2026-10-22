@@ -130,3 +130,26 @@ def apply_rope(
     cos = emb.cos().to(dtype=dtype).view(1, 1, positions.numel(), -1)
     sin = emb.sin().to(dtype=dtype).view(1, 1, positions.numel(), -1)
     return _apply_rope_one(query, cos, sin), _apply_rope_one(key, cos, sin)
+
+
+def rope_cos_sin(
+    inv_freq: torch.Tensor,
+    num_positions: int,
+    dtype: torch.dtype,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """cos and sin tables of shape [num_positions, head_dim] for positions 0..n-1.
+
+    Computed exactly like :func:`apply_rope` (fp32, then cast), so indexing
+    the tables by position gives the same values as recomputing them.
+    """
+    positions = torch.arange(num_positions, device=inv_freq.device, dtype=torch.float32)
+    freqs = torch.outer(positions, inv_freq.to(dtype=torch.float32))
+    emb = torch.cat((freqs, freqs), dim=-1)
+    return emb.cos().to(dtype=dtype), emb.sin().to(dtype=dtype)
+
+
+def apply_rope_cos_sin(
+    x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> torch.Tensor:
+    """Rotate ``x`` with cos/sin already gathered for its positions (broadcast)."""
+    return _apply_rope_one(x, cos, sin)

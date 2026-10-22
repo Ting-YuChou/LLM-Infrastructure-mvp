@@ -97,8 +97,11 @@ class StaticKVCache:
 class PagedKVCache:
     """Global block-addressed KV cache.
 
-    Layout is [num_blocks, block_size, kv_heads, head_dim] per layer. Scheduler
-    state maps each sequence's logical token positions to physical cache slots.
+    Layout is [num_blocks + 1, block_size, kv_heads, head_dim] per layer.
+    Scheduler state maps each sequence's logical token positions to physical
+    cache slots. The extra block (``null_block``) is outside the block
+    manager's pool: block tables are padded with it, and padded batch rows
+    write into it, so neither ever touches a real sequence's KV.
     """
 
     num_layers: int
@@ -112,23 +115,30 @@ class PagedKVCache:
     def __post_init__(self) -> None:
         self.device = torch.device(self.device)
         shape = (
-            self.num_blocks,
+            self.num_blocks + 1,
             self.block_size,
             self.num_key_value_heads,
             self.head_dim,
         )
+        # Zeroed, not empty: attention reads whole blocks and masks the slots
+        # past a sequence's length, and those must not hold NaN bit patterns.
         self.keys = [
-            torch.empty(shape, dtype=self.dtype, device=self.device)
+            torch.zeros(shape, dtype=self.dtype, device=self.device)
             for _ in range(self.num_layers)
         ]
         self.values = [
-            torch.empty(shape, dtype=self.dtype, device=self.device)
+            torch.zeros(shape, dtype=self.dtype, device=self.device)
             for _ in range(self.num_layers)
         ]
 
     @property
+    def null_block(self) -> int:
+        return self.num_blocks
+
+    @property
     def total_slots(self) -> int:
-        return self.num_blocks * self.block_size
+        """Addressable slots, including the null block's."""
+        return (self.num_blocks + 1) * self.block_size
 
     def update(
         self,
@@ -148,11 +158,12 @@ class PagedKVCache:
                 f"key/value shape must be {expected}, got {tuple(key.shape)}"
             )
 
+        # No bounds check here: it would read the slots back to the host on
+        # every layer. Callers build slot_mapping from block tables and check
+        # it on the host (metadata.build_batch).
         slot_mapping = slot_mapping.to(device=self.device, dtype=torch.long)
         if slot_mapping.numel() == 0:
             return
-        if int(slot_mapping.max().item()) >= self.total_slots:
-            raise ValueError("slot_mapping references a slot outside the KV cache")
 
         flat_keys = self.keys[layer_idx].view(
             self.total_slots,

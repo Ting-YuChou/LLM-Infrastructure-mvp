@@ -48,26 +48,17 @@ class FakePagedModel:
             device="cpu",
         )
 
-    def forward_paged(
-        self,
-        input_ids,
-        positions,
-        cache,
-        slot_mapping,
-        block_tables,
-        context_lens,
-        query_lens,
-        is_prefill,
-    ):
-        del positions, cache, slot_mapping, block_tables, context_lens
+    def forward_batch(self, input_ids, positions, cache, metadata):
+        del positions, cache
         self.calls.append(
             {
                 "tokens": int(input_ids.numel()),
-                "query_lens": list(query_lens),
-                "is_prefill": is_prefill,
+                "query_lens": list(metadata.query_lens),
+                "is_prefill": metadata.is_prefill,
             }
         )
-        logits = torch.zeros(input_ids.numel(), 128)
+        # One row per sequence, like the real model with logits_indices.
+        logits = torch.zeros(metadata.num_seqs, 128)
         logits[:, 2] = 10.0
         return logits
 
@@ -148,36 +139,28 @@ class ByteTokenizer:
 
 
 class ScriptedPagedModel(FakePagedModel):
-    """Each segment's last row argmaxes to next_token(segment_ids, positions)."""
+    """Each sequence's logits row argmaxes to next_token(segment_ids, positions)."""
 
     def __init__(self, next_token, delay: float = 0.0):
         super().__init__()
         self.next_token = next_token
         self.delay = delay
 
-    def forward_paged(
-        self,
-        input_ids,
-        positions,
-        cache,
-        slot_mapping,
-        block_tables,
-        context_lens,
-        query_lens,
-        is_prefill,
-    ):
-        del cache, slot_mapping, block_tables, context_lens
+    def forward_batch(self, input_ids, positions, cache, metadata):
+        del cache
         if self.delay:
             time.sleep(self.delay)
-        self.calls.append({"query_lens": list(query_lens), "is_prefill": is_prefill})
-        logits = torch.zeros(input_ids.numel(), 512)
+        self.calls.append(
+            {"query_lens": list(metadata.query_lens), "is_prefill": metadata.is_prefill}
+        )
+        logits = torch.zeros(metadata.num_seqs, 512)
         start = 0
-        for query_len in query_lens:
+        for row, query_len in enumerate(metadata.query_lens):
             end = start + query_len
             token = self.next_token(
                 input_ids[start:end].tolist(), positions[start:end].tolist()
             )
-            logits[end - 1, token] = 10.0
+            logits[row, token] = 10.0
             start = end
         return logits
 

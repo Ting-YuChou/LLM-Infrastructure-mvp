@@ -17,6 +17,7 @@ from .block_manager import BlockManager
 from .config import NanoVLLMConfig
 from .kv_cache import PagedKVCache
 from .model import NanoLlamaForCausalLM
+from .model_runner import ModelRunner
 from .scheduler import Scheduler
 from .sampling import SamplingOptions, sample_next_token
 from .sequence import GenerationEvent, Sequence, SequenceStatus
@@ -167,6 +168,7 @@ class NanoLlamaEngine:
         self.block_manager: Optional[BlockManager] = None
         self.scheduler: Optional[Scheduler] = None
         self.paged_cache: Optional[PagedKVCache] = None
+        self.model_runner: Optional[ModelRunner] = None
         self._scheduler_task: Optional[asyncio.Task] = None
         self._scheduler_event: Optional[asyncio.Event] = None
         self._scheduler_lock: Optional[asyncio.Lock] = None
@@ -193,6 +195,7 @@ class NanoLlamaEngine:
             device=self.config.device,
             use_triton=self.config.use_triton,
             attention_backend=self.config.attention_backend,
+            max_model_len=self.config.max_model_len,
         )
         self._initialize_batching_state()
         logger.info("nano-vLLM EOS token ids: %s", sorted(self.eos_token_ids))
@@ -480,6 +483,7 @@ class NanoLlamaEngine:
             num_blocks=self.config.num_kvcache_blocks,
             block_size=self.config.kvcache_block_size,
         )
+        self.model_runner = ModelRunner(self.model, self.paged_cache, self.block_manager)
 
     def _ensure_batching_state(self) -> None:
         if (
@@ -567,108 +571,9 @@ class NanoLlamaEngine:
         self._publish_events(emitted)
 
     def _run_scheduled_batch(self, seqs: list[Sequence], is_prefill: bool) -> list[int]:
-        if self.model is None or self.paged_cache is None or self.block_manager is None:
+        if self.model_runner is None:
             raise RuntimeError("nano-vLLM engine is not initialized")
-        input_ids, positions, slot_mapping, block_tables, context_lens, query_lens = (
-            self._prepare_prefill(seqs) if is_prefill else self._prepare_decode(seqs)
-        )
-        logits = self.model.forward_paged(
-            input_ids=input_ids,
-            positions=positions,
-            cache=self.paged_cache,
-            slot_mapping=slot_mapping,
-            block_tables=block_tables,
-            context_lens=context_lens,
-            query_lens=query_lens,
-            is_prefill=is_prefill,
-        )
-        token_ids = []
-        offset = 0
-        for seq, query_len in zip(seqs, query_lens):
-            sample_index = offset + query_len - 1
-            token_ids.append(
-                sample_next_token(
-                    logits[sample_index],
-                    temperature=seq.sampling.temperature,
-                    top_p=seq.sampling.top_p,
-                    top_k=seq.sampling.top_k,
-                )
-            )
-            offset += query_len
-        return token_ids
-
-    def _prepare_prefill(
-        self,
-        seqs: list[Sequence],
-    ) -> tuple[
-        torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, list[int]
-    ]:
-        input_ids: list[int] = []
-        positions: list[int] = []
-        slots: list[int] = []
-        context_lens: list[int] = []
-        query_lens: list[int] = []
-        for seq in seqs:
-            start = seq.num_cached_tokens
-            end = start + seq.num_scheduled_tokens
-            query_lens.append(seq.num_scheduled_tokens)
-            context_lens.append(end)
-            input_ids.extend(seq[start:end])
-            positions.extend(range(start, end))
-            slots.extend(
-                self.block_manager.slot_for_position(seq, pos)
-                for pos in range(start, end)
-            )
-        return self._to_runner_tensors(
-            input_ids, positions, slots, seqs, context_lens, query_lens
-        )
-
-    def _prepare_decode(
-        self,
-        seqs: list[Sequence],
-    ) -> tuple[
-        torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, list[int]
-    ]:
-        input_ids: list[int] = []
-        positions: list[int] = []
-        slots: list[int] = []
-        context_lens: list[int] = []
-        query_lens: list[int] = []
-        for seq in seqs:
-            position = len(seq) - 1
-            input_ids.append(seq.last_token)
-            positions.append(position)
-            slots.append(self.block_manager.slot_for_position(seq, position))
-            context_lens.append(len(seq))
-            query_lens.append(1)
-        return self._to_runner_tensors(
-            input_ids, positions, slots, seqs, context_lens, query_lens
-        )
-
-    def _to_runner_tensors(
-        self,
-        input_ids: list[int],
-        positions: list[int],
-        slots: list[int],
-        seqs: list[Sequence],
-        context_lens: list[int],
-        query_lens: list[int],
-    ) -> tuple[
-        torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, list[int]
-    ]:
-        device = self.model.device
-        max_blocks = max(len(seq.block_table) for seq in seqs)
-        padded_block_tables = [
-            seq.block_table + [-1] * (max_blocks - len(seq.block_table)) for seq in seqs
-        ]
-        return (
-            torch.tensor(input_ids, dtype=torch.long, device=device),
-            torch.tensor(positions, dtype=torch.long, device=device),
-            torch.tensor(slots, dtype=torch.long, device=device),
-            torch.tensor(padded_block_tables, dtype=torch.long, device=device),
-            torch.tensor(context_lens, dtype=torch.long, device=device),
-            query_lens,
-        )
+        return self.model_runner.run(seqs, is_prefill)
 
     def _publish_events(self, emitted: list[tuple[Sequence, int]]) -> None:
         for seq, token_id in emitted:

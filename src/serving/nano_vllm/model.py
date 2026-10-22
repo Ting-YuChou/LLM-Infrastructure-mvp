@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -10,9 +11,19 @@ from typing import Any, Dict, Optional
 import torch
 import torch.nn.functional as F
 
-from .kernels import apply_rope, causal_attention, rms_norm, silu_mul
+from .kernels import (
+    apply_rope,
+    apply_rope_cos_sin,
+    causal_attention,
+    paged_decode_attention,
+    paged_prefill_attention,
+    rms_norm,
+    rope_cos_sin,
+    silu_mul,
+)
 from .kernels.rotary import compute_inv_freq, validate_rope_scaling
 from .kv_cache import PagedKVCache, StaticKVCache
+from .metadata import BatchMetadata, build_batch
 
 
 def torch_dtype_from_string(
@@ -126,6 +137,58 @@ def _first_floating_dtype(weights: Dict[str, torch.Tensor]) -> Optional[torch.dt
     return None
 
 
+def _concat_projections(
+    weights: Dict[str, torch.Tensor], prefixes: list[str], fused: str
+) -> None:
+    """Replace several linear layers that read the same input with one."""
+    weights[f"{fused}.weight"] = torch.cat(
+        [weights.pop(f"{prefix}.weight") for prefix in prefixes]
+    )
+    biases = [weights.pop(f"{prefix}.bias", None) for prefix in prefixes]
+    if any(bias is not None for bias in biases):
+        if any(bias is None for bias in biases):
+            raise ValueError(f"{fused}: either all or none of {prefixes} need a bias")
+        weights[f"{fused}.bias"] = torch.cat(biases)
+
+
+def fuse_projections(
+    weights: Dict[str, torch.Tensor], num_layers: int
+) -> Dict[str, torch.Tensor]:
+    """q/k/v -> ``self_attn.qkv_proj`` and gate/up -> ``mlp.gate_up_proj``.
+
+    One GEMM instead of three (and two) per layer. Done on the checkpoint's
+    device (CPU) before weights move, so the GPU never holds both copies.
+    """
+    weights = dict(weights)
+    for layer_idx in range(num_layers):
+        attn = f"model.layers.{layer_idx}.self_attn"
+        mlp = f"model.layers.{layer_idx}.mlp"
+        _concat_projections(
+            weights, [f"{attn}.q_proj", f"{attn}.k_proj", f"{attn}.v_proj"],
+            f"{attn}.qkv_proj",
+        )
+        _concat_projections(
+            weights, [f"{mlp}.gate_proj", f"{mlp}.up_proj"], f"{mlp}.gate_up_proj"
+        )
+    return weights
+
+
+@dataclass(frozen=True)
+class _LayerWeights:
+    """Per-layer tensors, looked up once instead of by name on every call."""
+
+    input_norm: torch.Tensor
+    qkv: torch.Tensor
+    qkv_bias: Optional[torch.Tensor]
+    o_proj: torch.Tensor
+    o_bias: Optional[torch.Tensor]
+    post_norm: torch.Tensor
+    gate_up: torch.Tensor
+    gate_up_bias: Optional[torch.Tensor]
+    down: torch.Tensor
+    down_bias: Optional[torch.Tensor]
+
+
 class NanoLlamaForCausalLM:
     """Small, explicit Llama forward path for learning serving internals."""
 
@@ -137,22 +200,38 @@ class NanoLlamaForCausalLM:
         dtype: torch.dtype,
         use_triton: bool = True,
         attention_backend: str = "torch",
+        max_model_len: Optional[int] = None,
     ) -> None:
         self.config = config
         self.device = device
         self.dtype = dtype if device.type == "cuda" else torch.float32
         self.use_triton = use_triton
         self.attention_backend = attention_backend
+        self._validate_required_weights(weights)
+        weights = fuse_projections(weights, config.num_hidden_layers)
         self.weights = {
             name: self._move_weight(tensor) for name, tensor in weights.items()
         }
-        self._validate_required_weights()
         self.lm_head_weight = self._resolve_lm_head()
+        self.layers = [
+            self._layer_weights(layer_idx)
+            for layer_idx in range(config.num_hidden_layers)
+        ]
+        q_size = config.num_attention_heads * config.head_dim
+        kv_size = config.num_key_value_heads * config.head_dim
+        self._qkv_sizes = [q_size, kv_size, kv_size]
         self.inv_freq = compute_inv_freq(
             config.head_dim,
             theta=config.rope_theta,
             rope_scaling=config.rope_scaling,
             device=device,
+        )
+        # Indexed by position in forward_batch instead of recomputing cos/sin
+        # in every layer.
+        self.rope_cos, self.rope_sin = rope_cos_sin(
+            self.inv_freq,
+            max_model_len or config.max_position_embeddings,
+            self.dtype,
         )
 
     @classmethod
@@ -163,6 +242,7 @@ class NanoLlamaForCausalLM:
         device: str = "auto",
         use_triton: bool = True,
         attention_backend: str = "torch",
+        max_model_len: Optional[int] = None,
     ) -> "NanoLlamaForCausalLM":
         path = Path(model_path)
         if not path.is_dir():
@@ -179,6 +259,7 @@ class NanoLlamaForCausalLM:
             dtype=torch_dtype_from_string(dtype, checkpoint_dtype),
             use_triton=use_triton,
             attention_backend=attention_backend,
+            max_model_len=max_model_len,
         )
 
     def new_cache(self, batch_size: int, max_seq_len: int) -> StaticKVCache:
@@ -228,17 +309,16 @@ class NanoLlamaForCausalLM:
         )
         x = self.weights["model.embed_tokens.weight"][input_ids.to(self.device)]
 
-        for layer_idx in range(self.config.num_hidden_layers):
+        for layer_idx, layer in enumerate(self.layers):
             residual = x
             x_norm = rms_norm(
                 x,
-                self._weight(f"model.layers.{layer_idx}.input_layernorm.weight"),
+                layer.input_norm,
                 eps=self.config.rms_norm_eps,
                 use_triton=self.use_triton,
             )
-            query = self._linear(x_norm, f"model.layers.{layer_idx}.self_attn.q_proj")
-            key = self._linear(x_norm, f"model.layers.{layer_idx}.self_attn.k_proj")
-            value = self._linear(x_norm, f"model.layers.{layer_idx}.self_attn.v_proj")
+            qkv = F.linear(x_norm, layer.qkv, layer.qkv_bias)
+            query, key, value = qkv.split(self._qkv_sizes, dim=-1)
             query = self._shape_heads(query, self.config.num_attention_heads)
             key = self._shape_heads(key, self.config.num_key_value_heads)
             value = self._shape_heads(value, self.config.num_key_value_heads)
@@ -265,25 +345,8 @@ class NanoLlamaForCausalLM:
                 use_triton=self.use_triton,
             )
             attn = attn.transpose(1, 2).contiguous().view(batch_size, seq_len, -1)
-            x = residual + self._linear(
-                attn, f"model.layers.{layer_idx}.self_attn.o_proj"
-            )
-
-            residual = x
-            x_norm = rms_norm(
-                x,
-                self._weight(
-                    f"model.layers.{layer_idx}.post_attention_layernorm.weight"
-                ),
-                eps=self.config.rms_norm_eps,
-                use_triton=self.use_triton,
-            )
-            gate = self._linear(x_norm, f"model.layers.{layer_idx}.mlp.gate_proj")
-            up = self._linear(x_norm, f"model.layers.{layer_idx}.mlp.up_proj")
-            x = residual + self._linear(
-                silu_mul(gate, up, use_triton=self.use_triton),
-                f"model.layers.{layer_idx}.mlp.down_proj",
-            )
+            x = residual + F.linear(attn, layer.o_proj, layer.o_bias)
+            x = x + self._mlp(x, layer)
 
         x = rms_norm(
             x,
@@ -292,6 +355,104 @@ class NanoLlamaForCausalLM:
             use_triton=self.use_triton,
         )
         return F.linear(x, self.lm_head_weight)
+
+    @torch.inference_mode()
+    def forward_batch(
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        cache: PagedKVCache,
+        metadata: BatchMetadata,
+    ) -> torch.Tensor:
+        """Forward over a packed scheduler batch on the paged KV cache.
+
+        Returns logits for the rows in ``metadata.logits_indices`` (all rows
+        when it is None). Nothing here reads a device value back to the host.
+        """
+        if self.attention_backend != "torch":
+            raise NotImplementedError(
+                "nano-vLLM implements the paged KV contract with the PyTorch "
+                "attention backend. flash_attn is reserved for the GPU "
+                "fast-path phase."
+            )
+        num_tokens = input_ids.numel()
+        heads = self.config.num_attention_heads
+        kv_heads = self.config.num_key_value_heads
+        head_dim = self.config.head_dim
+        x = self.weights["model.embed_tokens.weight"][input_ids]
+        cos = self.rope_cos[positions].unsqueeze(1)  # [tokens, 1, head_dim]
+        sin = self.rope_sin[positions].unsqueeze(1)
+
+        for layer_idx, layer in enumerate(self.layers):
+            residual = x
+            x_norm = rms_norm(
+                x,
+                layer.input_norm,
+                eps=self.config.rms_norm_eps,
+                use_triton=self.use_triton,
+            )
+            qkv = F.linear(x_norm, layer.qkv, layer.qkv_bias)
+            query, key, value = qkv.split(self._qkv_sizes, dim=-1)
+            query = apply_rope_cos_sin(query.view(num_tokens, heads, head_dim), cos, sin)
+            key = apply_rope_cos_sin(key.view(num_tokens, kv_heads, head_dim), cos, sin)
+            value = value.view(num_tokens, kv_heads, head_dim)
+            cache.update(layer_idx, metadata.slot_mapping, key, value)
+            attn = self._paged_attention(
+                query, cache.keys[layer_idx], cache.values[layer_idx], metadata
+            )
+            x = residual + F.linear(
+                attn.reshape(num_tokens, -1), layer.o_proj, layer.o_bias
+            )
+            x = x + self._mlp(x, layer)
+
+        if metadata.logits_indices is not None:
+            x = x[metadata.logits_indices]
+        x = rms_norm(
+            x,
+            self._weight("model.norm.weight"),
+            eps=self.config.rms_norm_eps,
+            use_triton=self.use_triton,
+        )
+        return F.linear(x, self.lm_head_weight)
+
+    def _paged_attention(
+        self,
+        query: torch.Tensor,
+        key_cache: torch.Tensor,
+        value_cache: torch.Tensor,
+        metadata: BatchMetadata,
+    ) -> torch.Tensor:
+        scale = 1.0 / math.sqrt(self.config.head_dim)
+        if metadata.decode_only:
+            return paged_decode_attention(
+                query,
+                key_cache,
+                value_cache,
+                metadata.block_tables,
+                metadata.context_lens,
+                scale,
+            )
+        return paged_prefill_attention(
+            query,
+            key_cache,
+            value_cache,
+            metadata.block_tables,
+            metadata.query_lens,
+            metadata.context_lens_host,
+            scale,
+        )
+
+    def _mlp(self, x: torch.Tensor, layer: _LayerWeights) -> torch.Tensor:
+        x_norm = rms_norm(
+            x,
+            layer.post_norm,
+            eps=self.config.rms_norm_eps,
+            use_triton=self.use_triton,
+        )
+        gate, up = F.linear(x_norm, layer.gate_up, layer.gate_up_bias).chunk(2, dim=-1)
+        return F.linear(
+            silu_mul(gate, up, use_triton=self.use_triton), layer.down, layer.down_bias
+        )
 
     @torch.inference_mode()
     def forward_paged(
@@ -305,120 +466,36 @@ class NanoLlamaForCausalLM:
         query_lens: list[int],
         is_prefill: bool,
     ) -> torch.Tensor:
-        """Forward over a scheduler batch using paged KV cache metadata."""
-        del is_prefill
-        if self.attention_backend != "torch":
-            raise NotImplementedError(
-                "nano-vLLM v0.2 implements the paged KV contract with the "
-                "PyTorch attention backend. flash_attn is reserved for the "
-                "GPU fast-path phase."
-            )
+        """Per-row logits for a batch given as tensors (the pre-metadata API).
+
+        Kept for tests and scripts that build batches by hand: it moves the
+        tensors to the host, builds BatchMetadata and runs forward_batch over
+        every row. block_tables may be padded with -1.
+        """
         if input_ids.ndim != 1:
             raise ValueError("forward_paged expects flat input_ids")
         if positions.shape != input_ids.shape:
             raise ValueError("positions must match input_ids shape")
         if slot_mapping.shape != input_ids.shape:
             raise ValueError("slot_mapping must match input_ids shape")
-        if sum(query_lens) != input_ids.numel():
-            raise ValueError("query_lens must sum to the flat token count")
-
-        input_ids = input_ids.to(self.device)
-        positions = positions.to(self.device)
-        slot_mapping = slot_mapping.to(self.device)
-        block_tables = block_tables.to(self.device)
-        context_lens = context_lens.to(self.device)
-        x = self.weights["model.embed_tokens.weight"][input_ids]
-        query_offsets = self._query_offsets(query_lens)
-
-        for layer_idx in range(self.config.num_hidden_layers):
-            residual = x
-            x_norm = rms_norm(
-                x,
-                self._weight(f"model.layers.{layer_idx}.input_layernorm.weight"),
-                eps=self.config.rms_norm_eps,
-                use_triton=self.use_triton,
-            )
-            query = self._linear(x_norm, f"model.layers.{layer_idx}.self_attn.q_proj")
-            key = self._linear(x_norm, f"model.layers.{layer_idx}.self_attn.k_proj")
-            value = self._linear(x_norm, f"model.layers.{layer_idx}.self_attn.v_proj")
-            query = query.view(
-                -1,
-                self.config.num_attention_heads,
-                self.config.head_dim,
-            )
-            key = key.view(-1, self.config.num_key_value_heads, self.config.head_dim)
-            value = value.view(
-                -1, self.config.num_key_value_heads, self.config.head_dim
-            )
-
-            query_segments = []
-            key_segments = []
-            for start, end in query_offsets:
-                q_seg = query[start:end].transpose(0, 1).unsqueeze(0)
-                k_seg = key[start:end].transpose(0, 1).unsqueeze(0)
-                q_seg, k_seg = apply_rope(
-                    q_seg,
-                    k_seg,
-                    positions=positions[start:end],
-                    theta=self.config.rope_theta,
-                    use_triton=self.use_triton,
-                    inv_freq=self.inv_freq,
-                )
-                query_segments.append(q_seg.squeeze(0).transpose(0, 1))
-                key_segments.append(k_seg.squeeze(0).transpose(0, 1))
-            query = torch.cat(query_segments, dim=0)
-            key = torch.cat(key_segments, dim=0)
-            cache.update(layer_idx, slot_mapping, key, value)
-
-            attn_segments = []
-            for seq_index, (start, end) in enumerate(query_offsets):
-                seq_query = query[start:end].transpose(0, 1).unsqueeze(0)
-                seq_key, seq_value = cache.read_sequence(
-                    layer_idx,
-                    block_tables[seq_index],
-                    int(context_lens[seq_index].item()),
-                )
-                seq_key = self._repeat_kv(seq_key)
-                seq_value = self._repeat_kv(seq_value)
-                attn = causal_attention(
-                    seq_query,
-                    seq_key,
-                    seq_value,
-                    query_positions=positions[start:end],
-                    use_triton=self.use_triton,
-                )
-                attn_segments.append(attn.squeeze(0).transpose(0, 1))
-            attn = (
-                torch.cat(attn_segments, dim=0).contiguous().view(input_ids.numel(), -1)
-            )
-            x = residual + self._linear(
-                attn,
-                f"model.layers.{layer_idx}.self_attn.o_proj",
-            )
-
-            residual = x
-            x_norm = rms_norm(
-                x,
-                self._weight(
-                    f"model.layers.{layer_idx}.post_attention_layernorm.weight"
-                ),
-                eps=self.config.rms_norm_eps,
-                use_triton=self.use_triton,
-            )
-            gate = self._linear(x_norm, f"model.layers.{layer_idx}.mlp.gate_proj")
-            up = self._linear(x_norm, f"model.layers.{layer_idx}.mlp.up_proj")
-            x = residual + self._linear(
-                silu_mul(gate, up, use_triton=self.use_triton),
-                f"model.layers.{layer_idx}.mlp.down_proj",
-            )
-
-        x = rms_norm(
-            x,
-            self._weight("model.norm.weight"),
-            eps=self.config.rms_norm_eps,
-            use_triton=self.use_triton,
+        tables = [
+            [int(block) for block in row if int(block) >= 0]
+            for row in block_tables.tolist()
+        ]
+        input_ids_t, positions_t, metadata = build_batch(
+            input_ids=input_ids.tolist(),
+            positions=positions.tolist(),
+            slots=slot_mapping.tolist(),
+            block_tables=tables,
+            context_lens=context_lens.tolist(),
+            query_lens=list(query_lens),
+            is_prefill=is_prefill,
+            null_block=cache.null_block,
+            num_slots=cache.total_slots,
+            device=self.device,
+            all_logits=True,
         )
-        return F.linear(x, self.lm_head_weight)
+        return self.forward_batch(input_ids_t, positions_t, cache, metadata)
 
     def _resolve_lm_head(self) -> torch.Tensor:
         if self.config.tie_word_embeddings:
@@ -441,10 +518,20 @@ class NanoLlamaForCausalLM:
             return tensor.to(device=self.device, dtype=self.dtype)
         return tensor.to(device=self.device)
 
-    def _linear(self, x: torch.Tensor, prefix: str) -> torch.Tensor:
-        weight = self._weight(f"{prefix}.weight")
-        bias = self.weights.get(f"{prefix}.bias")
-        return F.linear(x, weight, bias)
+    def _layer_weights(self, layer_idx: int) -> _LayerWeights:
+        prefix = f"model.layers.{layer_idx}"
+        return _LayerWeights(
+            input_norm=self._weight(f"{prefix}.input_layernorm.weight"),
+            qkv=self._weight(f"{prefix}.self_attn.qkv_proj.weight"),
+            qkv_bias=self.weights.get(f"{prefix}.self_attn.qkv_proj.bias"),
+            o_proj=self._weight(f"{prefix}.self_attn.o_proj.weight"),
+            o_bias=self.weights.get(f"{prefix}.self_attn.o_proj.bias"),
+            post_norm=self._weight(f"{prefix}.post_attention_layernorm.weight"),
+            gate_up=self._weight(f"{prefix}.mlp.gate_up_proj.weight"),
+            gate_up_bias=self.weights.get(f"{prefix}.mlp.gate_up_proj.bias"),
+            down=self._weight(f"{prefix}.mlp.down_proj.weight"),
+            down_bias=self.weights.get(f"{prefix}.mlp.down_proj.bias"),
+        )
 
     def _shape_heads(self, x: torch.Tensor, num_heads: int) -> torch.Tensor:
         batch_size, seq_len, _ = x.shape
@@ -458,16 +545,7 @@ class NanoLlamaForCausalLM:
             return x
         return x.repeat_interleave(repeats, dim=1)
 
-    def _query_offsets(self, query_lens: list[int]) -> list[tuple[int, int]]:
-        offsets = []
-        start = 0
-        for query_len in query_lens:
-            end = start + query_len
-            offsets.append((start, end))
-            start = end
-        return offsets
-
-    def _validate_required_weights(self) -> None:
+    def _validate_required_weights(self, weights: Dict[str, torch.Tensor]) -> None:
         required = [
             "model.embed_tokens.weight",
             "model.norm.weight",
@@ -486,7 +564,7 @@ class NanoLlamaForCausalLM:
                     f"model.layers.{layer_idx}.mlp.down_proj.weight",
                 ]
             )
-        missing = [name for name in required if name not in self.weights]
+        missing = [name for name in required if name not in weights]
         if missing:
             raise KeyError(
                 f"Model checkpoint is missing required Llama weights: {missing[:5]}"

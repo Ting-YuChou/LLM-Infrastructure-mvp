@@ -7,9 +7,11 @@ torch = pytest.importorskip("torch")
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
+from serving.nano_vllm.metadata import build_batch  # noqa: E402
 from serving.nano_vllm.model import (  # noqa: E402
     NanoLlamaConfig,
     NanoLlamaForCausalLM,
+    fuse_projections,
     torch_dtype_from_string,
 )
 
@@ -260,6 +262,114 @@ def test_paged_forward_matches_transformers_llama(tmp_path, overrides):
     torch.testing.assert_close(second, expected_a[5:-1], **tol)
     torch.testing.assert_close(decode[0], expected_a[-1], **tol)
     torch.testing.assert_close(decode[1], expected_b[-1], **tol)
+
+
+def _prefill_two_sequences(model, cache):
+    """Prefill A (6 tokens, blocks 5 and 2) and B (3 tokens, block 7)."""
+    input_ids, positions, metadata = build_batch(
+        input_ids=[5, 17, 3, 88, 42, 9] + [7, 50, 1],
+        positions=list(range(6)) + list(range(3)),
+        slots=[20, 21, 22, 23, 8, 9] + [28, 29, 30],
+        block_tables=[[5, 2], [7]],
+        context_lens=[6, 3],
+        query_lens=[6, 3],
+        is_prefill=True,
+        null_block=cache.null_block,
+        num_slots=cache.total_slots,
+        device=model.device,
+    )
+    return model.forward_batch(input_ids, positions, cache, metadata)
+
+
+def _decode_batch(model, cache, extra_padding_rows=0):
+    """One decode step for A and B, optionally padded like a CUDA-graph bucket."""
+    null = cache.null_block
+    null_slot = null * cache.block_size
+    pad = extra_padding_rows
+    return build_batch(
+        input_ids=[25, 60] + [0] * pad,
+        positions=[6, 3] + [0] * pad,
+        slots=[10, 31] + [null_slot] * pad,
+        block_tables=[[5, 2], [7]] + [[null]] * pad,
+        context_lens=[7, 4] + [1] * pad,
+        query_lens=[1, 1] + [1] * pad,
+        is_prefill=False,
+        null_block=null,
+        num_slots=cache.total_slots,
+        device=model.device,
+    )
+
+
+def test_forward_batch_returns_logits_for_last_token_of_each_sequence(tmp_path):
+    hf_model, path = _save_tiny_hf_llama(tmp_path)
+    model = _load_nano(path)
+    cache = model.new_paged_cache(num_blocks=8, block_size=4)
+
+    prefill = _prefill_two_sequences(model, cache)
+
+    assert prefill.shape == (2, model.config.vocab_size)
+    tol = dict(rtol=1e-5, atol=1e-5)
+    torch.testing.assert_close(prefill[0], _hf_logits(hf_model, [5, 17, 3, 88, 42, 9])[-1], **tol)
+    torch.testing.assert_close(prefill[1], _hf_logits(hf_model, [7, 50, 1])[-1], **tol)
+
+
+def test_padding_rows_into_the_null_block_leave_real_rows_unchanged(tmp_path):
+    _, path = _save_tiny_hf_llama(tmp_path)
+    model = _load_nano(path)
+    plain_cache = model.new_paged_cache(num_blocks=8, block_size=4)
+    padded_cache = model.new_paged_cache(num_blocks=8, block_size=4)
+    _prefill_two_sequences(model, plain_cache)
+    _prefill_two_sequences(model, padded_cache)
+
+    ids, positions, metadata = _decode_batch(model, plain_cache)
+    plain = model.forward_batch(ids, positions, plain_cache, metadata)
+    ids, positions, metadata = _decode_batch(model, padded_cache, extra_padding_rows=2)
+    padded = model.forward_batch(ids, positions, padded_cache, metadata)
+
+    assert padded.shape == (4, model.config.vocab_size)
+    assert torch.isfinite(padded).all()
+    tol = dict(rtol=1e-5, atol=1e-5)
+    torch.testing.assert_close(padded[:2], plain, **tol)
+    # The padding rows wrote their KV only into the null block.
+    real_blocks = slice(0, padded_cache.num_blocks)
+    for layer_idx in range(model.config.num_hidden_layers):
+        torch.testing.assert_close(
+            padded_cache.keys[layer_idx][real_blocks],
+            plain_cache.keys[layer_idx][real_blocks],
+            **tol,
+        )
+
+
+def test_projections_are_fused_at_load(tmp_path):
+    _, path = _save_tiny_hf_llama(tmp_path)
+    model = _load_nano(path)
+    config = model.config
+    kv_dim = config.num_key_value_heads * config.head_dim
+
+    assert "model.layers.0.self_attn.q_proj.weight" not in model.weights
+    assert "model.layers.0.mlp.up_proj.weight" not in model.weights
+    assert model.weights["model.layers.0.self_attn.qkv_proj.weight"].shape == (
+        config.hidden_size + 2 * kv_dim,
+        config.hidden_size,
+    )
+    assert model.weights["model.layers.0.mlp.gate_up_proj.weight"].shape == (
+        2 * config.intermediate_size,
+        config.hidden_size,
+    )
+
+
+def test_fuse_projections_rejects_a_partial_bias():
+    weights = {
+        "model.layers.0.self_attn.q_proj.weight": torch.zeros(4, 4),
+        "model.layers.0.self_attn.k_proj.weight": torch.zeros(2, 4),
+        "model.layers.0.self_attn.v_proj.weight": torch.zeros(2, 4),
+        "model.layers.0.self_attn.q_proj.bias": torch.zeros(4),
+        "model.layers.0.mlp.gate_proj.weight": torch.zeros(8, 4),
+        "model.layers.0.mlp.up_proj.weight": torch.zeros(8, 4),
+    }
+
+    with pytest.raises(ValueError, match="bias"):
+        fuse_projections(weights, num_layers=1)
 
 
 def test_config_reads_dtype_tying_and_rope_scaling(tmp_path):
