@@ -11,14 +11,14 @@ blocks in flight. Two versions:
 - cuda: csrc/gemv_bf16.cu, CUDA cores with 128-bit loads and
   CUDA_GEMV_CONFIG["rows_per_warp"] weight rows per warp (up to 8 rows),
   built with torch.utils.cpp_extension on first use.
+
+Quantized weights (W4A16Weight, w4a16.py) take their own path.
 """
 
 from __future__ import annotations
 
 import functools
-import logging
 import math
-from pathlib import Path
 from typing import Optional
 
 import torch
@@ -34,7 +34,8 @@ except ModuleNotFoundError:  # pragma: no cover
     tl = None
     TRITON_AVAILABLE = False
 
-logger = logging.getLogger(__name__)
+from .cuda_ext import load_cuda_extension  # noqa: E402
+from .w4a16 import W4A16Weight, w4a16_linear  # noqa: E402
 
 LINEAR_BACKENDS = ("torch", "triton", "cuda")
 GEMV_MAX_ROWS = 16
@@ -146,31 +147,9 @@ def gemv_split_k(
     return split
 
 
-@functools.lru_cache(maxsize=None)
-def load_cuda_extension():
-    """JIT-build csrc/gemv_bf16.cu once per process; None if it cannot be built.
-
-    Needs nvcc matching torch's CUDA version (CUDA_HOME) and ninja. Call it
-    before capturing CUDA graphs: compiling inside a capture is not allowed.
-    """
-    try:
-        from torch.utils.cpp_extension import load
-
-        source = Path(__file__).with_name("csrc") / "gemv_bf16.cu"
-        return load(
-            name="nano_vllm_gemv_bf16",
-            sources=[str(source)],
-            extra_cuda_cflags=["-O3", "-lineinfo", "--use_fast_math"],
-            verbose=False,
-        )
-    except Exception:  # pragma: no cover - depends on the CUDA toolchain
-        logger.exception("nano-vLLM: building the CUDA GEMV failed; using F.linear")
-        return None
-
-
 def linear(
     x: torch.Tensor,
-    weight: torch.Tensor,
+    weight: torch.Tensor | W4A16Weight,
     bias: Optional[torch.Tensor] = None,
     backend: str = "torch",
     split_k: Optional[int] = None,
@@ -181,8 +160,11 @@ def linear(
     backend="triton" uses the Triton GEMV for <= 16 rows, backend="cuda" the
     CUDA one for <= 8 rows of bf16; everything else goes to F.linear.
     ``config`` overrides the chosen kernel's launch settings (GEMV_CONFIG or
-    CUDA_GEMV_CONFIG).
+    CUDA_GEMV_CONFIG). A W4A16Weight always goes to w4a16_linear, whatever
+    the backend.
     """
+    if isinstance(weight, W4A16Weight):
+        return w4a16_linear(x, weight, bias, config)
     rows = x.numel() // x.shape[-1] if x.shape[-1] else 0
     if (
         backend == "triton"

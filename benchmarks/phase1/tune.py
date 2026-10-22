@@ -4,11 +4,11 @@
 For each kernel and shape, times every config with kbench's CUDA-graph
 timer (inputs rotated past L2) and reports the fastest next to the config
 the code currently picks for that shape (decode_config(B), PREFILL_CONFIG,
-GEMV_CONFIG, CUDA_GEMV_CONFIG). Configs that fail to compile or run (e.g.
+GEMV_CONFIG, CUDA_GEMV_CONFIG, W4A16_CONFIG). Configs that fail to compile or run (e.g.
 too much shared memory) are recorded and skipped.
 
   python tune.py --out results/tune                  # all kernels
-  python tune.py --kernels gemv --out results/tune   # decode, prefill, gemv, cuda_gemv
+  python tune.py --kernels gemv --out results/tune   # decode, prefill, gemv, cuda_gemv, w4a16
 """
 
 from __future__ import annotations
@@ -161,6 +161,31 @@ def tune_cuda_gemv():
     return sweep("cuda_gemv", shapes, configs, make_call, input_bytes, linear_mod.CUDA_GEMV_CONFIG)
 
 
+def tune_w4a16():
+    w4a16 = importlib.import_module("src.serving.nano_vllm.kernels.w4a16")
+    if linear_mod.load_cuda_extension("w4a16") is None:
+        raise RuntimeError("the W4A16 kernels did not build")
+    shapes = [
+        {"layer": layer, "M": m, "N": n, "K": k}
+        for layer, (n, k) in {
+            "qkv": (6144, 4096), "o_proj": (4096, 4096), "gate_up": (28672, 4096),
+            "down": (4096, 14336),
+        }.items()
+        for m in (1, 4, 8)
+    ]
+    configs = grid(rows_per_warp=[1, 2, 4])
+
+    def make_call(shape, config):
+        x = randn(shape["M"], shape["K"], device="cuda")
+        w = w4a16.quantize_w4a16(randn(shape["N"], shape["K"], device="cuda", scale=shape["K"] ** -0.5))
+        return lambda: w4a16.w4a16_linear(x, w, config=config)
+
+    def input_bytes(shape):
+        return shape["N"] * shape["K"] // 2
+
+    return sweep("w4a16", shapes, configs, make_call, input_bytes, w4a16.W4A16_CONFIG)
+
+
 def markdown(rows) -> str:
     lines = ["# Triton launch-setting sweep", "",
              "| kernel | shape | best config | best us | default us | speedup |",
@@ -178,7 +203,7 @@ def markdown(rows) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--kernels", default="decode,prefill,gemv,cuda_gemv")
+    parser.add_argument("--kernels", default="decode,prefill,gemv,cuda_gemv,w4a16")
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
     assert torch.cuda.is_available(), "tune.py needs a GPU"
@@ -192,6 +217,7 @@ def main() -> None:
             "prefill": tune_prefill,
             "gemv": tune_gemv,
             "cuda_gemv": tune_cuda_gemv,
+            "w4a16": tune_w4a16,
         }[name]()
         # Written after each kernel so a failure in a later one keeps these.
         (out / "tune.json").write_text(json.dumps(rows, indent=2))

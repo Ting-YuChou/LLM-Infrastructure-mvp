@@ -6,7 +6,7 @@ import json
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -16,11 +16,13 @@ from .kernels import (
     causal_attention,
     fused_add_rms_norm,
     linear,
+    W4A16Weight,
     load_cuda_extension,
     paged_decode_attention,
     paged_prefill_attention,
     rms_norm,
     rope_and_cache_write,
+    quantize_w4a16,
     rope_cos_sin,
     silu_and_mul,
 )
@@ -182,19 +184,32 @@ def fuse_projections(
     return weights
 
 
+WEIGHT_QUANT_MODES = ("none", "w4a16")
+# The decoder-layer projections; embeddings, norms and lm_head stay in the
+# model dtype under weight_quant="w4a16".
+QUANTIZED_LINEARS = (
+    "self_attn.qkv_proj.weight",
+    "self_attn.o_proj.weight",
+    "mlp.gate_up_proj.weight",
+    "mlp.down_proj.weight",
+)
+
+Linear = Union[torch.Tensor, W4A16Weight]
+
+
 @dataclass(frozen=True)
 class _LayerWeights:
     """Per-layer tensors, looked up once instead of by name on every call."""
 
     input_norm: torch.Tensor
-    qkv: torch.Tensor
+    qkv: Linear
     qkv_bias: Optional[torch.Tensor]
-    o_proj: torch.Tensor
+    o_proj: Linear
     o_bias: Optional[torch.Tensor]
     post_norm: torch.Tensor
-    gate_up: torch.Tensor
+    gate_up: Linear
     gate_up_bias: Optional[torch.Tensor]
-    down: torch.Tensor
+    down: Linear
     down_bias: Optional[torch.Tensor]
 
 
@@ -211,20 +226,27 @@ class NanoLlamaForCausalLM:
         attention_backend: str = "torch",
         max_model_len: Optional[int] = None,
         linear_backend: str = "torch",
+        weight_quant: str = "none",
     ) -> None:
+        if weight_quant not in WEIGHT_QUANT_MODES:
+            raise ValueError(f"weight_quant must be one of: {', '.join(WEIGHT_QUANT_MODES)}")
         self.config = config
         self.device = device
         self.dtype = dtype if device.type == "cuda" else torch.float32
         self.use_triton = use_triton
         self.attention_backend = attention_backend
         self.linear_backend = linear_backend
-        if linear_backend == "cuda" and device.type == "cuda":
-            # Build the extension now, never inside a CUDA-graph capture.
-            load_cuda_extension()
+        self.weight_quant = weight_quant
+        if device.type == "cuda":
+            # Build the extensions now, never inside a CUDA-graph capture.
+            if linear_backend == "cuda":
+                load_cuda_extension()
+            if weight_quant == "w4a16":
+                load_cuda_extension("w4a16")
         self._validate_required_weights(weights)
         weights = fuse_projections(weights, config.num_hidden_layers)
         self.weights = {
-            name: self._move_weight(tensor) for name, tensor in weights.items()
+            name: self._load_weight(name, tensor) for name, tensor in weights.items()
         }
         self.lm_head_weight = self._resolve_lm_head()
         self.layers = [
@@ -258,6 +280,7 @@ class NanoLlamaForCausalLM:
         attention_backend: str = "torch",
         max_model_len: Optional[int] = None,
         linear_backend: str = "torch",
+        weight_quant: str = "none",
     ) -> "NanoLlamaForCausalLM":
         path = Path(model_path)
         if not path.is_dir():
@@ -276,6 +299,7 @@ class NanoLlamaForCausalLM:
             attention_backend=attention_backend,
             max_model_len=max_model_len,
             linear_backend=linear_backend,
+            weight_quant=weight_quant,
         )
 
     def new_cache(self, batch_size: int, max_seq_len: int) -> StaticKVCache:
@@ -333,7 +357,7 @@ class NanoLlamaForCausalLM:
                 eps=self.config.rms_norm_eps,
                 use_triton=self.use_triton,
             )
-            qkv = F.linear(x_norm, layer.qkv, layer.qkv_bias)
+            qkv = linear(x_norm, layer.qkv, layer.qkv_bias)
             query, key, value = qkv.split(self._qkv_sizes, dim=-1)
             query = self._shape_heads(query, self.config.num_attention_heads)
             key = self._shape_heads(key, self.config.num_key_value_heads)
@@ -361,7 +385,7 @@ class NanoLlamaForCausalLM:
                 use_triton=self.use_triton,
             )
             attn = attn.transpose(1, 2).contiguous().view(batch_size, seq_len, -1)
-            x = residual + F.linear(attn, layer.o_proj, layer.o_bias)
+            x = residual + linear(attn, layer.o_proj, layer.o_bias)
             x = x + self._mlp(x, layer)
 
         x = rms_norm(
@@ -486,8 +510,8 @@ class NanoLlamaForCausalLM:
             eps=self.config.rms_norm_eps,
             use_triton=self.use_triton,
         )
-        gate_up = F.linear(x_norm, layer.gate_up, layer.gate_up_bias)
-        return F.linear(
+        gate_up = linear(x_norm, layer.gate_up, layer.gate_up_bias)
+        return linear(
             silu_and_mul(gate_up, use_triton=self.use_triton), layer.down, layer.down_bias
         )
 
@@ -554,6 +578,17 @@ class NanoLlamaForCausalLM:
         if tensor.is_floating_point():
             return tensor.to(device=self.device, dtype=self.dtype)
         return tensor.to(device=self.device)
+
+    def _load_weight(self, name: str, tensor: torch.Tensor) -> torch.Tensor | W4A16Weight:
+        """Move one checkpoint tensor; quantize it here under weight_quant.
+
+        One weight at a time, so the full-precision copy of a quantized
+        projection is on the device only while it is being quantized.
+        """
+        moved = self._move_weight(tensor)
+        if self.weight_quant == "w4a16" and name.endswith(QUANTIZED_LINEARS):
+            return quantize_w4a16(moved)
+        return moved
 
     def _layer_weights(self, layer_idx: int) -> _LayerWeights:
         prefix = f"model.layers.{layer_idx}"

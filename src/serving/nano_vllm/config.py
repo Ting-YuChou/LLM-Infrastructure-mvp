@@ -53,6 +53,9 @@ class NanoVLLMConfig:
     # "triton" / "cuda": a GEMV kernel for linear layers when a batch has at
     # most 16 / 8 rows; "cuda" builds kernels/csrc/gemv_bf16.cu on first use.
     linear_backend: str = "torch"
+    # "w4a16": quantize the decoder-layer projections to 4-bit integers at
+    # load (RTN, groups of 128 along K); kernels/w4a16.py.
+    weight_quant: str = "none"
     use_triton: bool = True
     # Decode steps replay CUDA graphs (one per batch size up to
     # cuda_graph_max_bs) unless enforce_eager; CPU always runs eagerly.
@@ -79,6 +82,8 @@ class NanoVLLMConfig:
             raise ValueError("attention_backend must be one of: torch, triton, flash_attn")
         if self.linear_backend not in {"torch", "triton", "cuda"}:
             raise ValueError("linear_backend must be one of: torch, triton, cuda")
+        if self.weight_quant not in {"none", "w4a16"}:
+            raise ValueError("weight_quant must be one of: none, w4a16")
 
     @classmethod
     def from_yaml(cls, config_path: str | None) -> "NanoVLLMConfig":
@@ -150,6 +155,9 @@ class NanoVLLMConfig:
             ),
             linear_backend=str(
                 _env("LINEAR_BACKEND", engine.get("linear_backend", cls.linear_backend))
+            ),
+            weight_quant=str(
+                _env("WEIGHT_QUANT", engine.get("weight_quant", cls.weight_quant))
             ),
             use_triton=_bool_value(
                 _env("USE_TRITON", engine.get("use_triton")),

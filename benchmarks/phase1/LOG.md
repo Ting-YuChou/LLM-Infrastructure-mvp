@@ -236,3 +236,23 @@ docker run --rm -v "$PWD":/repo:ro nano-triton-interp python /repo/benchmarks/ph
   - `decode_config(B)`：B<32 用 32 / 4 / 3，B≥32 用 128 / 4 / 3。只看 batch 大小，所以每個 CUDA graph 的設定是固定的。
   - `PREFILL_CONFIG` 改成 128 / 64 / 8 / 2。
   - 這是從 run 2 的「最佳值」挑出來的規則，沒有每個點都量過，run 3 的 `tune.py` 會把「目前規則」和最佳值並排列出來。interpreter 檢查多了大 batch config 的 decode case，31/31 通過。
+
+### e2e：開 graph 之後和 vLLM 打平（run 2，用的是調參前的預設）
+
+decode ms/step（`nano_bench.py` 和 `vllm_offline.py`，相同的 batch / in / out；nano 是 paged path）：
+
+| config | b=1 in=128 | b=16 in=1024 | b=64 in=1024 |
+|---|---:|---:|---:|
+| torch_eager（M1 重構後的 torch 路徑） | 37.59 | 51.07 | 152.42 |
+| triton_eager（M2/M4/M5 的 kernel，不開 graph） | 21.95 | 23.66 | 29.35 |
+| triton_graph（再加 M3 的 CUDA graph） | 12.67 | 14.96 | 24.08 |
+| gemv_graph（再加 M6 的 Triton GEMV） | **12.47** | 14.99 | 24.07 |
+| vLLM 0.19.1（CUDA graph） | 12.63 | 14.83 | 23.04 |
+| nano / vLLM | **0.99×** | 1.01× | 1.04× |
+
+- **起點對照**：Phase 0 的 nano 是 b=1 44.1 ms、b=16 619 ms。M1 純重構（拿掉逐 sequence 迴圈和 host sync）就讓 b=16 從 619 降到 51 ms；Triton kernel 再降到 24 ms；graph 把 b=1 從 22 降到 12.7 ms，達到 M3 的 ≤13.5 ms 目標。
+- **b=1 比 vLLM 快 1%**：nsys（gemv_graph b=1）每個 step 424 個 kernel（Phase 0 是 1,604），2 次 launch API 呼叫（graph replay 和 sampling），GPU 忙 12.29 ms、閒 0.76 ms；GEMM 佔 kernel 時間的 93%。
+- **b=64 還慢 4.5%**：b=16 時 attention 佔 14%，b=64 時更多；run 2 的 decode 預設在 B=64 比最佳設定慢 10%，run 3 用調過的設定再量。
+- **GEMV 在 e2e 上只差 0.2 ms**：b=1 時 Triton GEMV 比 cuBLAS 快 1.6%，和 kbench 的結果一致（gate_up、down、lm_head 稍快，qkv、o_proj 稍慢）。b≥16 時列數超過 16，GEMV 不會被用到，所以和 triton_graph 一樣。
+- **static path 沒變**：那條路徑是 Phase 0 的對照組，刻意保留 F.linear 和逐層的 PyTorch attention。
+- **prefill 時間不能拿來比**：`vllm_offline.py` 的 `prefill_s` 是把非 decode step 的時間加總。b=16×1024 時只有 0.042 s，換算超過 A100 的算力上限（16K token × 16 GFLOP ≈ 262 TFLOP，至少 0.84 s），所以 vLLM 的 step 計時沒有涵蓋整個 prefill。nano 的 1.02 s 約等於 257 TFLOPs，是峰值的 82%。這兩個數字要等改用 TTFT 量法之後才能並排比較。

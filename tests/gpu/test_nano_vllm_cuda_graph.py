@@ -22,8 +22,11 @@ BLOCK_SIZE = 16
 PROMPT_LENS = [17, 30, 5, 64, 33, 1, 47, 16]
 
 
-def _runner(attention_backend, max_graph_batch):
-    model = _model("cuda", torch.bfloat16, use_triton=True, attention_backend=attention_backend)
+def _runner(attention_backend, max_graph_batch, weight_quant="none"):
+    model = _model(
+        "cuda", torch.bfloat16, use_triton=True, attention_backend=attention_backend,
+        weight_quant=weight_quant,
+    )
     Sequence.block_size = BLOCK_SIZE
     cache = model.new_paged_cache(num_blocks=96, block_size=BLOCK_SIZE)
     manager = BlockManager(num_blocks=96, block_size=BLOCK_SIZE, enable_prefix_cache=False)
@@ -33,11 +36,18 @@ def _runner(attention_backend, max_graph_batch):
 
 
 @pytest.mark.parametrize(
-    "attention_backend,batch,max_graph_batch",
-    [("triton", 1, 8), ("triton", 3, 8), ("triton", 8, 8), ("triton", 3, 2), ("torch", 3, 8)],
+    "attention_backend,batch,max_graph_batch,weight_quant",
+    [
+        ("triton", 1, 8, "none"),
+        ("triton", 3, 8, "none"),
+        ("triton", 8, 8, "none"),
+        ("triton", 3, 2, "none"),
+        ("torch", 3, 8, "none"),
+        ("triton", 3, 8, "w4a16"),
+    ],
 )
-def test_graph_replay_matches_eager(attention_backend, batch, max_graph_batch):
-    runner, manager = _runner(attention_backend, max_graph_batch)
+def test_graph_replay_matches_eager(attention_backend, batch, max_graph_batch, weight_quant):
+    runner, manager = _runner(attention_backend, max_graph_batch, weight_quant)
     greedy = SamplingOptions(max_tokens=64, temperature=0.0)
     seqs = [
         Sequence(prompt_token_ids=[(7 * i + j) % 500 + 1 for j in range(length)], sampling=greedy)

@@ -91,7 +91,7 @@ start() {
 rerun() {  # the VM already has the venvs and the model
   case "${PHASE}" in
     phase0) export P0_STEPS="${P0_STEPS:-bandwidth vllm_serve sglang_serve nsys_vllm nano ncu summarize}" ;;
-    phase1) export P1_STEPS="${P1_STEPS:-tests kbench ncu e2e summarize}" ;;
+    phase1) export P1_STEPS="${P1_STEPS:-tests kbench ncu e2e quality summarize}" ;;
   esac
   upload_code
   run

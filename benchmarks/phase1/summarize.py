@@ -113,6 +113,11 @@ def main() -> None:
             )
         lines.append("")
 
+    quality = run / "quality" / "quality.md"
+    if quality.exists():
+        body = quality.read_text().splitlines()
+        lines += [f"#{body[0]}", *body[1:], ""]
+
     text = "\n".join(lines)
     (run / "summary.md").write_text(text + "\n")
     print(text)

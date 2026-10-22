@@ -70,7 +70,9 @@ def _random_weights(config):
     return weights
 
 
-def _model(device, dtype, use_triton, attention_backend="torch", linear_backend="torch"):
+def _model(
+    device, dtype, use_triton, attention_backend="torch", linear_backend="torch", weight_quant="none"
+):
     return NanoLlamaForCausalLM(
         config=CONFIG,
         weights=_random_weights(CONFIG),
@@ -80,6 +82,7 @@ def _model(device, dtype, use_triton, attention_backend="torch", linear_backend=
         attention_backend=attention_backend,
         max_model_len=128,
         linear_backend=linear_backend,
+        weight_quant=weight_quant,
     )
 
 
@@ -190,4 +193,29 @@ def test_all_triton_paths_track_fp32():
     )
 
     for expected, actual in zip(reference, fast):
+        torch.testing.assert_close(actual, expected, rtol=0.05, atol=0.05)
+
+
+def test_w4a16_model_tracks_fp32_with_the_same_dequantized_weights():
+    """bf16 + Triton + the W4A16 kernels vs fp32 F.linear on the dequantized weights."""
+    import dataclasses
+
+    from serving.nano_vllm.kernels import dequantize_w4a16
+
+    quantized = _model(
+        "cuda", torch.bfloat16, use_triton=True, attention_backend="triton", weight_quant="w4a16"
+    )
+    reference = _model("cuda", torch.float32, use_triton=False)
+    reference.layers = [
+        dataclasses.replace(
+            ref,
+            **{
+                name: dequantize_w4a16(getattr(q, name), torch.float32)
+                for name in ("qkv", "o_proj", "gate_up", "down")
+            },
+        )
+        for ref, q in zip(reference.layers, quantized.layers)
+    ]
+
+    for expected, actual in zip(_prefill_then_decode(reference), _prefill_then_decode(quantized)):
         torch.testing.assert_close(actual, expected, rtol=0.05, atol=0.05)

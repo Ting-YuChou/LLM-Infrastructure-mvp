@@ -69,6 +69,14 @@ from src.serving.nano_vllm.kernels.silu_mul import (  # noqa: E402
     silu_mul,
     silu_mul_reference,
 )
+from src.serving.nano_vllm.kernels.w4a16 import (  # noqa: E402
+    W4A16Weight,
+    dequantize_w4a16,
+    quantize_w4a16,
+    unpack_w4a16,
+    w4a16_linear,
+    w4a16_linear_reference,
+)
 
 BF16 = torch.bfloat16
 PEAK_TFLOPS = 312.0  # A100 dense bf16
@@ -711,6 +719,85 @@ register(
             [i["context"]] * len(i["query_lens"]), SCALE),
         flops=_prefill_flops,
         ncu="_paged_prefill|flash_fwd",
+    )
+)
+
+
+# W4A16 (M7). Every impl multiplies by the same 4-bit codes: each factory
+# quantizes w with quantize_w4a16 (setup, outside the timed region), and
+# vLLM's Marlin gets those codes repacked into its layout. GB/s counts the
+# 4-bit weight, its scales, x and y, so the cublas_bf16 row (F.linear on the
+# dequantized bf16 weight) reads as the bandwidth W4A16 would need to match it.
+def _w4a16_cuda(i: dict):
+    if not i["x"].is_cuda:
+        raise Unavailable("needs a GPU")
+    if load_cuda_extension("w4a16") is None:
+        raise RuntimeError("building kernels/csrc/w4a16.cu failed (see the log)")
+    weight = quantize_w4a16(i["w"])
+    return lambda: w4a16_linear(i["x"], weight)
+
+
+def _marlin_weight(weight: W4A16Weight, device: torch.device):
+    """Our codes and scales in the layout of vLLM's gptq_marlin (uint4b8, no act order)."""
+    from vllm.model_executor.layers.quantization.utils import marlin_utils
+    from vllm.model_executor.layers.quantization.utils.marlin_utils_test import (
+        get_weight_perm,
+        marlin_weights,
+    )
+
+    n, k = weight.shape
+    codes = unpack_w4a16(weight.qweight).t().contiguous().to(torch.int32)  # [K, N], q + 8
+    packed = marlin_weights(codes, k, n, 4, get_weight_perm(4, False))
+    scales = marlin_utils.marlin_permute_scales(
+        weight.scales.t().contiguous(), k, n, weight.group_size
+    )
+    return packed.to(device), scales.to(device)
+
+
+def _vllm_marlin(i: dict):
+    if not i["x"].is_cuda:
+        raise Unavailable("needs a GPU")
+    from vllm.model_executor.layers.quantization.utils import marlin_utils
+    from vllm.scalar_type import scalar_types
+
+    weight = quantize_w4a16(i["w"])
+    n, k = weight.shape
+    packed, scales = _marlin_weight(weight, i["x"].device)
+    workspace = marlin_utils.marlin_make_workspace_new(i["x"].device)
+    empty = marlin_utils.marlin_make_empty_g_idx(i["x"].device)  # no zero points, no act order
+    return lambda: marlin_utils.apply_gptq_marlin_linear(
+        i["x"], packed, scales, empty, empty, empty, workspace, scalar_types.uint4b8,
+        n, k, is_k_full=True,
+    )
+
+
+def _cublas_dequantized(i: dict):
+    weight = dequantize_w4a16(quantize_w4a16(i["w"]))
+    return lambda: F.linear(i["x"], weight)
+
+
+register(
+    Kernel(
+        name="w4a16_linear",
+        shapes=[
+            {"layer": layer, "M": m, "N": n, "K": k}
+            for layer, (n, k) in LINEAR_SHAPES.items()
+            if layer != "lm_head"  # stays bf16 under weight_quant="w4a16"
+            for m in (1, 4, 8, 16, 32, 64)
+        ],
+        inputs=lambda s, dev: {
+            "x": randn(s["M"], s["K"], device=dev),
+            "w": randn(s["N"], s["K"], device=dev, scale=s["K"] ** -0.5),
+        },
+        impls={
+            "vllm_marlin": _vllm_marlin,
+            "cuda": _w4a16_cuda,
+            "cublas_bf16": _cublas_dequantized,
+        },
+        reference=lambda i: w4a16_linear_reference(i["x"], quantize_w4a16(i["w"])),
+        bytes=lambda s: s["N"] * s["K"] // 2 + 2 * s["N"] * s["K"] // 128
+        + 2 * s["M"] * (s["K"] + s["N"]),
+        ncu="gemv_w4a16|dequantize_w4a16|Marlin|marlin",
     )
 )
 

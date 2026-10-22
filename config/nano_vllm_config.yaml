@@ -18,6 +18,9 @@ engine:
   # "triton" / "cuda" use a GEMV kernel for linear layers at <= 16 / 8 rows
   # (decode); "cuda" JIT-builds it and needs nvcc matching torch's CUDA.
   linear_backend: "torch"
+  # "w4a16" quantizes the decoder-layer projections to 4-bit at load
+  # (round-to-nearest, groups of 128); about 4x less weight memory and traffic.
+  weight_quant: "none"
   use_triton: true
   # CUDA graphs for decode steps up to cuda_graph_max_bs sequences.
   enforce_eager: false

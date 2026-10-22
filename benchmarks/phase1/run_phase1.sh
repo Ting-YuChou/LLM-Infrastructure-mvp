@@ -14,18 +14,20 @@
 #             written to <P0_ROOT>/cuda129.env, which every later step sources
 #   tests     tests/gpu + tests/unit/test_nano_vllm_*.py; any SKIPPED fails it
 #   kbench    kbench.py: correctness, then time / GB/s / % of peak per shape
-#   tune      tune.py: sweep the Triton kernels' launch settings (not in the default)
+#   tune      tune.py: sweep the kernels' launch settings (not in the default)
 #   ncu       ncu on each kbench kernel (kbench.py --ncu-mode), analyze_ncu.py
 #   e2e       nano_bench.py per nano config and vllm_offline.py at the same
 #             points; nsys on the last nano config
+#   quality   quality.py: wikitext-2 perplexity and top-1 agreement of the torch,
+#             Triton and W4A16 paths on the real model
 #   summarize summary.md
 #
 # Env: P0_ROOT (default /workspace/p0), P0_RUN_ID (default: UTC timestamp),
 # P0_REPO_DIR (default: the checkout holding this script), P1_STEPS,
 # P1_MODEL (default unsloth/Meta-Llama-3.1-8B-Instruct), P1_TUNE (tune.py
-# kernels: decode,prefill,gemv,cuda_gemv), P1_KERNELS (kbench and
+# kernels: decode,prefill,gemv,cuda_gemv,w4a16), P1_KERNELS (kbench and
 # ncu filter, comma-separated), P1_E2E_RUNS (nano_bench kind:batch:in:out list;
-# vLLM runs the paged ones), P1_NANO_CONFIGS (label:attention:linear:eager|graph
+# vLLM runs the paged ones), P1_NANO_CONFIGS (label:attention:linear:eager|graph[:weight_quant]
 # per nano_bench run, default: the Phase 1 milestones in order), P1_NCU_LAUNCHES (cap per kbench kernel, default
 # 300), P1_CUDA_VERSION (cuda129 step, default: the venv's torch.version.cuda),
 # P0_VLLM_VERSION (default 0.19.1).
@@ -42,18 +44,19 @@ VENVS="${ROOT}/venvs"
 PY="${VENVS}/vllm/bin/python"
 VLLM_VERSION="${P0_VLLM_VERSION:-0.19.1}"
 REPO_DIR="${P0_REPO_DIR:-$(cd "${CODE_DIR}/../.." && pwd)}"
-STEPS="${P1_STEPS:-installs cuda129 tests kbench ncu e2e summarize}"
+STEPS="${P1_STEPS:-installs cuda129 tests kbench ncu e2e quality summarize}"
 KERNELS="${P1_KERNELS:-}"
 E2E_RUNS="${P1_E2E_RUNS:-static:1:128:256,paged:1:128:256,paged:16:1024:256,paged:64:1024:256}"
 # torch_eager: the M1 refactor alone; triton_eager: Triton attention and fused
 # kernels (M2, M4, M5); triton_graph: + decode CUDA graphs (M3); gemv_graph:
-# + the Triton GEMV (M6).
-NANO_CONFIGS="${P1_NANO_CONFIGS:-torch_eager:torch:torch:eager triton_eager:triton:torch:eager triton_graph:triton:torch:graph gemv_graph:triton:triton:graph}"
+# + the Triton GEMV (M6); cuda_gemv_graph: the CUDA GEMV instead (M6);
+# w4a16_graph: 4-bit decoder weights (M7).
+NANO_CONFIGS="${P1_NANO_CONFIGS:-torch_eager:torch:torch:eager triton_eager:triton:torch:eager triton_graph:triton:torch:graph gemv_graph:triton:triton:graph cuda_gemv_graph:triton:cuda:graph w4a16_graph:triton:triton:graph:w4a16}"
 CUDA_ENV="${ROOT}/cuda129.env"
 
 export HF_HOME="${ROOT}/hf_cache" UV_CACHE_DIR="${ROOT}/uv_cache" UV_PYTHON_INSTALL_DIR="${ROOT}/uv_python"
 export PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false MPLBACKEND=Agg
-mkdir -p "${OUT}"/{logs,tests,kbench,ncu,nsys,offline}
+mkdir -p "${OUT}"/{logs,tests,kbench,ncu,nsys,offline,quality}
 exec 3>&1  # console; step output goes to ${OUT}/logs/<step>.log
 
 log() { echo "[p1 $(date -u +%H:%M:%S)] $*" >&3; }
@@ -137,10 +140,10 @@ ncu_kbench() {  # one ncu report per kbench kernel, limited to its --kernel-name
 }
 
 # --- end to end --------------------------------------------------------------
-nano_config_args() {  # label:attention:linear:eager|graph -> nano_bench flags
-  local label attention linear mode
-  IFS=: read -r label attention linear mode <<< "$1"
-  echo "--attention-backend ${attention} --linear-backend ${linear}$([[ "${mode}" == eager ]] && echo " --enforce-eager")"
+nano_config_args() {  # label:attention:linear:eager|graph[:weight_quant] -> nano_bench flags
+  local label attention linear mode quant
+  IFS=: read -r label attention linear mode quant <<< "$1"
+  echo "--attention-backend ${attention} --linear-backend ${linear} --weight-quant ${quant:-none}$([[ "${mode}" == eager ]] && echo " --enforce-eager")"
 }
 
 e2e() {
@@ -171,6 +174,11 @@ e2e() {
     --runs paged:16:1024:64 $(nano_config_args "${last}") \
     --out "${OUT}/offline/nano_${label}_b16_nsys.json" || rc=1
   return "${rc}"
+}
+
+quality() {
+  PYTHONPATH="${REPO_DIR}" "${PY}" "${CODE_DIR}/quality.py" --model "${MODEL}" --out "${OUT}/quality" &&
+  cat "${OUT}/quality/quality.md" >&3
 }
 
 environment() {
@@ -213,6 +221,7 @@ want kbench && run_step kbench kbench
 want tune && run_step tune tune
 want ncu && run_step ncu ncu_kbench
 want e2e && run_step e2e e2e
+want quality && run_step quality quality
 run_step environment environment
 want summarize && run_step summarize summarize
 log "P1_DONE ${RUN_ID}; status:"

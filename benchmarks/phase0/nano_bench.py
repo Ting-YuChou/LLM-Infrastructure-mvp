@@ -172,6 +172,7 @@ def main() -> None:
     parser.add_argument("--device", default="cuda", help="cpu only for testing the harness")
     parser.add_argument("--attention-backend", default="torch", choices=["torch", "triton"])
     parser.add_argument("--linear-backend", default="torch", choices=["torch", "triton", "cuda"])
+    parser.add_argument("--weight-quant", default="none", choices=["none", "w4a16"])
     parser.add_argument(
         "--enforce-eager", action="store_true", help="no decode CUDA graphs (paged path)"
     )
@@ -191,6 +192,7 @@ def main() -> None:
         max_num_batched_tokens=max(4096, max_len),
         attention_backend=args.attention_backend,
         linear_backend=args.linear_backend,
+        weight_quant=args.weight_quant,
         enforce_eager=args.enforce_eager,
     )
     engine = NanoLlamaEngine(config)
@@ -217,6 +219,7 @@ def main() -> None:
         result["load_s"] = load_s
         result["attention_backend"] = args.attention_backend
         result["linear_backend"] = args.linear_backend
+        result["weight_quant"] = args.weight_quant
         result["cuda_graphs"] = (
             kind == "paged" and not args.enforce_eager and args.device == "cuda"
         )
