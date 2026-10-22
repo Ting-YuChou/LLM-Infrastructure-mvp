@@ -178,9 +178,9 @@ def _hf_logits(hf_model, token_ids: list[int]) -> torch.Tensor:
         return hf_model(torch.tensor([token_ids])).logits[0]
 
 
-def _load_nano(path) -> NanoLlamaForCausalLM:
+def _load_nano(path, **kwargs) -> NanoLlamaForCausalLM:
     return NanoLlamaForCausalLM.from_pretrained(
-        path, dtype="float32", device="cpu", use_triton=False
+        path, dtype="float32", device="cpu", use_triton=False, **kwargs
     )
 
 
@@ -338,6 +338,20 @@ def test_padding_rows_into_the_null_block_leave_real_rows_unchanged(tmp_path):
             plain_cache.keys[layer_idx][real_blocks],
             **tol,
         )
+
+
+def test_triton_backend_falls_back_to_the_references_on_cpu(tmp_path):
+    _, path = _save_tiny_hf_llama(tmp_path)
+    outputs = []
+    for backend in ("torch", "triton"):
+        model = _load_nano(path, attention_backend=backend)
+        cache = model.new_paged_cache(num_blocks=8, block_size=4)
+        prefill = _prefill_two_sequences(model, cache)
+        ids, positions, metadata = _decode_batch(model, cache)
+        outputs.append((prefill, model.forward_batch(ids, positions, cache, metadata)))
+
+    for expected, actual in zip(*outputs):
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
 def test_projections_are_fused_at_load(tmp_path):

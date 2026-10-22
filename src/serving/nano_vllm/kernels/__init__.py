@@ -2,6 +2,7 @@
 
 from .attention import causal_attention, decode_attention
 from .paged_attention import (
+    decode_num_splits,
     paged_decode_attention,
     paged_decode_attention_reference,
     paged_prefill_attention,
@@ -9,6 +10,7 @@ from .paged_attention import (
 )
 from .rmsnorm import is_triton_available as rmsnorm_triton_available
 from .rmsnorm import rms_norm, rms_norm_reference
+from .rope_cache import rope_and_cache_write, rope_and_cache_write_reference
 from .rotary import apply_rope, apply_rope_cos_sin, rope_cos_sin
 from .silu_mul import silu_mul, silu_mul_reference
 
@@ -17,6 +19,7 @@ __all__ = [
     "apply_rope_cos_sin",
     "causal_attention",
     "decode_attention",
+    "decode_num_splits",
     "paged_decode_attention",
     "paged_decode_attention_reference",
     "paged_prefill_attention",
@@ -24,6 +27,8 @@ __all__ = [
     "rms_norm",
     "rms_norm_reference",
     "rmsnorm_triton_available",
+    "rope_and_cache_write",
+    "rope_and_cache_write_reference",
     "rope_cos_sin",
     "silu_mul",
     "silu_mul_reference",

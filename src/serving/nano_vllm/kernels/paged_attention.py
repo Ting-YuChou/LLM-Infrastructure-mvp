@@ -4,11 +4,212 @@ Cache layout per layer is [num_blocks, block_size, kv_heads, head_dim]; query
 head ``h`` reads kv head ``h // (q_heads // kv_heads)``, as in transformers'
 repeat_kv. The references below are the PyTorch path and the ground truth for
 the kernels: they compute in fp32 and never read sizes back to the host.
+
+The Triton decode kernel is flash-decoding: each program owns one (sequence,
+kv head, split) and reads its slice of the context once for all the query
+heads of that kv head, keeping a running softmax; a second kernel merges the
+splits by their log-sum-exp. Lengths and block ids come from device tensors,
+and the split count depends only on the batch size, so a captured CUDA graph
+stays valid as contexts grow.
 """
 
 from __future__ import annotations
 
+import functools
+import math
+from typing import Optional
+
 import torch
+
+try:  # pragma: no cover - exercised only in CUDA/Triton environments
+    import triton
+    import triton.language as tl
+
+    TRITON_AVAILABLE = True
+except ModuleNotFoundError:  # pragma: no cover
+    triton = None
+    tl = None
+    TRITON_AVAILABLE = False
+
+# Context tokens per inner-loop tile, independent of the cache block size.
+DECODE_BLOCK_N = 64
+MAX_DECODE_SPLITS = 32
+
+
+if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
+
+    @triton.jit
+    def _paged_decode_split_kernel(
+        q_ptr,
+        k_cache_ptr,
+        v_cache_ptr,
+        block_tables_ptr,
+        context_lens_ptr,
+        out_ptr,
+        part_out_ptr,
+        part_lse_ptr,
+        scale_log2e,
+        stride_qb,
+        stride_qh,
+        stride_kb,
+        stride_kt,
+        stride_kh,
+        stride_vb,
+        stride_vt,
+        stride_vh,
+        stride_bt,
+        stride_ob,
+        stride_oh,
+        stride_pb,
+        stride_ph,
+        stride_ps,
+        stride_lb,
+        stride_lh,
+        GROUP: tl.constexpr,
+        BLOCK_H: tl.constexpr,
+        HEAD_DIM: tl.constexpr,
+        PAGE_SIZE: tl.constexpr,
+        BLOCK_N: tl.constexpr,
+        NUM_SPLITS: tl.constexpr,
+        INPUT_PRECISION: tl.constexpr,
+    ):
+        seq = tl.program_id(0)
+        kv_head = tl.program_id(1)
+        split = tl.program_id(2)
+
+        # Contiguous context range of this split, a multiple of BLOCK_N and at
+        # least two tiles long; splits past the end do no work.
+        context_len = tl.load(context_lens_ptr + seq)
+        split_len = (context_len + NUM_SPLITS - 1) // NUM_SPLITS
+        split_len = tl.maximum(split_len, 2 * BLOCK_N)
+        split_len = (split_len + BLOCK_N - 1) // BLOCK_N * BLOCK_N
+        start = split * split_len
+        end = tl.minimum(start + split_len, context_len)
+
+        offs_h = tl.arange(0, BLOCK_H)
+        head_mask = offs_h < GROUP
+        heads = kv_head * GROUP + offs_h
+        offs_d = tl.arange(0, HEAD_DIM)
+        # The GROUP query heads of this kv head, padded to BLOCK_H rows so
+        # tl.dot can use tensor cores.
+        q = tl.load(
+            q_ptr + seq * stride_qb + heads[:, None] * stride_qh + offs_d[None, :],
+            mask=head_mask[:, None],
+            other=0.0,
+        )
+
+        m_i = tl.full([BLOCK_H], float("-inf"), dtype=tl.float32)
+        l_i = tl.zeros([BLOCK_H], dtype=tl.float32)
+        acc = tl.zeros([BLOCK_H, HEAD_DIM], dtype=tl.float32)
+        table = block_tables_ptr + seq.to(tl.int64) * stride_bt
+        for tile_start in range(start, end, BLOCK_N):
+            offs_n = tile_start + tl.arange(0, BLOCK_N)
+            n_mask = offs_n < end
+            blocks = tl.load(table + offs_n // PAGE_SIZE, mask=n_mask, other=0)
+            within = (offs_n % PAGE_SIZE).to(tl.int64)
+            k_rows = blocks.to(tl.int64) * stride_kb + within * stride_kt + kv_head * stride_kh
+            v_rows = blocks.to(tl.int64) * stride_vb + within * stride_vt + kv_head * stride_vh
+            k = tl.load(
+                k_cache_ptr + k_rows[:, None] + offs_d[None, :],
+                mask=n_mask[:, None],
+                other=0.0,
+            )
+            scores = tl.dot(q, tl.trans(k), input_precision=INPUT_PRECISION)
+            scores = scores * scale_log2e
+            scores = tl.where(n_mask[None, :], scores, float("-inf"))
+            m_new = tl.maximum(m_i, tl.max(scores, axis=1))
+            alpha = tl.exp2(m_i - m_new)
+            p = tl.exp2(scores - m_new[:, None])
+            l_i = l_i * alpha + tl.sum(p, axis=1)
+            v = tl.load(
+                v_cache_ptr + v_rows[:, None] + offs_d[None, :],
+                mask=n_mask[:, None],
+                other=0.0,
+            )
+            acc = acc * alpha[:, None] + tl.dot(
+                p.to(v.dtype), v, input_precision=INPUT_PRECISION
+            )
+            m_i = m_new
+
+        # An empty split (or context) has l_i == 0: write 0, not 0/0.
+        inv_l = tl.where(l_i > 0, 1.0 / l_i, 0.0)
+        result = acc * inv_l[:, None]
+        if NUM_SPLITS == 1:
+            tl.store(
+                out_ptr + seq * stride_ob + heads[:, None] * stride_oh + offs_d[None, :],
+                result.to(out_ptr.dtype.element_ty),
+                mask=head_mask[:, None],
+            )
+        else:
+            tl.store(
+                part_out_ptr
+                + seq * stride_pb
+                + heads[:, None] * stride_ph
+                + split * stride_ps
+                + offs_d[None, :],
+                result,
+                mask=head_mask[:, None],
+            )
+            # Base-2 log-sum-exp of this split's scores; -inf when empty.
+            tl.store(
+                part_lse_ptr + seq * stride_lb + heads * stride_lh + split,
+                m_i + tl.log2(l_i),
+                mask=head_mask,
+            )
+
+    @triton.jit
+    def _paged_decode_reduce_kernel(
+        part_out_ptr,
+        part_lse_ptr,
+        out_ptr,
+        stride_pb,
+        stride_ph,
+        stride_ps,
+        stride_lb,
+        stride_lh,
+        stride_ob,
+        stride_oh,
+        HEAD_DIM: tl.constexpr,
+        NUM_SPLITS: tl.constexpr,
+    ):
+        seq = tl.program_id(0)
+        head = tl.program_id(1)
+        offs_s = tl.arange(0, NUM_SPLITS)
+        offs_d = tl.arange(0, HEAD_DIM)
+        lse = tl.load(part_lse_ptr + seq * stride_lb + head * stride_lh + offs_s)
+        lse_max = tl.max(lse, axis=0)
+        lse_max = tl.where(lse_max == float("-inf"), 0.0, lse_max)
+        weights = tl.exp2(lse - lse_max)
+        parts = tl.load(
+            part_out_ptr
+            + seq * stride_pb
+            + head * stride_ph
+            + offs_s[:, None] * stride_ps
+            + offs_d[None, :]
+        )
+        total = tl.sum(weights, axis=0)
+        inv_total = tl.where(total > 0, 1.0 / total, 0.0)
+        out = tl.sum(parts * weights[:, None], axis=0) * inv_total
+        tl.store(
+            out_ptr + seq * stride_ob + head * stride_oh + offs_d,
+            out.to(out_ptr.dtype.element_ty),
+        )
+
+
+@functools.lru_cache(maxsize=None)
+def _num_sms(device_index: int) -> int:
+    return torch.cuda.get_device_properties(device_index).multi_processor_count
+
+
+def decode_num_splits(batch_size: int, kv_heads: int, device: torch.device) -> int:
+    """Splits per sequence: enough programs to fill the GPU about four times.
+
+    Depends only on the batch shape (never on context lengths), so one CUDA
+    graph per batch size stays valid as sequences grow.
+    """
+    device_index = device.index if device.index is not None else torch.cuda.current_device()
+    wanted = math.ceil(4 * _num_sms(device_index) / (batch_size * kv_heads))
+    return min(MAX_DECODE_SPLITS, triton.next_power_of_2(max(1, wanted)))
 
 
 def _gather_blocks(cache: torch.Tensor, block_table: torch.Tensor) -> torch.Tensor:
@@ -91,6 +292,10 @@ def paged_prefill_attention_reference(
     return torch.cat(outputs, dim=0).to(query.dtype)
 
 
+def is_triton_available() -> bool:
+    return TRITON_AVAILABLE
+
+
 def paged_decode_attention(
     query: torch.Tensor,
     key_cache: torch.Tensor,
@@ -98,10 +303,106 @@ def paged_decode_attention(
     block_tables: torch.Tensor,
     context_lens: torch.Tensor,
     scale: float,
+    use_triton: bool = False,
+    num_splits: Optional[int] = None,
 ) -> torch.Tensor:
+    """[batch, q_heads, head_dim] decode queries -> attention output, same shape."""
+    if use_triton and TRITON_AVAILABLE and query.is_cuda:  # pragma: no cover
+        return _paged_decode_attention_triton(
+            query, key_cache, value_cache, block_tables, context_lens, scale, num_splits
+        )
     return paged_decode_attention_reference(
         query, key_cache, value_cache, block_tables, context_lens, scale
     )
+
+
+def _paged_decode_attention_triton(  # pragma: no cover - depends on CUDA/Triton
+    query: torch.Tensor,
+    key_cache: torch.Tensor,
+    value_cache: torch.Tensor,
+    block_tables: torch.Tensor,
+    context_lens: torch.Tensor,
+    scale: float,
+    num_splits: Optional[int],
+) -> torch.Tensor:
+    batch, q_heads, head_dim = query.shape
+    _, page_size, kv_heads, cache_head_dim = key_cache.shape
+    if cache_head_dim != head_dim or q_heads % kv_heads != 0:
+        raise ValueError("query and KV cache head layouts do not match")
+    if head_dim & (head_dim - 1) or head_dim < 16:
+        raise ValueError("the Triton decode kernel needs a power-of-two head_dim >= 16")
+    if query.stride(-1) != 1 or key_cache.stride(-1) != 1 or value_cache.stride(-1) != 1:
+        raise ValueError("head_dim must be the contiguous dimension")
+    group = q_heads // kv_heads
+    if num_splits is None:
+        num_splits = decode_num_splits(batch, kv_heads, query.device)
+    if num_splits & (num_splits - 1):
+        raise ValueError("num_splits must be a power of two")
+
+    out = torch.empty_like(query)
+    if batch == 0:
+        return out
+    if num_splits == 1:
+        part_out = part_lse = out  # unused
+        part_strides = (0, 0, 0)
+        lse_strides = (0, 0)
+    else:
+        part_out = torch.empty(
+            batch, q_heads, num_splits, head_dim, dtype=torch.float32, device=query.device
+        )
+        part_lse = torch.empty(
+            batch, q_heads, num_splits, dtype=torch.float32, device=query.device
+        )
+        part_strides = part_out.stride()[:3]
+        lse_strides = part_lse.stride()[:2]
+
+    _paged_decode_split_kernel[(batch, kv_heads, num_splits)](
+        query,
+        key_cache,
+        value_cache,
+        block_tables,
+        context_lens,
+        out,
+        part_out,
+        part_lse,
+        scale * 1.4426950408889634,  # log2(e): the kernel uses exp2
+        query.stride(0),
+        query.stride(1),
+        key_cache.stride(0),
+        key_cache.stride(1),
+        key_cache.stride(2),
+        value_cache.stride(0),
+        value_cache.stride(1),
+        value_cache.stride(2),
+        block_tables.stride(0),
+        out.stride(0),
+        out.stride(1),
+        *part_strides,
+        *lse_strides,
+        GROUP=group,
+        BLOCK_H=max(16, triton.next_power_of_2(group)),
+        HEAD_DIM=head_dim,
+        PAGE_SIZE=page_size,
+        BLOCK_N=DECODE_BLOCK_N,
+        NUM_SPLITS=num_splits,
+        INPUT_PRECISION="ieee" if query.dtype == torch.float32 else "tf32",
+        num_warps=4,
+        num_stages=2,
+    )
+    if num_splits > 1:
+        _paged_decode_reduce_kernel[(batch, q_heads)](
+            part_out,
+            part_lse,
+            out,
+            *part_strides,
+            *lse_strides,
+            out.stride(0),
+            out.stride(1),
+            HEAD_DIM=head_dim,
+            NUM_SPLITS=num_splits,
+            num_warps=4,
+        )
+    return out
 
 
 def paged_prefill_attention(

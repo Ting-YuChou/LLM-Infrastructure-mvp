@@ -13,11 +13,11 @@ import torch.nn.functional as F
 
 from .kernels import (
     apply_rope,
-    apply_rope_cos_sin,
     causal_attention,
     paged_decode_attention,
     paged_prefill_attention,
     rms_norm,
+    rope_and_cache_write,
     rope_cos_sin,
     silu_mul,
 )
@@ -369,19 +369,15 @@ class NanoLlamaForCausalLM:
         Returns logits for the rows in ``metadata.logits_indices`` (all rows
         when it is None). Nothing here reads a device value back to the host.
         """
-        if self.attention_backend != "torch":
+        if self.attention_backend not in {"torch", "triton"}:
             raise NotImplementedError(
-                "nano-vLLM implements the paged KV contract with the PyTorch "
-                "attention backend. flash_attn is reserved for the GPU "
-                "fast-path phase."
+                "nano-vLLM's paged path supports the torch and triton attention "
+                "backends; flash_attn is not implemented."
             )
         num_tokens = input_ids.numel()
-        heads = self.config.num_attention_heads
-        kv_heads = self.config.num_key_value_heads
-        head_dim = self.config.head_dim
         x = self.weights["model.embed_tokens.weight"][input_ids]
-        cos = self.rope_cos[positions].unsqueeze(1)  # [tokens, 1, head_dim]
-        sin = self.rope_sin[positions].unsqueeze(1)
+        cos = self.rope_cos[positions]  # [tokens, head_dim]
+        sin = self.rope_sin[positions]
 
         for layer_idx, layer in enumerate(self.layers):
             residual = x
@@ -392,11 +388,17 @@ class NanoLlamaForCausalLM:
                 use_triton=self.use_triton,
             )
             qkv = F.linear(x_norm, layer.qkv, layer.qkv_bias)
-            query, key, value = qkv.split(self._qkv_sizes, dim=-1)
-            query = apply_rope_cos_sin(query.view(num_tokens, heads, head_dim), cos, sin)
-            key = apply_rope_cos_sin(key.view(num_tokens, kv_heads, head_dim), cos, sin)
-            value = value.view(num_tokens, kv_heads, head_dim)
-            cache.update(layer_idx, metadata.slot_mapping, key, value)
+            query = rope_and_cache_write(
+                qkv,
+                cos,
+                sin,
+                cache.keys[layer_idx],
+                cache.values[layer_idx],
+                metadata.slot_mapping,
+                self.config.num_attention_heads,
+                self.config.num_key_value_heads,
+                use_triton=self.attention_backend == "triton",
+            )
             attn = self._paged_attention(
                 query, cache.keys[layer_idx], cache.values[layer_idx], metadata
             )
@@ -431,6 +433,7 @@ class NanoLlamaForCausalLM:
                 metadata.block_tables,
                 metadata.context_lens,
                 scale,
+                use_triton=self.attention_backend == "triton",
             )
         return paged_prefill_attention(
             query,

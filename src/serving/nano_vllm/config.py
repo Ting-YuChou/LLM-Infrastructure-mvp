@@ -66,8 +66,8 @@ class NanoVLLMConfig:
             raise ValueError("max_num_seqs must be positive")
         if self.max_num_batched_tokens <= 0:
             raise ValueError("max_num_batched_tokens must be positive")
-        if self.attention_backend not in {"torch", "flash_attn"}:
-            raise ValueError("attention_backend must be one of: torch, flash_attn")
+        if self.attention_backend not in {"torch", "triton", "flash_attn"}:
+            raise ValueError("attention_backend must be one of: torch, triton, flash_attn")
 
     @classmethod
     def from_yaml(cls, config_path: str | None) -> "NanoVLLMConfig":

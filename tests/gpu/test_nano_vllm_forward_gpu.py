@@ -70,13 +70,14 @@ def _random_weights(config):
     return weights
 
 
-def _model(device, dtype, use_triton):
+def _model(device, dtype, use_triton, attention_backend="torch"):
     return NanoLlamaForCausalLM(
         config=CONFIG,
         weights=_random_weights(CONFIG),
         device=torch.device(device),
         dtype=dtype,
         use_triton=use_triton,
+        attention_backend=attention_backend,
         max_model_len=128,
     )
 
@@ -128,8 +129,9 @@ def _prefill_then_decode(model):
     return prefill.float().cpu(), decode.float().cpu()
 
 
-def test_decode_step_never_syncs_with_the_host():
-    model = _model("cuda", torch.bfloat16, use_triton=True)
+@pytest.mark.parametrize("attention_backend", ["torch", "triton"])
+def test_decode_step_never_syncs_with_the_host(attention_backend):
+    model = _model("cuda", torch.bfloat16, use_triton=True, attention_backend=attention_backend)
     cache = model.new_paged_cache(num_blocks=16, block_size=BLOCK_SIZE)
     ids, positions, metadata = _batch(model, cache, decode=False)
     model.forward_batch(ids, positions, cache, metadata)
@@ -159,4 +161,19 @@ def test_cuda_bf16_with_triton_tracks_fp32():
     fast = _prefill_then_decode(_model("cuda", torch.bfloat16, use_triton=True))
 
     for expected, actual in zip(reference, fast):
+        torch.testing.assert_close(actual, expected, rtol=0.05, atol=0.05)
+
+
+def test_triton_attention_backend_matches_torch_backend():
+    reference = _prefill_then_decode(_model("cuda", torch.float32, use_triton=False))
+    triton_fp32 = _prefill_then_decode(
+        _model("cuda", torch.float32, use_triton=False, attention_backend="triton")
+    )
+    triton_bf16 = _prefill_then_decode(
+        _model("cuda", torch.bfloat16, use_triton=True, attention_backend="triton")
+    )
+
+    for expected, actual in zip(reference, triton_fp32):
+        torch.testing.assert_close(actual, expected, rtol=1e-4, atol=1e-4)
+    for expected, actual in zip(reference, triton_bf16):
         torch.testing.assert_close(actual, expected, rtol=0.05, atol=0.05)
