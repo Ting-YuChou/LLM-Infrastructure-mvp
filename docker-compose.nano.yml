@@ -12,6 +12,8 @@ services:
       DEVICE: auto
       USE_TRITON: "true"
       ATTENTION_BACKEND: torch
+      ENFORCE_EAGER: "false"
+      CUDA_GRAPH_MAX_BS: "64"
       MAX_MODEL_LEN: "2048"
       MAX_NEW_TOKENS: "256"
       KVCACHE_BLOCK_SIZE: "16"

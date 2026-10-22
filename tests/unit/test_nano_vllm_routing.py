@@ -53,3 +53,17 @@ def test_nano_config_loads_yaml_defaults_and_env_overrides(tmp_path, monkeypatch
     assert config.device == "cpu"
     assert config.use_triton is True
     assert config.port == 9000
+
+
+def test_cuda_graph_settings_come_from_yaml_and_env(tmp_path, monkeypatch):
+    path = tmp_path / "nano.yaml"
+    path.write_text("engine:\n  enforce_eager: true\n  cuda_graph_max_bs: 8\n")
+    config = NanoVLLMConfig.from_yaml(str(path))
+    assert config.enforce_eager is True
+    assert config.cuda_graph_max_bs == 8
+
+    monkeypatch.setenv("ENFORCE_EAGER", "false")
+    monkeypatch.setenv("CUDA_GRAPH_MAX_BS", "32")
+    config = NanoVLLMConfig.from_yaml(str(path))
+    assert config.enforce_eager is False
+    assert config.cuda_graph_max_bs == 32

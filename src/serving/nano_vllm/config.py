@@ -51,6 +51,10 @@ class NanoVLLMConfig:
     enable_prefix_cache: bool = True
     attention_backend: str = "torch"
     use_triton: bool = True
+    # Decode steps replay CUDA graphs (one per batch size up to
+    # cuda_graph_max_bs) unless enforce_eager; CPU always runs eagerly.
+    enforce_eager: bool = False
+    cuda_graph_max_bs: int = 64
     eager_load: bool = True
     host: str = "0.0.0.0"
     port: int = 8000
@@ -66,6 +70,8 @@ class NanoVLLMConfig:
             raise ValueError("max_num_seqs must be positive")
         if self.max_num_batched_tokens <= 0:
             raise ValueError("max_num_batched_tokens must be positive")
+        if self.cuda_graph_max_bs <= 0:
+            raise ValueError("cuda_graph_max_bs must be positive")
         if self.attention_backend not in {"torch", "triton", "flash_attn"}:
             raise ValueError("attention_backend must be one of: torch, triton, flash_attn")
 
@@ -140,6 +146,16 @@ class NanoVLLMConfig:
             use_triton=_bool_value(
                 _env("USE_TRITON", engine.get("use_triton")),
                 default=cls.use_triton,
+            ),
+            enforce_eager=_bool_value(
+                _env("ENFORCE_EAGER", engine.get("enforce_eager")),
+                default=cls.enforce_eager,
+            ),
+            cuda_graph_max_bs=int(
+                _env(
+                    "CUDA_GRAPH_MAX_BS",
+                    engine.get("cuda_graph_max_bs", cls.cuda_graph_max_bs),
+                )
             ),
             eager_load=_bool_value(
                 _env("EAGER_LOAD", engine.get("eager_load")),

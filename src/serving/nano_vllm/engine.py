@@ -198,6 +198,11 @@ class NanoLlamaEngine:
             max_model_len=self.config.max_model_len,
         )
         self._initialize_batching_state()
+        if not self.config.enforce_eager and self.model.device.type == "cuda":
+            self.model_runner.capture_decode_graphs(
+                max_batch=min(self.config.max_num_seqs, self.config.cuda_graph_max_bs),
+                max_model_len=self.config.max_model_len,
+            )
         logger.info("nano-vLLM EOS token ids: %s", sorted(self.eos_token_ids))
         self.initialized = True
 

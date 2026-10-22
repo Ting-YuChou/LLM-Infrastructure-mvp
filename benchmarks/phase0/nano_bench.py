@@ -4,8 +4,10 @@
 Two paths, both as they are today:
   static  NanoLlamaForCausalLM.forward on a StaticKVCache, batch 1, one
           argmax + .item() per token (what NanoLlamaEngine.generate does);
-  paged   the continuous-batching engine: scheduler -> forward_paged ->
-          per-sequence sampling -> postprocess, driven step by step.
+  paged   the continuous-batching engine: scheduler -> ModelRunner (forward
+          over the batch, batched sampling) -> postprocess, driven step by
+          step. --attention-backend and --enforce-eager pick the Phase 1
+          paths (Triton attention, decode CUDA graphs).
 
 EOS is disabled so every sequence decodes exactly --output-len tokens. The
 decode steps of each measured run (after the prefill) sit between
@@ -168,6 +170,10 @@ def main() -> None:
     )
     parser.add_argument("--out", required=True)
     parser.add_argument("--device", default="cuda", help="cpu only for testing the harness")
+    parser.add_argument("--attention-backend", default="torch", choices=["torch", "triton"])
+    parser.add_argument(
+        "--enforce-eager", action="store_true", help="no decode CUDA graphs (paged path)"
+    )
     args = parser.parse_args()
 
     runs = [tuple(r.split(":")) for r in args.runs.split(",")]
@@ -182,6 +188,8 @@ def main() -> None:
         num_kvcache_blocks=max_batch * (max_len // 16 + 2) + 64,
         max_num_seqs=max_batch,
         max_num_batched_tokens=max(4096, max_len),
+        attention_backend=args.attention_backend,
+        enforce_eager=args.enforce_eager,
     )
     engine = NanoLlamaEngine(config)
     t0 = time.perf_counter()
@@ -205,6 +213,10 @@ def main() -> None:
             raw = run_paged(engine, prompts, output_len, profile=True)
         result = summarize(kind, batch, input_len, output_len, raw)
         result["load_s"] = load_s
+        result["attention_backend"] = args.attention_backend
+        result["cuda_graphs"] = (
+            kind == "paged" and not args.enforce_eager and args.device == "cuda"
+        )
         results.append(result)
         print("NANO_BENCH " + json.dumps(result), flush=True)
 

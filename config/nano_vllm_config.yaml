@@ -16,6 +16,9 @@ engine:
   device: "auto"
   attention_backend: "torch"
   use_triton: true
+  # CUDA graphs for decode steps up to cuda_graph_max_bs sequences.
+  enforce_eager: false
+  cuda_graph_max_bs: 64
   eager_load: true
   max_new_tokens: 256
   kvcache_block_size: 16
