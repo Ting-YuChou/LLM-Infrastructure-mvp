@@ -451,9 +451,12 @@ class NanoLlamaForCausalLM:
             key_cache,
             value_cache,
             metadata.block_tables,
+            metadata.cu_seqlens_q,
+            metadata.context_lens,
             metadata.query_lens,
             metadata.context_lens_host,
             scale,
+            use_triton=self.attention_backend == "triton",
         )
 
     def _mlp(self, x: torch.Tensor, layer: _LayerWeights) -> torch.Tensor:

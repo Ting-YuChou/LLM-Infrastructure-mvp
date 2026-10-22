@@ -14,6 +14,8 @@ from serving.nano_vllm.kernels.paged_attention import (  # noqa: E402
     is_triton_available,
     paged_decode_attention,
     paged_decode_attention_reference,
+    paged_prefill_attention,
+    paged_prefill_attention_reference,
 )
 from serving.nano_vllm.kernels.rope_cache import (  # noqa: E402
     rope_and_cache_write,
@@ -103,6 +105,38 @@ def test_decode_kernel_returns_zero_for_an_empty_context(num_splits):
 
     assert torch.isfinite(out).all()
     assert (out[1] == 0).all()
+
+
+# (query_len, context_len): whole prompts, chunks after a cached prefix,
+# single tokens, a tile-sized and a long prompt.
+PREFILL_SHAPES = [(37, 37), (5, 70), (1, 1), (1, 33), (64, 64), (65, 129), (300, 1000), (17, 17)]
+
+
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float32], ids=["bf16", "fp32"])
+@pytest.mark.parametrize("heads", [LLAMA_8B, TINY], ids=["llama8b", "tiny"])
+@pytest.mark.parametrize("page_size", [4, 16])
+def test_prefill_kernel_matches_reference(page_size, heads, dtype):
+    q_heads, kv_heads, head_dim = heads
+    query_lens = [q for q, _ in PREFILL_SHAPES]
+    context_lens = [c for _, c in PREFILL_SHAPES]
+    num_blocks = sum((c + page_size - 1) // page_size for c in context_lens) + 4
+    keys, values = _cache(num_blocks, page_size, kv_heads, head_dim, dtype)
+    tables = _shuffled_tables(context_lens, page_size, num_blocks)
+    query = torch.randn(sum(query_lens), q_heads, head_dim, device="cuda").to(dtype)
+    cu_seqlens = torch.tensor([0] + query_lens, device="cuda").cumsum(0).to(torch.int32)
+    lens = torch.tensor(context_lens, dtype=torch.int32, device="cuda")
+    scale = 1.0 / math.sqrt(head_dim)
+
+    out = paged_prefill_attention(
+        query, keys, values, tables, cu_seqlens, lens, query_lens, context_lens, scale,
+        use_triton=True,
+    )
+    expected = paged_prefill_attention_reference(
+        query, keys, values, tables, query_lens, context_lens, scale
+    )
+
+    tol = dict(rtol=1e-4, atol=1e-4) if dtype == torch.float32 else dict(rtol=2e-2, atol=2e-2)
+    torch.testing.assert_close(out.float(), expected.float(), **tol)
 
 
 @pytest.mark.parametrize("heads", [LLAMA_8B, TINY], ids=["llama8b", "tiny"])
