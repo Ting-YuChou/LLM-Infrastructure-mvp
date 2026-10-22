@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Phase 0 on one Google Colab A100 (40GB, ncu allowed), driven from this
 # machine with the Colab CLI (see scripts/colab_gpu_smoke.sh for sign-in).
+# BENCH_PHASE=phase1 drives benchmarks/phase1/run_phase1.sh the same way.
 #
-# Uploads benchmarks/phase0 and src/serving/nano_vllm from this checkout (no
-# push needed), runs run_phase0.sh on the VM through colab_launcher.py, then
-# downloads the run directory into benchmarks/phase0/results/<run_id>/ and
-# releases the VM.
+# Uploads benchmarks/phase0, benchmarks/${BENCH_PHASE}, src/serving/nano_vllm
+# and the nano_vllm tests from this checkout (no push needed), runs
+# run_${BENCH_PHASE}.sh on the VM through colab_launcher.py, then downloads the
+# run directory into benchmarks/${BENCH_PHASE}/results/<run_id>/ and releases
+# the VM.
 #
 #   bash benchmarks/phase0/colab_phase0.sh          # new VM, upload, run, fetch, stop
 #   bash benchmarks/phase0/colab_phase0.sh rerun    # same VM (venvs, model kept), upload, run, fetch, stop
@@ -13,20 +15,25 @@
 #   bash benchmarks/phase0/colab_phase0.sh fetch    # download the results again
 #   bash benchmarks/phase0/colab_phase0.sh stop     # release the VM
 #
-# Env: COLAB_SESSION (default phase0), COLAB_GPU (default A100), COLAB_KEEP=1
+# Env: BENCH_PHASE (default phase0), COLAB_SESSION (default phase0; both
+# phases share the VM's venvs and model), COLAB_GPU (default A100), COLAB_KEEP=1
 # (do not stop the VM at the end), COLAB_TIMEOUT (seconds without output before
 # `colab exec` gives up, default 900; the run goes on and tail/fetch still
 # work), P0_RUN_ID, P0_STEPS, P0_CONCURRENCY (default 1..128: 40 GB leaves room
-# for ~145k KV tokens, so 256 concurrent 1280-token requests would just queue).
+# for ~145k KV tokens, so 256 concurrent 1280-token requests would just queue),
+# and every P1_* variable that is set (see benchmarks/phase1/run_phase1.sh).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${HERE}/../.." && pwd)"
+PHASE="${BENCH_PHASE:-phase0}"
 SESSION="${COLAB_SESSION:-phase0}"
 GPU="${COLAB_GPU:-A100}"
 RUN_ID="${P0_RUN_ID:-$(date -u +%Y%m%d-%H%M%S)-colab}"
 REMOTE_ROOT=/content/p0
-RESULTS="${HERE}/results"
+RESULTS="${REPO_DIR}/benchmarks/${PHASE}/results"
+[[ -f "${REPO_DIR}/benchmarks/${PHASE}/run_${PHASE}.sh" ]] || {
+  echo "no benchmarks/${PHASE}/run_${PHASE}.sh for BENCH_PHASE=${PHASE}" >&2; exit 2; }
 
 log() { echo "[colab-phase0 $(date +%H:%M:%S)] $*"; }
 
@@ -38,11 +45,16 @@ fetch() {
 }
 
 upload_code() {
-  local tarball
+  local tarball paths=(benchmarks/phase0 src/serving/nano_vllm)
+  [[ "${PHASE}" == phase0 ]] || paths+=("benchmarks/${PHASE}")
+  # The nano_vllm tests and the repo files they import or read outside nano_vllm.
+  paths+=(tests/unit/tiny_llama.py src/monitoring/metrics.py src/api/model_routing.py
+    config/model_routing.nano.json)
+  if [[ -d "${REPO_DIR}/tests/gpu" ]]; then paths+=(tests/gpu); fi
   tarball="$(mktemp -d)/p0code.tgz"
   (cd "${REPO_DIR}" &&
     COPYFILE_DISABLE=1 tar --no-mac-metadata --exclude results --exclude __pycache__ \
-      -czf "${tarball}" benchmarks/phase0 src/serving/nano_vllm)
+      -czf "${tarball}" "${paths[@]}" tests/unit/test_nano_vllm_*.py)
   log "code tarball $(du -h "${tarball}" | cut -f1)"
 
   colab upload -s "${SESSION}" "${tarball}" /content/p0code.tgz
@@ -50,12 +62,12 @@ upload_code() {
 }
 
 run() {
-  local env_args=(--env "P0_RUN_ID=${RUN_ID}") name
-  for name in P0_STEPS P0_CONCURRENCY P0_SGLANG_SPEC; do
+  local env_args=(--env "P0_RUN_ID=${RUN_ID}" --env "BENCH_PHASE=${PHASE}") name
+  for name in P0_STEPS P0_CONCURRENCY P0_SGLANG_SPEC ${!P1_@}; do
     if [[ -n "${!name:-}" ]]; then env_args+=(--env "${name}=${!name}"); fi
   done
   mkdir -p "${RESULTS}"
-  log "running phase 0 (run ${RUN_ID}); console also in ${RESULTS}/${RUN_ID}.launcher.log"
+  log "running ${PHASE} (run ${RUN_ID}); console also in ${RESULTS}/${RUN_ID}.launcher.log"
   local rc=0
   colab exec -s "${SESSION}" --timeout "${COLAB_TIMEOUT:-900}" "${env_args[@]}" \
     -f "${HERE}/colab_launcher.py" 2>&1 | tee "${RESULTS}/${RUN_ID}.launcher.log" || rc=$?
@@ -77,7 +89,10 @@ start() {
 }
 
 rerun() {  # the VM already has the venvs and the model
-  export P0_STEPS="${P0_STEPS:-bandwidth vllm_serve sglang_serve nsys_vllm nano ncu summarize}"
+  case "${PHASE}" in
+    phase0) export P0_STEPS="${P0_STEPS:-bandwidth vllm_serve sglang_serve nsys_vllm nano ncu summarize}" ;;
+    phase1) export P1_STEPS="${P1_STEPS:-tests kbench ncu e2e summarize}" ;;
+  esac
   upload_code
   run
 }

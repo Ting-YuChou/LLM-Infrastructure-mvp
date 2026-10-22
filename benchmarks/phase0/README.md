@@ -183,6 +183,12 @@ python benchmarks/phase0/summarize.py benchmarks/phase0/results/<run_id>
 
 `run_phase0.sh` 本身不綁平台，在 RunPod 這類 80GB 的機器上也能直接當 pod 的啟動指令跑。設 `P0_REPO` 的話，每一步結束都會把結果上傳到私有 HF dataset repo；不過 RunPod 上 ncu 不能用。
 
+```bash
+BENCH_PHASE=phase1 bash benchmarks/phase0/colab_phase0.sh
+```
+
+同一套 Colab driver 也拿來跑 Phase 1：設 `BENCH_PHASE=phase1` 時，改跑 `benchmarks/phase1/run_phase1.sh`，結果下載到 `benchmarks/phase1/results/`，細節見 [Phase 1 README](../phase1/README.md)。兩個 phase 共用的 step runner、安裝函式和 nsys、ncu 函式都放在 `lib.sh`。
+
 ## 檔案
 
 | 檔案 | 內容 |

@@ -43,6 +43,9 @@ mkdir -p "${OUT}"/{logs,serve,nsys,ncu,offline}
 exec 3>&1  # console (pod logs); step output goes to ${OUT}/logs/<step>.log
 
 log() { echo "[p0 $(date -u +%H:%M:%S)] $*" >&3; }
+# run_step, want, install_vllm/nsys, download_model, nsys_run, ncu_run
+# shellcheck source-path=SCRIPTDIR source=lib.sh
+source "${CODE_DIR}/lib.sh"
 
 upload() {  # everything under ${OUT} -> P0_REPO/runs/<run id>, when P0_REPO is set
   [[ -n "${P0_REPO:-}" ]] || return 0
@@ -57,72 +60,13 @@ api.upload_folder(
 EOF
 }
 
-run_step() {  # name command...: log to logs/<name>.log, record status.tsv
-  local name=$1; shift
-  local start rc
-  start=$(date +%s)
-  log "step ${name} started"
-  "$@" > "${OUT}/logs/${name}.log" 2>&1
-  rc=$?
-  printf '%s\t%s\t%s\n' "${name}" "${rc}" "$(( $(date +%s) - start ))" >> "${OUT}/status.tsv"
-  log "step ${name} rc=${rc} in $(( $(date +%s) - start ))s"
-  if [[ ${rc} -ne 0 ]]; then tail -30 "${OUT}/logs/${name}.log" >&3; fi
-  return "${rc}"
-}
-
-want() { [[ " ${STEPS} " == *" $1 "* ]]; }
-
-find_nsys() {
-  command -v nsys || ls -1 /usr/local/cuda*/bin/nsys /opt/nvidia/nsight-systems/*/bin/nsys 2>/dev/null | tail -1
-}
-
-find_ncu() {
-  command -v ncu || ls -1 /usr/local/cuda*/bin/ncu /opt/nvidia/nsight-compute/*/ncu 2>/dev/null | tail -1
-}
-
 # --- installs (run in parallel) --------------------------------------------
-install_vllm() {
-  uv venv --seed --python 3.12 "${VENVS}/vllm" &&
-  uv pip install -p "${PY}" "vllm==${VLLM_VERSION}" huggingface_hub matplotlib &&
-  "${PY}" -c "import vllm, torch; print('vllm', vllm.__version__, 'torch', torch.__version__, torch.version.cuda)"
-}
-
 install_sglang() {
   # ninja: flashinfer JIT-compiles kernels when SGLang captures its CUDA graphs.
   { [[ -x "${VENVS}/sglang/bin/python" ]] || uv venv --seed --python 3.12 "${VENVS}/sglang"; } &&
   { uv pip install -p "${VENVS}/sglang/bin/python" "${SGLANG_SPEC}" ninja ||
     uv pip install -p "${VENVS}/sglang/bin/python" sglang ninja; } &&
   "${VENVS}/sglang/bin/python" -c "import sglang, torch; print('sglang', sglang.__version__, 'torch', torch.__version__)"
-}
-
-install_nsys() {
-  if [[ -n "$(find_nsys)" ]]; then find_nsys; return 0; fi
-  apt-get update -qq
-  if ! apt-cache policy cuda-nsight-systems-12-8 | grep -q 'Candidate: [0-9]'; then
-    local ubuntu  # NVIDIA's CUDA apt repo is not configured in this image
-    ubuntu="$(. /etc/os-release && echo "${VERSION_ID//./}")"
-    wget -q -O /tmp/cuda-keyring.deb \
-      "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu${ubuntu}/x86_64/cuda-keyring_1.1-1_all.deb" &&
-      dpkg -i /tmp/cuda-keyring.deb && apt-get update -qq
-  fi
-  local v
-  for v in 12-9 13-0 12-8; do
-    if apt-cache policy "cuda-nsight-systems-${v}" | grep -q 'Candidate: [0-9]'; then
-      DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-        "cuda-nsight-systems-${v}" && break
-    fi
-  done
-  [[ -n "$(find_nsys)" ]] && "$(find_nsys)" --version
-}
-
-download_model() {
-  python3 - <<EOF
-import os
-from huggingface_hub import snapshot_download
-snapshot_download("${MODEL_ID}", local_dir="${MODEL}", token=os.environ.get("HF_TOKEN"),
-                  allow_patterns=["*.json", "*.safetensors", "tokenizer*"])
-EOF
-  du -sh "${MODEL}"
 }
 
 clone_repo() {
@@ -228,23 +172,6 @@ sglang_serve() {
   serve_engine sglang 30000 /health_generate "${cmd[@]}" --attention-backend triton --sampling-backend pytorch
 }
 
-# --- nsys ------------------------------------------------------------------
-nsys_run() {  # label command...: capture the cudaProfilerStart/Stop range, export, analyze
-  local label=$1; shift
-  local nsys
-  if [[ -f "${OUT}/nsys/${label}.json" ]]; then echo "${label}: already analyzed, skipped"; return 0; fi
-  nsys="$(find_nsys)"
-  [[ -n "${nsys}" ]] || { echo "nsys not installed"; return 1; }
-  timeout 1800 "${nsys}" profile -t cuda,nvtx --cuda-graph-trace=node \
-    --capture-range=cudaProfilerApi --capture-range-end=stop --sample=none --cpuctxsw=none \
-    -f true -o "${OUT}/nsys/${label}" "$@" || return 1
-  "${nsys}" export --type sqlite -f true -o "${OUT}/nsys/${label}.sqlite" "${OUT}/nsys/${label}.nsys-rep" || return 1
-  "${nsys}" stats -q -f csv --report cuda_gpu_kern_sum --report cuda_api_sum \
-    -o "${OUT}/nsys/${label}" "${OUT}/nsys/${label}.sqlite"
-  "${PY}" "${CODE_DIR}/analyze_nsys.py" "${OUT}/nsys/${label}.sqlite" --label "${label}" \
-    --out-dir "${OUT}/nsys" >&3
-}
-
 nsys_vllm() {
   local rc=0
   nsys_run vllm_graph_b1 "${PY}" "${CODE_DIR}/vllm_offline.py" --model "${MODEL}" \
@@ -269,24 +196,6 @@ nano() {
   nsys_run nano_paged_b16 "${PY}" "${CODE_DIR}/nano_bench.py" --model "${MODEL}" \
     --runs paged:16:1024:64 --out "${OUT}/offline/nano_paged_b16_nsys.json" || rc=1
   return "${rc}"
-}
-
-# --- ncu: hardware counters for one decode step (needs CAP_SYS_ADMIN; Colab yes, RunPod no)
-ncu_run() {  # label launch_count command...
-  local label=$1 count=$2; shift 2
-  local ncu
-  if [[ -f "${OUT}/ncu/${label}.json" ]]; then echo "${label}: already analyzed, skipped"; return 0; fi
-  ncu="$(find_ncu)"
-  [[ -n "${ncu}" ]] || { echo "ncu not installed"; return 1; }
-  # --clock-control none: real boost clocks, so durations line up with the nsys/serve timings.
-  timeout 2400 "${ncu}" --profile-from-start off --graph-profiling node --launch-count "${count}" \
-    --clock-control none \
-    --section SpeedOfLight --section MemoryWorkloadAnalysis --section Occupancy \
-    --section LaunchStats --section WarpStateStats \
-    -f -o "${OUT}/ncu/${label}" "$@" || return 1
-  "${ncu}" --import "${OUT}/ncu/${label}.ncu-rep" --csv --page raw > "${OUT}/ncu/${label}_raw.csv" || return 1
-  "${PY}" "${CODE_DIR}/analyze_ncu.py" "${OUT}/ncu/${label}_raw.csv" --label "${label}" \
-    --out-dir "${OUT}/ncu" >&3
 }
 
 ncu_kernels() {
