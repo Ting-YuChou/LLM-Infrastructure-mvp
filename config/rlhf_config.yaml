@@ -118,8 +118,9 @@ algorithm:
     # GAE (Generalized Advantage Estimation) lambda
     gae_lambda: 0.95
     
-    # Discount factor
-    gamma: 0.99
+    # Discount factor. 1.0: the reward model scores the whole response at its
+    # last token, and discounting that pays shorter answers more per token.
+    gamma: 1.0
     
     # Target KL divergence (from reference model)
     target_kl: 0.1

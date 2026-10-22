@@ -38,7 +38,7 @@ OUT_DIR="${COLAB_OUT_DIR:-${REPO_DIR}/outputs/colab_smoke/${SESSION}}"
 SMOKE_ROOT="${SMOKE_ROOT:-/content/smoke}"
 SMOKE_PRESET="${SMOKE_PRESET:-1b}"
 FORWARDED_ENV=(SMOKE_PRESET SMOKE_MODEL SMOKE_STAGES SMOKE_STAGE_TIMEOUT SMOKE_PRUNE SMOKE_RUN_ID
-  SMOKE_ROLLOUT HF_UPLOAD_REPO_PREFIX)
+  SMOKE_ROLLOUT HF_UPLOAD_REPO_PREFIX HF_INIT_REPO_PREFIX)
 # `colab exec --env` sends values as code, which the CLI keeps in plain text in
 # ~/.config/colab-cli/history; tokens go up as a file the launcher deletes.
 SECRET_ENV=(HF_TOKEN HF_WRITE_TOKEN)

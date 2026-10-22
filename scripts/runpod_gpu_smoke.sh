@@ -34,6 +34,11 @@
 # HF_UPLOAD_REPO_PREFIX=user/name uploads each stage's final model, as soon as
 # the stage passes, to the private repo <prefix>-<stage> with HF_WRITE_TOKEN
 # (scripts/upload_checkpoint.py).
+#
+# PPO on earlier SFT/RM models: SMOKE_STAGES="init_from_hf rlhf" with
+# HF_INIT_REPO_PREFIX=user/name downloads <prefix>-sft and <prefix>-reward
+# (HF_TOKEN, or HF_WRITE_TOKEN for private repos) to where the rlhf stage
+# looks for the SFT and reward checkpoints.
 set -uo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -288,6 +293,17 @@ for stage in ${SMOKE_STAGES}; do
     verl_lora|verl_full)
       verl_stage "${stage#verl_}" 2>&1 | tee "${LOG_DIR}/${stage}.log"
       rc=${PIPESTATUS[0]} ;;
+    init_from_hf)
+      python - "${HF_INIT_REPO_PREFIX:?set HF_INIT_REPO_PREFIX}" "${RUN_DIR}/outputs" <<'PY' 2>&1 | tee "${LOG_DIR}/${stage}.log"
+import os, sys
+from huggingface_hub import snapshot_download
+prefix, outputs = sys.argv[1], sys.argv[2]
+token = os.environ.get("HF_TOKEN") or os.environ.get("HF_WRITE_TOKEN")
+for stage in ("sft", "reward"):
+    path = snapshot_download(f"{prefix}-{stage}", local_dir=f"{outputs}/{stage}/final", token=token)
+    print(f"{prefix}-{stage} -> {path}")
+PY
+      rc=${PIPESTATUS[0]} ;;
     *)
       timeout "${SMOKE_STAGE_TIMEOUT}" bash scripts/launch_training.sh "${stage}" 2>&1 | tee "${LOG_DIR}/${stage}.log"
       rc=${PIPESTATUS[0]} ;;
@@ -303,7 +319,7 @@ for stage in ${SMOKE_STAGES}; do
   case "${stage}" in
     sft) [[ " ${SMOKE_STAGES} " == *" sft_resume "* ]] || prune sft ;;  # resume reads them
     sft_resume) prune sft; prune sft_resume ;;
-    verl_*) ;;  # verl_stage prunes its own checkpoints
+    verl_*|init_from_hf) ;;  # verl_stage prunes its own; init_from_hf has none
     *) prune "${stage}" ;;
   esac
 done

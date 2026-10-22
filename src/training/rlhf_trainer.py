@@ -1494,7 +1494,7 @@ def rlhf_config_from_dict(
         value_loss_coef=ppo_config.get('value_loss_coef', 0.1),
         entropy_coef=ppo_config.get('entropy_coef', 0.01),
         gae_lambda=ppo_config.get('gae_lambda', 0.95),
-        gamma=ppo_config.get('gamma', 0.99),
+        gamma=ppo_config.get('gamma', 1.0),
 
         # Generation
         max_prompt_length=data_config.get('max_prompt_length', 512),

@@ -113,7 +113,7 @@ OVERRIDES=(
   reward.reward_model.rollout.response_length=1024
   # Per-token KL penalty in the reward with an adaptive coefficient, GAE.
   algorithm.adv_estimator=gae
-  algorithm.gamma=0.99
+  algorithm.gamma=1.0
   algorithm.lam=0.95
   algorithm.use_kl_in_reward=True
   algorithm.kl_ctrl.type=adaptive
