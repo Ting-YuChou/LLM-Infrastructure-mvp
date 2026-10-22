@@ -360,3 +360,48 @@ decode ms/step（`nano_bench.py` 和 `vllm_offline.py`，相同的 batch / in / 
 - **針對 M>16 和 K 切分的修正**（run 6 驗證）：
   - 新的 `gemm_w4a16_wide`（17–64 列）：block 裡 4 個 warp 各管不同的 32 欄（一個 block 128 欄），共用一份放在 shared memory 的 x（`cp.async`，先載下一組），讀取時用 XOR swizzle 避開 bank conflict。group scale 乘進反量化後的 B fragment（q−8 是精確值，乘積只在 bf16 捨入一次，和 Marlin 一樣），所以每個 thread 只要一組 fp32 累加器。ptxas：120–190 個暫存器，沒有 spill。
   - K 切分改成「最後一個抵達的 block 收尾」：每個 split 把部分和 atomicAdd 進 fp32 workspace，用每個 column tile 的計數器判斷誰最後到；最後到的 block 寫出 bf16，並把 workspace 和計數器歸零。workspace 常駐（`w4a16_workspace`，模型載入時就配好，在 capture 之前），所以不再需要 memset 和 cast kernel。
+
+## 2026-10-22 21:07 — run `20261022-p1-run6`：wide kernel、K 切分收尾、vLLM AWQ 對照
+
+- **tests：348 passed**，包含 wide kernel 的 1–64 列、K 切分、graph capture，以及「呼叫後 workspace 和計數器都歸零」。
+- **kbench**（自動分派，對 Marlin 的速度比）：
+
+  | layer | M=1 | M=4 | M=8 | M=16 | M=32 | M=64 |
+  |---|---:|---:|---:|---:|---:|---:|
+  | qkv | 1.06 | 0.89 | 0.89 | 0.97 | 0.68 | 0.70 |
+  | o_proj | **1.33** | 1.03 | 1.00 | 1.07 | 0.62 | 0.62 |
+  | gate_up | 0.99 | 0.86 | 0.85 | 0.88 | 0.61 | 0.51 |
+  | down | 0.64 | 0.60 | 0.59 | 0.66 | 0.52 | 0.48 |
+
+  wide kernel 讓 M=64 的時間大約減半（gate_up 311 → 204 µs，down 237 → 131 µs），M=32 的 gate_up 和 down 也變快，但 qkv 和 o_proj 在 M=32 時還是 mma kernel 快（tune：1.19–1.30 倍）。e2e 量的是 b=1、16、64，所以自動分派維持 16 列以上改用 wide。
+- **e2e**：
+
+  | | b=1 | b=16 | b=64 |
+  |---|---:|---:|---:|
+  | nano W4A16 | 5.95 | 8.91 | 24.20 |
+  | vLLM AWQ int4（`awq_marlin`） | 5.55 | 7.87 | 16.23 |
+  | nano / vLLM | 1.07× | 1.13× | 1.49× |
+
+  vLLM 跑的是 `hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4`，量化方法（AWQ，非對稱）和我們的 RTN 不同，比的是速度。b=16 每個 step 的 kernel 從 520 降到 328，K 切分不再需要 memset 和 cast。b=64 從 30.32 降到 24.20 ms。
+
+## 2026-10-22 21:21 — run `20261022-p1-run7`：W4A16 的 ncu 證據
+
+`P1_STEPS="ncu summarize" P1_KERNELS=w4a16_linear P1_KBENCH_SHAPES="down_proj M=(1|16|64) "`，只看最弱的 down_proj（N=4096，K=14336）。新增的 `kbench.py --shapes` 讓 ncu 只錄這幾個 shape。
+
+- 第一次失敗：ncu mode 把 GEMV 在 M=64 的 `NotApplicable`（刻意不支援）算成錯誤，kbench 回傳 1，ncu step 就沒有做 export 和分析。改成和計時模式一樣當成 skip（run 7b）。
+- **結果**（ncu，`--clock-control none`，每組三次取中位數）：
+
+  | M | kernel | µs | DRAM 佔峰值 | occupancy | 主要 stall（每個 issue 的 warp 數） |
+  |---:|---|---:|---:|---:|---|
+  | 1 | Marlin | 33.6 | 62% | 12%（grid 108，每個 SM 一個 block） | long_scoreboard 1.4 |
+  | 1 | GEMV | 40.1 | 52% | 26% | **long_scoreboard 3.8** |
+  | 1 | mma | 46.1 | 46% | 15% | long_scoreboard 2.5 |
+  | 1 | wide | 51.0 | 41% | 13% | long_scoreboard 2.5 |
+  | 16 | Marlin | 34.5 | 62% | 12% | long_scoreboard 0.8 |
+  | 16 | mma | 50.4 | 42% | 15% | long_scoreboard 2.9 |
+  | 64 | Marlin | 67.4 | 34%（SM 36%） | 6% | wait 1.8 |
+  | 64 | wide | 134.0 | 17%（SM 21%） | 12% | long_scoreboard 1.4、wait 1.3 |
+
+- **結論**：我們的三個 kernel 都既不是頻寬瓶頸，也不是算力瓶頸，而是被記憶體延遲卡住。warp 大多在等 global load（long_scoreboard），因為每個 thread 同時只有大約一組（64 B）權重在路上；多開 warp 也沒用，GEMV 的 occupancy 是 Marlin 的兩倍，DRAM 還是比較低。Marlin 每個 SM 只放一個常駐 block，用多段 `cp.async` pipeline 讓權重和 x 都提早好幾段載入，occupancy 只有 12% 就能到 62% DRAM。M=64 時 wide 的 SM 使用率只有 21%，除了等記憶體，還有 mma 之間的相依（wait）。
+- **下一步**（Phase 1 先停在這裡）：權重也經過 shared memory，用 3–4 段 `cp.async` pipeline；grid 改成常駐、跨 SM 條狀分配 K（Marlin 的 striped partition），取代現在的 K 切分加 atomic；M≥32 時用 `ldmatrix` 讀 A，並讓每個 warp 管更多欄來攤平 A 的讀取。
+- 跑完之後把 Colab VM 關掉了。

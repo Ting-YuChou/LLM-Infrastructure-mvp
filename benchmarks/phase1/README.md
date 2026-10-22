@@ -92,29 +92,54 @@ python benchmarks/phase1/kbench.py --device cpu --out /tmp/kbench
 
 ## 結果
 
-每個 milestone 跑完填一列。ms 是 decode 每個 step 的時間；static 和 paged b=1 的輸入是 128，b=16 和 b=64 的輸入是 1024，輸出都是 256。
+所有數字都來自 Colab A100-SXM4-40GB，模型是 Llama 3.1 8B Instruct。過程（每一輪 run 量到什麼、哪裡失敗、怎麼修）在 [LOG.md](LOG.md)。
 
-| milestone | run | static b=1 | paged b=1 | paged b=16 | paged b=64 | kernels/step（paged b=1） | 備註 |
-|---|---|---:|---:|---:|---:|---:|---|
-| vLLM 0.19.1（CUDA graph） | Phase 0 | 12.62 | 12.62 | - | 23.03 | 365 | 對照組 |
-| Phase 0 baseline | Phase 0 | 44.10 | 53.63 | 618.92 | - | 1,604 | |
-| M0 harness | | | | | | | 第一次 GPU run |
-| M1 engine 重構 | | | | | | | |
-| M2 paged decode attention + RoPE/KV | | | | | | | 目標 b=16 < 60 ms（eager） |
-| M3 decode CUDA graph | | | | | | | 目標 b=1 ≤ 13.5 ms |
-| M4 其餘 fusion | | | | | | | 目標 kernels/step 約 330 |
-| M5 prefill attention | | | | | | | |
-| M6 bf16 GEMV | | | | | | | 目標 b=1（graph）約 11 ms |
-| M7 W4A16 | | | | | | | |
+### 端到端 decode
 
-Kernel 層級的目標：
+ms 是 decode 每個 step 的時間。static 和 paged b=1 的輸入是 128，b=16 和 b=64 的輸入是 1024，輸出都是 256。nano 的設定是逐個 milestone 疊上去的，所以每一列代表「做到這個 milestone 為止」。
+
+| 設定 | 對應 milestone | run | paged b=1 | paged b=16 | paged b=64 | kernels/step（b=1） |
+|---|---|---|---:|---:|---:|---:|
+| Phase 0 baseline | - | Phase 0 | 53.63 | 618.92 | - | 1,604 |
+| torch_eager | M1 engine 重構 | run 3 | 39.60 | 51.12 | 152.52 | |
+| triton_eager | + M2 decode attention、RoPE/KV、M4 fusion、M5 prefill | run 3 | 21.56 | 23.00 | 30.17 | |
+| triton_graph | + M3 decode CUDA graph | run 3 | 12.61 | 14.87 | 23.48 | |
+| gemv_graph | + M6 Triton GEMV | run 4 | 12.32 | **14.63** | 23.77 | 424 |
+| cuda_gemv_graph | M6 改用 CUDA GEMV（1–2 列） | run 4 | **12.15** | 14.87 | 23.51 | 328 |
+| **vLLM 0.19.1 bf16** | 對照組 | run 2–6 | 12.63 | 14.83 | 23.04 | 365（Phase 0） |
+| w4a16_graph | + M7 W4A16 | run 6 | 5.95 | 8.91 | 24.20 | 328 |
+| **vLLM 0.19.1 AWQ int4（awq_marlin）** | M7 的對照組 | run 6 | 5.55 | 7.87 | 16.23 | |
+
+- **bf16**：nano 和 vLLM 打平。b=1 快 4%，b=16 快 1%，b=64 慢 2%。e2e 的 run-to-run 差異約 1%（LOG.md，run 4）。
+- **M2 目標**（eager 下 b=16 < 60 ms）：23.0 ms，達標。光是 M1 的重構就從 619 降到 51 ms。
+- **M3 目標**（b=1 ≤ 13.5 ms）：12.6 ms，達標。
+- **M4 目標**（每個 step 約 330 個 kernel）：CUDA GEMV 路徑 328 個，達標；Triton GEMV 多 96 個 split-K reduce kernel，共 424 個。
+- **M6 目標**（b=1 約 11 ms）：12.15 ms，沒達標。計畫估的是「GEMV 比 cuBLAS 快很多」，實際上 cuBLAS 在 graph replay 下已經到 76–94% 峰值（Phase 0 用 CUDA event 量到的 63–73% 包含 launch 間隔），GEMV 能贏的空間只有 0–8%。
+- **M7**：b=1 時 W4A16 比 bf16 快 2.0 倍，和 vLLM 的 AWQ Marlin 差 7%；b=16 差 13%；b=64 差 49%（見下面的 kernel 表）。
+- static path 刻意保留 Phase 0 的寫法（逐層 PyTorch attention、F.linear），所以一直是 40 ms 左右，沒有列出。
+- prefill 時間沒有和 vLLM 比：`vllm_offline.py` 的 `prefill_s` 沒有涵蓋整個 prefill（LOG.md，run 2）。
+
+### Kernel
+
+kbench，CUDA graph replay，輸入輪替超過 L2。表裡是 run 5 的結果，所有預設都是 tune 調過的最終版。
 
 | kernel | 對照組 | 目標 | 實測 |
 |---|---|---|---|
-| paged decode attention | vLLM FA2 split-KV | 每個 (B, ctx) 都 ≥ FA2；B·ctx 大時 ≥ 80% 峰值 | |
-| prefill attention | `flash_attn_varlen_func` | 1k–4k 時 ≥ 70% FA2 TFLOPs | |
-| bf16 GEMV | cuBLAS（`linear`） | 每種 shape ≥ cuBLAS；o_proj、qkv ≥ 80% 峰值 | |
-| W4A16 GEMV | vLLM Marlin | 權重頻寬 ≥ 80% 峰值，和 Marlin 差 10% 以內 | |
+| paged decode attention | vLLM FA2 split-KV | 每個 (B, ctx) 都 ≥ FA2；B·ctx 大時 ≥ 80% 峰值 | 12 個點裡 11 個 ≥ FA2（1.03–1.44×）；B=1/ctx=128 只有 0.52×（S=32 個 split 只有一個有工作，加上 reduce kernel，每個 token 約多 0.2 ms）。B·ctx 大時 86–93% 峰值 |
+| prefill attention | `flash_attn_varlen_func` | 1k–4k 時 ≥ 70% FA2 TFLOPs | 1k–4k：0.80–0.89×（1×4096 是 144 TFLOPs，46% 峰值）；512 時 0.68× |
+| bf16 GEMV（M=1） | cuBLAS | 每種 shape ≥ cuBLAS；o_proj、qkv ≥ 80% 峰值 | Triton：gate_up 1.06×、down 1.05×、lm_head 1.01×、qkv 0.99×、o_proj 0.97×。CUDA：1.08×、1.06×、1.01×、1.00×、0.97×。o_proj 73–74%、qkv 78–79% 峰值，都差一點沒達標 |
+| W4A16 | vLLM `gptq_marlin`（同一組 4-bit code） | 權重頻寬 ≥ 80% 峰值，和 Marlin 差 10% 以內 | M=1：o_proj 1.33×、qkv 1.06×、gate_up 0.99×、down 0.64×。M=4–16：0.59–1.07×。M=32–64：0.48–0.70×（run 6）。down_proj 和大 batch 沒達標：ncu 顯示我們的 kernel 被記憶體延遲卡住（long_scoreboard），每個 thread 只有一組權重在路上，DRAM 41–52%；Marlin 用多段 `cp.async` pipeline，到 62%（LOG.md，run 7） |
+| fused add + RMSNorm、silu_and_mul、RoPE + KV 寫入 | torch | - | 對 torch 快 2.2–7.5 倍。256 和 2048 個 token 時，前兩個到 83–94% 峰值，RoPE + KV 寫入是 42–62% |
+
+### 品質（`quality.py`，wikitext-2 test，288,627 個 token）
+
+| 設定 | 權重 GiB | perplexity | top-1 一致率（對 bf16 torch 路徑） |
+|---|---:|---:|---:|
+| bf16，PyTorch 路徑 | 15.0 | 7.233 | - |
+| bf16，Triton kernel | 15.0 | 7.232 | 98.81% |
+| W4A16（RTN，對稱，每 128 個一組） | 5.3 | 8.024 | 85.90% |
+
+計畫要求 bf16 的 top-1 一致率 ≥ 99%，實測 98.81%。perplexity 到小數第三位相同，差異只在 attention（Triton 照 FA2 的做法把 softmax 機率轉成 bf16 再乘 V），不一致的都是接近平手的 token。W4A16 的 RTN 讓 perplexity 增加 11%，和文獻上 Llama 3 8B 的結果同一個量級。
 
 ## 檔案
 

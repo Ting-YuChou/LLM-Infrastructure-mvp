@@ -305,6 +305,8 @@ def ncu_mode(kernels: list[Kernel], reps: int) -> int:
                     torch.cuda.synchronize()
                     torch.cuda.profiler.stop()
                     print(f"KBENCH_NCU {name} x{reps}", flush=True)
+                except NotApplicable as e:  # left out on purpose, as in the timed run
+                    print(f"KBENCH_NCU {name} skipped: {e}", flush=True)
                 except Exception as e:
                     failed += 1
                     print(f"KBENCH_NCU {name} failed: {type(e).__name__}: {e}", flush=True)
