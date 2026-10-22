@@ -70,7 +70,19 @@ def test_cuda_extension_builds():
     assert load_cuda_extension() is not None, "see the log for the nvcc error"
 
 
-@pytest.mark.parametrize("rows", [1, 3, 8])
+@pytest.mark.parametrize("rows", [1, 2])
 @pytest.mark.parametrize("shape", CUDA_SHAPES.values(), ids=CUDA_SHAPES)
 def test_cuda_gemv_matches_fp32_matmul(shape, rows):
     _check(rows, *shape, backend="cuda")
+
+
+@pytest.mark.parametrize("rows_per_warp", [1, 2, 4])
+@pytest.mark.parametrize("rows", [3, 8])
+def test_cuda_kernel_beyond_the_dispatch_limit(rows, rows_per_warp):
+    """linear() stops at CUDA_GEMV_MAX_ROWS; the kernel itself takes up to 8 rows."""
+    from serving.nano_vllm.kernels.linear import load_cuda_extension
+
+    x = torch.randn(rows, 1000, device="cuda").to(torch.bfloat16)
+    weight = (torch.randn(100, 1000, device="cuda") / 1000**0.5).to(torch.bfloat16)
+    out = load_cuda_extension().gemv_bf16(x, weight, rows_per_warp)
+    torch.testing.assert_close(out.float(), x.float() @ weight.float().T, rtol=1.6e-2, atol=1.6e-2)

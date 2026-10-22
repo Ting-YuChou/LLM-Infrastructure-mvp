@@ -24,9 +24,11 @@ BENCH_PHASE=phase1 bash benchmarks/phase0/colab_phase0.sh
 BENCH_PHASE=phase1 P1_STEPS="tests kbench" COLAB_KEEP=1 bash benchmarks/phase0/colab_phase0.sh rerun
 ```
 
-開發迴圈：在同一台 VM 上只跑測試和 kernel benchmark。venv、模型和 CUDA toolkit 都留在 VM 上，`COLAB_KEEP=1` 讓 VM 跑完不關。不設 `P1_STEPS` 的話，`rerun` 跑 `tests kbench ncu e2e summarize`。
+開發迴圈：在同一台 VM 上只跑測試和 kernel benchmark。venv、模型和 CUDA toolkit 都留在 VM 上，`COLAB_KEEP=1` 讓 VM 跑完不關。不設 `P1_STEPS` 的話，`rerun` 跑 `tests kbench ncu e2e quality summarize`。
 
 - `P1_KERNELS=rms_norm,linear`：kbench 和 ncu 只跑這幾個 kernel。
+- `P1_TUNE=decode,w4a16`：`tune` step 只掃這幾個 kernel（預設全部：decode、prefill、gemv、cuda_gemv、w4a16）。
+- `P1_NANO_CONFIGS`：e2e 要跑的 nano 設定，每個是 `label:attention:linear:eager|graph[:weight_quant]`，預設是 milestone 依序疊上去的六組（torch_eager、triton_eager、triton_graph、gemv_graph、cuda_gemv_graph、w4a16_graph）。
 - 同一個 `P0_RUN_ID` 重跑時，ncu 和 nsys 已經分析過的 label 會跳過。
 - 用完記得 `bash benchmarks/phase0/colab_phase0.sh stop`。
 
@@ -47,7 +49,9 @@ python benchmarks/phase1/kbench.py --device cpu --out /tmp/kbench
 | `tests` | `pytest -q -rs tests/gpu tests/unit/test_nano_vllm_*.py`；只要有一行 `SKIPPED` 就算失敗（和 CI training job 同一條規則）。`tests/gpu` 還沒建立時只跑 unit tests |
 | `kbench` | `kbench.py`：每個 kernel 的每個 shape 先對 reference 檢查，再計時，輸出 `kbench/kbench.{json,md}` |
 | `ncu` | 每個 kbench kernel 各錄一份 ncu（`--kernel-name regex:<登記的 regex>`，sections 和 Phase 0 相同），再用 Phase 0 的 `analyze_ncu.py` 整理 |
-| `e2e` | `nano_bench.py` 跑 `static:1:128:256,paged:1:128:256,paged:16:1024:256,paged:64:1024:256`；`vllm_offline.py` 跑同樣的 paged 點；nano paged b=1 和 b=16 錄 nsys |
+| `tune` | `tune.py`：每個 kernel、每個 shape 掃一遍 launch 設定，和程式目前選的設定並排，輸出 `tune/tune.{json,md}`。不在預設步驟裡 |
+| `e2e` | 每組 `P1_NANO_CONFIGS` 各跑一次 `nano_bench.py`（`static:1:128:256,paged:1:128:256,paged:16:1024:256,paged:64:1024:256`）；`vllm_offline.py` 跑同樣的 paged 點；最後一組 nano 設定的 paged b=1 和 b=16 錄 nsys |
+| `quality` | `quality.py`：在真的 8B 上，用 wikitext-2 test 的 2048-token 區塊做 teacher forcing，比 torch 路徑、Triton kernel、Triton + W4A16 的 perplexity 和 top-1 一致率 |
 | `summarize` | 全部整理成 `summary.md` |
 
 ## kbench
@@ -66,7 +70,11 @@ python benchmarks/phase1/kbench.py --device cpu --out /tmp/kbench
 目前登記的 kernel：
 
 - `rms_norm`、`silu_mul`：`kernels/` 現有的 Triton 版對照 torch 版，M = 1、16、64、256、2048。
-- `linear`：cuBLAS `F.linear`，跑 decode 的五種 shape（qkv 6144×4096、o 4096×4096、gate_up 28672×4096、down 4096×14336、lm_head 128256×4096），M = 1、2、4、8、16。這是 M6 GEMV 要打的 baseline。
+- `linear`：cuBLAS `F.linear`、Triton GEMV、CUDA GEMV，跑 decode 的五種 shape（qkv 6144×4096、o 4096×4096、gate_up 28672×4096、down 4096×14336、lm_head 128256×4096），M = 1、2、4、8、16。
+- `fused_add_rms_norm`、`silu_and_mul`、`rope_cache_write`：M4 和 M2 的融合 kernel 對照 torch 版。
+- `paged_decode_attention`：vLLM 的 FA2（`flash_attn_varlen_func` 加 block_table）、torch reference、Triton split-KV，B = 1、16、64、128，ctx = 128、1k、4k。
+- `paged_prefill_attention`：vLLM 的 FA2、torch reference、Triton，算 TFLOPs。
+- `w4a16_linear`：vLLM 的 `gptq_marlin`、我們的 CUDA GEMV 和 tensor-core 版，以及 cuBLAS 跑反量化後的 bf16 權重；四種 decoder 投影，M = 1–64。所有實作都用同一組 4-bit code（Marlin 的權重由我們的 code 用 vLLM 的 helper 重排），所以 reference 相同。GB/s 一律用 4-bit 權重的 bytes 算，cuBLAS 那列可以讀成「W4A16 要多少頻寬才追得上 bf16」。
 
 **計時方式**：
 
@@ -114,8 +122,11 @@ Kernel 層級的目標：
 |---|---|
 | `run_phase1.sh` | 主流程。step runner、安裝、nsys、ncu 函式來自 `../phase0/lib.sh` |
 | `kbench.py` | kernel micro-benchmark：登記、正確性檢查、CUDA graph 計時、JSON 和 markdown |
+| `tune.py` | launch 設定的 sweep，計時沿用 kbench |
+| `quality.py` | 8B 上的 perplexity 和 top-1 一致率 |
+| `interp/` | 本機用 Docker（linux/arm64）跑 `TRITON_INTERPRET=1` 檢查 Triton kernel 的邏輯：`interp_check.py`，以及證明 interpreter 的 bf16 `tl.dot` 有錯的 `dot_check.py` |
 | `summarize.py` | 把一次 run 整理成 `summary.md` |
-| `results/<run_id>/` | `summary.md`、`status.tsv`、`logs/`、`tests/`、`kbench/`、`ncu/`、`nsys/`、`offline/`、`environment.txt`，以及當次 run 的程式碼副本 `code/` |
+| `results/<run_id>/` | `summary.md`、`status.tsv`、`logs/`、`tests/`、`kbench/`、`tune/`、`ncu/`、`nsys/`、`offline/`、`quality/`、`environment.txt`，以及當次 run 的程式碼副本 `code/` |
 
 Colab 的 driver 和 launcher 沿用 Phase 0 的 `colab_phase0.sh`、`colab_launcher.py`，用 `BENCH_PHASE=phase1` 切換。tarball 除了 `benchmarks/phase0`、`benchmarks/phase1` 和 `src/serving/nano_vllm`，還會帶 `tests/unit/test_nano_vllm_*.py`、`tiny_llama.py`，以及這些測試在 nano_vllm 以外會 import 或讀取的檔案：`src/monitoring/metrics.py`、`src/api/model_routing.py`、`config/model_routing.nano.json`。`tests/gpu/` 存在的話也會帶上。
 

@@ -51,7 +51,7 @@ class NanoVLLMConfig:
     enable_prefix_cache: bool = True
     attention_backend: str = "torch"
     # "triton" / "cuda": a GEMV kernel for linear layers when a batch has at
-    # most 16 / 8 rows; "cuda" builds kernels/csrc/gemv_bf16.cu on first use.
+    # most 16 / 2 rows; "cuda" builds kernels/csrc/gemv_bf16.cu on first use.
     linear_backend: str = "torch"
     # "w4a16": quantize the decoder-layer projections to 4-bit integers at
     # load (RTN, groups of 128 along K); kernels/w4a16.py.

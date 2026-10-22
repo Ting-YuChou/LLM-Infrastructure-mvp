@@ -161,8 +161,8 @@ for heads in (TINY, LLAMA):
         for splits in (1, 4):
             run("decode", lambda: decode_case(heads, page, [1, 15, 17, 70, 0], splits, torch.float32))
     run("decode fp16", lambda: decode_case(heads, 16, [5, 130], 2, torch.float16))
-    run("decode large-batch config", lambda: decode_case(
-        heads, 16, [1, 129, 300, 0], 2, torch.float32, PA.DECODE_CONFIG_LARGE_BATCH))
+    for _, config in PA.DECODE_CONFIGS:
+        run("decode config", lambda: decode_case(heads, 16, [1, 129, 300, 0], 2, torch.float32, config))
     run("prefill", lambda: prefill_case(heads, 4, [(5, 5), (3, 10), (1, 7), (70, 70)], torch.float32))
     run("prefill fp16", lambda: prefill_case(heads, 16, [(20, 40), (65, 65)], torch.float16))
     for n in (1, 5):

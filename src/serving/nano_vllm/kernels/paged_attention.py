@@ -32,20 +32,21 @@ except ModuleNotFoundError:  # pragma: no cover
     TRITON_AVAILABLE = False
 
 MAX_DECODE_SPLITS = 32
-# Launch settings, from benchmarks/phase1/tune.py on an A100 (LOG.md, run 2).
+# Launch settings, from benchmarks/phase1/tune.py on an A100 (LOG.md, run 3).
 # Decode: block_n is the context tokens per inner-loop tile, independent of
-# the cache block size. Small batches split every context many ways and a
-# short tile keeps those splits busy; from DECODE_LARGE_BATCH on there are
-# few splits per sequence and a long, deeper-pipelined tile wins (1.10x at
-# B=64). The choice depends only on the batch size, so it is fixed per CUDA
-# graph.
-DECODE_CONFIG = {"block_n": 32, "num_warps": 4, "num_stages": 3}
-DECODE_CONFIG_LARGE_BATCH = {"block_n": 128, "num_warps": 4, "num_stages": 3}
-DECODE_LARGE_BATCH = 32
-# Prefill: query rows x context tokens per program iteration (1.23-1.42x
-# over 64 x 64 with four warps).
-PREFILL_CONFIG = {"block_m": 128, "block_n": 64, "num_warps": 8, "num_stages": 2}
-
+# the cache block size. Small batches split every context many ways (up to
+# 32 splits at B=1) and want wide programs with no pipelining; from B=64 a
+# sequence has a single split and a long, three-stage tile wins. Each tier
+# is within 3% of the best config of every swept (B, ctx). The choice
+# depends only on the batch size, so it is fixed per CUDA graph.
+DECODE_CONFIGS = (  # (smallest batch, config)
+    (1, {"block_n": 64, "num_warps": 8, "num_stages": 1}),
+    (16, {"block_n": 32, "num_warps": 4, "num_stages": 2}),
+    (64, {"block_n": 128, "num_warps": 4, "num_stages": 3}),
+)
+# Prefill: query rows x context tokens per program iteration. Within 1.3%
+# of the best config on every swept shape (1.3-1.4x over 64 x 64).
+PREFILL_CONFIG = {"block_m": 128, "block_n": 32, "num_warps": 4, "num_stages": 2}
 
 if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
 
@@ -364,7 +365,7 @@ def decode_num_splits(batch_size: int, kv_heads: int, device: torch.device) -> i
 
 def decode_config(batch_size: int) -> dict:
     """Launch settings of the Triton decode kernel for a batch size."""
-    return DECODE_CONFIG_LARGE_BATCH if batch_size >= DECODE_LARGE_BATCH else DECODE_CONFIG
+    return next(c for smallest, c in reversed(DECODE_CONFIGS) if batch_size >= smallest)
 
 
 def _gather_blocks(cache: torch.Tensor, block_table: torch.Tensor) -> torch.Tensor:

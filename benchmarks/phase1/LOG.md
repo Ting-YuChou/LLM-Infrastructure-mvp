@@ -256,3 +256,46 @@ decode ms/step（`nano_bench.py` 和 `vllm_offline.py`，相同的 batch / in / 
 - **GEMV 在 e2e 上只差 0.2 ms**：b=1 時 Triton GEMV 比 cuBLAS 快 1.6%，和 kbench 的結果一致（gate_up、down、lm_head 稍快，qkv、o_proj 稍慢）。b≥16 時列數超過 16，GEMV 不會被用到，所以和 triton_graph 一樣。
 - **static path 沒變**：那條路徑是 Phase 0 的對照組，刻意保留 F.linear 和逐層的 PyTorch attention。
 - **prefill 時間不能拿來比**：`vllm_offline.py` 的 `prefill_s` 是把非 decode step 的時間加總。b=16×1024 時只有 0.042 s，換算超過 A100 的算力上限（16K token × 16 GFLOP ≈ 262 TFLOP，至少 0.84 s），所以 vLLM 的 step 計時沒有涵蓋整個 prefill。nano 的 1.02 s 約等於 257 TFLOPs，是峰值的 82%。這兩個數字要等改用 TTFT 量法之後才能並排比較。
+
+## 2026-10-22 20:13 — run `20261022-p1-run3`（同一台 VM）
+
+`P1_STEPS="tests kbench tune e2e summarize"`。帶了調過的 decode/prefill 預設、CUDA GEMV v2、修好的 `tune.py`，e2e 多一組 `cuda_gemv_graph`。
+
+- **tests：226 passed**，沒有 skip。
+- **CUDA GEMV v2**（每個 warp 2 列、每個權重只轉換一次）：
+
+  | layer | M=1 | M=2 | M=4 | M=8 |
+  |---|---:|---:|---:|---:|
+  | qkv | 1.00× | 1.00× | 0.95× | 0.69× |
+  | o_proj | 0.98× | 1.01× | 0.92× | 0.59× |
+  | gate_up | **1.08×**（92% 峰值） | 1.07× | 1.05× | 0.77× |
+  | down | 1.04× | 1.00× | 0.93× | 0.57× |
+  | lm_head | 1.01× | 1.00× | 0.99× | 0.73× |
+
+  （對 cuBLAS 的速度比。）M≤2 時每種 shape 都和 cuBLAS 打平或更快，M=8 反而比 v1 更慢。
+  - **原因**：CUDA core 的 fp32 FMA 不夠。M=8 時每個權重要做 8 次 FMA，bf16 權重在 1.4 TB/s 下是每秒 0.7e12 個，需要 5.6e12 FMA/s，再加上 x 的轉換和 shared memory 讀取，已經接近 A100 的 9.7e12 FMA/s。Triton 版用 `tl.dot` 走 tensor core，所以 M=8 時還能維持 0.93–1.05×。
+  - `tune.py` 顯示 M=8 時每個 warp 4 列能快 1.2–1.3 倍（例如 down 從 162 µs 降到 124 µs），但還是輸給 cuBLAS 的 93 µs。
+  - **結論**：CUDA core 的 GEMV 只適合 1–2 列；列數再多就需要 tensor core（M7 的 W4A16 也是同一個道理，所以接著寫 `mma.sync` 版）。
+- **tune**（每個 shape 的「目前規則」和最佳值並排）：
+  - decode：B≥16 時規則就是最佳或差不到 2%；B=1 時 8 個 warp、1 段 pipeline 還能快 1.08–1.19 倍。
+  - prefill：128 / 128 / 8 / 2 在 1×1024 和 1×4096 最快（1×4096 比目前的 128 / 64 快 1.08 倍）；4×1024 則是 128 / 32 / 4 / 2 最快。
+  - Triton GEMV：qkv、o_proj 用 block_n=32、block_k=128、4 warps、3 stages 快 2–6%；gate_up 和 down 各有不同的最佳值，差 3–4%。
+- **e2e**（decode ms/step；run 3 用了 run 2 調出來的 decode/prefill 預設）：
+
+  | config | b=1 | b=16 | b=64 |
+  |---|---:|---:|---:|
+  | triton_graph | 12.61 | 14.87 | 23.48 |
+  | gemv_graph（Triton GEMV） | 12.45 | 14.89 | 23.50 |
+  | cuda_gemv_graph（CUDA GEMV） | **12.09** | 14.86 | 23.50 |
+  | vLLM 0.19.1 | 12.63 | 14.83 | 23.04 |
+  | nano / vLLM（最佳那組） | **0.96×** | 1.00× | 1.02× |
+
+  - b=64 從 run 2 的 24.07 降到 23.50 ms，這是 decode 新設定的效果（kbench：B=64/ctx=1024 從 219 µs 降到 200 µs）。
+  - b=1 時 CUDA GEMV 比 Triton GEMV 快 0.36 ms：nsys 顯示每個 step 328 個 kernel（Triton GEMV 是 424 個），少掉的 96 個正是 Triton split-K 的 reduce kernel，每個約 2.6 µs。CUDA 版沒有 split-K，一個 kernel 就寫出結果。
+  - b≥16 時兩種 GEMV 都用不到（列數超過上限），三組設定一樣。
+- **nsys 順便看到的**：b=16 每個 step 有一個 PyTorch argmax（`reduce_kernel<ArgMaxOps>`）花 56 µs，讀 4 MB 照理只要 3 µs；PyTorch 對「列很少、每列很長」的 reduce 平行度不夠。留給 Phase 2。
+- **套用 run 3 的完整 sweep**（`tune.json` 裡每個 config 的時間）：
+  - decode 分三段：B<16 用 64 / 8 warps / 1 stage，16≤B<64 用 32 / 4 / 2，B≥64 用 128 / 4 / 3。每段在每個量過的 (B, ctx) 都在最佳值的 3% 以內；B=1/ctx=4096 從 22.6 降到 20.9 µs。
+  - prefill 改成單一的 128 / 32 / 4 warps / 2 stages：在三個 shape 上都在最佳值的 1.3% 以內（4×1024 從 319.5 降到 295.7 µs）。
+  - Triton GEMV 改成 block_n=32、block_k=128、4 warps、3 stages：每個 shape 都在最佳值的 2% 以內。
+  - CUDA GEMV 的分派上限從 8 列改成 2 列，只在贏 cuBLAS 的地方用。kernel 本身還是支援 8 列，GPU 測試直接呼叫它測 3 和 8 列。

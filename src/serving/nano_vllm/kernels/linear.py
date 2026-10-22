@@ -9,8 +9,8 @@ blocks in flight. Two versions:
   wide so every SM stays busy, accumulates in fp32 with the rows padded to
   16 for tensor cores (up to 16 rows);
 - cuda: csrc/gemv_bf16.cu, CUDA cores with 128-bit loads and
-  CUDA_GEMV_CONFIG["rows_per_warp"] weight rows per warp (up to 8 rows),
-  built with torch.utils.cpp_extension on first use.
+  CUDA_GEMV_CONFIG["rows_per_warp"] weight rows per warp, built with
+  torch.utils.cpp_extension on first use; used up to CUDA_GEMV_MAX_ROWS.
 
 Quantized weights (W4A16Weight, w4a16.py) take their own path.
 """
@@ -39,12 +39,15 @@ from .w4a16 import W4A16Weight, w4a16_linear  # noqa: E402
 
 LINEAR_BACKENDS = ("torch", "triton", "cuda")
 GEMV_MAX_ROWS = 16
-CUDA_GEMV_MAX_ROWS = 8
-GEMV_BLOCK_N = 64
+# The CUDA kernel takes up to 8 rows, but its fp32 FMAs on CUDA cores only
+# keep up with cuBLAS's tensor cores for 1-2 rows (LOG.md, run 3).
+CUDA_GEMV_MAX_ROWS = 2
+GEMV_BLOCK_N = 32
 GEMV_BLOCK_K = 128
 MAX_SPLIT_K = 8
-# Launch settings; benchmarks/phase1/tune.py sweeps them on the GPU.
-GEMV_CONFIG = {"block_n": GEMV_BLOCK_N, "block_k": GEMV_BLOCK_K, "num_warps": 4, "num_stages": 4}
+# Launch settings, from benchmarks/phase1/tune.py on an A100 (LOG.md, run 3):
+# within 2% of the best config of each Llama 3.1 8B decode shape.
+GEMV_CONFIG = {"block_n": GEMV_BLOCK_N, "block_k": GEMV_BLOCK_K, "num_warps": 4, "num_stages": 3}
 CUDA_GEMV_CONFIG = {"rows_per_warp": 2}
 
 
@@ -158,7 +161,7 @@ def linear(
     """y = x @ weight.T (+ bias).
 
     backend="triton" uses the Triton GEMV for <= 16 rows, backend="cuda" the
-    CUDA one for <= 8 rows of bf16; everything else goes to F.linear.
+    CUDA one for <= 2 rows of bf16; everything else goes to F.linear.
     ``config`` overrides the chosen kernel's launch settings (GEMV_CONFIG or
     CUDA_GEMV_CONFIG). A W4A16Weight always goes to w4a16_linear, whatever
     the backend.
