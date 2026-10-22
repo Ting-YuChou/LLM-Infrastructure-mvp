@@ -315,3 +315,48 @@ decode ms/step（`nano_bench.py` 和 `vllm_offline.py`，相同的 batch / in / 
 4. **quality 跑不起來**：vLLM 的 venv 沒有 `datasets`，也沒有 `pyarrow`。改成 quality step 需要時才用 uv 裝 `pyarrow`，再從 HF hub 下載 wikitext-2 的 parquet。
 
 **bf16 的 e2e 照常跑完**，這是第一次用 run 3 調出來的全部預設值：gemv_graph b=1 12.32 / b=16 **14.63（vLLM 14.83，0.99×）**/ b=64 23.77 ms；cuda_gemv_graph b=1 12.15 / 14.87 / 23.51 ms。b=64 這兩組的 kernel 完全一樣（列數都超過 GEMV 上限），卻差 0.26 ms，所以 e2e 的 run-to-run 差異大約是 1%。
+
+## 2026-10-22 20:50 — run `20261022-p1-run5`：W4A16 第一次跑通
+
+- **tests：315 passed**，沒有 skip。兩個 W4A16 kernel 對反量化矩陣乘法都正確（1–64 列、bf16/fp16、K 切分、graph capture），W4A16 模型對 fp32 參考在 bf16 容忍度內，graph replay 等於 eager。
+- **kbench**（對照 vLLM `gptq_marlin`，用同一組 4-bit code；µs）：
+
+  | layer | M | Marlin | 我們 GEMV | 我們 mma | cuBLAS bf16 |
+  |---|---:|---:|---:|---:|---:|
+  | qkv | 1 | 19.2 | 23.0 | 23.9 | 41.0 |
+  | o_proj | 1 | 17.5 | 19.5 | 21.8 | 28.5 |
+  | gate_up | 1 | 59.6（65% 峰值） | 71.6 | 70.4 | 178.3 |
+  | down | 1 | 23.5（83%） | 43.2 | 36.5 | 92.9 |
+  | o_proj | 16 | 19.5 | - | 19.5 | 29.0 |
+  | gate_up | 16 | 66.1 | - | 78.1 | 182.9 |
+  | gate_up | 64 | 113.9 | - | 312.5 | 264.7 |
+  | down | 64 | 62.8 | - | 187.5 | 99.3 |
+
+  - M≤16 時 mma 版是 Marlin 的 0.64–1.00×，比 bf16 cuBLAS 快 1.5–3.3 倍。
+  - M=32–64 時掉到 Marlin 的 0.34–0.73×，M=64 甚至比 bf16 cuBLAS 慢。**原因**：每個 block 只管 32 欄（M≥33 時 16 欄），卻要從 L2 讀整份 x 的 K 範圍；M=64 時 x 是 512 KB，o_proj 的 256 個 block 加起來從 L2 讀約 128 MB，權重只有 8 MB。
+  - kbench 和 tune 量到的同一個設定差到 20%（qkv M=1 GEMV：kbench 23.0、tune 18.7 µs）。兩邊都輪替輸入超過 L2，但 kbench 每份輸入還帶著 bf16 權重（給 cuBLAS 那列用），working set 和配置都不同。所以不同實作之間只拿同一個工具的數字比：Marlin 的對照看 kbench，設定的選擇看 tune。
+- **tune**：
+  - GEMV 在 1–2 列時每個 warp 2 列最好，4 列反而慢到 1.27 倍（o_proj、down）。M=2 時 GEMV 還是比 mma 快，M≥3 改用 mma。
+  - mma 的 K 切分：自動值（目標每個 SM 4 個 block）對 qkv 切太多（切 3 份比不切慢 14%），每多切一次就多一個 memset、一個 cast kernel 和 atomic 的成本。改成目標每個 SM 1.5 個 block。
+- **e2e**（decode ms/step）：
+
+  | | b=1 | b=16 | b=64 |
+  |---|---:|---:|---:|
+  | nano W4A16 | **6.48** | **9.31** | 30.32 |
+  | nano bf16（run 4 最佳） | 12.15 | 14.63 | 23.51 |
+  | vLLM bf16 | 12.63 | 14.83 | 23.04 |
+
+  b=1 比 bf16 快 1.9 倍，b=16 快 1.6 倍；b=64 反而慢，就是上面 M=64 的問題。nsys（b=16）每個 step 520 個 kernel，比 bf16 多 192 個：3 個要切 K 的 linear × 32 層 × 2（memset 和 cast）。
+- **quality**（wikitext-2 test，288,627 個 token，2048-token 區塊，teacher forcing）：
+
+  | config | 權重 GiB | perplexity | top-1 一致率（對 bf16 torch） |
+  |---|---:|---:|---:|
+  | bf16，torch 路徑 | 15.0 | 7.233 | - |
+  | bf16，Triton kernel | 15.0 | 7.232 | 98.81% |
+  | W4A16（RTN g128 對稱），Triton | 5.3 | 8.024 | 85.90% |
+
+  - Triton 和 torch 的 perplexity 到小數第三位都一樣；top-1 一致率 98.81%，比計畫的 99% 低一點。兩邊的 linear 和 norm 走同一條路（prefill 列數超過 GEMV 上限），只差在 attention：Triton kernel 照 FA2 的做法把 P 轉成 bf16 再乘 V，reference 全程 fp32。不一致的位置是 bf16 捨入剛好翻轉的接近平手的 token，不是錯誤。
+  - RTN W4A16 讓 perplexity 增加 11%，和文獻上 Llama 3 8B 的 RTN g128 結果同一個量級（Llama 3 比 Llama 2 難量化）。要更好的品質得用 GPTQ/AWQ 或非對稱量化，這是 Phase 2 的事。
+- **針對 M>16 和 K 切分的修正**（run 6 驗證）：
+  - 新的 `gemm_w4a16_wide`（17–64 列）：block 裡 4 個 warp 各管不同的 32 欄（一個 block 128 欄），共用一份放在 shared memory 的 x（`cp.async`，先載下一組），讀取時用 XOR swizzle 避開 bank conflict。group scale 乘進反量化後的 B fragment（q−8 是精確值，乘積只在 bf16 捨入一次，和 Marlin 一樣），所以每個 thread 只要一組 fp32 累加器。ptxas：120–190 個暫存器，沒有 spill。
+  - K 切分改成「最後一個抵達的 block 收尾」：每個 split 把部分和 atomicAdd 進 fp32 workspace，用每個 column tile 的計數器判斷誰最後到；最後到的 block 寫出 bf16，並把 workspace 和計數器歸零。workspace 常駐（`w4a16_workspace`，模型載入時就配好，在 capture 之前），所以不再需要 memset 和 cast kernel。

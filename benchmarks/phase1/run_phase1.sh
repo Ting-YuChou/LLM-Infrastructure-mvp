@@ -27,7 +27,8 @@
 # P0_REPO_DIR (default: the checkout holding this script), P1_STEPS,
 # P1_MODEL (default unsloth/Meta-Llama-3.1-8B-Instruct), P1_TUNE (tune.py
 # kernels: decode,prefill,gemv,cuda_gemv,w4a16), P1_KERNELS (kbench and
-# ncu filter, comma-separated), P1_E2E_RUNS (nano_bench kind:batch:in:out list;
+# ncu filter, comma-separated), P1_KBENCH_SHAPES (regex on the shape label,
+# same two steps), P1_E2E_RUNS (nano_bench kind:batch:in:out list;
 # vLLM runs the paged ones), P1_NANO_CONFIGS (label:attention:linear:eager|graph[:weight_quant]
 # per nano_bench run, default: the Phase 1 milestones in order), P1_NCU_LAUNCHES (cap per kbench kernel, default
 # 300), P1_CUDA_VERSION (cuda129 step, default: the venv's torch.version.cuda),
@@ -51,6 +52,7 @@ VLLM_VERSION="${P0_VLLM_VERSION:-0.19.1}"
 REPO_DIR="${P0_REPO_DIR:-$(cd "${CODE_DIR}/../.." && pwd)}"
 STEPS="${P1_STEPS:-installs cuda129 tests kbench ncu e2e quality summarize}"
 KERNELS="${P1_KERNELS:-}"
+KBENCH_SHAPES="${P1_KBENCH_SHAPES:-}"
 E2E_RUNS="${P1_E2E_RUNS:-static:1:128:256,paged:1:128:256,paged:16:1024:256,paged:64:1024:256}"
 # torch_eager: the M1 refactor alone; triton_eager: Triton attention and fused
 # kernels (M2, M4, M5); triton_graph: + decode CUDA graphs (M3); gemv_graph:
@@ -123,7 +125,8 @@ gpu_tests() {
 # --- kernels -----------------------------------------------------------------
 kbench() {
   local rc=0
-  "${PY}" "${CODE_DIR}/kbench.py" --out "${OUT}/kbench" ${KERNELS:+--kernels "${KERNELS}"} || rc=1
+  "${PY}" "${CODE_DIR}/kbench.py" --out "${OUT}/kbench" ${KERNELS:+--kernels "${KERNELS}"} \
+    ${KBENCH_SHAPES:+--shapes "${KBENCH_SHAPES}"} || rc=1
   cat "${OUT}/kbench/kbench.md" >&3
   return "${rc}"
 }
@@ -139,7 +142,7 @@ ncu_kbench() {  # one ncu report per kbench kernel, limited to its --kernel-name
   while IFS=$'\t' read -r name regex <&4; do
     [[ -n "${name}" ]] || continue
     ncu_run "kbench_${name}" "${P1_NCU_LAUNCHES:-300}" --kernel-name "regex:${regex}" --nvtx -- \
-      "${PY}" "${CODE_DIR}/kbench.py" --ncu-mode --kernels "${name}" || rc=1
+      "${PY}" "${CODE_DIR}/kbench.py" --ncu-mode --kernels "${name}" ${KBENCH_SHAPES:+--shapes "${KBENCH_SHAPES}"} || rc=1
   done 4<<< "${listing}"
   return "${rc}"
 }

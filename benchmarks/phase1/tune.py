@@ -174,7 +174,7 @@ def tune_w4a16():
         for m in (1, 2, 4, 8, 16, 32, 64)
     ]
     configs = [{"kernel": "gemv", "rows_per_warp": r} for r in (1, 2, 4)] + [
-        {"kernel": "mma", "splits": s} for s in (0, 1, 2, 4, 8)
+        {"kernel": kernel, "splits": s} for kernel in ("mma", "wide") for s in (0, 1, 2, 4, 8)
     ]
 
     def make_call(shape, config):

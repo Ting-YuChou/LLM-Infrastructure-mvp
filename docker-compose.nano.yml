@@ -11,8 +11,8 @@ services:
       DTYPE: float16
       DEVICE: auto
       USE_TRITON: "true"
-      ATTENTION_BACKEND: torch
-      LINEAR_BACKEND: torch
+      ATTENTION_BACKEND: triton
+      LINEAR_BACKEND: triton
       WEIGHT_QUANT: none
       ENFORCE_EAGER: "false"
       CUDA_GRAPH_MAX_BS: "64"

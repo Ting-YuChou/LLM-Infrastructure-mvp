@@ -17,6 +17,7 @@ on the GPU, any implementation could not run.
 
   python kbench.py --out results/kbench                 # every kernel
   python kbench.py --kernels rms_norm,linear --out d     # a subset
+  python kbench.py --kernels linear --shapes "M=1 " --out d  # shapes whose label matches
   python kbench.py --list                                # name<TAB>ncu --kernel-name regex
   python kbench.py --ncu-mode --kernels rms_norm         # a few plain calls per shape and
                                                          # impl in cudaProfilerStart/Stop
@@ -26,8 +27,10 @@ on the GPU, any implementation could not run.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import math
+import re
 import statistics
 import sys
 import traceback
@@ -363,6 +366,7 @@ def markdown(rows: list[dict], env: dict) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--kernels", default="", help="comma-separated names (default: all)")
+    parser.add_argument("--shapes", default="", help="regex on the shape label (default: all)")
     parser.add_argument("--out", type=Path, help="directory for kbench.json and kbench.md")
     parser.add_argument("--device", default="cuda", choices=["cuda", "cpu"])
     parser.add_argument("--list", action="store_true", help="print name<TAB>ncu regex and exit")
@@ -377,6 +381,12 @@ def main() -> None:
     if unknown:
         parser.error(f"unknown kernels {unknown}; known: {', '.join(KERNELS)}")
     kernels = [KERNELS[n] for n in names]
+    if args.shapes:
+        pattern = re.compile(args.shapes)
+        kernels = [
+            dataclasses.replace(k, shapes=[s for s in k.shapes if pattern.search(label(s))])
+            for k in kernels
+        ]
     if args.list:
         for kernel in kernels:
             print(f"{kernel.name}\t{kernel.ncu}")
@@ -800,12 +810,14 @@ register(
             "vllm_marlin": _vllm_marlin,
             "cuda_gemv": _w4a16_cuda("gemv", W4A16_GEMV_MAX_ROWS),
             "cuda_mma": _w4a16_cuda("mma", W4A16_MMA_MAX_ROWS),
+            "cuda_wide": _w4a16_cuda("wide", W4A16_MMA_MAX_ROWS),
+            "cuda_auto": _w4a16_cuda("auto", W4A16_MMA_MAX_ROWS),
             "cublas_bf16": _cublas_dequantized,
         },
         reference=lambda i: w4a16_linear_reference(i["x"], quantize_w4a16(i["w"])),
         bytes=lambda s: s["N"] * s["K"] // 2 + 2 * s["N"] * s["K"] // 128
         + 2 * s["M"] * (s["K"] + s["N"]),
-        ncu="gemv_w4a16|gemm_w4a16_mma|cast_workspace|Marlin|marlin",
+        ncu="gemv_w4a16|gemm_w4a16|Marlin|marlin",
     )
 )
 

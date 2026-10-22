@@ -27,6 +27,7 @@ from .kernels import (
     silu_and_mul,
 )
 from .kernels.rotary import compute_inv_freq, validate_rope_scaling
+from .kernels.w4a16 import w4a16_workspace
 from .kv_cache import PagedKVCache, StaticKVCache
 from .metadata import BatchMetadata, build_batch
 
@@ -248,6 +249,10 @@ class NanoLlamaForCausalLM:
         self.weights = {
             name: self._load_weight(name, tensor) for name, tensor in weights.items()
         }
+        quantized = [w for w in self.weights.values() if isinstance(w, W4A16Weight)]
+        if quantized and device.type == "cuda":
+            # Split-K buffers, before any CUDA graph is captured.
+            w4a16_workspace(device, max(w.shape[0] for w in quantized))
         self.lm_head_weight = self._resolve_lm_head()
         self.layers = [
             self._layer_weights(layer_idx)

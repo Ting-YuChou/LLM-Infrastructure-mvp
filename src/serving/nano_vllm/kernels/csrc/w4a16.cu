@@ -31,8 +31,11 @@
 // scaled once, as in the GEMV. A block owns 32 output columns (four n8
 // tiles); its four warps take interleaved groups and reduce through shared
 // memory. When there are too few blocks to fill the GPU, gridDim.y splits K
-// further and the splits meet in an fp32 workspace with atomicAdd. From 33
+// further and the splits meet in an fp32 workspace (finish_split). From 33
 // rows on a block owns 16 columns instead, to stay within 255 registers.
+//
+// gemm_w4a16_wide (17-64 rows) shares one shared-memory copy of x among
+// warps that own different columns; see the kernel.
 
 #include <torch/extension.h>
 #include <c10/cuda/CUDAException.h>
@@ -228,6 +231,33 @@ __device__ __forceinline__ void mma16816(float d[4], const uint32_t a[4], uint32
   }
 }
 
+// Split-K finish. Every split adds its partial tile into the fp32 workspace;
+// the last split to arrive (per-tile counter) writes T to y and re-zeroes
+// the workspace and the counter, so the next call starts from zeros without
+// a memset or a separate cast kernel. The workspace persists across calls
+// (w4a16.py reserves it before CUDA graphs are captured).
+template <typename T>
+__device__ __forceinline__ void finish_split(float* workspace, int* counters, T* y, int m, int n, int col0,
+                                             int cols) {
+  __shared__ int last;
+  __threadfence();  // this block's atomics are visible before the counter moves
+  __syncthreads();
+  if (threadIdx.x == 0) last = atomicAdd(&counters[blockIdx.x], 1) == static_cast<int>(gridDim.y) - 1;
+  __syncthreads();
+  if (!last) return;
+  __threadfence();
+  for (int i = threadIdx.x; i < m * cols; i += blockDim.x) {
+    const int row = i / cols;
+    const int col = col0 + i % cols;
+    if (col < n) {
+      float* p = workspace + static_cast<int64_t>(row) * n + col;
+      y[static_cast<int64_t>(row) * n + col] = Traits<T>::from_float(__ldcg(p));
+      __stcg(p, 0.f);
+    }
+  }
+  if (threadIdx.x == 0) counters[blockIdx.x] = 0;
+}
+
 constexpr int kMmaGroup = 128;  // K per scale group and per kernel step
 
 // MT m16 tiles (up to 16 * MT rows of x) by NT n8 tiles (8 * NT output
@@ -240,6 +270,7 @@ __global__ void __launch_bounds__(kThreads) gemm_w4a16_mma_kernel(
     const T* __restrict__ scales,
     T* __restrict__ y,
     float* __restrict__ workspace,
+    int* __restrict__ counters,
     int m,
     int n,
     int k,
@@ -360,12 +391,171 @@ __global__ void __launch_bounds__(kThreads) gemm_w4a16_mma_kernel(
       }
     }
   }
+  if (workspace != nullptr) finish_split(workspace, counters, y, m, n, n0, 8 * NT);
+}
+
+__device__ __forceinline__ void cp_async_16(void* smem, const void* gmem, int src_bytes) {
+  // src_bytes = 0 zero-fills the 16 bytes (padding rows of x).
+  const uint32_t dst = static_cast<uint32_t>(__cvta_generic_to_shared(smem));
+  asm volatile("cp.async.cg.shared.global [%0], [%1], 16, %2;\n" ::"r"(dst), "l"(gmem), "r"(src_bytes));
+}
+__device__ __forceinline__ void cp_async_commit() { asm volatile("cp.async.commit_group;\n" ::); }
+template <int N>
+__device__ __forceinline__ void cp_async_wait() { asm volatile("cp.async.wait_group %0;\n" ::"n"(N)); }
+
+// 16-byte chunk ch (0..15) of x tile row `row` lives at this chunk of the
+// shared-memory row. Thread (g, c) reads chunk 4c + t of rows g and g+8, so
+// the eight lanes of a quarter warp (g in {2q, 2q+1}, c in 0..3) would hit
+// two bank groups without the XOR; with it they hit eight.
+__device__ __forceinline__ int swizzle(int row, int ch) { return ch ^ (((ch >> 3) & 1) << 1) ^ (row & 1); }
+
+template <typename T>
+__device__ __forceinline__ uint32_t broadcast_scale(T s) {
+  using T2 = typename Traits<T>::T2;
+  T2 v;
+  v.x = s;
+  v.y = s;
+  return *reinterpret_cast<const uint32_t*>(&v);
 }
 
 template <typename T>
-__global__ void cast_workspace_kernel(const float* __restrict__ in, T* __restrict__ out, int64_t count) {
-  const int64_t i = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
-  if (i < count) out[i] = Traits<T>::from_float(in[i]);
+__device__ __forceinline__ uint32_t hmul2_bits(uint32_t a, uint32_t b) {
+  const auto v = __hmul2(as_t2<T>(a), as_t2<T>(b));
+  return *reinterpret_cast<const uint32_t*>(&v);
+}
+
+// The tensor-core kernel for 17-64 rows. gemm_w4a16_mma re-reads x from L2
+// in every block of 32 columns, which at 64 rows is 8x the weight traffic.
+// Here the four warps own different columns (4 n8 tiles each, 128 per
+// block) and share one shared-memory copy of x per group, loaded with
+// cp.async one group ahead. The group scale multiplies the dequantized B
+// fragment (q - 8 is exact, the product is rounded once to T, as in Marlin),
+// so a thread keeps a single set of fp32 accumulators. Same K permutation
+// and qweight layout as gemm_w4a16_mma.
+constexpr int kWideTiles = 4;                     // n8 tiles per warp
+constexpr int kWideCols = kWarps * kWideTiles * 8;  // 128 columns per block
+
+template <typename T, int MT>
+__global__ void __launch_bounds__(kThreads) gemm_w4a16_wide_kernel(
+    const T* __restrict__ x,
+    const uint32_t* __restrict__ qweight,
+    const T* __restrict__ scales,
+    T* __restrict__ y,
+    float* __restrict__ workspace,
+    int* __restrict__ counters,
+    int m,
+    int n,
+    int k,
+    int groups_per_split) {
+  using Tr = Traits<T>;
+  constexpr int kRows = 16 * MT;
+  __shared__ __align__(16) T xs[2][kRows * kMmaGroup];
+  const int warp = threadIdx.x / 32;
+  const int lane = threadIdx.x % 32;
+  const int g = lane / 4;
+  const int c = lane % 4;
+  const int col0 = blockIdx.x * kWideCols + warp * kWideTiles * 8;
+  const int groups = k / kMmaGroup;
+  const int words_per_row = k / 8;
+  const int group_begin = blockIdx.y * groups_per_split;
+  const int group_end = min(group_begin + groups_per_split, groups);
+
+  auto stage = [&](int s, int buf) {
+    for (int i = threadIdx.x; i < kRows * 16; i += kThreads) {
+      const int row = i / 16;
+      const int ch = i % 16;
+      const bool real = row < m;
+      const T* src = real ? x + static_cast<int64_t>(row) * k + s * kMmaGroup + ch * 8 : x;
+      cp_async_16(&xs[buf][row * kMmaGroup + swizzle(row, ch) * 8], src, real ? 16 : 0);
+    }
+    cp_async_commit();
+  };
+  auto load_b = [&](int s, uint4 (&bq)[kWideTiles]) {
+#pragma unroll
+    for (int j = 0; j < kWideTiles; ++j) {
+      const int row = col0 + 8 * j + g;
+      bq[j] = row < n ? __ldg(reinterpret_cast<const uint4*>(
+                            qweight + static_cast<int64_t>(row) * words_per_row + s * 16 + 4 * c))
+                      : make_uint4(0, 0, 0, 0);
+    }
+  };
+
+  float acc[MT][kWideTiles][4];
+#pragma unroll
+  for (int mt = 0; mt < MT; ++mt)
+#pragma unroll
+    for (int j = 0; j < kWideTiles; ++j)
+#pragma unroll
+      for (int r = 0; r < 4; ++r) acc[mt][j][r] = 0.f;
+
+  uint4 bq[kWideTiles], bq_next[kWideTiles];
+  if (group_begin < group_end) {
+    stage(group_begin, 0);
+    load_b(group_begin, bq);
+  }
+  for (int s = group_begin, buf = 0; s < group_end; ++s, buf ^= 1) {
+    if (s + 1 < group_end) {
+      stage(s + 1, buf ^ 1);
+      load_b(s + 1, bq_next);
+      cp_async_wait<1>();
+    } else {
+      cp_async_wait<0>();
+    }
+    __syncthreads();
+    // The B fragment holds column g of each tile: one scale per tile.
+    uint32_t scale[kWideTiles];
+#pragma unroll
+    for (int j = 0; j < kWideTiles; ++j) {
+      const int col = col0 + 8 * j + g;
+      scale[j] = broadcast_scale<T>(col < n ? scales[static_cast<int64_t>(col) * groups + s] : T{});
+    }
+#pragma unroll
+    for (int t = 0; t < 4; ++t) {
+      uint32_t b[kWideTiles][4];
+#pragma unroll
+      for (int j = 0; j < kWideTiles; ++j) {
+        const uint32_t word = reinterpret_cast<const uint32_t*>(&bq[j])[t];
+#pragma unroll
+        for (int i = 0; i < 4; ++i) b[j][i] = hmul2_bits<T>(dequant_pair<T>(word, i), scale[j]);
+      }
+#pragma unroll
+      for (int mt = 0; mt < MT; ++mt) {
+        const int row = 16 * mt + g;
+        const uint4 lo4 = *reinterpret_cast<const uint4*>(&xs[buf][row * kMmaGroup + swizzle(row, 4 * c + t) * 8]);
+        const uint4 hi4 =
+            *reinterpret_cast<const uint4*>(&xs[buf][(row + 8) * kMmaGroup + swizzle(row + 8, 4 * c + t) * 8]);
+        const uint32_t* lo = reinterpret_cast<const uint32_t*>(&lo4);
+        const uint32_t* hi = reinterpret_cast<const uint32_t*>(&hi4);
+#pragma unroll
+        for (int u = 0; u < 2; ++u) {
+          const uint32_t a[4] = {lo[2 * u], hi[2 * u], lo[2 * u + 1], hi[2 * u + 1]};
+#pragma unroll
+          for (int j = 0; j < kWideTiles; ++j) mma16816<T>(acc[mt][j], a, b[j][2 * u], b[j][2 * u + 1]);
+        }
+      }
+    }
+    __syncthreads();  // everyone is done with xs[buf] before it is refilled
+#pragma unroll
+    for (int j = 0; j < kWideTiles; ++j) bq[j] = bq_next[j];
+  }
+
+#pragma unroll
+  for (int mt = 0; mt < MT; ++mt)
+#pragma unroll
+    for (int j = 0; j < kWideTiles; ++j)
+#pragma unroll
+      for (int r = 0; r < 4; ++r) {
+        const int row = 16 * mt + g + 8 * (r / 2);
+        const int col = col0 + 8 * j + 2 * c + (r % 2);
+        if (row < m && col < n) {
+          if (workspace == nullptr) {
+            y[static_cast<int64_t>(row) * n + col] = Tr::from_float(acc[mt][j][r]);
+          } else {
+            atomicAdd(workspace + static_cast<int64_t>(row) * n + col, acc[mt][j][r]);
+          }
+        }
+      }
+  if (workspace != nullptr) finish_split(workspace, counters, y, m, n, blockIdx.x * kWideCols, kWideCols);
 }
 
 struct Problem {
@@ -454,73 +644,140 @@ torch::Tensor gemv_w4a16(torch::Tensor x, torch::Tensor qweight, torch::Tensor s
 
 namespace {
 
+// K split across blocks (gridDim.y) and the persistent split-K buffers.
+struct Split {
+  int64_t splits;
+  float* workspace_ptr;  // >= m * n floats, all zero between calls
+  int* counters;         // >= gridDim.x ints, all zero between calls
+  int per_split(int k) const { return static_cast<int>((k / kMmaGroup + splits - 1) / splits); }
+  int grid_y(int k) const { return (k / kMmaGroup + per_split(k) - 1) / per_split(k); }
+  float* workspace(int k) const { return grid_y(k) > 1 ? workspace_ptr : nullptr; }
+};
+
 // Four n8 tiles per block up to two m16 tiles, two beyond (see the kernel).
 constexpr int mma_tiles_n(int mt) { return mt <= 2 ? 4 : 2; }
 
 template <typename T, int MT>
 void launch_mma(const torch::Tensor& x, const torch::Tensor& qweight, const torch::Tensor& scales,
-                torch::Tensor& y, int64_t splits, cudaStream_t stream) {
+                torch::Tensor& y, const Split& split, cudaStream_t stream) {
   constexpr int NT = mma_tiles_n(MT);
   const int m = static_cast<int>(x.size(0));
   const int n = static_cast<int>(qweight.size(0));
   const int k = static_cast<int>(qweight.size(1) * 8);
-  const int groups = k / kMmaGroup;
-  const int per_split = (groups + splits - 1) / splits;
-  const int grid_y = (groups + per_split - 1) / per_split;
-  const dim3 grid((n + 8 * NT - 1) / (8 * NT), grid_y);
-  torch::Tensor workspace;
-  if (grid_y > 1) workspace = torch::zeros({m, n}, x.options().dtype(torch::kFloat32));
+  const dim3 grid((n + 8 * NT - 1) / (8 * NT), split.grid_y(k));
   gemm_w4a16_mma_kernel<T, MT, NT><<<grid, kThreads, 0, stream>>>(
       static_cast<const T*>(x.data_ptr()), static_cast<const uint32_t*>(qweight.data_ptr()),
       static_cast<const T*>(scales.data_ptr()), static_cast<T*>(y.data_ptr()),
-      grid_y > 1 ? workspace.data_ptr<float>() : nullptr, m, n, k, per_split);
-  if (grid_y > 1) {
-    const int64_t count = static_cast<int64_t>(m) * n;
-    cast_workspace_kernel<T><<<static_cast<unsigned>((count + 255) / 256), 256, 0, stream>>>(
-        workspace.data_ptr<float>(), static_cast<T*>(y.data_ptr()), count);
-  }
+      split.workspace(k), split.counters, m, n, k, split.per_split(k));
 }
 
 template <typename T>
 void launch_mma_rows(const torch::Tensor& x, const torch::Tensor& qweight, const torch::Tensor& scales,
-                     torch::Tensor& y, int64_t splits, cudaStream_t stream) {
+                     torch::Tensor& y, const Split& split, cudaStream_t stream) {
   switch ((x.size(0) + 15) / 16) {
-    case 1: launch_mma<T, 1>(x, qweight, scales, y, splits, stream); break;
-    case 2: launch_mma<T, 2>(x, qweight, scales, y, splits, stream); break;
-    case 3: launch_mma<T, 3>(x, qweight, scales, y, splits, stream); break;
-    default: launch_mma<T, 4>(x, qweight, scales, y, splits, stream); break;
+    case 1: launch_mma<T, 1>(x, qweight, scales, y, split, stream); break;
+    case 2: launch_mma<T, 2>(x, qweight, scales, y, split, stream); break;
+    case 3: launch_mma<T, 3>(x, qweight, scales, y, split, stream); break;
+    default: launch_mma<T, 4>(x, qweight, scales, y, split, stream); break;
   }
+}
+
+template <typename T, int MT>
+void launch_wide(const torch::Tensor& x, const torch::Tensor& qweight, const torch::Tensor& scales,
+                 torch::Tensor& y, const Split& split, cudaStream_t stream) {
+  const int m = static_cast<int>(x.size(0));
+  const int n = static_cast<int>(qweight.size(0));
+  const int k = static_cast<int>(qweight.size(1) * 8);
+  const dim3 grid((n + kWideCols - 1) / kWideCols, split.grid_y(k));
+  gemm_w4a16_wide_kernel<T, MT><<<grid, kThreads, 0, stream>>>(
+      static_cast<const T*>(x.data_ptr()), static_cast<const uint32_t*>(qweight.data_ptr()),
+      static_cast<const T*>(scales.data_ptr()), static_cast<T*>(y.data_ptr()),
+      split.workspace(k), split.counters, m, n, k, split.per_split(k));
+}
+
+template <typename T>
+void launch_wide_rows(const torch::Tensor& x, const torch::Tensor& qweight, const torch::Tensor& scales,
+                      torch::Tensor& y, const Split& split, cudaStream_t stream) {
+  switch ((x.size(0) + 15) / 16) {
+    case 1: launch_wide<T, 1>(x, qweight, scales, y, split, stream); break;
+    case 2: launch_wide<T, 2>(x, qweight, scales, y, split, stream); break;
+    case 3: launch_wide<T, 3>(x, qweight, scales, y, split, stream); break;
+    default: launch_wide<T, 4>(x, qweight, scales, y, split, stream); break;
+  }
+}
+
+int sm_count() {
+  // Not ATen/cuda/CUDAContext.h: it needs the cuSPARSE/cuBLAS headers, and
+  // the build only has nvcc, cudart and cccl.
+  int device = 0, sms = 0;
+  C10_CUDA_CHECK(cudaGetDevice(&device));
+  C10_CUDA_CHECK(cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, device));
+  return sms;
+}
+
+Split make_split(int64_t splits, const torch::Tensor& workspace, const torch::Tensor& counters, int64_t m,
+                 int64_t n, int64_t cols, const char* name) {
+  TORCH_CHECK(workspace.is_cuda() && workspace.scalar_type() == torch::kFloat32 && workspace.is_contiguous() &&
+                  workspace.numel() >= m * n,
+              name, ": workspace must be a zeroed, contiguous fp32 CUDA tensor of at least m * n elements");
+  TORCH_CHECK(counters.is_cuda() && counters.scalar_type() == torch::kInt32 && counters.is_contiguous() &&
+                  counters.numel() >= (n + cols - 1) / cols,
+              name, ": counters must be a zeroed int32 CUDA tensor with one entry per column block");
+  return Split{splits, workspace.data_ptr<float>(), counters.data_ptr<int>()};
+}
+
+void check_mma_args(const torch::Tensor& x, const torch::Tensor& qweight, const torch::Tensor& scales,
+                    int64_t group_size, const char* name) {
+  check_weight(qweight, scales, group_size);
+  TORCH_CHECK(group_size == kMmaGroup, name, ": group_size must be 128");
+  TORCH_CHECK(x.is_cuda() && x.dim() == 2 && x.is_contiguous(), name, ": contiguous CUDA x expected");
+  TORCH_CHECK(x.scalar_type() == scales.scalar_type(), name, ": x and scales must share a dtype");
+  TORCH_CHECK(x.size(1) == qweight.size(1) * 8, name, ": shape mismatch");
+  TORCH_CHECK(x.size(0) >= 1 && x.size(0) <= 64, name, ": 1 to 64 rows supported");
 }
 
 }  // namespace
 
-torch::Tensor gemm_w4a16_mma(torch::Tensor x, torch::Tensor qweight, torch::Tensor scales,
-                             int64_t group_size, int64_t splits) {
-  check_weight(qweight, scales, group_size);
-  TORCH_CHECK(group_size == kMmaGroup, "gemm_w4a16_mma: group_size must be 128");
-  TORCH_CHECK(x.is_cuda() && x.dim() == 2 && x.is_contiguous(), "gemm_w4a16_mma: contiguous CUDA x expected");
-  TORCH_CHECK(x.scalar_type() == scales.scalar_type(), "gemm_w4a16_mma: x and scales must share a dtype");
+torch::Tensor gemm_w4a16_wide(torch::Tensor x, torch::Tensor qweight, torch::Tensor scales, torch::Tensor workspace,
+                              torch::Tensor counters, int64_t group_size, int64_t splits) {
+  check_mma_args(x, qweight, scales, group_size, "gemm_w4a16_wide");
   const int64_t m = x.size(0);
   const int64_t n = qweight.size(0);
-  const int64_t k = qweight.size(1) * 8;
-  TORCH_CHECK(x.size(1) == k, "gemm_w4a16_mma: shape mismatch");
-  TORCH_CHECK(m >= 1 && m <= 64, "gemm_w4a16_mma: 1 to 64 rows supported");
-  if (splits <= 0) {  // enough blocks for about four per SM, at least one group per warp
-    const int64_t cols = 8 * mma_tiles_n(static_cast<int>((m + 15) / 16));
-    const int64_t blocks = (n + cols - 1) / cols;
-    // Not ATen/cuda/CUDAContext.h: it needs the cuSPARSE/cuBLAS headers, and
-    // the build only has nvcc, cudart and cccl.
-    int device = 0, sms = 0;
-    C10_CUDA_CHECK(cudaGetDevice(&device));
-    C10_CUDA_CHECK(cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, device));
-    splits = std::max<int64_t>(1, std::min<int64_t>((4 * sms + blocks - 1) / blocks, k / kMmaGroup / kWarps));
+  const int64_t groups = qweight.size(1) * 8 / kMmaGroup;
+  if (splits <= 0) {  // about two blocks per SM, at least two groups per split
+    const int64_t blocks = (n + kWideCols - 1) / kWideCols;
+    splits = std::max<int64_t>(1, std::min<int64_t>((2 * sm_count() + blocks - 1) / blocks, groups / 2));
   }
+  const Split split = make_split(splits, workspace, counters, m, n, kWideCols, "gemm_w4a16_wide");
   auto y = torch::empty({m, n}, x.options());
   const auto stream = c10::cuda::getCurrentCUDAStream();
   if (x.scalar_type() == torch::kBFloat16) {
-    launch_mma_rows<__nv_bfloat16>(x, qweight, scales, y, splits, stream);
+    launch_wide_rows<__nv_bfloat16>(x, qweight, scales, y, split, stream);
   } else {
-    launch_mma_rows<__half>(x, qweight, scales, y, splits, stream);
+    launch_wide_rows<__half>(x, qweight, scales, y, split, stream);
+  }
+  return y;
+}
+
+torch::Tensor gemm_w4a16_mma(torch::Tensor x, torch::Tensor qweight, torch::Tensor scales, torch::Tensor workspace,
+                             torch::Tensor counters, int64_t group_size, int64_t splits) {
+  check_mma_args(x, qweight, scales, group_size, "gemm_w4a16_mma");
+  const int64_t m = x.size(0);
+  const int64_t n = qweight.size(0);
+  const int64_t k = qweight.size(1) * 8;
+  const int64_t cols = 8 * mma_tiles_n(static_cast<int>((m + 15) / 16));
+  if (splits <= 0) {  // about 1.5 blocks per SM, at least one group per warp (tune.py, run 5)
+    const int64_t blocks = (n + cols - 1) / cols;
+    const int64_t wanted = (3 * sm_count() + 2 * blocks - 1) / (2 * blocks);
+    splits = std::max<int64_t>(1, std::min<int64_t>(wanted, k / kMmaGroup / kWarps));
+  }
+  const Split split = make_split(splits, workspace, counters, m, n, cols, "gemm_w4a16_mma");
+  auto y = torch::empty({m, n}, x.options());
+  const auto stream = c10::cuda::getCurrentCUDAStream();
+  if (x.scalar_type() == torch::kBFloat16) {
+    launch_mma_rows<__nv_bfloat16>(x, qweight, scales, y, split, stream);
+  } else {
+    launch_mma_rows<__half>(x, qweight, scales, y, split, stream);
   }
   return y;
 }
@@ -557,6 +814,11 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, module) {
              pybind11::arg("group_size") = 128, pybind11::arg("rows_per_warp") = 4);
   module.def("gemm_w4a16_mma", &gemm_w4a16_mma, "W4A16 tensor-core GEMM for 1-64 rows",
              pybind11::arg("x"), pybind11::arg("qweight"), pybind11::arg("scales"),
+             pybind11::arg("workspace"), pybind11::arg("counters"),
+             pybind11::arg("group_size") = 128, pybind11::arg("splits") = 0);
+  module.def("gemm_w4a16_wide", &gemm_w4a16_wide, "W4A16 tensor-core GEMM for 17-64 rows",
+             pybind11::arg("x"), pybind11::arg("qweight"), pybind11::arg("scales"),
+             pybind11::arg("workspace"), pybind11::arg("counters"),
              pybind11::arg("group_size") = 128, pybind11::arg("splits") = 0);
   module.def("dequantize_w4a16", &dequantize_w4a16, "int4 weight -> scales dtype",
              pybind11::arg("qweight"), pybind11::arg("scales"), pybind11::arg("group_size") = 128);

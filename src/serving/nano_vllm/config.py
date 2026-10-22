@@ -49,10 +49,13 @@ class NanoVLLMConfig:
     max_num_seqs: int = 16
     max_num_batched_tokens: int = 512
     enable_prefix_cache: bool = True
-    attention_backend: str = "torch"
+    # "triton": the paged decode/prefill attention and fused RoPE + KV write
+    # kernels (benchmarks/phase1); off CUDA they fall back to the PyTorch
+    # references, so it is a safe default.
+    attention_backend: str = "triton"
     # "triton" / "cuda": a GEMV kernel for linear layers when a batch has at
     # most 16 / 2 rows; "cuda" builds kernels/csrc/gemv_bf16.cu on first use.
-    linear_backend: str = "torch"
+    linear_backend: str = "triton"
     # "w4a16": quantize the decoder-layer projections to 4-bit integers at
     # load (RTN, groups of 128 along K); kernels/w4a16.py.
     weight_quant: str = "none"

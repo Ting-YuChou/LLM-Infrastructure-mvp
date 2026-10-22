@@ -14,12 +14,16 @@ Layout:
   is what the CUDA kernel dequantizes two at a time.
 - scales: [N, K // group_size] in the activation dtype.
 
-Decode-sized batches use csrc/w4a16.cu, which has two kernels over the
+Decode-sized batches use csrc/w4a16.cu, which has three kernels over the
 same qweight:
 - gemv: CUDA cores, 8 rows of x per launch (looped up to
   W4A16_GEMV_MAX_ROWS); fp32 FMAs limit it to small batches;
 - mma: tensor cores (mma.m16n8k16), up to W4A16_MMA_MAX_ROWS rows in one
-  pass over the weight; needs group_size 128.
+  pass over the weight, each block reading x from L2; needs group_size 128;
+- wide: tensor cores for 17-64 rows, warps of a block share one copy of x
+  in shared memory, scales folded into the dequantized weights.
+The tensor-core kernels split K across blocks when the weight is short; the
+splits meet in a persistent fp32 workspace (w4a16_workspace).
 Bigger batches dequantize the whole weight and call F.linear: they are
 compute-bound, so the extra pass over the weight is a small share of their
 time.
@@ -45,10 +49,19 @@ W4A16_PACK_ORDER = (0, 2, 4, 6, 1, 3, 5, 7)
 # chunks (each chunk re-reads the 4-bit weight).
 W4A16_GEMV_MAX_ROWS = 32
 W4A16_MMA_MAX_ROWS = 64
-# Launch settings; benchmarks/phase1/tune.py sweeps them on the GPU.
-# kernel: "gemv", "mma", or "auto" (gemv up to auto_gemv_rows, then mma);
-# splits: K splits of the mma kernel, 0 picks enough blocks to fill the GPU.
-W4A16_CONFIG = {"kernel": "auto", "auto_gemv_rows": 4, "rows_per_warp": 4, "splits": 0}
+# Launch settings, from benchmarks/phase1/tune.py on an A100 (LOG.md, run 5).
+# kernel: "gemv", "mma", "wide", or "auto" (gemv up to auto_gemv_rows, mma
+# up to auto_mma_rows, then wide); splits: K splits of the tensor-core
+# kernels, 0 lets the op choose from the grid size.
+W4A16_CONFIG = {
+    "kernel": "auto",
+    "auto_gemv_rows": 2,
+    "auto_mma_rows": 16,
+    "rows_per_warp": 2,
+    "splits": 0,
+}
+_WORKSPACE: dict[torch.device, tuple[torch.Tensor, torch.Tensor]] = {}
+_RETIRED: list[tuple[torch.Tensor, torch.Tensor]] = []
 
 
 @dataclass(frozen=True)
@@ -156,9 +169,12 @@ def w4a16_linear(
         extension = load_cuda_extension("w4a16")
         if extension is not None:
             flat = x.reshape(rows, k).contiguous()
-            if kernel == "mma":
-                out = extension.gemm_w4a16_mma(
-                    flat, weight.qweight, weight.scales, weight.group_size, config["splits"]
+            if kernel in ("mma", "wide"):
+                workspace, counters = w4a16_workspace(x.device, weight.shape[0])
+                op = extension.gemm_w4a16_mma if kernel == "mma" else extension.gemm_w4a16_wide
+                out = op(
+                    flat, weight.qweight, weight.scales, workspace, counters,
+                    weight.group_size, config["splits"],
                 )
             else:
                 out = extension.gemv_w4a16(
@@ -169,12 +185,36 @@ def w4a16_linear(
     return F.linear(x, dequantize_w4a16(weight, x.dtype), bias)
 
 
+def w4a16_workspace(device: torch.device, out_features: int) -> tuple[torch.Tensor, torch.Tensor]:
+    """Zeroed split-K buffers for up to W4A16_MMA_MAX_ROWS x ``out_features``.
+
+    The kernels leave them zeroed, so one pair per device serves every call.
+    CUDA graphs keep raw pointers, so a buffer that grows is retired, not
+    freed, and growing during a capture is refused: reserve the largest
+    out_features first (the model does at load).
+    """
+    current = _WORKSPACE.get(device)
+    if current is not None and current[0].numel() >= W4A16_MMA_MAX_ROWS * out_features:
+        return current
+    if torch.cuda.is_current_stream_capturing():
+        raise RuntimeError("w4a16_workspace must be reserved before capturing a CUDA graph")
+    if current is not None:
+        _RETIRED.append(current)
+    workspace = torch.zeros(W4A16_MMA_MAX_ROWS * out_features, dtype=torch.float32, device=device)
+    counters = torch.zeros(out_features // 16 + 1, dtype=torch.int32, device=device)
+    _WORKSPACE[device] = (workspace, counters)
+    return workspace, counters
+
+
 def _pick_kernel(rows: int, weight: W4A16Weight, config: dict) -> Optional[str]:
-    """"gemv", "mma", or None for dequantize + F.linear."""
+    """"gemv", "mma", "wide", or None for dequantize + F.linear."""
     kernel = config["kernel"]
     if kernel == "auto":
-        kernel = "gemv" if rows <= config["auto_gemv_rows"] else "mma"
-    if kernel == "mma" and (weight.group_size != 128 or rows > W4A16_MMA_MAX_ROWS):
+        if rows <= config["auto_gemv_rows"]:
+            kernel = "gemv"
+        else:
+            kernel = "mma" if rows <= config["auto_mma_rows"] else "wide"
+    if kernel in ("mma", "wide") and (weight.group_size != 128 or rows > W4A16_MMA_MAX_ROWS):
         kernel = "gemv"
     if kernel == "gemv" and rows > W4A16_GEMV_MAX_ROWS:
         return None

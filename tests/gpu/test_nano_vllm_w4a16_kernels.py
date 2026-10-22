@@ -75,7 +75,10 @@ def _check(x, weight, **config):
 
 
 @pytest.mark.parametrize(
-    "kernel,rows", [("gemv", r) for r in (1, 2, 3, 8, 9, 32)] + [("mma", r) for r in (1, 5, 16, 17, 40, 64)]
+    "kernel,rows",
+    [("gemv", r) for r in (1, 2, 3, 8, 9, 32)]
+    + [("mma", r) for r in (1, 5, 16, 17, 40, 64)]
+    + [("wide", r) for r in (1, 17, 33, 48, 64)],
 )
 @pytest.mark.parametrize("shape", SHAPES.values(), ids=SHAPES)
 def test_kernels_match_dequantized_matmul(shape, kernel, rows):
@@ -94,16 +97,30 @@ def test_gemv_launch_variants_and_dtypes(rows_per_warp, dtype):
 
 @pytest.mark.parametrize("splits", [0, 1, 2, 3, 8])
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
-def test_mma_k_splits_and_dtypes(splits, dtype):
+@pytest.mark.parametrize("kernel", ["mma", "wide"])
+def test_tensor_core_k_splits_and_dtypes(kernel, splits, dtype):
     weight = _weight(300, 2048, dtype)
     x = torch.randn(20, 2048, device="cuda").to(dtype)
-    _check(x, weight, kernel="mma", splits=splits)
+    _check(x, weight, kernel=kernel, splits=splits)
 
 
-def test_mma_with_other_group_sizes_falls_back_to_the_gemv():
+def test_split_k_leaves_the_workspace_zeroed():
+    """The last split re-zeroes what it summed, so calls need no memset."""
+    weight = _weight(4096, 4096, torch.bfloat16)
+    for kernel, rows in (("mma", 8), ("wide", 40)):
+        x = torch.randn(rows, 4096, device="cuda").to(torch.bfloat16)
+        for _ in range(3):
+            _check(x, weight, kernel=kernel, splits=4)
+        workspace, counters = w4a16_mod.w4a16_workspace(x.device, 4096)
+        torch.cuda.synchronize()
+        assert not workspace.any() and not counters.any()
+
+
+@pytest.mark.parametrize("kernel", ["mma", "wide"])
+def test_tensor_cores_with_other_group_sizes_fall_back_to_the_gemv(kernel):
     weight = _weight(256, 1024, torch.bfloat16, group_size=64)
     x = torch.randn(3, 1024, device="cuda").to(torch.bfloat16)
-    _check(x, weight, kernel="mma")
+    _check(x, weight, kernel=kernel)
 
 
 def test_large_batches_dequantize_and_call_f_linear():
@@ -114,7 +131,7 @@ def test_large_batches_dequantize_and_call_f_linear():
     assert torch.equal(w4a16_linear(x, weight), expected)
 
 
-@pytest.mark.parametrize("kernel,rows", [("gemv", 4), ("mma", 24)])
+@pytest.mark.parametrize("kernel,rows", [("gemv", 4), ("mma", 12), ("wide", 40)])
 def test_kernels_are_captured_by_a_cuda_graph(kernel, rows):
     weight = _weight(4096, 4096, torch.bfloat16)
     x = torch.randn(rows, 4096, device="cuda").to(torch.bfloat16)
