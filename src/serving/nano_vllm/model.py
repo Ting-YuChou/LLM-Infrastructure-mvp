@@ -14,12 +14,13 @@ import torch.nn.functional as F
 from .kernels import (
     apply_rope,
     causal_attention,
+    fused_add_rms_norm,
     paged_decode_attention,
     paged_prefill_attention,
     rms_norm,
     rope_and_cache_write,
     rope_cos_sin,
-    silu_mul,
+    silu_and_mul,
 )
 from .kernels.rotary import compute_inv_freq, validate_rope_scaling
 from .kv_cache import PagedKVCache, StaticKVCache
@@ -375,18 +376,18 @@ class NanoLlamaForCausalLM:
                 "backends; flash_attn is not implemented."
             )
         num_tokens = input_ids.numel()
-        x = self.weights["model.embed_tokens.weight"][input_ids]
+        eps = self.config.rms_norm_eps
+        triton_attention = self.attention_backend == "triton"
         cos = self.rope_cos[positions]  # [tokens, head_dim]
         sin = self.rope_sin[positions]
+        # x is each sublayer's output; fused_add_rms_norm folds it into the
+        # residual stream and normalizes for the next sublayer in one pass.
+        residual = self.weights["model.embed_tokens.weight"][input_ids]
+        x_norm = rms_norm(
+            residual, self.layers[0].input_norm, eps=eps, use_triton=self.use_triton
+        )
 
         for layer_idx, layer in enumerate(self.layers):
-            residual = x
-            x_norm = rms_norm(
-                x,
-                layer.input_norm,
-                eps=self.config.rms_norm_eps,
-                use_triton=self.use_triton,
-            )
             qkv = F.linear(x_norm, layer.qkv, layer.qkv_bias)
             query = rope_and_cache_write(
                 qkv,
@@ -397,25 +398,35 @@ class NanoLlamaForCausalLM:
                 metadata.slot_mapping,
                 self.config.num_attention_heads,
                 self.config.num_key_value_heads,
-                use_triton=self.attention_backend == "triton",
+                use_triton=triton_attention,
             )
             attn = self._paged_attention(
                 query, cache.keys[layer_idx], cache.values[layer_idx], metadata
             )
-            x = residual + F.linear(
-                attn.reshape(num_tokens, -1), layer.o_proj, layer.o_bias
+            x = F.linear(attn.reshape(num_tokens, -1), layer.o_proj, layer.o_bias)
+            x_norm, residual = fused_add_rms_norm(
+                x, residual, layer.post_norm, eps=eps, use_triton=self.use_triton
             )
-            x = x + self._mlp(x, layer)
+            gate_up = F.linear(x_norm, layer.gate_up, layer.gate_up_bias)
+            x = F.linear(
+                silu_and_mul(gate_up, use_triton=self.use_triton), layer.down, layer.down_bias
+            )
+            if layer_idx + 1 < len(self.layers):
+                x_norm, residual = fused_add_rms_norm(
+                    x,
+                    residual,
+                    self.layers[layer_idx + 1].input_norm,
+                    eps=eps,
+                    use_triton=self.use_triton,
+                )
 
         if metadata.logits_indices is not None:
             x = x[metadata.logits_indices]
-        x = rms_norm(
-            x,
-            self._weight("model.norm.weight"),
-            eps=self.config.rms_norm_eps,
-            use_triton=self.use_triton,
+            residual = residual[metadata.logits_indices]
+        x_norm, _ = fused_add_rms_norm(
+            x, residual, self._weight("model.norm.weight"), eps=eps, use_triton=self.use_triton
         )
-        return F.linear(x, self.lm_head_weight)
+        return F.linear(x_norm, self.lm_head_weight)
 
     def _paged_attention(
         self,
@@ -452,9 +463,9 @@ class NanoLlamaForCausalLM:
             eps=self.config.rms_norm_eps,
             use_triton=self.use_triton,
         )
-        gate, up = F.linear(x_norm, layer.gate_up, layer.gate_up_bias).chunk(2, dim=-1)
+        gate_up = F.linear(x_norm, layer.gate_up, layer.gate_up_bias)
         return F.linear(
-            silu_mul(gate, up, use_triton=self.use_triton), layer.down, layer.down_bias
+            silu_and_mul(gate_up, use_triton=self.use_triton), layer.down, layer.down_bias
         )
 
     @torch.inference_mode()

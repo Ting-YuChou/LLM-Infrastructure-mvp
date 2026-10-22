@@ -1,4 +1,4 @@
-"""Fused SiLU-gate multiplication fallback and optional Triton kernel."""
+"""Fused SiLU-gate multiplication fallbacks and optional Triton kernels."""
 
 from __future__ import annotations
 
@@ -29,6 +29,16 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
         out = gate / (1.0 + tl.exp(-gate)) * up
         tl.store(out_ptr + offsets, out.to(out_ptr.dtype.element_ty), mask=mask)
 
+    @triton.jit
+    def _silu_and_mul_kernel(x_ptr, out_ptr, stride_x, stride_out, inter, BLOCK: tl.constexpr):
+        row = tl.program_id(0).to(tl.int64)
+        cols = tl.program_id(1) * BLOCK + tl.arange(0, BLOCK)
+        mask = cols < inter
+        gate = tl.load(x_ptr + row * stride_x + cols, mask=mask, other=0.0).to(tl.float32)
+        up = tl.load(x_ptr + row * stride_x + inter + cols, mask=mask, other=0.0).to(tl.float32)
+        out = gate / (1.0 + tl.exp(-gate)) * up
+        tl.store(out_ptr + row * stride_out + cols, out.to(out_ptr.dtype.element_ty), mask=mask)
+
 
 def silu_mul_reference(gate: torch.Tensor, up: torch.Tensor) -> torch.Tensor:
     return torch.nn.functional.silu(gate) * up
@@ -52,3 +62,24 @@ def silu_mul(
         return out.view_as(gate)
 
     return silu_mul_reference(gate, up)
+
+
+def silu_and_mul_reference(gate_up: torch.Tensor) -> torch.Tensor:
+    gate, up = gate_up.chunk(2, dim=-1)
+    return silu_mul_reference(gate, up)
+
+
+def silu_and_mul(gate_up: torch.Tensor, use_triton: bool = False) -> torch.Tensor:
+    """SiLU(gate) * up for the fused gate_up projection output [..., 2 * inter]."""
+    if use_triton and TRITON_AVAILABLE and gate_up.is_cuda:  # pragma: no cover
+        inter = gate_up.shape[-1] // 2
+        flat = gate_up.reshape(-1, 2 * inter)
+        if flat.stride(-1) != 1:
+            flat = flat.contiguous()
+        out = torch.empty(flat.shape[0], inter, dtype=gate_up.dtype, device=gate_up.device)
+        block = 1024
+        grid = (flat.shape[0], triton.cdiv(inter, block))
+        _silu_and_mul_kernel[grid](flat, out, flat.stride(0), out.stride(0), inter, BLOCK=block)
+        return out.view(*gate_up.shape[:-1], inter)
+
+    return silu_and_mul_reference(gate_up)

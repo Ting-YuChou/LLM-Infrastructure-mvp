@@ -1,4 +1,4 @@
-"""RMSNorm fallback and optional Triton kernel."""
+"""RMSNorm (and residual add + RMSNorm) fallbacks and optional Triton kernels."""
 
 from __future__ import annotations
 
@@ -28,12 +28,31 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
         )
         w = tl.load(w_ptr + offsets, mask=mask, other=0.0).to(tl.float32)
         var = tl.sum(x * x, axis=0) / n_cols
-        y = x * tl.rsqrt(var + eps) * w
-        tl.store(
-            y_ptr + row * n_cols + offsets,
-            y.to(y_ptr.dtype.element_ty),
-            mask=mask,
-        )
+        # Round the normalized value to the output dtype before the weight
+        # multiply, like transformers' LlamaRMSNorm.
+        out_type = y_ptr.dtype.element_ty
+        normalized = (x * tl.rsqrt(var + eps)).to(out_type).to(tl.float32)
+        tl.store(y_ptr + row * n_cols + offsets, (normalized * w).to(out_type), mask=mask)
+
+    @triton.jit
+    def _fused_add_rms_norm_kernel(
+        x_ptr, residual_ptr, w_ptr, y_ptr, residual_out_ptr, n_cols, eps, BLOCK: tl.constexpr
+    ):
+        row = tl.program_id(0).to(tl.int64)
+        offsets = tl.arange(0, BLOCK)
+        mask = offsets < n_cols
+        x = tl.load(x_ptr + row * n_cols + offsets, mask=mask, other=0.0).to(tl.float32)
+        residual = tl.load(residual_ptr + row * n_cols + offsets, mask=mask, other=0.0)
+        out_type = residual_out_ptr.dtype.element_ty
+        # The sum is rounded to the model dtype first (it is the next
+        # residual), and the variance is taken of the rounded value.
+        total = (x + residual.to(tl.float32)).to(out_type)
+        tl.store(residual_out_ptr + row * n_cols + offsets, total, mask=mask)
+        total = total.to(tl.float32)
+        w = tl.load(w_ptr + offsets, mask=mask, other=0.0).to(tl.float32)
+        var = tl.sum(total * total, axis=0) / n_cols
+        normalized = (total * tl.rsqrt(var + eps)).to(out_type).to(tl.float32)
+        tl.store(y_ptr + row * n_cols + offsets, (normalized * w).to(out_type), mask=mask)
 
 
 def is_triton_available() -> bool:
@@ -78,3 +97,48 @@ def rms_norm(
         return output.view_as(x)
 
     return rms_norm_reference(x, weight, eps=eps)
+
+
+def fused_add_rms_norm_reference(
+    x: torch.Tensor, residual: torch.Tensor, weight: torch.Tensor, eps: float = 1e-6
+) -> tuple[torch.Tensor, torch.Tensor]:
+    residual = residual + x
+    return rms_norm_reference(residual, weight, eps=eps), residual
+
+
+def fused_add_rms_norm(
+    x: torch.Tensor,
+    residual: torch.Tensor,
+    weight: torch.Tensor,
+    eps: float = 1e-6,
+    use_triton: bool = False,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return (rms_norm(residual + x), residual + x) in one pass over the rows.
+
+    A decoder layer adds each sublayer's output to the residual stream and
+    normalizes the result for the next sublayer; this does both with one read
+    of each input. Inputs are not modified.
+    """
+    if (
+        use_triton
+        and TRITON_AVAILABLE
+        and x.is_cuda
+        and x.shape[-1] <= 8192
+    ):  # pragma: no cover - depends on CUDA/Triton
+        flat_x = x.contiguous().view(-1, x.shape[-1])
+        flat_residual = residual.contiguous().view(-1, x.shape[-1])
+        output = torch.empty_like(flat_x)
+        residual_out = torch.empty_like(flat_residual)
+        _fused_add_rms_norm_kernel[(flat_x.shape[0],)](
+            flat_x,
+            flat_residual,
+            weight.contiguous(),
+            output,
+            residual_out,
+            flat_x.shape[-1],
+            eps,
+            BLOCK=triton.next_power_of_2(flat_x.shape[-1]),
+        )
+        return output.view_as(x), residual_out.view_as(residual)
+
+    return fused_add_rms_norm_reference(x, residual, weight, eps=eps)
