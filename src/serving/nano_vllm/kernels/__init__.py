@@ -1,7 +1,7 @@
 """Kernel helpers with PyTorch fallbacks and optional Triton fast paths."""
 
 from .attention import causal_attention, decode_attention
-from .linear import linear
+from .linear import linear, load_cuda_extension
 from .paged_attention import (
     decode_num_splits,
     paged_decode_attention,
@@ -29,6 +29,7 @@ __all__ = [
     "fused_add_rms_norm",
     "fused_add_rms_norm_reference",
     "linear",
+    "load_cuda_extension",
     "paged_decode_attention",
     "paged_decode_attention_reference",
     "paged_prefill_attention",

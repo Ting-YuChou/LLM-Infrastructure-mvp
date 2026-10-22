@@ -1,4 +1,4 @@
-"""Triton GEMV (linear_backend="triton") vs an fp32 matmul."""
+"""The Triton and CUDA GEMVs (linear_backend="triton" / "cuda") vs an fp32 matmul."""
 
 import sys
 from pathlib import Path
@@ -27,12 +27,12 @@ SHAPES = {
 }
 
 
-def _check(rows, out_features, in_features, split_k=None):
+def _check(rows, out_features, in_features, split_k=None, backend="triton"):
     x = torch.randn(rows, in_features, device="cuda").to(torch.bfloat16)
     weight = (torch.randn(out_features, in_features, device="cuda") / in_features**0.5).to(
         torch.bfloat16
     )
-    out = linear(x, weight, backend="triton", split_k=split_k)
+    out = linear(x, weight, backend=backend, split_k=split_k)
     expected = x.float() @ weight.float().T
     assert out.shape == (rows, out_features) and out.dtype == torch.bfloat16
     torch.testing.assert_close(out.float(), expected, rtol=1.6e-2, atol=1.6e-2)
@@ -58,3 +58,19 @@ def test_more_than_16_rows_falls_back_to_f_linear():
     weight = torch.randn(4096, 4096, device="cuda").to(torch.bfloat16)
 
     assert torch.equal(linear(x, weight, backend="triton"), F.linear(x, weight))
+
+
+# CUDA: in_features must be a multiple of 8, so "ragged" uses 1000 -> 1000.
+CUDA_SHAPES = {**{k: v for k, v in SHAPES.items() if k != "ragged"}, "ragged": (100, 1000)}
+
+
+def test_cuda_extension_builds():
+    from serving.nano_vllm.kernels.linear import load_cuda_extension
+
+    assert load_cuda_extension() is not None, "see the log for the nvcc error"
+
+
+@pytest.mark.parametrize("rows", [1, 3, 8])
+@pytest.mark.parametrize("shape", CUDA_SHAPES.values(), ids=CUDA_SHAPES)
+def test_cuda_gemv_matches_fp32_matmul(shape, rows):
+    _check(rows, *shape, backend="cuda")

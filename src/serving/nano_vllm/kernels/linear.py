@@ -1,17 +1,24 @@
-"""Linear layers for decode: a Triton GEMV for a few rows, F.linear otherwise.
+"""Linear layers for decode: a GEMV for a few rows, F.linear otherwise.
 
 At batch sizes up to GEMV_MAX_ROWS a projection is bound by reading its
 weight once from HBM. cuBLAS reaches only 63-73% of peak bandwidth on the
 o_proj and qkv shapes at M=1 (Phase 0), mostly from having too few thread
-blocks in flight. This kernel tiles the output features, splits K when the
-weight is short and wide so every SM stays busy, and accumulates in fp32
-with the rows padded to 16 for tensor cores.
+blocks in flight. Two versions:
+
+- triton: tiles the output features, splits K when the weight is short and
+  wide so every SM stays busy, accumulates in fp32 with the rows padded to
+  16 for tensor cores (up to 16 rows);
+- cuda: csrc/gemv_bf16.cu, CUDA cores with 128-bit loads and
+  CUDA_GEMV_CONFIG["rows_per_warp"] weight rows per warp (up to 8 rows),
+  built with torch.utils.cpp_extension on first use.
 """
 
 from __future__ import annotations
 
 import functools
+import logging
 import math
+from pathlib import Path
 from typing import Optional
 
 import torch
@@ -27,11 +34,17 @@ except ModuleNotFoundError:  # pragma: no cover
     tl = None
     TRITON_AVAILABLE = False
 
-LINEAR_BACKENDS = ("torch", "triton")
+logger = logging.getLogger(__name__)
+
+LINEAR_BACKENDS = ("torch", "triton", "cuda")
 GEMV_MAX_ROWS = 16
+CUDA_GEMV_MAX_ROWS = 8
 GEMV_BLOCK_N = 64
 GEMV_BLOCK_K = 128
 MAX_SPLIT_K = 8
+# Launch settings; benchmarks/phase1/tune.py sweeps them on the GPU.
+GEMV_CONFIG = {"block_n": GEMV_BLOCK_N, "block_k": GEMV_BLOCK_K, "num_warps": 4, "num_stages": 4}
+CUDA_GEMV_CONFIG = {"rows_per_warp": 2}
 
 
 if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
@@ -117,18 +130,42 @@ def _num_sms(device_index: int) -> int:
     return torch.cuda.get_device_properties(device_index).multi_processor_count
 
 
-def gemv_split_k(n: int, k: int, device: torch.device) -> int:
+def gemv_split_k(
+    n: int, k: int, device: torch.device, block_n: int = GEMV_BLOCK_N, block_k: int = GEMV_BLOCK_K
+) -> int:
     """Split K until there are about two thread blocks per SM."""
     device_index = device.index if device.index is not None else torch.cuda.current_device()
-    blocks = math.ceil(n / GEMV_BLOCK_N)
+    blocks = math.ceil(n / block_n)
     split = 1
     while (
         split < MAX_SPLIT_K
         and blocks * split < 2 * _num_sms(device_index)
-        and k // (2 * split) >= 2 * GEMV_BLOCK_K  # keep >= 2 K tiles per split
+        and k // (2 * split) >= 2 * block_k  # keep >= 2 K tiles per split
     ):
         split *= 2
     return split
+
+
+@functools.lru_cache(maxsize=None)
+def load_cuda_extension():
+    """JIT-build csrc/gemv_bf16.cu once per process; None if it cannot be built.
+
+    Needs nvcc matching torch's CUDA version (CUDA_HOME) and ninja. Call it
+    before capturing CUDA graphs: compiling inside a capture is not allowed.
+    """
+    try:
+        from torch.utils.cpp_extension import load
+
+        source = Path(__file__).with_name("csrc") / "gemv_bf16.cu"
+        return load(
+            name="nano_vllm_gemv_bf16",
+            sources=[str(source)],
+            extra_cuda_cflags=["-O3", "-lineinfo", "--use_fast_math"],
+            verbose=False,
+        )
+    except Exception:  # pragma: no cover - depends on the CUDA toolchain
+        logger.exception("nano-vLLM: building the CUDA GEMV failed; using F.linear")
+        return None
 
 
 def linear(
@@ -137,8 +174,15 @@ def linear(
     bias: Optional[torch.Tensor] = None,
     backend: str = "torch",
     split_k: Optional[int] = None,
+    config: Optional[dict] = None,
 ) -> torch.Tensor:
-    """y = x @ weight.T (+ bias). backend="triton" uses the GEMV for <= 16 rows."""
+    """y = x @ weight.T (+ bias).
+
+    backend="triton" uses the Triton GEMV for <= 16 rows, backend="cuda" the
+    CUDA one for <= 8 rows of bf16; everything else goes to F.linear.
+    ``config`` overrides the chosen kernel's launch settings (GEMV_CONFIG or
+    CUDA_GEMV_CONFIG).
+    """
     rows = x.numel() // x.shape[-1] if x.shape[-1] else 0
     if (
         backend == "triton"
@@ -148,12 +192,27 @@ def linear(
         and 0 < rows <= GEMV_MAX_ROWS
         and x.dtype in (torch.bfloat16, torch.float16)
     ):  # pragma: no cover - depends on CUDA/Triton
-        return _gemv_triton(x, weight, split_k)
+        return _gemv_triton(x, weight, split_k, config or GEMV_CONFIG)
+    if (
+        backend == "cuda"
+        and x.is_cuda
+        and bias is None
+        and 0 < rows <= CUDA_GEMV_MAX_ROWS
+        and x.dtype == torch.bfloat16
+        and weight.is_contiguous()
+        and x.shape[-1] % 8 == 0
+    ):  # pragma: no cover - depends on CUDA
+        extension = load_cuda_extension()
+        if extension is not None:
+            flat = x.reshape(-1, x.shape[-1]).contiguous()
+            rows_per_warp = (config or CUDA_GEMV_CONFIG)["rows_per_warp"]
+            out = extension.gemv_bf16(flat, weight, rows_per_warp)
+            return out.view(*x.shape[:-1], weight.shape[0])
     return F.linear(x, weight, bias)
 
 
 def _gemv_triton(  # pragma: no cover - depends on CUDA/Triton
-    x: torch.Tensor, weight: torch.Tensor, split_k: Optional[int]
+    x: torch.Tensor, weight: torch.Tensor, split_k: Optional[int], config: dict = GEMV_CONFIG
 ) -> torch.Tensor:
     k = x.shape[-1]
     n = weight.shape[0]
@@ -164,16 +223,17 @@ def _gemv_triton(  # pragma: no cover - depends on CUDA/Triton
         flat = flat.contiguous()
     m = flat.shape[0]
     out = torch.empty(m, n, dtype=x.dtype, device=x.device)
+    block_n, block_k = config["block_n"], config["block_k"]
     if split_k is None:
-        split_k = gemv_split_k(n, k, x.device)
-    k_per_split = triton.cdiv(triton.cdiv(k, split_k), GEMV_BLOCK_K) * GEMV_BLOCK_K
+        split_k = gemv_split_k(n, k, x.device, block_n, block_k)
+    k_per_split = triton.cdiv(triton.cdiv(k, split_k), block_k) * block_k
     split_k = triton.cdiv(k, k_per_split)
     if split_k > 1:
         part = torch.empty(split_k, m, n, dtype=torch.float32, device=x.device)
         part_strides = (part.stride(0), part.stride(1))
     else:
         part, part_strides = out, (0, 0)
-    grid = (triton.cdiv(n, GEMV_BLOCK_N), split_k)
+    grid = (triton.cdiv(n, block_n), split_k)
     _gemv_kernel[grid](
         flat,
         weight,
@@ -188,12 +248,12 @@ def _gemv_triton(  # pragma: no cover - depends on CUDA/Triton
         out.stride(0),
         *part_strides,
         BLOCK_M=GEMV_MAX_ROWS,
-        BLOCK_N=GEMV_BLOCK_N,
-        BLOCK_K=GEMV_BLOCK_K,
+        BLOCK_N=block_n,
+        BLOCK_K=block_k,
         SPLIT_K=split_k,
-        EVEN_K=k % k_per_split == 0 and k_per_split % GEMV_BLOCK_K == 0,
-        num_warps=4,
-        num_stages=4,
+        EVEN_K=k % k_per_split == 0 and k_per_split % block_k == 0,
+        num_warps=config["num_warps"],
+        num_stages=config["num_stages"],
     )
     if split_k > 1:
         block = 1024

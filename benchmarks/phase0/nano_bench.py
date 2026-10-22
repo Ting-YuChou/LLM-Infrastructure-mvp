@@ -171,7 +171,7 @@ def main() -> None:
     parser.add_argument("--out", required=True)
     parser.add_argument("--device", default="cuda", help="cpu only for testing the harness")
     parser.add_argument("--attention-backend", default="torch", choices=["torch", "triton"])
-    parser.add_argument("--linear-backend", default="torch", choices=["torch", "triton"])
+    parser.add_argument("--linear-backend", default="torch", choices=["torch", "triton", "cuda"])
     parser.add_argument(
         "--enforce-eager", action="store_true", help="no decode CUDA graphs (paged path)"
     )

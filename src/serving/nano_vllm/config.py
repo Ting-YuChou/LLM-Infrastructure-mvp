@@ -50,7 +50,8 @@ class NanoVLLMConfig:
     max_num_batched_tokens: int = 512
     enable_prefix_cache: bool = True
     attention_backend: str = "torch"
-    # "triton": a GEMV kernel for linear layers when a batch has <= 16 rows.
+    # "triton" / "cuda": a GEMV kernel for linear layers when a batch has at
+    # most 16 / 8 rows; "cuda" builds kernels/csrc/gemv_bf16.cu on first use.
     linear_backend: str = "torch"
     use_triton: bool = True
     # Decode steps replay CUDA graphs (one per batch size up to
@@ -76,8 +77,8 @@ class NanoVLLMConfig:
             raise ValueError("cuda_graph_max_bs must be positive")
         if self.attention_backend not in {"torch", "triton", "flash_attn"}:
             raise ValueError("attention_backend must be one of: torch, triton, flash_attn")
-        if self.linear_backend not in {"torch", "triton"}:
-            raise ValueError("linear_backend must be one of: torch, triton")
+        if self.linear_backend not in {"torch", "triton", "cuda"}:
+            raise ValueError("linear_backend must be one of: torch, triton, cuda")
 
     @classmethod
     def from_yaml(cls, config_path: str | None) -> "NanoVLLMConfig":

@@ -16,6 +16,7 @@ from .kernels import (
     causal_attention,
     fused_add_rms_norm,
     linear,
+    load_cuda_extension,
     paged_decode_attention,
     paged_prefill_attention,
     rms_norm,
@@ -217,6 +218,9 @@ class NanoLlamaForCausalLM:
         self.use_triton = use_triton
         self.attention_backend = attention_backend
         self.linear_backend = linear_backend
+        if linear_backend == "cuda" and device.type == "cuda":
+            # Build the extension now, never inside a CUDA-graph capture.
+            load_cuda_extension()
         self._validate_required_weights(weights)
         weights = fuse_projections(weights, config.num_hidden_layers)
         self.weights = {
