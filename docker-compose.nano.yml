@@ -12,6 +12,7 @@ services:
       DEVICE: auto
       USE_TRITON: "true"
       ATTENTION_BACKEND: torch
+      LINEAR_BACKEND: torch
       ENFORCE_EAGER: "false"
       CUDA_GRAPH_MAX_BS: "64"
       MAX_MODEL_LEN: "2048"

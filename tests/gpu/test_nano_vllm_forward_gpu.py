@@ -70,7 +70,7 @@ def _random_weights(config):
     return weights
 
 
-def _model(device, dtype, use_triton, attention_backend="torch"):
+def _model(device, dtype, use_triton, attention_backend="torch", linear_backend="torch"):
     return NanoLlamaForCausalLM(
         config=CONFIG,
         weights=_random_weights(CONFIG),
@@ -79,6 +79,7 @@ def _model(device, dtype, use_triton, attention_backend="torch"):
         use_triton=use_triton,
         attention_backend=attention_backend,
         max_model_len=128,
+        linear_backend=linear_backend,
     )
 
 
@@ -176,4 +177,17 @@ def test_triton_attention_backend_matches_torch_backend():
     for expected, actual in zip(reference, triton_fp32):
         torch.testing.assert_close(actual, expected, rtol=1e-4, atol=1e-4)
     for expected, actual in zip(reference, triton_bf16):
+        torch.testing.assert_close(actual, expected, rtol=0.05, atol=0.05)
+
+
+def test_all_triton_paths_track_fp32():
+    reference = _prefill_then_decode(_model("cuda", torch.float32, use_triton=False))
+    fast = _prefill_then_decode(
+        _model(
+            "cuda", torch.bfloat16, use_triton=True, attention_backend="triton",
+            linear_backend="triton",
+        )
+    )
+
+    for expected, actual in zip(reference, fast):
         torch.testing.assert_close(actual, expected, rtol=0.05, atol=0.05)

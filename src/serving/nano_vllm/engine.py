@@ -196,6 +196,7 @@ class NanoLlamaEngine:
             use_triton=self.config.use_triton,
             attention_backend=self.config.attention_backend,
             max_model_len=self.config.max_model_len,
+            linear_backend=self.config.linear_backend,
         )
         self._initialize_batching_state()
         if not self.config.enforce_eager and self.model.device.type == "cuda":

@@ -15,6 +15,7 @@ from .kernels import (
     apply_rope,
     causal_attention,
     fused_add_rms_norm,
+    linear,
     paged_decode_attention,
     paged_prefill_attention,
     rms_norm,
@@ -202,12 +203,14 @@ class NanoLlamaForCausalLM:
         use_triton: bool = True,
         attention_backend: str = "torch",
         max_model_len: Optional[int] = None,
+        linear_backend: str = "torch",
     ) -> None:
         self.config = config
         self.device = device
         self.dtype = dtype if device.type == "cuda" else torch.float32
         self.use_triton = use_triton
         self.attention_backend = attention_backend
+        self.linear_backend = linear_backend
         self._validate_required_weights(weights)
         weights = fuse_projections(weights, config.num_hidden_layers)
         self.weights = {
@@ -244,6 +247,7 @@ class NanoLlamaForCausalLM:
         use_triton: bool = True,
         attention_backend: str = "torch",
         max_model_len: Optional[int] = None,
+        linear_backend: str = "torch",
     ) -> "NanoLlamaForCausalLM":
         path = Path(model_path)
         if not path.is_dir():
@@ -261,6 +265,7 @@ class NanoLlamaForCausalLM:
             use_triton=use_triton,
             attention_backend=attention_backend,
             max_model_len=max_model_len,
+            linear_backend=linear_backend,
         )
 
     def new_cache(self, batch_size: int, max_seq_len: int) -> StaticKVCache:
@@ -388,7 +393,7 @@ class NanoLlamaForCausalLM:
         )
 
         for layer_idx, layer in enumerate(self.layers):
-            qkv = F.linear(x_norm, layer.qkv, layer.qkv_bias)
+            qkv = self._linear(x_norm, layer.qkv, layer.qkv_bias)
             query = rope_and_cache_write(
                 qkv,
                 cos,
@@ -403,12 +408,12 @@ class NanoLlamaForCausalLM:
             attn = self._paged_attention(
                 query, cache.keys[layer_idx], cache.values[layer_idx], metadata
             )
-            x = F.linear(attn.reshape(num_tokens, -1), layer.o_proj, layer.o_bias)
+            x = self._linear(attn.reshape(num_tokens, -1), layer.o_proj, layer.o_bias)
             x_norm, residual = fused_add_rms_norm(
                 x, residual, layer.post_norm, eps=eps, use_triton=self.use_triton
             )
-            gate_up = F.linear(x_norm, layer.gate_up, layer.gate_up_bias)
-            x = F.linear(
+            gate_up = self._linear(x_norm, layer.gate_up, layer.gate_up_bias)
+            x = self._linear(
                 silu_and_mul(gate_up, use_triton=self.use_triton), layer.down, layer.down_bias
             )
             if layer_idx + 1 < len(self.layers):
@@ -426,7 +431,12 @@ class NanoLlamaForCausalLM:
         x_norm, _ = fused_add_rms_norm(
             x, residual, self._weight("model.norm.weight"), eps=eps, use_triton=self.use_triton
         )
-        return F.linear(x_norm, self.lm_head_weight)
+        return self._linear(x_norm, self.lm_head_weight)
+
+    def _linear(
+        self, x: torch.Tensor, weight: torch.Tensor, bias: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        return linear(x, weight, bias, backend=self.linear_backend)
 
     def _paged_attention(
         self,
