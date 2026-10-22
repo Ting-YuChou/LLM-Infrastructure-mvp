@@ -1,0 +1,363 @@
+track,start_us,dur_us,name,category
+CPU (CUDA API),-1.82,6.349,cudaLaunchKernel,api
+CPU (CUDA API),25.776,6.72,cudaLaunchKernel,api
+CPU (CUDA API),46.099,6.041,cudaLaunchKernel,api
+CPU (CUDA API),64.295,5.974,cudaLaunchKernel,api
+CPU (CUDA API),82.756,7.804,cudaLaunchKernel,api
+CPU (CUDA API),109.594,6.412,cudaLaunchKernel,api
+CPU (CUDA API),135.4,7.064,cudaLaunchKernel,api
+CPU (CUDA API),155.241,5.553,cudaLaunchKernel,api
+CPU (CUDA API),171.811,5.689,cudaLaunchKernel,api
+CPU (CUDA API),234.404,8.281,cudaLaunchKernel,api
+CPU (CUDA API),262.135,6.605,cudaLaunchKernel,api
+CPU (CUDA API),283.845,6.552,cudaLaunchKernel,api
+CPU (CUDA API),301.292,6.048,cudaLaunchKernel,api
+CPU (CUDA API),321.51,5.711,cudaLaunchKernel,api
+CPU (CUDA API),343.022,6.043,cudaLaunchKernel,api
+CPU (CUDA API),361.117,5.588,cudaLaunchKernel,api
+CPU (CUDA API),383.302,5.908,cudaLaunchKernel,api
+CPU (CUDA API),410.651,6.247,cudaLaunchKernel,api
+CPU (CUDA API),437.524,7.116,cudaLaunchKernel,api
+CPU (CUDA API),457.852,5.482,cudaLaunchKernel,api
+CPU (CUDA API),474.903,5.952,cudaLaunchKernel,api
+CPU (CUDA API),493.724,5.707,cudaLaunchKernel,api
+CPU (CUDA API),517.295,6.012,cudaLaunchKernel,api
+CPU (CUDA API),542.197,6.473,cudaLaunchKernel,api
+CPU (CUDA API),560.985,5.947,cudaLaunchKernel,api
+CPU (CUDA API),577.65,5.378,cudaLaunchKernel,api
+CPU (CUDA API),637.523,8.214,cudaLaunchKernel,api
+CPU (CUDA API),664.423,6.383,cudaLaunchKernel,api
+CPU (CUDA API),685.781,6.079,cudaLaunchKernel,api
+CPU (CUDA API),702.337,5.348,cudaLaunchKernel,api
+CPU (CUDA API),721.379,5.876,cudaLaunchKernel,api
+CPU (CUDA API),742.783,5.654,cudaLaunchKernel,api
+CPU (CUDA API),782.811,7.206,cudaLaunchKernel,api
+CPU (CUDA API),809.725,6.63,cudaLaunchKernel,api
+CPU (CUDA API),839.543,6.552,cudaLaunchKernel,api
+CPU (CUDA API),868.691,6.792,cudaLaunchKernel,api
+CPU (CUDA API),889.225,5.991,cudaLaunchKernel,api
+CPU (CUDA API),908.208,5.383,cudaLaunchKernel,api
+CPU (CUDA API),926.299,6.324,cudaLaunchKernel,api
+CPU (CUDA API),950.645,5.641,cudaLaunchKernel,api
+CPU (CUDA API),975.429,6.552,cudaLaunchKernel,api
+CPU (CUDA API),994.449,5.954,cudaLaunchKernel,api
+CPU (CUDA API),1011.324,5.607,cudaLaunchKernel,api
+CPU (CUDA API),1074.712,8.865,cudaLaunchKernel,api
+CPU (CUDA API),1105.503,7.343,cudaLaunchKernel,api
+CPU (CUDA API),1128.059,6.044,cudaLaunchKernel,api
+CPU (CUDA API),1144.979,6.07,cudaLaunchKernel,api
+CPU (CUDA API),1165.223,5.903,cudaLaunchKernel,api
+CPU (CUDA API),1187.44,5.948,cudaLaunchKernel,api
+CPU (CUDA API),1205.251,5.72,cudaLaunchKernel,api
+CPU (CUDA API),1227.957,6.448,cudaLaunchKernel,api
+CPU (CUDA API),1256.041,6.449,cudaLaunchKernel,api
+CPU (CUDA API),1283.477,6.791,cudaLaunchKernel,api
+CPU (CUDA API),1303.699,5.736,cudaLaunchKernel,api
+CPU (CUDA API),1321.312,6.02,cudaLaunchKernel,api
+CPU (CUDA API),1340.145,5.402,cudaLaunchKernel,api
+CPU (CUDA API),1363.278,6.11,cudaLaunchKernel,api
+CPU (CUDA API),1388.306,6.737,cudaLaunchKernel,api
+CPU (CUDA API),1407.506,5.582,cudaLaunchKernel,api
+CPU (CUDA API),1423.963,5.346,cudaLaunchKernel,api
+CPU (CUDA API),1483.616,7.924,cudaLaunchKernel,api
+CPU (CUDA API),1510.108,6.11,cudaLaunchKernel,api
+CPU (CUDA API),1530.953,6.677,cudaLaunchKernel,api
+CPU (CUDA API),1548.097,5.753,cudaLaunchKernel,api
+CPU (CUDA API),1567.843,6.154,cudaLaunchKernel,api
+CPU (CUDA API),1589.431,5.24,cudaLaunchKernel,api
+CPU (CUDA API),1606.6,5.671,cudaLaunchKernel,api
+CPU (CUDA API),1628.603,5.868,cudaLaunchKernel,api
+CPU (CUDA API),1655.111,5.886,cudaLaunchKernel,api
+CPU (CUDA API),1681.157,6.278,cudaLaunchKernel,api
+CPU (CUDA API),1700.647,5.499,cudaLaunchKernel,api
+CPU (CUDA API),1717.834,5.341,cudaLaunchKernel,api
+CPU (CUDA API),1735.379,5.962,cudaLaunchKernel,api
+CPU (CUDA API),1779.001,7.964,cudaLaunchKernel,api
+CPU (CUDA API),1810.561,6.998,cudaLaunchKernel,api
+CPU (CUDA API),1831.246,5.88,cudaLaunchKernel,api
+CPU (CUDA API),1848.283,5.779,cudaLaunchKernel,api
+CPU (CUDA API),1911.886,8.351,cudaLaunchKernel,api
+CPU (CUDA API),1940.057,6.903,cudaLaunchKernel,api
+CPU (CUDA API),1962.125,6.519,cudaLaunchKernel,api
+CPU (CUDA API),1979.573,5.694,cudaLaunchKernel,api
+CPU (CUDA API),1999.531,5.639,cudaLaunchKernel,api
+CPU (CUDA API),2020.914,6.284,cudaLaunchKernel,api
+CPU (CUDA API),2038.84,4.92,cudaLaunchKernel,api
+CPU (CUDA API),2059.975,6.343,cudaLaunchKernel,api
+CPU (CUDA API),2087.42,5.927,cudaLaunchKernel,api
+CPU (CUDA API),2114.056,6.312,cudaLaunchKernel,api
+CPU (CUDA API),2133.851,5.853,cudaLaunchKernel,api
+CPU (CUDA API),2151.167,5.254,cudaLaunchKernel,api
+CPU (CUDA API),2168.883,6.045,cudaLaunchKernel,api
+CPU (CUDA API),2192.631,5.991,cudaLaunchKernel,api
+CPU (CUDA API),2217.398,6.545,cudaLaunchKernel,api
+CPU (CUDA API),2236.463,6.184,cudaLaunchKernel,api
+CPU (CUDA API),2253.314,5.671,cudaLaunchKernel,api
+CPU (CUDA API),2312.913,8.571,cudaLaunchKernel,api
+CPU (CUDA API),2339.799,6.248,cudaLaunchKernel,api
+CPU (CUDA API),2360.988,6.482,cudaLaunchKernel,api
+CPU (CUDA API),2377.971,5.874,cudaLaunchKernel,api
+CPU (CUDA API),2397.791,6.002,cudaLaunchKernel,api
+CPU (CUDA API),2419.046,5.72,cudaLaunchKernel,api
+CPU (CUDA API),2436.376,5.358,cudaLaunchKernel,api
+CPU (CUDA API),2458.038,5.98,cudaLaunchKernel,api
+CPU (CUDA API),2484.21,6.264,cudaLaunchKernel,api
+CPU (CUDA API),2510.184,6.698,cudaLaunchKernel,api
+CPU (CUDA API),2530.774,5.654,cudaLaunchKernel,api
+CPU (CUDA API),2548.368,5.48,cudaLaunchKernel,api
+CPU (CUDA API),2566.535,5.2,cudaLaunchKernel,api
+CPU (CUDA API),2589.045,6.106,cudaLaunchKernel,api
+CPU (CUDA API),2613.979,6.45,cudaLaunchKernel,api
+CPU (CUDA API),2633.039,5.252,cudaLaunchKernel,api
+CPU (CUDA API),2648.674,5.458,cudaLaunchKernel,api
+CPU (CUDA API),2708.489,8.413,cudaLaunchKernel,api
+CPU (CUDA API),2734.829,5.79,cudaLaunchKernel,api
+CPU (CUDA API),2769.535,13.953,cudaLaunchKernel,api
+CPU (CUDA API),2796.527,5.664,cudaLaunchKernel,api
+CPU (CUDA API),2817.9,6.113,cudaLaunchKernel,api
+CPU (CUDA API),2840.271,5.796,cudaLaunchKernel,api
+CPU (CUDA API),2857.818,5.585,cudaLaunchKernel,api
+CPU (CUDA API),2880.572,6.144,cudaLaunchKernel,api
+CPU (CUDA API),2909.924,6.605,cudaLaunchKernel,api
+CPU (CUDA API),2937.839,7.164,cudaLaunchKernel,api
+CPU (CUDA API),2958.509,5.975,cudaLaunchKernel,api
+CPU (CUDA API),2976.44,5.817,cudaLaunchKernel,api
+CPU (CUDA API),2995.014,6.085,cudaLaunchKernel,api
+CPU (CUDA API),3019.044,6.043,cudaLaunchKernel,api
+CPU (CUDA API),3043.858,6.465,cudaLaunchKernel,api
+CPU (CUDA API),3062.803,6.166,cudaLaunchKernel,api
+CPU (CUDA API),3079.234,5.004,cudaLaunchKernel,api
+CPU (CUDA API),3140.024,7.854,cudaLaunchKernel,api
+CPU (CUDA API),3167.043,6.599,cudaLaunchKernel,api
+CPU (CUDA API),3188.616,5.995,cudaLaunchKernel,api
+CPU (CUDA API),3205.108,5.994,cudaLaunchKernel,api
+CPU (CUDA API),3225.269,5.097,cudaLaunchKernel,api
+CPU (CUDA API),3245.994,6.311,cudaLaunchKernel,api
+CPU (CUDA API),3264.263,5.149,cudaLaunchKernel,api
+CPU (CUDA API),3286.08,6.089,cudaLaunchKernel,api
+CPU (CUDA API),3313.055,6.076,cudaLaunchKernel,api
+CPU (CUDA API),3339.565,6.624,cudaLaunchKernel,api
+CPU (CUDA API),3359.43,5.728,cudaLaunchKernel,api
+CPU (CUDA API),3376.647,5.194,cudaLaunchKernel,api
+CPU (CUDA API),3394.306,5.789,cudaLaunchKernel,api
+CPU (CUDA API),3417.431,6.117,cudaLaunchKernel,api
+CPU (CUDA API),3442.26,6.671,cudaLaunchKernel,api
+CPU (CUDA API),3461.255,5.434,cudaLaunchKernel,api
+CPU (CUDA API),3477.271,5.715,cudaLaunchKernel,api
+CPU (CUDA API),3536.713,7.767,cudaLaunchKernel,api
+CPU (CUDA API),3562.811,6.447,cudaLaunchKernel,api
+CPU (CUDA API),3584.386,6.323,cudaLaunchKernel,api
+CPU (CUDA API),3601.149,5.71,cudaLaunchKernel,api
+CPU (CUDA API),3620.311,5.851,cudaLaunchKernel,api
+CPU (CUDA API),3641.239,5.957,cudaLaunchKernel,api
+CPU (CUDA API),3658.958,5.642,cudaLaunchKernel,api
+CPU (CUDA API),3680.652,6.119,cudaLaunchKernel,api
+CPU (CUDA API),3707.57,5.968,cudaLaunchKernel,api
+CPU (CUDA API),3734.129,6.559,cudaLaunchKernel,api
+CPU (CUDA API),3753.851,25.367,cudaLaunchKernel,api
+CPU (CUDA API),3794.346,6.629,cudaLaunchKernel,api
+CPU (CUDA API),3814.376,5.691,cudaLaunchKernel,api
+CPU (CUDA API),3839.75,6.432,cudaLaunchKernel,api
+CPU (CUDA API),3866.338,6.953,cudaLaunchKernel,api
+CPU (CUDA API),3885.683,5.717,cudaLaunchKernel,api
+CPU (CUDA API),3901.753,5.456,cudaLaunchKernel,api
+CPU (CUDA API),3940.421,7.088,cudaLaunchKernel,api
+CPU (CUDA API),3965.702,6.389,cudaLaunchKernel,api
+CPU (CUDA API),4003.969,7.591,cudaLaunchKernel,api
+CPU (CUDA API),4022.125,12.755,cudaMemcpyAsync,api
+CPU (CUDA API),4035.638,11.155,cudaStreamSynchronize,api
+CPU (CUDA API),4088.313,9.141,cudaLaunchKernel,api
+CPU (CUDA API),4114.341,6.195,cudaLaunchKernel,api
+CPU (CUDA API),4171.718,9.067,cudaMemcpyAsync,api
+CPU (CUDA API),4181.286,10.9,cudaStreamSynchronize,api
+CPU (CUDA API),4212.069,19.422,cudaMemcpyAsync,api
+CPU (CUDA API),4231.923,3.568,cudaStreamSynchronize,api
+CPU (CUDA API),4542.612,10.134,cudaMemcpyAsync,api
+CPU (CUDA API),4553.266,9.385,cudaStreamSynchronize,api
+CPU (CUDA API),4610.831,13.91,cudaLaunchKernel,api
+CPU (CUDA API),4650.949,7.203,cudaLaunchKernel,api
+CPU (CUDA API),4686.168,7.99,cudaLaunchKernel,api
+CPU (CUDA API),4713.606,6.065,cudaLaunchKernel,api
+CPU (CUDA API),4784.732,9.199,cudaLaunchKernel,api
+CPU (CUDA API),4820.86,7.412,cudaLaunchKernel,api
+CPU (CUDA API),4897.712,1.38,cuKernelGetFunction,api
+CPU (CUDA API),4903.959,9.564,cuLaunchKernel,api
+CPU (CUDA API),4940.097,7.134,cudaLaunchKernel,api
+CPU (CUDA API),4972.537,7.071,cudaLaunchKernel,api
+GPU,7.2,4.896,elementwise_kernel,elementwise/copy
+GPU,35.168,7.36,CatArrayBatchedCopy,elementwise/copy
+GPU,54.816,4.704,elementwise_kernel,elementwise/copy
+GPU,72.832,2.592,vectorized_elementwise_kernel,elementwise/copy
+GPU,92.864,4.896,elementwise_kernel,elementwise/copy
+GPU,118.592,4.544,elementwise_kernel,elementwise/copy
+GPU,145.28,6.304,CatArrayBatchedCopy,elementwise/copy
+GPU,163.744,4.32,elementwise_kernel,elementwise/copy
+GPU,180.288,2.624,vectorized_elementwise_kernel,elementwise/copy
+GPU,245.056,3.008,unrolled_elementwise_kernel,elementwise/copy
+GPU,271.232,3.264,elementwise_kernel,elementwise/copy
+GPU,293.376,3.84,CatArrayBatchedCopy_vectorized,elementwise/copy
+GPU,309.888,3.744,vectorized_elementwise_kernel,elementwise/copy
+GPU,329.92,2.496,vectorized_elementwise_kernel,elementwise/copy
+GPU,351.616,3.776,vectorized_elementwise_kernel,elementwise/copy
+GPU,369.663,2.464,vectorized_elementwise_kernel,elementwise/copy
+GPU,391.935,4.832,elementwise_kernel,elementwise/copy
+GPU,419.647,4.576,elementwise_kernel,elementwise/copy
+GPU,447.391,7.328,CatArrayBatchedCopy,elementwise/copy
+GPU,466.495,4.512,elementwise_kernel,elementwise/copy
+GPU,483.295,2.688,vectorized_elementwise_kernel,elementwise/copy
+GPU,502.207,4.896,elementwise_kernel,elementwise/copy
+GPU,526.015,4.384,elementwise_kernel,elementwise/copy
+GPU,551.743,6.304,CatArrayBatchedCopy,elementwise/copy
+GPU,569.663,4.352,elementwise_kernel,elementwise/copy
+GPU,585.759,2.496,vectorized_elementwise_kernel,elementwise/copy
+GPU,648.031,3.328,unrolled_elementwise_kernel,elementwise/copy
+GPU,673.503,3.264,elementwise_kernel,elementwise/copy
+GPU,694.559,3.872,CatArrayBatchedCopy_vectorized,elementwise/copy
+GPU,710.367,3.744,vectorized_elementwise_kernel,elementwise/copy
+GPU,729.919,2.528,vectorized_elementwise_kernel,elementwise/copy
+GPU,751.295,3.744,vectorized_elementwise_kernel,elementwise/copy
+GPU,792.607,2.464,vectorized_elementwise_kernel,elementwise/copy
+GPU,818.655,4.896,elementwise_kernel,elementwise/copy
+GPU,848.703,4.864,elementwise_kernel,elementwise/copy
+GPU,878.495,7.328,CatArrayBatchedCopy,elementwise/copy
+GPU,898.015,4.256,elementwise_kernel,elementwise/copy
+GPU,916.223,2.688,vectorized_elementwise_kernel,elementwise/copy
+GPU,935.295,4.32,elementwise_kernel,elementwise/copy
+GPU,959.199,4.192,elementwise_kernel,elementwise/copy
+GPU,984.831,6.272,CatArrayBatchedCopy,elementwise/copy
+GPU,1003.167,4.416,elementwise_kernel,elementwise/copy
+GPU,1019.711,2.464,vectorized_elementwise_kernel,elementwise/copy
+GPU,1085.918,3.04,unrolled_elementwise_kernel,elementwise/copy
+GPU,1115.006,3.232,elementwise_kernel,elementwise/copy
+GPU,1136.958,3.84,CatArrayBatchedCopy_vectorized,elementwise/copy
+GPU,1153.694,3.744,vectorized_elementwise_kernel,elementwise/copy
+GPU,1173.822,2.528,vectorized_elementwise_kernel,elementwise/copy
+GPU,1196.03,3.712,vectorized_elementwise_kernel,elementwise/copy
+GPU,1213.694,2.464,vectorized_elementwise_kernel,elementwise/copy
+GPU,1237.054,4.288,elementwise_kernel,elementwise/copy
+GPU,1265.342,4.576,elementwise_kernel,elementwise/copy
+GPU,1292.99,7.296,CatArrayBatchedCopy,elementwise/copy
+GPU,1312.094,4.672,elementwise_kernel,elementwise/copy
+GPU,1330.046,2.592,vectorized_elementwise_kernel,elementwise/copy
+GPU,1348.542,4.352,elementwise_kernel,elementwise/copy
+GPU,1371.998,4.256,elementwise_kernel,elementwise/copy
+GPU,1397.982,6.24,CatArrayBatchedCopy,elementwise/copy
+GPU,1415.838,4.352,elementwise_kernel,elementwise/copy
+GPU,1432.382,2.656,vectorized_elementwise_kernel,elementwise/copy
+GPU,1493.854,3.04,unrolled_elementwise_kernel,elementwise/copy
+GPU,1518.782,3.264,elementwise_kernel,elementwise/copy
+GPU,1540.35,3.872,CatArrayBatchedCopy_vectorized,elementwise/copy
+GPU,1556.766,3.712,vectorized_elementwise_kernel,elementwise/copy
+GPU,1576.766,2.528,vectorized_elementwise_kernel,elementwise/copy
+GPU,1597.374,3.712,vectorized_elementwise_kernel,elementwise/copy
+GPU,1614.942,2.432,vectorized_elementwise_kernel,elementwise/copy
+GPU,1637.31,4.832,elementwise_kernel,elementwise/copy
+GPU,1663.646,4.576,elementwise_kernel,elementwise/copy
+GPU,1690.142,7.328,CatArrayBatchedCopy,elementwise/copy
+GPU,1708.83,4.768,elementwise_kernel,elementwise/copy
+GPU,1726.174,2.528,vectorized_elementwise_kernel,elementwise/copy
+GPU,1744.158,4.32,elementwise_kernel,elementwise/copy
+GPU,1789.405,4.192,elementwise_kernel,elementwise/copy
+GPU,1820.189,6.272,CatArrayBatchedCopy,elementwise/copy
+GPU,1839.901,4.352,elementwise_kernel,elementwise/copy
+GPU,1856.349,2.624,vectorized_elementwise_kernel,elementwise/copy
+GPU,1922.621,3.04,unrolled_elementwise_kernel,elementwise/copy
+GPU,1949.053,3.264,elementwise_kernel,elementwise/copy
+GPU,1971.581,3.872,CatArrayBatchedCopy_vectorized,elementwise/copy
+GPU,1987.997,3.68,vectorized_elementwise_kernel,elementwise/copy
+GPU,2007.933,2.528,vectorized_elementwise_kernel,elementwise/copy
+GPU,2029.725,3.68,vectorized_elementwise_kernel,elementwise/copy
+GPU,2046.909,2.464,vectorized_elementwise_kernel,elementwise/copy
+GPU,2068.957,4.896,elementwise_kernel,elementwise/copy
+GPU,2096.029,4.864,elementwise_kernel,elementwise/copy
+GPU,2123.133,7.328,CatArrayBatchedCopy,elementwise/copy
+GPU,2142.621,4.672,elementwise_kernel,elementwise/copy
+GPU,2159.229,2.56,vectorized_elementwise_kernel,elementwise/copy
+GPU,2177.661,4.352,elementwise_kernel,elementwise/copy
+GPU,2201.309,4.352,elementwise_kernel,elementwise/copy
+GPU,2226.973,6.272,CatArrayBatchedCopy,elementwise/copy
+GPU,2245.277,4.416,elementwise_kernel,elementwise/copy
+GPU,2261.757,2.624,vectorized_elementwise_kernel,elementwise/copy
+GPU,2323.805,3.04,unrolled_elementwise_kernel,elementwise/copy
+GPU,2348.925,3.232,elementwise_kernel,elementwise/copy
+GPU,2370.269,3.872,CatArrayBatchedCopy_vectorized,elementwise/copy
+GPU,2386.589,3.744,vectorized_elementwise_kernel,elementwise/copy
+GPU,2406.525,2.528,vectorized_elementwise_kernel,elementwise/copy
+GPU,2427.613,3.776,vectorized_elementwise_kernel,elementwise/copy
+GPU,2444.509,2.464,vectorized_elementwise_kernel,elementwise/copy
+GPU,2466.684,4.832,elementwise_kernel,elementwise/copy
+GPU,2492.924,4.576,elementwise_kernel,elementwise/copy
+GPU,2519.932,7.296,CatArrayBatchedCopy,elementwise/copy
+GPU,2539.388,4.8,elementwise_kernel,elementwise/copy
+GPU,2556.668,2.56,vectorized_elementwise_kernel,elementwise/copy
+GPU,2574.556,4.896,elementwise_kernel,elementwise/copy
+GPU,2597.916,4.544,elementwise_kernel,elementwise/copy
+GPU,2623.452,6.304,CatArrayBatchedCopy,elementwise/copy
+GPU,2641.084,4.352,elementwise_kernel,elementwise/copy
+GPU,2656.86,2.656,vectorized_elementwise_kernel,elementwise/copy
+GPU,2719.548,3.008,unrolled_elementwise_kernel,elementwise/copy
+GPU,2743.292,3.232,elementwise_kernel,elementwise/copy
+GPU,2786.14,3.84,CatArrayBatchedCopy_vectorized,elementwise/copy
+GPU,2804.924,3.68,vectorized_elementwise_kernel,elementwise/copy
+GPU,2826.94,2.528,vectorized_elementwise_kernel,elementwise/copy
+GPU,2848.668,3.744,vectorized_elementwise_kernel,elementwise/copy
+GPU,2866.14,2.464,vectorized_elementwise_kernel,elementwise/copy
+GPU,2889.276,4.864,elementwise_kernel,elementwise/copy
+GPU,2919.42,4.864,elementwise_kernel,elementwise/copy
+GPU,2947.676,7.36,CatArrayBatchedCopy,elementwise/copy
+GPU,2967.228,4.8,elementwise_kernel,elementwise/copy
+GPU,2984.924,2.688,vectorized_elementwise_kernel,elementwise/copy
+GPU,3004.156,4.864,elementwise_kernel,elementwise/copy
+GPU,3027.58,4.512,elementwise_kernel,elementwise/copy
+GPU,3053.116,6.304,CatArrayBatchedCopy,elementwise/copy
+GPU,3071.548,4.352,elementwise_kernel,elementwise/copy
+GPU,3087.324,2.624,vectorized_elementwise_kernel,elementwise/copy
+GPU,3150.46,2.976,unrolled_elementwise_kernel,elementwise/copy
+GPU,3176.219,3.264,elementwise_kernel,elementwise/copy
+GPU,3197.371,3.84,CatArrayBatchedCopy_vectorized,elementwise/copy
+GPU,3213.947,3.744,vectorized_elementwise_kernel,elementwise/copy
+GPU,3233.147,2.528,vectorized_elementwise_kernel,elementwise/copy
+GPU,3255.003,3.776,vectorized_elementwise_kernel,elementwise/copy
+GPU,3272.155,2.432,vectorized_elementwise_kernel,elementwise/copy
+GPU,3295.003,4.832,elementwise_kernel,elementwise/copy
+GPU,3321.883,4.576,elementwise_kernel,elementwise/copy
+GPU,3348.955,7.328,CatArrayBatchedCopy,elementwise/copy
+GPU,3367.931,4.384,elementwise_kernel,elementwise/copy
+GPU,3384.731,2.592,vectorized_elementwise_kernel,elementwise/copy
+GPU,3402.619,4.864,elementwise_kernel,elementwise/copy
+GPU,3426.203,4.544,elementwise_kernel,elementwise/copy
+GPU,3451.707,6.304,CatArrayBatchedCopy,elementwise/copy
+GPU,3469.691,4.352,elementwise_kernel,elementwise/copy
+GPU,3485.691,2.624,vectorized_elementwise_kernel,elementwise/copy
+GPU,3547.003,2.976,unrolled_elementwise_kernel,elementwise/copy
+GPU,3571.931,3.264,elementwise_kernel,elementwise/copy
+GPU,3593.691,3.872,CatArrayBatchedCopy_vectorized,elementwise/copy
+GPU,3609.531,3.744,vectorized_elementwise_kernel,elementwise/copy
+GPU,3628.859,2.528,vectorized_elementwise_kernel,elementwise/copy
+GPU,3649.691,3.776,vectorized_elementwise_kernel,elementwise/copy
+GPU,3667.643,2.464,vectorized_elementwise_kernel,elementwise/copy
+GPU,3689.563,4.896,elementwise_kernel,elementwise/copy
+GPU,3716.187,4.864,elementwise_kernel,elementwise/copy
+GPU,3743.451,7.36,CatArrayBatchedCopy,elementwise/copy
+GPU,3781.723,4.768,elementwise_kernel,elementwise/copy
+GPU,3803.515,2.56,vectorized_elementwise_kernel,elementwise/copy
+GPU,3822.843,4.864,elementwise_kernel,elementwise/copy
+GPU,3848.635,4.544,elementwise_kernel,elementwise/copy
+GPU,3876.25,6.272,CatArrayBatchedCopy,elementwise/copy
+GPU,3894.106,4.352,elementwise_kernel,elementwise/copy
+GPU,3910.01,2.624,vectorized_elementwise_kernel,elementwise/copy
+GPU,3950.138,3.84,CatArrayBatchedCopy_vectorized,elementwise/copy
+GPU,3975.002,3.168,CatArrayBatchedCopy_vectorized,elementwise/copy
+GPU,4014.202,5.632,reduce_kernel,other
+GPU,4099.642,8.096,index_elementwise_kernel,elementwise/copy
+GPU,4123.386,6.816,index_elementwise_kernel,elementwise/copy
+GPU,4626.297,5.568,vectorized_gather_kernel,elementwise/copy
+GPU,4660.921,5.408,vectorized_gather_kernel,elementwise/copy
+GPU,4696.665,8.992,elementwise_kernel,elementwise/copy
+GPU,4722.649,8.704,elementwise_kernel,elementwise/copy
+GPU,4796.121,21.28,elementwise_kernel,elementwise/copy
+GPU,4830.937,22.208,elementwise_kernel,elementwise/copy
+GPU,4915.993,10.752,Kernel2,gemm
+GPU,4949.817,2.656,vectorized_elementwise_kernel,elementwise/copy
+GPU,4982.137,2.272,elementwise_kernel_with_index,elementwise/copy
+NVTX,-404716.297,809432.594,engine_step_35,nvtx

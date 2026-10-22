@@ -1,0 +1,1233 @@
+track,start_us,dur_us,name,category
+CPU (CUDA API),-115.272,12832.712,cudaEventSynchronize,api
+CPU (CUDA API),94.782,12.119,cudaEventSynchronize,api
+CPU (CUDA API),191.558,17.967,cudaMemcpyAsync,api
+CPU (CUDA API),301.473,10.753,cudaMemcpyAsync,api
+CPU (CUDA API),428.489,11.38,cudaMemcpyAsync,api
+CPU (CUDA API),456.574,18.166,cudaLaunchKernel,api
+CPU (CUDA API),491.52,7.378,cudaMemcpyAsync,api
+CPU (CUDA API),517.165,5.67,cudaMemcpyAsync,api
+CPU (CUDA API),541.272,5.23,cudaMemcpyAsync,api
+CPU (CUDA API),563.158,5.394,cudaMemcpyAsync,api
+CPU (CUDA API),603.499,22.594,cudaLaunchKernel,api
+CPU (CUDA API),657.394,9.184,cudaLaunchKernel,api
+CPU (CUDA API),690.092,7.738,cudaLaunchKernel,api
+CPU (CUDA API),710.413,14.577,cudaMemcpyAsync,api
+CPU (CUDA API),744.052,7.734,cudaLaunchKernel,api
+CPU (CUDA API),761.998,10.182,cudaMemcpyAsync,api
+CPU (CUDA API),789.225,7.435,cudaLaunchKernel,api
+CPU (CUDA API),871.434,9.398,cuLaunchKernelEx,api
+CPU (CUDA API),942.009,15.31,cudaMemcpyAsync,api
+CPU (CUDA API),992.435,10.094,cudaLaunchKernel,api
+CPU (CUDA API),1239.313,6.143,cudaEventRecord,api
+CPU (CUDA API),1292.166,1.134,cudaStreamIsCapturing,api
+CPU (CUDA API),1294.772,568.138,cudaGraphLaunch,api
+CPU (CUDA API),1926.452,17.67,cudaLaunchKernel,api
+CPU (CUDA API),1966.746,7.706,cudaLaunchKernel,api
+CPU (CUDA API),2052.237,10.549,cudaLaunchKernel,api
+CPU (CUDA API),2190.64,13.651,cudaLaunchKernel,api
+CPU (CUDA API),2234.796,8.322,cudaLaunchKernel,api
+CPU (CUDA API),2270.202,7.295,cudaLaunchKernel,api
+CPU (CUDA API),2427.023,9.383,cudaEventCreateWithFlags,api
+CPU (CUDA API),2440.054,1.252,cudaStreamIsCapturing,api
+CPU (CUDA API),2441.863,4.289,cudaEventRecordWithFlags,api
+CPU (CUDA API),2449.534,0.498,cudaStreamIsCapturing,api
+CPU (CUDA API),2450.476,2.793,cudaStreamWaitEvent,api
+CPU (CUDA API),2455.365,1.301,cudaEventDestroy,api
+CPU (CUDA API),2469.626,9.011,cudaEventQuery,api
+CPU (CUDA API),2479.506,1.692,cudaEventQuery,api
+CPU (CUDA API),2491.482,15.287,cudaMemcpyAsync,api
+CPU (CUDA API),2515.235,1.292,cudaEventCreateWithFlags,api
+CPU (CUDA API),2517.203,2.209,cudaEventRecord,api
+CPU (CUDA API),12734.033,1.193,cudaEventDestroy,api
+CPU (CUDA API),12737.857,0.68,cudaStreamIsCapturing,api
+CPU (CUDA API),12738.896,1.661,cudaEventRecordWithFlags,api
+CPU (CUDA API),12746.568,12830.75,cudaEventSynchronize,api
+CPU (CUDA API),12955.822,12.743,cudaEventSynchronize,api
+CPU (CUDA API),13053.207,17.753,cudaMemcpyAsync,api
+CPU (CUDA API),13163.234,10.288,cudaMemcpyAsync,api
+CPU (CUDA API),13251.741,8.445,cudaMemcpyAsync,api
+CPU (CUDA API),13274.393,17.719,cudaLaunchKernel,api
+CPU (CUDA API),13308.428,6.675,cudaMemcpyAsync,api
+CPU (CUDA API),13332.967,5.359,cudaMemcpyAsync,api
+CPU (CUDA API),13356.428,5.189,cudaMemcpyAsync,api
+CPU (CUDA API),13401.961,6.454,cudaMemcpyAsync,api
+CPU (CUDA API),13443.796,13.772,cudaLaunchKernel,api
+CPU (CUDA API),13486.996,8.305,cudaLaunchKernel,api
+CPU (CUDA API),13518.044,8.322,cudaLaunchKernel,api
+CPU (CUDA API),13539.264,14.446,cudaMemcpyAsync,api
+CPU (CUDA API),13572.514,7.711,cudaLaunchKernel,api
+CPU (CUDA API),13590.396,9.998,cudaMemcpyAsync,api
+CPU (CUDA API),13628.564,8.195,cudaLaunchKernel,api
+CPU (CUDA API),13711.352,8.572,cuLaunchKernelEx,api
+CPU (CUDA API),13781.797,15.908,cudaMemcpyAsync,api
+CPU (CUDA API),13834.054,9.692,cudaLaunchKernel,api
+CPU (CUDA API),14078.863,5.619,cudaEventRecord,api
+CPU (CUDA API),14130.259,1.161,cudaStreamIsCapturing,api
+CPU (CUDA API),14132.882,561.017,cudaGraphLaunch,api
+CPU (CUDA API),14757.7,17.663,cudaLaunchKernel,api
+CPU (CUDA API),14798.848,7.801,cudaLaunchKernel,api
+CPU (CUDA API),14886.117,10.487,cudaLaunchKernel,api
+CPU (CUDA API),15024.92,13.886,cudaLaunchKernel,api
+CPU (CUDA API),15069.389,8.459,cudaLaunchKernel,api
+CPU (CUDA API),15105.571,7.398,cudaLaunchKernel,api
+CPU (CUDA API),15246.879,2.842,cudaEventCreateWithFlags,api
+CPU (CUDA API),15252.897,1.14,cudaStreamIsCapturing,api
+CPU (CUDA API),15254.559,3.934,cudaEventRecordWithFlags,api
+CPU (CUDA API),15261.995,0.47,cudaStreamIsCapturing,api
+CPU (CUDA API),15262.925,2.735,cudaStreamWaitEvent,api
+CPU (CUDA API),15267.749,1.245,cudaEventDestroy,api
+CPU (CUDA API),15280.804,8.833,cudaEventQuery,api
+CPU (CUDA API),15290.518,1.746,cudaEventQuery,api
+CPU (CUDA API),15301.483,14.638,cudaMemcpyAsync,api
+CPU (CUDA API),15324.23,7.844,cudaEventCreateWithFlags,api
+CPU (CUDA API),15332.696,2.341,cudaEventRecord,api
+CPU (CUDA API),25593.604,1.179,cudaEventDestroy,api
+CPU (CUDA API),25597.502,0.621,cudaStreamIsCapturing,api
+CPU (CUDA API),25598.513,1.466,cudaEventRecordWithFlags,api
+CPU (CUDA API),25606.647,12843.132,cudaEventSynchronize,api
+CPU (CUDA API),25808.655,12.427,cudaEventSynchronize,api
+CPU (CUDA API),25905.259,17.584,cudaMemcpyAsync,api
+CPU (CUDA API),26014.299,10.344,cudaMemcpyAsync,api
+CPU (CUDA API),26101.799,8.434,cudaMemcpyAsync,api
+CPU (CUDA API),26124.604,17.558,cudaLaunchKernel,api
+CPU (CUDA API),26158.371,6.776,cudaMemcpyAsync,api
+CPU (CUDA API),26183.394,5.562,cudaMemcpyAsync,api
+CPU (CUDA API),26207.097,5.246,cudaMemcpyAsync,api
+CPU (CUDA API),26228.52,5.345,cudaMemcpyAsync,api
+CPU (CUDA API),26267.793,12.2,cudaLaunchKernel,api
+CPU (CUDA API),26308.692,8.381,cudaLaunchKernel,api
+CPU (CUDA API),26339.542,8.352,cudaLaunchKernel,api
+CPU (CUDA API),26360.702,36.728,cudaMemcpyAsync,api
+CPU (CUDA API),26420.926,9.073,cudaLaunchKernel,api
+CPU (CUDA API),26441.071,10.74,cudaMemcpyAsync,api
+CPU (CUDA API),26469.34,7.186,cudaLaunchKernel,api
+CPU (CUDA API),26550.658,8.575,cuLaunchKernelEx,api
+CPU (CUDA API),26630.77,17.368,cudaMemcpyAsync,api
+CPU (CUDA API),26685.462,10.062,cudaLaunchKernel,api
+CPU (CUDA API),26931.416,5.667,cudaEventRecord,api
+CPU (CUDA API),26982.741,1.224,cudaStreamIsCapturing,api
+CPU (CUDA API),26985.352,538.962,cudaGraphLaunch,api
+CPU (CUDA API),27586.205,17.333,cudaLaunchKernel,api
+CPU (CUDA API),27636.516,9.075,cudaLaunchKernel,api
+CPU (CUDA API),27725.097,10.705,cudaLaunchKernel,api
+CPU (CUDA API),27865.27,14.272,cudaLaunchKernel,api
+CPU (CUDA API),27910.236,8.726,cudaLaunchKernel,api
+CPU (CUDA API),27946.691,7.68,cudaLaunchKernel,api
+CPU (CUDA API),28088.559,2.783,cudaEventCreateWithFlags,api
+CPU (CUDA API),28094.573,1.142,cudaStreamIsCapturing,api
+CPU (CUDA API),28096.184,3.912,cudaEventRecordWithFlags,api
+CPU (CUDA API),28103.556,0.527,cudaStreamIsCapturing,api
+CPU (CUDA API),28104.477,2.702,cudaStreamWaitEvent,api
+CPU (CUDA API),28109.377,1.297,cudaEventDestroy,api
+CPU (CUDA API),28122.692,8.425,cudaEventQuery,api
+CPU (CUDA API),28132.853,1.618,cudaEventQuery,api
+CPU (CUDA API),28143.558,14.715,cudaMemcpyAsync,api
+CPU (CUDA API),28165.976,1.378,cudaEventCreateWithFlags,api
+CPU (CUDA API),28167.791,2.256,cudaEventRecord,api
+CPU (CUDA API),38464.364,1.016,cudaEventDestroy,api
+CPU (CUDA API),38467.738,0.615,cudaStreamIsCapturing,api
+CPU (CUDA API),38468.724,1.509,cudaEventRecordWithFlags,api
+CPU (CUDA API),38475.654,12839.99,cudaEventSynchronize,api
+GPU,-4.417,8.288,flash_fwd_splitkv_kernel,attention
+GPU,4.319,7.936,flash_fwd_splitkv_combine_kernel,attention
+GPU,13.887,30.08,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,43.871,3.104,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,54.975,170.112,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,224.991,2.176,triton_poi_fused_mul_silu_slice_1,activation
+GPU,227.039,93.12,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,320.063,3.424,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,323.327,40.736,Kernel2,gemm
+GPU,363.903,2.624,triton_poi_fused_3,elementwise/copy
+GPU,366.367,3.072,reshape_and_cache_flash_kernel,attention
+GPU,369.471,8.576,flash_fwd_splitkv_kernel,attention
+GPU,378.463,7.872,flash_fwd_splitkv_combine_kernel,attention
+GPU,387.967,29.44,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,417.247,3.232,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,428.607,172.128,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,600.575,2.208,triton_poi_fused_mul_silu_slice_1,activation
+GPU,602.623,92.224,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,694.687,3.296,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,697.855,39.968,Kernel2,gemm
+GPU,737.695,2.624,triton_poi_fused_3,elementwise/copy
+GPU,740.159,3.072,reshape_and_cache_flash_kernel,attention
+GPU,743.263,8.256,flash_fwd_splitkv_kernel,attention
+GPU,751.903,7.872,flash_fwd_splitkv_combine_kernel,attention
+GPU,761.407,30.144,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,791.423,3.296,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,802.847,172.032,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,974.751,2.24,triton_poi_fused_mul_silu_slice_1,activation
+GPU,976.831,92.0,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,1068.671,3.296,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,1071.807,41.408,Kernel2,gemm
+GPU,1113.087,2.624,triton_poi_fused_3,elementwise/copy
+GPU,1115.551,3.2,reshape_and_cache_flash_kernel,attention
+GPU,1118.783,8.448,flash_fwd_splitkv_kernel,attention
+GPU,1127.679,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,1137.343,29.184,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,1166.431,3.232,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,1177.471,172.096,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,1349.471,2.176,triton_poi_fused_mul_silu_slice_1,activation
+GPU,1351.519,92.321,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,1443.744,3.424,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,1446.944,39.488,Kernel2,gemm
+GPU,1486.304,2.592,triton_poi_fused_3,elementwise/copy
+GPU,1488.8,3.104,reshape_and_cache_flash_kernel,attention
+GPU,1492.0,8.16,flash_fwd_splitkv_kernel,attention
+GPU,1500.608,7.904,flash_fwd_splitkv_combine_kernel,attention
+GPU,1510.048,29.472,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,1539.424,3.072,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,1551.488,171.648,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,1722.944,2.08,triton_poi_fused_mul_silu_slice_1,activation
+GPU,1724.896,92.928,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,1817.696,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,1820.928,39.328,Kernel2,gemm
+GPU,1860.16,2.592,triton_poi_fused_3,elementwise/copy
+GPU,1862.624,3.296,reshape_and_cache_flash_kernel,attention
+GPU,1866.016,8.256,flash_fwd_splitkv_kernel,attention
+GPU,1874.72,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,1884.384,28.992,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,1913.28,3.008,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,1924.384,170.592,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,2094.88,2.272,triton_poi_fused_mul_silu_slice_1,activation
+GPU,2097.024,92.576,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,2189.344,3.488,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,2192.672,40.576,Kernel2,gemm
+GPU,2233.088,2.656,triton_poi_fused_3,elementwise/copy
+GPU,2235.584,3.168,reshape_and_cache_flash_kernel,attention
+GPU,2238.784,8.384,flash_fwd_splitkv_kernel,attention
+GPU,2247.584,7.904,flash_fwd_splitkv_combine_kernel,attention
+GPU,2257.152,30.272,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,2287.296,2.976,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,2299.168,173.536,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,2472.576,2.112,triton_poi_fused_mul_silu_slice_1,activation
+GPU,2474.56,90.112,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,2564.544,3.392,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,2567.808,39.712,Kernel2,gemm
+GPU,2607.296,2.656,triton_poi_fused_3,elementwise/copy
+GPU,2609.792,3.136,reshape_and_cache_flash_kernel,attention
+GPU,2612.992,8.224,flash_fwd_splitkv_kernel,attention
+GPU,2621.632,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,2631.328,28.896,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,2660.064,3.04,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,2671.104,169.249,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,2840.225,2.528,triton_poi_fused_mul_silu_slice_1,activation
+GPU,2842.433,92.672,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,2934.977,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,2938.177,40.224,Kernel2,gemm
+GPU,2978.241,2.656,triton_poi_fused_3,elementwise/copy
+GPU,2980.737,3.168,reshape_and_cache_flash_kernel,attention
+GPU,2983.937,8.224,flash_fwd_splitkv_kernel,attention
+GPU,2992.737,7.872,flash_fwd_splitkv_combine_kernel,attention
+GPU,3002.305,29.824,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,3032.033,3.2,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,3043.041,172.8,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,3215.745,1.952,triton_poi_fused_mul_silu_slice_1,activation
+GPU,3217.601,93.344,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,3310.817,3.232,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,3313.921,39.712,Kernel2,gemm
+GPU,3353.537,2.592,triton_poi_fused_3,elementwise/copy
+GPU,3356.001,3.168,reshape_and_cache_flash_kernel,attention
+GPU,3359.233,8.096,flash_fwd_splitkv_kernel,attention
+GPU,3367.777,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,3377.377,29.28,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,3406.529,3.008,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,3417.505,171.904,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,3589.313,2.144,triton_poi_fused_mul_silu_slice_1,activation
+GPU,3591.361,92.16,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,3683.393,3.424,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,3686.689,39.616,Kernel2,gemm
+GPU,3726.177,2.624,triton_poi_fused_3,elementwise/copy
+GPU,3728.673,3.136,reshape_and_cache_flash_kernel,attention
+GPU,3731.873,8.416,flash_fwd_splitkv_kernel,attention
+GPU,3740.705,7.872,flash_fwd_splitkv_combine_kernel,attention
+GPU,3750.273,30.176,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,3780.353,3.136,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,3791.489,172.0,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,3963.201,2.048,triton_poi_fused_mul_silu_slice_1,activation
+GPU,3965.089,91.488,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,4056.449,3.232,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,4059.521,40.64,Kernel2,gemm
+GPU,4100.001,2.656,triton_poi_fused_3,elementwise/copy
+GPU,4102.497,3.168,reshape_and_cache_flash_kernel,attention
+GPU,4105.697,8.256,flash_fwd_splitkv_kernel,attention
+GPU,4114.369,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,4124.065,29.824,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,4153.729,3.168,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,4165.762,172.512,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,4338.114,2.24,triton_poi_fused_mul_silu_slice_1,activation
+GPU,4340.194,92.608,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,4432.642,3.488,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,4436.002,39.872,Kernel2,gemm
+GPU,4475.746,2.624,triton_poi_fused_3,elementwise/copy
+GPU,4478.242,3.36,reshape_and_cache_flash_kernel,attention
+GPU,4481.634,8.32,flash_fwd_splitkv_kernel,attention
+GPU,4490.53,7.935,flash_fwd_splitkv_combine_kernel,attention
+GPU,4500.098,30.08,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,4530.018,2.944,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,4540.962,173.856,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,4714.69,2.016,triton_poi_fused_mul_silu_slice_1,activation
+GPU,4716.546,93.568,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,4809.986,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,4813.186,39.904,Kernel2,gemm
+GPU,4852.962,2.624,triton_poi_fused_3,elementwise/copy
+GPU,4855.458,3.168,reshape_and_cache_flash_kernel,attention
+GPU,4858.658,8.16,flash_fwd_splitkv_kernel,attention
+GPU,4867.234,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,4876.93,29.376,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,4906.178,3.04,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,4918.178,171.648,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,5089.73,2.176,triton_poi_fused_mul_silu_slice_1,activation
+GPU,5091.81,93.184,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,5184.866,3.488,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,5188.226,39.744,Kernel2,gemm
+GPU,5227.874,2.592,triton_poi_fused_3,elementwise/copy
+GPU,5230.338,3.136,reshape_and_cache_flash_kernel,attention
+GPU,5233.57,8.128,flash_fwd_splitkv_kernel,attention
+GPU,5242.146,7.872,flash_fwd_splitkv_combine_kernel,attention
+GPU,5251.618,29.408,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,5280.898,2.912,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,5291.874,170.272,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,5462.05,2.016,triton_poi_fused_mul_silu_slice_1,activation
+GPU,5463.938,92.769,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,5556.579,3.296,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,5559.747,40.032,Kernel2,gemm
+GPU,5599.683,2.688,triton_poi_fused_3,elementwise/copy
+GPU,5602.147,3.136,reshape_and_cache_flash_kernel,attention
+GPU,5605.347,8.192,flash_fwd_splitkv_kernel,attention
+GPU,5613.987,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,5623.651,29.792,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,5653.315,3.04,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,5664.483,171.744,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,5836.099,2.144,triton_poi_fused_mul_silu_slice_1,activation
+GPU,5838.115,91.296,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,5929.283,3.456,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,5932.611,40.8,Kernel2,gemm
+GPU,5973.251,2.752,triton_poi_fused_3,elementwise/copy
+GPU,5975.747,3.136,reshape_and_cache_flash_kernel,attention
+GPU,5978.947,8.352,flash_fwd_splitkv_kernel,attention
+GPU,5987.715,7.904,flash_fwd_splitkv_combine_kernel,attention
+GPU,5997.283,30.24,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,6027.267,3.2,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,6038.627,172.864,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,6211.363,2.176,triton_poi_fused_mul_silu_slice_1,activation
+GPU,6213.411,92.48,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,6305.731,3.328,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,6308.931,39.808,Kernel2,gemm
+GPU,6348.611,2.624,triton_poi_fused_3,elementwise/copy
+GPU,6351.075,3.168,reshape_and_cache_flash_kernel,attention
+GPU,6354.275,8.16,flash_fwd_splitkv_kernel,attention
+GPU,6362.819,8.064,flash_fwd_splitkv_combine_kernel,attention
+GPU,6372.515,29.536,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,6401.891,3.008,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,6412.867,173.088,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,6585.827,2.368,triton_poi_fused_mul_silu_slice_1,activation
+GPU,6588.035,92.512,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,6680.387,3.52,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,6683.747,39.488,Kernel2,gemm
+GPU,6723.107,2.624,triton_poi_fused_3,elementwise/copy
+GPU,6725.571,3.136,reshape_and_cache_flash_kernel,attention
+GPU,6728.771,8.096,flash_fwd_splitkv_kernel,attention
+GPU,6737.315,7.904,flash_fwd_splitkv_combine_kernel,attention
+GPU,6746.883,29.76,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,6776.515,3.168,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,6787.683,170.785,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,6958.34,2.016,triton_poi_fused_mul_silu_slice_1,activation
+GPU,6960.228,91.776,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,7051.812,3.424,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,7055.108,40.576,Kernel2,gemm
+GPU,7095.556,2.624,triton_poi_fused_3,elementwise/copy
+GPU,7098.052,3.168,reshape_and_cache_flash_kernel,attention
+GPU,7101.252,8.16,flash_fwd_splitkv_kernel,attention
+GPU,7109.828,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,7119.524,29.12,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,7148.516,3.008,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,7159.556,172.896,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,7332.356,2.24,triton_poi_fused_mul_silu_slice_1,activation
+GPU,7334.5,92.256,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,7426.628,3.424,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,7429.956,39.328,Kernel2,gemm
+GPU,7469.188,2.72,triton_poi_fused_3,elementwise/copy
+GPU,7471.684,3.136,reshape_and_cache_flash_kernel,attention
+GPU,7474.884,8.224,flash_fwd_splitkv_kernel,attention
+GPU,7483.524,7.904,flash_fwd_splitkv_combine_kernel,attention
+GPU,7493.092,30.912,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,7523.908,2.88,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,7535.556,171.872,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,7707.3,2.048,triton_poi_fused_mul_silu_slice_1,activation
+GPU,7709.188,92.896,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,7801.924,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,7805.156,39.36,Kernel2,gemm
+GPU,7844.356,2.624,triton_poi_fused_3,elementwise/copy
+GPU,7846.852,3.168,reshape_and_cache_flash_kernel,attention
+GPU,7850.052,8.288,flash_fwd_splitkv_kernel,attention
+GPU,7858.724,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,7868.42,30.304,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,7898.596,3.04,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,7909.956,172.448,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,8082.212,2.336,triton_poi_fused_mul_silu_slice_1,activation
+GPU,8084.388,93.056,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,8177.284,3.52,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,8180.676,39.872,Kernel2,gemm
+GPU,8220.42,2.592,triton_poi_fused_3,elementwise/copy
+GPU,8222.884,3.168,reshape_and_cache_flash_kernel,attention
+GPU,8226.084,8.16,flash_fwd_splitkv_kernel,attention
+GPU,8234.66,7.904,flash_fwd_splitkv_combine_kernel,attention
+GPU,8244.196,29.984,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,8274.244,3.04,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,8286.084,172.257,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,8458.213,2.048,triton_poi_fused_mul_silu_slice_1,activation
+GPU,8460.101,90.912,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,8550.853,3.424,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,8554.117,40.0,Kernel2,gemm
+GPU,8593.989,2.656,triton_poi_fused_3,elementwise/copy
+GPU,8596.517,3.136,reshape_and_cache_flash_kernel,attention
+GPU,8599.717,8.16,flash_fwd_splitkv_kernel,attention
+GPU,8608.293,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,8617.989,29.408,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,8647.269,3.008,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,8658.245,171.616,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,8829.765,2.24,triton_poi_fused_mul_silu_slice_1,activation
+GPU,8831.877,92.512,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,8924.261,3.552,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,8927.685,39.616,Kernel2,gemm
+GPU,8967.205,2.592,triton_poi_fused_3,elementwise/copy
+GPU,8969.701,3.104,reshape_and_cache_flash_kernel,attention
+GPU,8972.869,8.256,flash_fwd_splitkv_kernel,attention
+GPU,8981.573,7.872,flash_fwd_splitkv_combine_kernel,attention
+GPU,8991.109,29.536,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,9020.517,2.944,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,9031.589,171.328,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,9202.821,2.016,triton_poi_fused_mul_silu_slice_1,activation
+GPU,9204.709,93.12,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,9297.701,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,9300.933,39.264,Kernel2,gemm
+GPU,9340.101,2.72,triton_poi_fused_3,elementwise/copy
+GPU,9342.565,3.232,reshape_and_cache_flash_kernel,attention
+GPU,9345.829,8.192,flash_fwd_splitkv_kernel,attention
+GPU,9354.437,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,9364.165,29.6,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,9393.669,3.072,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,9404.709,173.76,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,9578.341,2.176,triton_poi_fused_mul_silu_slice_1,activation
+GPU,9580.357,92.864,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,9673.061,3.424,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,9676.357,40.001,Kernel2,gemm
+GPU,9716.23,2.624,triton_poi_fused_3,elementwise/copy
+GPU,9718.726,3.168,reshape_and_cache_flash_kernel,attention
+GPU,9721.926,8.224,flash_fwd_splitkv_kernel,attention
+GPU,9730.566,7.904,flash_fwd_splitkv_combine_kernel,attention
+GPU,9740.006,29.952,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,9769.798,3.104,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,9780.966,171.648,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,9952.486,2.048,triton_poi_fused_mul_silu_slice_1,activation
+GPU,9954.406,91.52,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,10045.798,3.264,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,10048.934,39.936,Kernel2,gemm
+GPU,10088.742,2.624,triton_poi_fused_3,elementwise/copy
+GPU,10091.206,3.168,reshape_and_cache_flash_kernel,attention
+GPU,10094.406,8.16,flash_fwd_splitkv_kernel,attention
+GPU,10102.982,8.063,flash_fwd_splitkv_combine_kernel,attention
+GPU,10112.678,28.96,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,10141.51,3.008,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,10153.35,173.952,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,10327.142,2.208,triton_poi_fused_mul_silu_slice_1,activation
+GPU,10329.19,92.224,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,10421.254,3.456,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,10424.55,39.776,Kernel2,gemm
+GPU,10464.198,2.624,triton_poi_fused_3,elementwise/copy
+GPU,10466.694,3.168,reshape_and_cache_flash_kernel,attention
+GPU,10469.894,8.16,flash_fwd_splitkv_kernel,attention
+GPU,10478.438,7.936,flash_fwd_splitkv_combine_kernel,attention
+GPU,10488.006,29.824,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,10517.67,3.104,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,10528.902,174.4,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,10703.174,2.048,triton_poi_fused_mul_silu_slice_1,activation
+GPU,10705.062,91.328,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,10796.262,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,10799.494,39.68,Kernel2,gemm
+GPU,10839.046,2.624,triton_poi_fused_3,elementwise/copy
+GPU,10841.51,3.199,reshape_and_cache_flash_kernel,attention
+GPU,10844.71,8.576,flash_fwd_splitkv_kernel,attention
+GPU,10853.702,8.064,flash_fwd_splitkv_combine_kernel,attention
+GPU,10863.398,29.312,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,10892.742,2.944,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,10904.614,171.552,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,11075.974,2.24,triton_poi_fused_mul_silu_slice_1,activation
+GPU,11078.054,92.001,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,11169.895,3.488,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,11173.191,40.48,Kernel2,gemm
+GPU,11213.511,2.656,triton_poi_fused_3,elementwise/copy
+GPU,11216.007,3.264,reshape_and_cache_flash_kernel,attention
+GPU,11219.303,8.256,flash_fwd_splitkv_kernel,attention
+GPU,11227.943,7.936,flash_fwd_splitkv_combine_kernel,attention
+GPU,11237.511,30.112,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,11267.527,3.2,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,11278.599,172.8,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,11451.271,2.016,triton_poi_fused_mul_silu_slice_1,activation
+GPU,11453.159,90.784,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,11543.815,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,11547.079,39.168,Kernel2,gemm
+GPU,11586.151,2.592,triton_poi_fused_3,elementwise/copy
+GPU,11588.615,3.136,reshape_and_cache_flash_kernel,attention
+GPU,11591.815,8.224,flash_fwd_splitkv_kernel,attention
+GPU,11600.455,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,11610.055,29.12,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,11639.079,3.072,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,11649.223,172.32,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,11821.415,2.24,triton_poi_fused_mul_silu_slice_1,activation
+GPU,11823.527,92.192,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,11915.623,3.264,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,11920.327,3.168,unrolled_elementwise_kernel,elementwise/copy
+GPU,11924.903,5.984,index_elementwise_kernel,elementwise/copy
+GPU,11932.039,721.313,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,12654.504,5.856,unrolled_elementwise_kernel,elementwise/copy
+GPU,12661.704,40.096,reduce_kernel,sampling
+GPU,12702.952,2.24,unrolled_elementwise_kernel,elementwise/copy
+GPU,12729.448,1.792,vectorized_elementwise_kernel,elementwise/copy
+GPU,12755.048,4.576,index_elementwise_kernel,elementwise/copy
+GPU,12760.936,2.4,unrolled_elementwise_kernel,elementwise/copy
+GPU,12764.392,2.56,vectorized_elementwise_kernel,elementwise/copy
+GPU,12771.176,2.144,vectorized_elementwise_kernel,elementwise/copy
+GPU,12777.288,1.76,unrolled_elementwise_kernel,elementwise/copy
+GPU,12780.296,3.936,_compute_slot_mapping_kernel,other
+GPU,12788.36,1.824,unrolled_elementwise_kernel,elementwise/copy
+GPU,12794.568,4.736,triton_red_fused__to_copy_add_embedding_mean_mul_pow_rsqrt_0,norm
+GPU,12799.368,41.344,Kernel2,gemm
+GPU,12840.776,2.432,triton_poi_fused_1,elementwise/copy
+GPU,12843.272,3.136,reshape_and_cache_flash_kernel,attention
+GPU,12846.472,8.384,flash_fwd_splitkv_kernel,attention
+GPU,12855.304,7.936,flash_fwd_splitkv_combine_kernel,attention
+GPU,12864.904,29.504,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,12894.312,3.232,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,12905.576,170.592,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,13076.072,2.304,triton_poi_fused_mul_silu_slice_1,activation
+GPU,13078.28,92.832,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,13171.016,3.68,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,13174.504,40.768,Kernel2,gemm
+GPU,13215.144,2.624,triton_poi_fused_3,elementwise/copy
+GPU,13217.608,3.04,reshape_and_cache_flash_kernel,attention
+GPU,13220.68,8.448,flash_fwd_splitkv_kernel,attention
+GPU,13229.512,7.872,flash_fwd_splitkv_combine_kernel,attention
+GPU,13238.952,29.344,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,13268.136,3.232,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,13280.232,169.696,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,13449.64,2.176,triton_poi_fused_mul_silu_slice_1,activation
+GPU,13451.688,91.712,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,13543.272,3.328,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,13546.472,40.672,Kernel2,gemm
+GPU,13587.016,2.592,triton_poi_fused_3,elementwise/copy
+GPU,13589.48,3.039,reshape_and_cache_flash_kernel,attention
+GPU,13592.52,8.16,flash_fwd_splitkv_kernel,attention
+GPU,13601.128,7.871,flash_fwd_splitkv_combine_kernel,attention
+GPU,13610.632,29.632,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,13640.136,3.264,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,13651.432,173.344,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,13824.648,2.24,triton_poi_fused_mul_silu_slice_1,activation
+GPU,13826.76,92.257,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,13918.889,3.296,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,13922.057,39.424,Kernel2,gemm
+GPU,13961.353,2.656,triton_poi_fused_3,elementwise/copy
+GPU,13963.849,3.136,reshape_and_cache_flash_kernel,attention
+GPU,13967.049,8.192,flash_fwd_splitkv_kernel,attention
+GPU,13975.625,8.064,flash_fwd_splitkv_combine_kernel,attention
+GPU,13985.321,29.408,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,14014.601,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,14025.993,172.896,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,14198.761,2.336,triton_poi_fused_mul_silu_slice_1,activation
+GPU,14201.001,91.744,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,14292.649,3.296,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,14295.817,39.744,Kernel2,gemm
+GPU,14335.465,2.656,triton_poi_fused_3,elementwise/copy
+GPU,14337.929,3.136,reshape_and_cache_flash_kernel,attention
+GPU,14341.161,8.16,flash_fwd_splitkv_kernel,attention
+GPU,14349.737,7.904,flash_fwd_splitkv_combine_kernel,attention
+GPU,14359.305,29.408,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,14388.585,3.04,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,14400.297,169.536,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,14569.737,2.08,triton_poi_fused_mul_silu_slice_1,activation
+GPU,14571.721,93.056,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,14664.681,3.392,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,14667.945,40.576,Kernel2,gemm
+GPU,14708.425,2.688,triton_poi_fused_3,elementwise/copy
+GPU,14710.889,3.104,reshape_and_cache_flash_kernel,attention
+GPU,14714.089,8.16,flash_fwd_splitkv_kernel,attention
+GPU,14722.665,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,14732.361,29.216,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,14761.481,3.072,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,14772.521,173.12,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,14945.385,2.304,triton_poi_fused_mul_silu_slice_1,activation
+GPU,14947.561,93.12,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,15040.521,3.52,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,15043.881,40.384,Kernel2,gemm
+GPU,15084.105,2.656,triton_poi_fused_3,elementwise/copy
+GPU,15086.601,3.264,reshape_and_cache_flash_kernel,attention
+GPU,15089.897,8.352,flash_fwd_splitkv_kernel,attention
+GPU,15098.633,7.936,flash_fwd_splitkv_combine_kernel,attention
+GPU,15108.201,29.888,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,15137.961,3.2,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,15149.321,173.409,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,15322.602,2.112,triton_poi_fused_mul_silu_slice_1,activation
+GPU,15324.554,91.456,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,15415.85,3.424,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,15419.146,39.552,Kernel2,gemm
+GPU,15458.57,2.688,triton_poi_fused_3,elementwise/copy
+GPU,15461.098,3.2,reshape_and_cache_flash_kernel,attention
+GPU,15464.33,8.224,flash_fwd_splitkv_kernel,attention
+GPU,15472.938,8.064,flash_fwd_splitkv_combine_kernel,attention
+GPU,15482.634,29.344,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,15511.818,3.04,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,15522.826,172.096,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,15694.794,2.208,triton_poi_fused_mul_silu_slice_1,activation
+GPU,15696.874,93.344,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,15790.09,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,15793.29,39.872,Kernel2,gemm
+GPU,15833.034,2.624,triton_poi_fused_3,elementwise/copy
+GPU,15835.498,3.199,reshape_and_cache_flash_kernel,attention
+GPU,15838.698,8.224,flash_fwd_splitkv_kernel,attention
+GPU,15847.338,7.872,flash_fwd_splitkv_combine_kernel,attention
+GPU,15856.81,30.016,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,15886.698,3.072,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,15897.866,171.712,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,16069.354,2.08,triton_poi_fused_mul_silu_slice_1,activation
+GPU,16071.338,92.544,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,16163.754,3.232,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,16166.858,39.936,Kernel2,gemm
+GPU,16206.698,2.592,triton_poi_fused_3,elementwise/copy
+GPU,16209.194,3.136,reshape_and_cache_flash_kernel,attention
+GPU,16212.394,8.16,flash_fwd_splitkv_kernel,attention
+GPU,16221.002,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,16230.698,29.664,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,16260.234,3.008,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,16271.05,171.232,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,16442.154,2.304,triton_poi_fused_mul_silu_slice_1,activation
+GPU,16444.33,91.648,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,16535.786,3.328,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,16538.986,39.072,Kernel2,gemm
+GPU,16577.962,2.592,triton_poi_fused_3,elementwise/copy
+GPU,16580.458,3.104,reshape_and_cache_flash_kernel,attention
+GPU,16583.626,8.32,flash_fwd_splitkv_kernel,attention
+GPU,16592.394,7.904,flash_fwd_splitkv_combine_kernel,attention
+GPU,16601.962,30.24,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,16632.106,2.944,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,16643.882,172.801,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,16816.587,2.016,triton_poi_fused_mul_silu_slice_1,activation
+GPU,16818.475,91.296,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,16909.643,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,16912.843,39.872,Kernel2,gemm
+GPU,16952.587,2.656,triton_poi_fused_3,elementwise/copy
+GPU,16955.083,3.168,reshape_and_cache_flash_kernel,attention
+GPU,16958.283,8.224,flash_fwd_splitkv_kernel,attention
+GPU,16966.891,8.064,flash_fwd_splitkv_combine_kernel,attention
+GPU,16976.619,29.44,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,17005.899,3.232,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,17017.931,170.688,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,17188.427,2.208,triton_poi_fused_mul_silu_slice_1,activation
+GPU,17190.475,92.928,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,17283.243,3.488,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,17286.603,39.744,Kernel2,gemm
+GPU,17326.219,2.656,triton_poi_fused_3,elementwise/copy
+GPU,17328.715,3.168,reshape_and_cache_flash_kernel,attention
+GPU,17331.947,8.352,flash_fwd_splitkv_kernel,attention
+GPU,17340.683,7.936,flash_fwd_splitkv_combine_kernel,attention
+GPU,17350.251,29.984,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,17380.107,3.04,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,17391.403,175.616,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,17566.859,2.208,triton_poi_fused_mul_silu_slice_1,activation
+GPU,17568.939,94.176,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,17662.955,3.392,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,17666.187,39.584,Kernel2,gemm
+GPU,17705.643,2.624,triton_poi_fused_3,elementwise/copy
+GPU,17708.139,3.168,reshape_and_cache_flash_kernel,attention
+GPU,17711.339,8.096,flash_fwd_splitkv_kernel,attention
+GPU,17719.883,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,17729.483,29.344,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,17758.699,3.008,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,17769.643,172.896,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,17942.251,2.336,triton_poi_fused_mul_silu_slice_1,activation
+GPU,17944.459,92.704,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,18037.035,3.552,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,18040.459,40.001,Kernel2,gemm
+GPU,18080.364,2.592,triton_poi_fused_3,elementwise/copy
+GPU,18082.828,3.136,reshape_and_cache_flash_kernel,attention
+GPU,18086.06,8.192,flash_fwd_splitkv_kernel,attention
+GPU,18094.668,7.872,flash_fwd_splitkv_combine_kernel,attention
+GPU,18104.236,29.6,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,18133.708,3.072,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,18144.812,170.816,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,18315.372,2.016,triton_poi_fused_mul_silu_slice_1,activation
+GPU,18317.26,92.896,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,18410.06,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,18413.292,39.776,Kernel2,gemm
+GPU,18452.972,2.752,triton_poi_fused_3,elementwise/copy
+GPU,18455.468,3.136,reshape_and_cache_flash_kernel,attention
+GPU,18458.668,8.224,flash_fwd_splitkv_kernel,attention
+GPU,18467.34,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,18477.004,29.792,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,18506.668,3.04,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,18517.932,173.056,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,18690.828,2.176,triton_poi_fused_mul_silu_slice_1,activation
+GPU,18692.876,91.904,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,18784.588,3.488,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,18787.948,40.672,Kernel2,gemm
+GPU,18828.46,2.656,triton_poi_fused_3,elementwise/copy
+GPU,18830.956,3.168,reshape_and_cache_flash_kernel,attention
+GPU,18834.156,8.48,flash_fwd_splitkv_kernel,attention
+GPU,18843.116,7.904,flash_fwd_splitkv_combine_kernel,attention
+GPU,18852.652,30.176,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,18882.668,2.912,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,18893.58,172.768,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,19066.22,2.112,triton_poi_fused_mul_silu_slice_1,activation
+GPU,19068.172,93.408,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,19161.452,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,19164.652,39.776,Kernel2,gemm
+GPU,19204.3,2.624,triton_poi_fused_3,elementwise/copy
+GPU,19206.764,3.2,reshape_and_cache_flash_kernel,attention
+GPU,19209.996,8.224,flash_fwd_splitkv_kernel,attention
+GPU,19218.636,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,19228.3,29.44,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,19257.58,3.168,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,19269.548,171.425,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,19440.813,2.208,triton_poi_fused_mul_silu_slice_1,activation
+GPU,19442.861,92.544,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,19535.277,3.328,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,19538.477,39.904,Kernel2,gemm
+GPU,19578.253,2.624,triton_poi_fused_3,elementwise/copy
+GPU,19580.749,3.136,reshape_and_cache_flash_kernel,attention
+GPU,19583.949,8.128,flash_fwd_splitkv_kernel,attention
+GPU,19592.493,7.872,flash_fwd_splitkv_combine_kernel,attention
+GPU,19601.965,29.248,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,19631.117,3.04,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,19642.093,171.872,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,19813.869,2.016,triton_poi_fused_mul_silu_slice_1,activation
+GPU,19815.757,91.648,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,19907.277,3.392,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,19910.541,40.896,Kernel2,gemm
+GPU,19951.181,2.688,triton_poi_fused_3,elementwise/copy
+GPU,19953.677,3.136,reshape_and_cache_flash_kernel,attention
+GPU,19956.877,8.192,flash_fwd_splitkv_kernel,attention
+GPU,19965.517,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,19975.181,29.248,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,20004.301,3.104,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,20015.469,170.784,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,20186.157,2.144,triton_poi_fused_mul_silu_slice_1,activation
+GPU,20188.173,92.768,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,20280.813,3.456,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,20284.141,39.552,Kernel2,gemm
+GPU,20323.597,2.592,triton_poi_fused_3,elementwise/copy
+GPU,20326.061,3.168,reshape_and_cache_flash_kernel,attention
+GPU,20329.293,8.224,flash_fwd_splitkv_kernel,attention
+GPU,20337.933,7.904,flash_fwd_splitkv_combine_kernel,attention
+GPU,20347.533,30.08,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,20377.485,3.04,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,20389.357,172.32,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,20561.517,2.272,triton_poi_fused_mul_silu_slice_1,activation
+GPU,20563.597,92.896,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,20656.333,3.328,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,20659.501,39.808,Kernel2,gemm
+GPU,20699.149,2.624,triton_poi_fused_3,elementwise/copy
+GPU,20701.645,3.168,reshape_and_cache_flash_kernel,attention
+GPU,20704.845,8.224,flash_fwd_splitkv_kernel,attention
+GPU,20713.453,8.064,flash_fwd_splitkv_combine_kernel,attention
+GPU,20723.149,29.632,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,20752.621,2.976,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,20763.629,173.153,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,20936.622,2.176,triton_poi_fused_mul_silu_slice_1,activation
+GPU,20938.67,92.576,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,21031.118,3.328,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,21034.318,39.808,Kernel2,gemm
+GPU,21073.998,2.592,triton_poi_fused_3,elementwise/copy
+GPU,21076.462,3.168,reshape_and_cache_flash_kernel,attention
+GPU,21079.662,8.32,flash_fwd_splitkv_kernel,attention
+GPU,21088.494,7.904,flash_fwd_splitkv_combine_kernel,attention
+GPU,21098.03,29.696,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,21127.758,3.04,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,21138.862,173.472,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,21312.206,2.016,triton_poi_fused_mul_silu_slice_1,activation
+GPU,21314.062,90.496,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,21404.43,3.392,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,21407.662,40.224,Kernel2,gemm
+GPU,21447.758,2.592,triton_poi_fused_3,elementwise/copy
+GPU,21450.222,3.168,reshape_and_cache_flash_kernel,attention
+GPU,21453.422,8.192,flash_fwd_splitkv_kernel,attention
+GPU,21462.03,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,21471.598,29.728,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,21501.23,3.264,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,21512.366,170.656,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,21682.734,2.272,triton_poi_fused_mul_silu_slice_1,activation
+GPU,21684.91,91.872,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,21776.654,3.584,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,21779.982,39.008,Kernel2,gemm
+GPU,21818.894,2.592,triton_poi_fused_3,elementwise/copy
+GPU,21821.358,3.168,reshape_and_cache_flash_kernel,attention
+GPU,21824.59,8.16,flash_fwd_splitkv_kernel,attention
+GPU,21833.198,7.872,flash_fwd_splitkv_combine_kernel,attention
+GPU,21842.734,29.664,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,21872.174,2.944,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,21882.99,171.84,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,22054.734,2.048,triton_poi_fused_mul_silu_slice_1,activation
+GPU,22056.654,93.696,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,22150.222,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,22153.454,39.872,Kernel2,gemm
+GPU,22193.23,2.592,triton_poi_fused_3,elementwise/copy
+GPU,22195.694,3.136,reshape_and_cache_flash_kernel,attention
+GPU,22198.894,8.256,flash_fwd_splitkv_kernel,attention
+GPU,22207.566,8.033,flash_fwd_splitkv_combine_kernel,attention
+GPU,22217.263,30.4,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,22247.567,3.04,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,22258.831,173.6,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,22432.303,2.208,triton_poi_fused_mul_silu_slice_1,activation
+GPU,22434.351,93.28,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,22527.343,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,22530.543,39.648,Kernel2,gemm
+GPU,22570.063,2.624,triton_poi_fused_3,elementwise/copy
+GPU,22572.559,3.168,reshape_and_cache_flash_kernel,attention
+GPU,22575.759,8.192,flash_fwd_splitkv_kernel,attention
+GPU,22584.367,7.936,flash_fwd_splitkv_combine_kernel,attention
+GPU,22593.935,29.824,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,22623.599,3.232,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,22635.663,172.704,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,22808.239,2.08,triton_poi_fused_mul_silu_slice_1,activation
+GPU,22810.191,90.272,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,22900.303,3.264,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,22903.439,40.448,Kernel2,gemm
+GPU,22943.759,2.624,triton_poi_fused_3,elementwise/copy
+GPU,22946.223,3.264,reshape_and_cache_flash_kernel,attention
+GPU,22949.519,8.384,flash_fwd_splitkv_kernel,attention
+GPU,22958.287,8.064,flash_fwd_splitkv_combine_kernel,attention
+GPU,22967.983,29.12,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,22996.943,3.008,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,23008.783,175.008,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,23183.631,2.208,triton_poi_fused_mul_silu_slice_1,activation
+GPU,23185.679,93.216,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,23278.735,3.584,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,23282.159,39.968,Kernel2,gemm
+GPU,23321.935,2.624,triton_poi_fused_3,elementwise/copy
+GPU,23324.431,3.168,reshape_and_cache_flash_kernel,attention
+GPU,23327.663,8.16,flash_fwd_splitkv_kernel,attention
+GPU,23336.239,7.936,flash_fwd_splitkv_combine_kernel,attention
+GPU,23345.807,29.728,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,23375.375,3.232,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,23386.575,171.424,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,23557.871,2.112,triton_poi_fused_mul_silu_slice_1,activation
+GPU,23559.823,92.193,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,23651.856,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,23655.056,40.416,Kernel2,gemm
+GPU,23695.312,2.624,triton_poi_fused_3,elementwise/copy
+GPU,23697.776,3.168,reshape_and_cache_flash_kernel,attention
+GPU,23700.976,8.288,flash_fwd_splitkv_kernel,attention
+GPU,23709.68,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,23719.344,29.12,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,23748.496,2.944,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,23759.632,171.392,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,23930.864,2.208,triton_poi_fused_mul_silu_slice_1,activation
+GPU,23932.912,91.104,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,24023.856,3.456,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,24027.152,41.152,Kernel2,gemm
+GPU,24068.144,2.624,triton_poi_fused_3,elementwise/copy
+GPU,24070.64,3.168,reshape_and_cache_flash_kernel,attention
+GPU,24073.84,8.448,flash_fwd_splitkv_kernel,attention
+GPU,24082.672,7.936,flash_fwd_splitkv_combine_kernel,attention
+GPU,24092.144,29.888,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,24121.904,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,24133.52,170.656,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,24304.08,1.984,triton_poi_fused_mul_silu_slice_1,activation
+GPU,24305.968,91.456,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,24397.232,3.328,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,24400.464,39.52,Kernel2,gemm
+GPU,24439.856,2.624,triton_poi_fused_3,elementwise/copy
+GPU,24442.352,3.136,reshape_and_cache_flash_kernel,attention
+GPU,24445.552,8.192,flash_fwd_splitkv_kernel,attention
+GPU,24454.192,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,24463.888,28.992,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,24492.784,3.04,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,24503.12,171.808,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,24674.832,2.336,triton_poi_fused_mul_silu_slice_1,activation
+GPU,24676.88,92.704,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,24769.456,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,24774.224,3.264,unrolled_elementwise_kernel,elementwise/copy
+GPU,24779.056,6.016,index_elementwise_kernel,elementwise/copy
+GPU,24786.352,720.129,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,25507.793,5.824,unrolled_elementwise_kernel,elementwise/copy
+GPU,25514.673,41.44,reduce_kernel,sampling
+GPU,25557.233,2.24,unrolled_elementwise_kernel,elementwise/copy
+GPU,25591.921,1.824,vectorized_elementwise_kernel,elementwise/copy
+GPU,25625.713,4.704,index_elementwise_kernel,elementwise/copy
+GPU,25631.601,2.4,unrolled_elementwise_kernel,elementwise/copy
+GPU,25635.345,2.4,vectorized_elementwise_kernel,elementwise/copy
+GPU,25641.713,2.176,vectorized_elementwise_kernel,elementwise/copy
+GPU,25647.889,1.728,unrolled_elementwise_kernel,elementwise/copy
+GPU,25650.897,3.936,_compute_slot_mapping_kernel,other
+GPU,25659.281,1.856,unrolled_elementwise_kernel,elementwise/copy
+GPU,25665.521,4.8,triton_red_fused__to_copy_add_embedding_mean_mul_pow_rsqrt_0,norm
+GPU,25670.385,40.768,Kernel2,gemm
+GPU,25711.249,2.4,triton_poi_fused_1,elementwise/copy
+GPU,25713.713,3.136,reshape_and_cache_flash_kernel,attention
+GPU,25716.913,8.672,flash_fwd_splitkv_kernel,attention
+GPU,25726.033,7.968,flash_fwd_splitkv_combine_kernel,attention
+GPU,25735.537,30.048,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,25765.489,3.072,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,25776.657,171.104,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,25947.665,2.144,triton_poi_fused_mul_silu_slice_1,activation
+GPU,25949.713,93.888,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,26043.505,3.552,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,26046.897,40.448,Kernel2,gemm
+GPU,26087.185,2.624,triton_poi_fused_3,elementwise/copy
+GPU,26089.649,3.072,reshape_and_cache_flash_kernel,attention
+GPU,26092.753,8.416,flash_fwd_splitkv_kernel,attention
+GPU,26101.553,7.871,flash_fwd_splitkv_combine_kernel,attention
+GPU,26111.057,29.472,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,26140.401,3.2,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,26151.633,170.88,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,26322.385,2.208,triton_poi_fused_mul_silu_slice_1,activation
+GPU,26324.433,92.577,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,26416.882,3.424,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,26420.018,40.32,Kernel2,gemm
+GPU,26460.21,2.656,triton_poi_fused_3,elementwise/copy
+GPU,26462.674,3.04,reshape_and_cache_flash_kernel,attention
+GPU,26465.778,8.384,flash_fwd_splitkv_kernel,attention
+GPU,26474.642,7.84,flash_fwd_splitkv_combine_kernel,attention
+GPU,26484.114,29.44,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,26513.394,3.2,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,26525.362,171.712,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,26696.946,2.368,triton_poi_fused_mul_silu_slice_1,activation
+GPU,26699.058,93.152,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,26792.082,3.264,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,26795.218,39.36,Kernel2,gemm
+GPU,26834.45,2.624,triton_poi_fused_3,elementwise/copy
+GPU,26836.946,3.167,reshape_and_cache_flash_kernel,attention
+GPU,26840.114,8.448,flash_fwd_splitkv_kernel,attention
+GPU,26848.946,8.064,flash_fwd_splitkv_combine_kernel,attention
+GPU,26858.642,29.056,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,26887.602,3.2,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,26898.866,173.344,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,27072.114,2.176,triton_poi_fused_mul_silu_slice_1,activation
+GPU,27074.162,92.448,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,27166.482,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,27169.714,39.2,Kernel2,gemm
+GPU,27208.786,2.624,triton_poi_fused_3,elementwise/copy
+GPU,27211.282,3.136,reshape_and_cache_flash_kernel,attention
+GPU,27214.482,8.192,flash_fwd_splitkv_kernel,attention
+GPU,27223.122,7.872,flash_fwd_splitkv_combine_kernel,attention
+GPU,27232.658,29.536,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,27262.066,3.104,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,27273.874,171.776,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,27445.554,2.08,triton_poi_fused_mul_silu_slice_1,activation
+GPU,27447.538,92.64,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,27540.082,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,27543.346,39.392,Kernel2,gemm
+GPU,27582.642,2.592,triton_poi_fused_3,elementwise/copy
+GPU,27585.106,3.136,reshape_and_cache_flash_kernel,attention
+GPU,27588.338,8.192,flash_fwd_splitkv_kernel,attention
+GPU,27596.978,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,27606.546,29.344,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,27635.762,2.976,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,27646.77,173.569,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,27820.243,2.24,triton_poi_fused_mul_silu_slice_1,activation
+GPU,27822.355,92.96,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,27914.995,3.488,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,27918.323,40.896,Kernel2,gemm
+GPU,27959.059,2.656,triton_poi_fused_3,elementwise/copy
+GPU,27961.555,3.168,reshape_and_cache_flash_kernel,attention
+GPU,27964.755,8.288,flash_fwd_splitkv_kernel,attention
+GPU,27973.427,7.936,flash_fwd_splitkv_combine_kernel,attention
+GPU,27982.995,29.728,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,28012.563,3.264,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,28023.891,173.184,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,28196.947,2.112,triton_poi_fused_mul_silu_slice_1,activation
+GPU,28198.899,90.496,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,28289.235,3.424,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,28292.499,39.712,Kernel2,gemm
+GPU,28332.083,2.816,triton_poi_fused_3,elementwise/copy
+GPU,28334.579,3.168,reshape_and_cache_flash_kernel,attention
+GPU,28337.779,8.384,flash_fwd_splitkv_kernel,attention
+GPU,28346.547,8.064,flash_fwd_splitkv_combine_kernel,attention
+GPU,28356.243,29.344,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,28385.427,3.072,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,28396.851,171.776,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,28568.499,2.272,triton_poi_fused_mul_silu_slice_1,activation
+GPU,28570.611,92.384,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,28662.867,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,28666.099,39.456,Kernel2,gemm
+GPU,28705.427,2.624,triton_poi_fused_3,elementwise/copy
+GPU,28707.891,3.168,reshape_and_cache_flash_kernel,attention
+GPU,28711.091,8.224,flash_fwd_splitkv_kernel,attention
+GPU,28719.731,7.872,flash_fwd_splitkv_combine_kernel,attention
+GPU,28729.299,30.368,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,28759.539,3.072,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,28770.707,172.64,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,28943.251,1.984,triton_poi_fused_mul_silu_slice_1,activation
+GPU,28945.139,94.624,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,29039.667,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,29042.899,40.0,Kernel2,gemm
+GPU,29082.803,2.592,triton_poi_fused_3,elementwise/copy
+GPU,29085.299,3.136,reshape_and_cache_flash_kernel,attention
+GPU,29088.499,8.192,flash_fwd_splitkv_kernel,attention
+GPU,29097.107,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,29106.803,29.536,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,29136.211,3.008,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,29147.251,171.393,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,29318.548,2.272,triton_poi_fused_mul_silu_slice_1,activation
+GPU,29320.692,91.04,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,29411.604,3.424,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,29414.804,39.84,Kernel2,gemm
+GPU,29454.516,2.592,triton_poi_fused_3,elementwise/copy
+GPU,29457.012,3.136,reshape_and_cache_flash_kernel,attention
+GPU,29460.212,8.256,flash_fwd_splitkv_kernel,attention
+GPU,29469.076,7.872,flash_fwd_splitkv_combine_kernel,attention
+GPU,29478.644,30.08,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,29508.596,3.072,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,29519.732,171.712,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,29691.348,2.048,triton_poi_fused_mul_silu_slice_1,activation
+GPU,29693.236,92.512,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,29785.62,3.232,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,29788.724,40.384,Kernel2,gemm
+GPU,29828.98,2.624,triton_poi_fused_3,elementwise/copy
+GPU,29831.476,3.168,reshape_and_cache_flash_kernel,attention
+GPU,29834.676,8.256,flash_fwd_splitkv_kernel,attention
+GPU,29843.348,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,29853.012,29.28,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,29882.132,3.136,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,29894.068,170.688,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,30064.596,2.176,triton_poi_fused_mul_silu_slice_1,activation
+GPU,30066.644,92.352,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,30158.868,3.424,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,30162.164,39.904,Kernel2,gemm
+GPU,30201.94,2.624,triton_poi_fused_3,elementwise/copy
+GPU,30204.436,3.168,reshape_and_cache_flash_kernel,attention
+GPU,30207.636,8.256,flash_fwd_splitkv_kernel,attention
+GPU,30216.308,7.904,flash_fwd_splitkv_combine_kernel,attention
+GPU,30225.844,30.112,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,30255.828,3.104,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,30267.092,174.464,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,30441.428,2.08,triton_poi_fused_mul_silu_slice_1,activation
+GPU,30443.348,93.728,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,30536.948,3.392,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,30540.212,39.969,Kernel2,gemm
+GPU,30580.021,2.656,triton_poi_fused_3,elementwise/copy
+GPU,30582.517,3.2,reshape_and_cache_flash_kernel,attention
+GPU,30585.749,8.128,flash_fwd_splitkv_kernel,attention
+GPU,30594.325,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,30604.021,29.376,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,30633.269,2.976,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,30645.013,171.2,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,30816.117,2.24,triton_poi_fused_mul_silu_slice_1,activation
+GPU,30818.261,92.32,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,30910.453,3.392,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,30913.749,39.68,Kernel2,gemm
+GPU,30953.301,2.624,triton_poi_fused_3,elementwise/copy
+GPU,30955.797,3.136,reshape_and_cache_flash_kernel,attention
+GPU,30958.997,8.128,flash_fwd_splitkv_kernel,attention
+GPU,30967.733,7.872,flash_fwd_splitkv_combine_kernel,attention
+GPU,30977.301,29.696,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,31006.901,3.04,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,31018.133,171.808,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,31189.845,2.016,triton_poi_fused_mul_silu_slice_1,activation
+GPU,31191.733,91.424,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,31283.061,3.264,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,31286.197,39.36,Kernel2,gemm
+GPU,31325.461,2.592,triton_poi_fused_3,elementwise/copy
+GPU,31327.925,3.136,reshape_and_cache_flash_kernel,attention
+GPU,31331.125,8.224,flash_fwd_splitkv_kernel,attention
+GPU,31339.797,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,31349.461,29.568,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,31378.901,3.104,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,31390.229,172.928,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,31562.997,2.176,triton_poi_fused_mul_silu_slice_1,activation
+GPU,31565.045,91.328,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,31656.245,3.296,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,31659.413,40.256,Kernel2,gemm
+GPU,31699.509,2.656,triton_poi_fused_3,elementwise/copy
+GPU,31702.005,3.264,reshape_and_cache_flash_kernel,attention
+GPU,31705.333,8.32,flash_fwd_splitkv_kernel,attention
+GPU,31714.069,7.936,flash_fwd_splitkv_combine_kernel,attention
+GPU,31723.637,29.952,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,31753.429,3.04,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,31764.501,172.193,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,31936.566,2.08,triton_poi_fused_mul_silu_slice_1,activation
+GPU,31938.518,92.8,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,32031.158,3.328,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,32034.358,39.648,Kernel2,gemm
+GPU,32073.846,2.624,triton_poi_fused_3,elementwise/copy
+GPU,32076.342,3.168,reshape_and_cache_flash_kernel,attention
+GPU,32079.542,8.192,flash_fwd_splitkv_kernel,attention
+GPU,32088.15,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,32097.75,29.568,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,32127.158,3.04,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,32138.23,172.384,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,32310.454,2.368,triton_poi_fused_mul_silu_slice_1,activation
+GPU,32312.662,91.872,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,32404.374,3.392,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,32407.606,39.936,Kernel2,gemm
+GPU,32447.414,2.816,triton_poi_fused_3,elementwise/copy
+GPU,32450.07,3.136,reshape_and_cache_flash_kernel,attention
+GPU,32453.27,8.192,flash_fwd_splitkv_kernel,attention
+GPU,32461.91,7.872,flash_fwd_splitkv_combine_kernel,attention
+GPU,32471.478,29.792,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,32501.142,3.072,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,32513.11,171.136,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,32684.15,2.048,triton_poi_fused_mul_silu_slice_1,activation
+GPU,32686.102,91.36,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,32777.366,3.424,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,32780.694,40.576,Kernel2,gemm
+GPU,32821.142,2.592,triton_poi_fused_3,elementwise/copy
+GPU,32823.638,3.136,reshape_and_cache_flash_kernel,attention
+GPU,32826.838,8.16,flash_fwd_splitkv_kernel,attention
+GPU,32835.414,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,32845.11,29.12,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,32874.134,3.168,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,32885.334,171.776,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,33056.854,2.176,triton_poi_fused_mul_silu_slice_1,activation
+GPU,33058.902,91.584,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,33150.39,3.584,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,33153.846,40.448,Kernel2,gemm
+GPU,33194.198,2.592,triton_poi_fused_3,elementwise/copy
+GPU,33196.694,3.136,reshape_and_cache_flash_kernel,attention
+GPU,33199.894,8.352,flash_fwd_splitkv_kernel,attention
+GPU,33208.662,7.904,flash_fwd_splitkv_combine_kernel,attention
+GPU,33218.23,29.952,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,33248.086,3.04,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,33259.926,173.761,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,33433.559,2.112,triton_poi_fused_mul_silu_slice_1,activation
+GPU,33435.511,93.856,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,33529.239,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,33532.471,39.36,Kernel2,gemm
+GPU,33571.703,2.656,triton_poi_fused_3,elementwise/copy
+GPU,33574.199,3.168,reshape_and_cache_flash_kernel,attention
+GPU,33577.399,8.256,flash_fwd_splitkv_kernel,attention
+GPU,33586.103,8.064,flash_fwd_splitkv_combine_kernel,attention
+GPU,33595.799,29.728,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,33625.367,3.04,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,33636.407,172.416,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,33808.695,2.24,triton_poi_fused_mul_silu_slice_1,activation
+GPU,33810.807,93.792,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,33904.471,3.296,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,33907.639,39.968,Kernel2,gemm
+GPU,33947.479,2.752,triton_poi_fused_3,elementwise/copy
+GPU,33949.975,3.168,reshape_and_cache_flash_kernel,attention
+GPU,33953.175,8.224,flash_fwd_splitkv_kernel,attention
+GPU,33961.975,7.904,flash_fwd_splitkv_combine_kernel,attention
+GPU,33971.415,30.304,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,34001.783,2.848,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,34012.759,172.096,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,34184.727,2.048,triton_poi_fused_mul_silu_slice_1,activation
+GPU,34186.647,90.56,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,34277.047,3.328,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,34280.247,39.744,Kernel2,gemm
+GPU,34319.831,2.752,triton_poi_fused_3,elementwise/copy
+GPU,34322.327,3.168,reshape_and_cache_flash_kernel,attention
+GPU,34325.527,8.224,flash_fwd_splitkv_kernel,attention
+GPU,34334.199,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,34343.895,29.472,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,34373.239,3.008,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,34384.151,171.968,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,34555.991,2.272,triton_poi_fused_mul_silu_slice_1,activation
+GPU,34558.135,93.536,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,34651.543,3.552,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,34654.967,39.488,Kernel2,gemm
+GPU,34694.359,2.56,triton_poi_fused_3,elementwise/copy
+GPU,34696.823,3.136,reshape_and_cache_flash_kernel,attention
+GPU,34700.023,8.192,flash_fwd_splitkv_kernel,attention
+GPU,34708.631,7.873,flash_fwd_splitkv_combine_kernel,attention
+GPU,34718.2,29.472,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,34747.544,2.944,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,34758.488,172.224,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,34930.616,2.048,triton_poi_fused_mul_silu_slice_1,activation
+GPU,34932.536,94.368,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,35026.648,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,35029.88,39.168,Kernel2,gemm
+GPU,35068.952,2.592,triton_poi_fused_3,elementwise/copy
+GPU,35071.416,3.136,reshape_and_cache_flash_kernel,attention
+GPU,35074.616,8.32,flash_fwd_splitkv_kernel,attention
+GPU,35083.384,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,35093.08,30.592,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,35123.544,2.976,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,35134.648,170.24,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,35304.728,2.24,triton_poi_fused_mul_silu_slice_1,activation
+GPU,35306.808,91.84,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,35398.52,3.328,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,35401.72,40.64,Kernel2,gemm
+GPU,35442.232,2.624,triton_poi_fused_3,elementwise/copy
+GPU,35444.728,3.167,reshape_and_cache_flash_kernel,attention
+GPU,35447.896,8.416,flash_fwd_splitkv_kernel,attention
+GPU,35456.696,7.936,flash_fwd_splitkv_combine_kernel,attention
+GPU,35466.264,30.112,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,35496.216,3.2,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,35507.512,171.936,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,35679.32,2.112,triton_poi_fused_mul_silu_slice_1,activation
+GPU,35681.272,91.904,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,35772.984,3.456,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,35776.312,40.608,Kernel2,gemm
+GPU,35816.792,2.624,triton_poi_fused_3,elementwise/copy
+GPU,35819.256,3.2,reshape_and_cache_flash_kernel,attention
+GPU,35822.488,8.192,flash_fwd_splitkv_kernel,attention
+GPU,35831.064,8.064,flash_fwd_splitkv_combine_kernel,attention
+GPU,35840.664,28.864,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,35869.4,3.008,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,35881.176,173.888,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,36054.936,2.24,triton_poi_fused_mul_silu_slice_1,activation
+GPU,36057.016,94.081,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,36150.937,3.488,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,36154.265,39.808,Kernel2,gemm
+GPU,36193.945,2.624,triton_poi_fused_3,elementwise/copy
+GPU,36196.441,3.168,reshape_and_cache_flash_kernel,attention
+GPU,36199.641,8.352,flash_fwd_splitkv_kernel,attention
+GPU,36208.377,7.904,flash_fwd_splitkv_combine_kernel,attention
+GPU,36217.945,29.76,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,36247.385,3.072,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,36258.553,171.52,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,36429.913,2.08,triton_poi_fused_mul_silu_slice_1,activation
+GPU,36431.833,91.808,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,36523.513,3.36,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,36526.745,40.416,Kernel2,gemm
+GPU,36567.001,2.752,triton_poi_fused_3,elementwise/copy
+GPU,36569.561,3.264,reshape_and_cache_flash_kernel,attention
+GPU,36572.857,8.192,flash_fwd_splitkv_kernel,attention
+GPU,36581.465,8.064,flash_fwd_splitkv_combine_kernel,attention
+GPU,36591.161,29.408,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,36620.601,3.008,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,36631.769,174.4,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,36806.041,2.24,triton_poi_fused_mul_silu_slice_1,activation
+GPU,36808.121,91.136,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,36899.097,3.424,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,36902.361,39.616,Kernel2,gemm
+GPU,36941.817,2.656,triton_poi_fused_3,elementwise/copy
+GPU,36944.313,3.2,reshape_and_cache_flash_kernel,attention
+GPU,36947.545,8.224,flash_fwd_splitkv_kernel,attention
+GPU,36956.185,7.904,flash_fwd_splitkv_combine_kernel,attention
+GPU,36965.721,30.368,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,36995.961,3.136,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,37007.769,172.096,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,37179.769,1.984,triton_poi_fused_mul_silu_slice_1,activation
+GPU,37181.657,92.096,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,37273.625,3.392,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,37276.889,39.488,Kernel2,gemm
+GPU,37316.281,2.688,triton_poi_fused_3,elementwise/copy
+GPU,37318.745,3.136,reshape_and_cache_flash_kernel,attention
+GPU,37321.945,8.288,flash_fwd_splitkv_kernel,attention
+GPU,37330.681,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,37340.345,29.216,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,37369.401,3.072,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0,norm
+GPU,37378.969,170.305,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,37548.986,2.176,triton_poi_fused_mul_silu_slice_1,activation
+GPU,37551.034,93.152,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,37644.09,3.264,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,37648.73,3.04,unrolled_elementwise_kernel,elementwise/copy
+GPU,37653.306,6.016,index_elementwise_kernel,elementwise/copy
+GPU,37660.41,721.632,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,38383.066,6.144,unrolled_elementwise_kernel,elementwise/copy
+GPU,38390.266,39.936,reduce_kernel,sampling
+GPU,38431.546,2.144,unrolled_elementwise_kernel,elementwise/copy
+GPU,38465.69,1.792,vectorized_elementwise_kernel,elementwise/copy
+GPU,38499.482,4.544,index_elementwise_kernel,elementwise/copy
+GPU,38505.338,2.4,unrolled_elementwise_kernel,elementwise/copy
+GPU,38509.082,2.4,vectorized_elementwise_kernel,elementwise/copy
+GPU,38515.482,2.144,vectorized_elementwise_kernel,elementwise/copy
+GPU,38521.658,1.728,unrolled_elementwise_kernel,elementwise/copy
+GPU,38524.41,3.936,_compute_slot_mapping_kernel,other
+GPU,38532.538,1.824,unrolled_elementwise_kernel,elementwise/copy
+GPU,38538.714,4.576,triton_red_fused__to_copy_add_embedding_mean_mul_pow_rsqrt_0,norm
+GPU,38543.354,40.832,Kernel2,gemm
+NVTX,0.0,12848.629,engine_step_38,nvtx
+NVTX,12859.757,12844.85,engine_step_39,nvtx
+NVTX,25715.392,12868.358,engine_step_40,nvtx

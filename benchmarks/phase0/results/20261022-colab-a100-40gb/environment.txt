@@ -1,0 +1,19 @@
+run_id: 20261022-colab-a100-40gb
+name, driver_version, memory.total [MiB], clocks.max.sm [MHz], clocks.max.memory [MHz], power.limit [W]
+NVIDIA A100-SXM4-40GB, 580.82.07, 40960 MiB, 1410 MHz, 1215 MHz, 400.00 W
+	[4mGPU0	CPU Affinity	NUMA Affinity	GPU NUMA ID[0m
+GPU0	 X 	0-11	0		N/A
+
+Legend:
+
+RmProfilingAdminOnly: 1
+CPU(s):                                  12
+Model name:                              Intel(R) Xeon(R) CPU @ 2.20GHz
+               total        used        free      shared  buff/cache   available
+Mem:              83           2          52           0          30          81
+vllm 0.19.1 | torch 2.10.0+cu128 cuda 12.8 | transformers 5.20.2
+sglang 0.5.22 | torch 2.14.1+cu130
+flashinfer 0.7.1
+NVIDIA Nsight Systems version 2025.3.1.0
+repo: uploaded working tree
+Version 2025.3.1.0 (build 36398880) (public-release)

@@ -22,10 +22,12 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
         pid = tl.program_id(0)
         offsets = pid * BLOCK + tl.arange(0, BLOCK)
         mask = offsets < n_elements
-        gate = tl.load(gate_ptr + offsets, mask=mask, other=0.0)
-        up = tl.load(up_ptr + offsets, mask=mask, other=0.0)
+        # Compute in fp32: tl.exp rejects bf16/fp16 inputs, and torch's SiLU
+        # also upcasts internally before rounding back.
+        gate = tl.load(gate_ptr + offsets, mask=mask, other=0.0).to(tl.float32)
+        up = tl.load(up_ptr + offsets, mask=mask, other=0.0).to(tl.float32)
         out = gate / (1.0 + tl.exp(-gate)) * up
-        tl.store(out_ptr + offsets, out, mask=mask)
+        tl.store(out_ptr + offsets, out.to(out_ptr.dtype.element_ty), mask=mask)
 
 
 def silu_mul_reference(gate: torch.Tensor, up: torch.Tensor) -> torch.Tensor:
