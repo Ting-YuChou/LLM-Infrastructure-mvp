@@ -1,0 +1,14 @@
+{
+  "engine": "vllm",
+  "cuda_graphs": true,
+  "batch": 16,
+  "input_len": 1024,
+  "output_len": 256,
+  "prefill_steps": 2,
+  "prefill_s": 0.04117623399997683,
+  "decode_steps": 254,
+  "decode_ms_per_step": 14.832379216554763,
+  "decode_ms_p50": 14.879003999340057,
+  "decode_tok_per_s": 1078.7210714072107,
+  "profiled_decode_ms_per_step": 14.835254611770162
+}

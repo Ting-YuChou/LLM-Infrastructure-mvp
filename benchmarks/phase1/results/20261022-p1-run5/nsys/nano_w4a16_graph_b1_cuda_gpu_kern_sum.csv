@@ -1,0 +1,11 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+74.8,300988633,8064,37325.0,34368.0,15648,65889,19804.1,"void <unnamed>::gemv_w4a16_kernel<__nv_bfloat16, (int)1, (int)4>(const T1 *, const unsigned int *, const T1 *, T1 *, int, int, int)"
+11.2,44928115,63,713144.7,713093.0,709189,718373,2171.7,_gemv_kernel
+5.4,21853467,2016,10840.0,11008.0,10016,11521,375.0,_paged_decode_split_kernel
+2.9,11814005,4032,2930.1,2912.0,2432,3552,214.8,_fused_add_rms_norm_kernel
+1.6,6451907,2016,3200.4,3264.0,2656,3520,139.2,_rope_cache_write_kernel
+1.6,6242649,2016,3096.6,3168.0,2816,3265,121.2,_paged_decode_reduce_kernel
+1.2,4732095,2016,2347.3,2368.0,2144,2720,101.6,_silu_and_mul_kernel
+0.9,3556444,63,56451.5,56769.0,53088,59712,1685.4,"void at::native::reduce_kernel<(int)512, (int)1, at::native::ReduceOp<c10::BFloat16, at::native::ArgMaxOps<float>, unsigned int, long, (int)4, (int)4>>(T3)"
+0.4,1660860,315,5272.6,4832.0,2752,10623,2038.1,"void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)2>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)"
+0.0,164157,63,2605.7,2624.0,2336,2944,111.8,_rms_norm_kernel

@@ -1,0 +1,11 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+80.9,737262673,8127,90717.7,91008.0,28832,736581,80856.4,_gemv_kernel
+13.2,120615247,2016,59829.0,59840.0,57216,62944,901.6,_paged_decode_split_kernel
+1.7,15874217,6048,2624.7,2656.0,2176,3264,196.4,_gemv_reduce_kernel
+1.2,11250792,4032,2790.4,2784.0,2496,3072,79.9,_fused_add_rms_norm_kernel
+1.1,9611103,2016,4767.4,4768.0,4608,5088,65.8,_paged_decode_reduce_kernel
+0.7,6457286,2016,3203.0,3200.0,3040,3744,94.0,_rope_cache_write_kernel
+0.6,5773769,2016,2864.0,2848.0,2688,3232,70.4,_silu_and_mul_kernel
+0.4,3516830,63,55822.7,55809.0,54816,56896,430.3,"void at::native::reduce_kernel<(int)512, (int)1, at::native::ReduceOp<c10::BFloat16, at::native::ArgMaxOps<float>, unsigned int, long, (int)4, (int)4>>(T3)"
+0.1,739139,315,2346.5,2240.0,1952,2752,209.5,"void at::native::vectorized_gather_kernel<(int)16, long>(char *, char *, T2 *, int, long, long, long, long, bool)"
+0.0,162305,63,2576.3,2624.0,2272,2912,173.3,_rms_norm_kernel

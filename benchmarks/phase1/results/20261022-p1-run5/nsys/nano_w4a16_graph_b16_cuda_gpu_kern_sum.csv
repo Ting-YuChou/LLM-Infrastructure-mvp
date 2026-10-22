@@ -1,0 +1,13 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+61.1,340002928,8064,42163.1,35568.0,16288,82336,24635.6,"void <unnamed>::gemm_w4a16_mma_kernel<__nv_bfloat16, (int)1, (int)4>(const T1 *, const unsigned int *, const T1 *, T1 *, float *, int, int, int, int)"
+20.3,112765182,2016,55935.1,55936.0,53600,59840,1021.8,_paged_decode_split_kernel
+8.3,46305841,63,735013.3,734821.0,731013,739461,1838.0,_gemv_kernel
+2.1,11448043,6048,1892.9,1888.0,1760,2496,83.0,"void <unnamed>::cast_workspace_kernel<__nv_bfloat16>(const float *, T1 *, long)"
+2.0,11322233,4032,2808.1,2816.0,2592,3072,67.7,_fused_add_rms_norm_kernel
+1.7,9404022,2016,4664.7,4672.0,4448,4897,51.5,_paged_decode_reduce_kernel
+1.6,8693563,6048,1437.4,1440.0,1344,1856,52.1,"void at::native::vectorized_elementwise_kernel<(int)4, at::native::FillFunctor<float>, std::array<char *, (unsigned long)1>>(int, T2, T3)"
+1.2,6479642,2016,3214.1,3200.0,2976,3456,71.7,_rope_cache_write_kernel
+1.0,5650568,2016,2802.9,2784.0,2496,3104,70.9,_silu_and_mul_kernel
+0.6,3468181,63,55050.5,55008.0,54240,56448,419.3,"void at::native::reduce_kernel<(int)512, (int)1, at::native::ReduceOp<c10::BFloat16, at::native::ArgMaxOps<float>, unsigned int, long, (int)4, (int)4>>(T3)"
+0.1,748154,315,2375.1,2240.0,1920,2848,223.3,"void at::native::vectorized_gather_kernel<(int)16, long>(char *, char *, T2 *, int, long, long, long, long, bool)"
+0.0,150306,63,2385.8,2368.0,2240,2752,114.6,_rms_norm_kernel
