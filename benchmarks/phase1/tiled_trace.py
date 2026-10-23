@@ -16,8 +16,10 @@ as decode does, and the trace build runs --runs times. Each run is split into:
   critical path the last block's time from the first entry, by segment
 
 Clocks are converted with the median cycles-per-ns over all blocks, since
-globaltimer may tick in microseconds. Writes trace.json, trace.md and a
-Gantt chart of one run per shape (gantt_<layer>_M<m>.png).
+globaltimer ticks every ~1 µs on an A100. The launches go back to back after
+a warm-up, with one sync at the end: a host round trip after each launch let
+the SM clock drop to ~1.08 GHz (run down-d1). Writes trace.json, trace.md and
+a Gantt chart of one run per shape (gantt_<layer>_M<m>.png).
 
   python tiled_trace.py --out results/trace
   python tiled_trace.py --out d --shapes down --rows 1,16 --runs 20
@@ -105,10 +107,11 @@ def analyze_run(rows: list[list[int]], schedule: dict, k_tiles: int, rate: float
     median = lambda xs: statistics.median(xs) if xs else 0.0  # noqa: E731
     mid = [f for b in blocks for f in b["finishes"] if not f["final"]]
     final = [f for b in blocks for f in b["finishes"] if f["final"]]
+    full = [row for row, (begin, end) in zip(rows, schedule["ranges"]) if end - begin == schedule["iters"]]
     return {
         "kernel": max(row[GT_EXIT] for row in rows) - t0,
         "launch_skew": max(row[GT_ENTRY] for row in rows) - t0,
-        "end_skew": max(row[GT_EXIT] for row in rows) - min(row[GT_EXIT] for row in rows),
+        "end_skew": max(row[GT_EXIT] for row in full) - min(row[GT_EXIT] for row in full),  # full stripes
         "prologue": median([b["prologue"] for b in blocks]),
         "per_tile": median([b["per_tile"] for b in blocks]),
         "finish_mid": median([f["total"] for f in mid]),
@@ -141,6 +144,15 @@ def summarize(runs: list[dict]) -> dict:
         else:
             out[key] = statistics.median(r[key] for r in runs)
     return out
+
+
+def globaltimer_tick(runs: list[list[list[int]]]) -> int:
+    """The smallest step between distinct globaltimer stamps of one launch."""
+    steps = []
+    for rows in runs:
+        stamps = sorted({row[GT_ENTRY] for row in rows} | {row[GT_EXIT] for row in rows})
+        steps += [b - a for a, b in zip(stamps, stamps[1:])]
+    return min(steps, default=0)
 
 
 def tile_dram_ns(rows: int, tile_k: int, tile_n: int, blocks: int, copy_gbps: float) -> float:
@@ -198,24 +210,32 @@ def trace_shape(layer: str, n: int, k: int, rows: int, runs: int, copy_gbps: flo
     x = torch.randn(rows, k, device="cuda", dtype=torch.bfloat16)
     tile_k, tile_n, grid = tiled_launch_config(rows, n, k, W4A16_CONFIG, _sm_count(x.device))
     schedule = tiled_schedule(n, k, tile_k, tile_n, grid)
-    traces = []
+    for _ in range(20):  # warm-up at full load, so the SM clock is up
+        for weight in weights:
+            w4a16_linear(x, weight)
+    pending = []
     for run in range(runs):
         target = run % copies
         for c in range(copies):  # every other copy, so the target's weight has left L2
             if c != target:
                 w4a16_linear(x, weights[c])
-        _, trace = w4a16_tiled_trace(x, weights[target])
-        traces.append(trace.cpu().tolist())
+        pending.append(w4a16_tiled_trace(x, weights[target])[1])
+    traces = [trace.cpu().tolist() for trace in pending]  # the one sync
     k_tiles = k // tile_k
     rate = clock_rate(traces)
+    rates = sorted(
+        statistics.median(
+            (row[CLK_EXIT] - row[CLK_ENTRY]) / (row[GT_EXIT] - row[GT_ENTRY]) for row in t if row[GT_EXIT] > row[GT_ENTRY]
+        )
+        for t in traces
+    )
     analyzed = [analyze_run(t, schedule, k_tiles, rate) for t in traces]
     result = {
         "layer": layer, "N": n, "K": k, "M": rows, "tile": f"{tile_k}x{tile_n}",
         "blocks": len(schedule["ranges"]), "iters": schedule["iters"], "copies": copies, "runs": runs,
         "cycles_per_ns": rate,
-        "globaltimer_tick_ns": min(
-            (d for t in traces for row in t for d in [row[GT_EXIT] - row[GT_ENTRY]] if d > 0), default=0
-        ),
+        "cycles_per_ns_runs": [rates[0], rates[-1]],  # slowest and fastest run
+        "globaltimer_tick_ns": globaltimer_tick(traces),
         "tile_dram_ns": tile_dram_ns(rows, tile_k, tile_n, len(schedule["ranges"]), copy_gbps),
         "median": summarize(analyzed),
     }
@@ -231,7 +251,7 @@ def markdown(results: list[dict]) -> str:
         "# gemm_w4a16_tiled trace (cold weights, medians over runs, µs)",
         "",
         "| shape | tile, blocks × tiles | kernel | launch skew | prologue | per tile / DRAM share | "
-        "slice end mid / final (last block) | end skew | critical block: start + prologue + tiles + ends + exit |",
+        "slice end mid / final (last block) | end skew (full stripes) | critical block: start + prologue + tiles + ends + exit |",
         "|---|---|---:|---:|---:|---:|---:|---:|---|",
     ]
     for r in results:
@@ -246,14 +266,14 @@ def markdown(results: list[dict]) -> str:
         "",
         "Slice ends split (median µs): warps summed / counter bumped (slot stored, fenced) / last block's slot sum.",
         "",
-        "| shape | sum warps | handoff | last block's sum | globaltimer tick |",
-        "|---|---:|---:|---:|---:|",
+        "| shape | sum warps | handoff | last block's sum | SM GHz (runs) | globaltimer tick |",
+        "|---|---:|---:|---:|---:|---:|",
     ]
     for r in results:
-        m = r["median"]
+        m, (slow, fast) = r["median"], r["cycles_per_ns_runs"]
         lines.append(
             f"| {r['layer']} M={r['M']} | {us(m['sum_warps'])} | {us(m['handoff'])} | {us(m['last_tail'])} | "
-            f"{r['globaltimer_tick_ns']} ns |"
+            f"{slow:.2f}–{fast:.2f} | {r['globaltimer_tick_ns']} ns |"
         )
     return "\n".join(lines) + "\n"
 
