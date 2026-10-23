@@ -14,10 +14,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 from serving.nano_vllm.kernels import w4a16 as w4a16_mod  # noqa: E402
 from serving.nano_vllm.kernels.cuda_ext import load_cuda_extension  # noqa: E402
 from serving.nano_vllm.kernels.w4a16 import (  # noqa: E402
+    W4A16_TILED_TILES,
     dequantize_w4a16,
     quantize_w4a16,
     unpack_w4a16,
     w4a16_linear,
+    w4a16_row_scales,
 )
 
 # Llama 3.1 8B projections (out_features, in_features) plus a row count that
@@ -30,9 +32,19 @@ SHAPES = {
 }
 
 
-def _weight(n, k, dtype, group_size=128):
+# The tiled kernel needs N % 128 == 0; n384 only fits TILE_N 128.
+TILED_SHAPES = {
+    "qkv": (6144, 4096),
+    "o_proj": (4096, 4096),
+    "gate_up": (28672, 4096),
+    "down": (4096, 14336),
+    "n384": (384, 1024),
+}
+
+
+def _weight(n, k, dtype, group_size=128, layout="rows"):
     w = (torch.randn(n, k, device="cuda") / k**0.5).to(dtype)
-    return quantize_w4a16(w, group_size=group_size)
+    return quantize_w4a16(w, group_size=group_size, layout=layout)
 
 
 def _reference(x, weight):
@@ -43,7 +55,7 @@ def dequantize_w4a16_torch(weight):
     n, k = weight.shape
     q = unpack_w4a16(weight.qweight).float() - 8
     g = weight.group_size
-    return (q.view(n, k // g, g) * weight.scales.float().unsqueeze(-1)).view(n, k)
+    return (q.view(n, k // g, g) * w4a16_row_scales(weight).float().unsqueeze(-1)).view(n, k)
 
 
 def test_w4a16_extension_builds():
@@ -136,6 +148,85 @@ def test_kernels_are_captured_by_a_cuda_graph(kernel, rows):
     weight = _weight(4096, 4096, torch.bfloat16)
     x = torch.randn(rows, 4096, device="cuda").to(torch.bfloat16)
     config = {"kernel": kernel}
+    w4a16_linear(x, weight, config=config)  # warm-up outside the capture
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        out = w4a16_linear(x, weight, config=config)
+    x.copy_(torch.randn_like(x))
+    graph.replay()
+    torch.testing.assert_close(out.float(), _reference(x, weight), rtol=1.6e-2, atol=1.6e-2)
+
+
+# --- gemm_w4a16_tiled (tiled layout) ----------------------------------------
+
+
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
+def test_tiled_dequantize_kernel_matches_the_row_kernel_bit_for_bit(dtype):
+    w = (torch.randn(384, 1024, device="cuda") / 32).to(dtype)
+    rows, tiled = quantize_w4a16(w), quantize_w4a16(w, layout="tiled")
+    assert torch.equal(dequantize_w4a16(tiled), dequantize_w4a16(rows))
+    assert torch.equal(dequantize_w4a16(tiled), dequantize_w4a16_torch(rows).to(dtype))
+
+
+@pytest.mark.parametrize("rows", [1, 2, 7, 16, 17, 33, 48, 64, 65, 130])
+@pytest.mark.parametrize("shape", TILED_SHAPES.values(), ids=TILED_SHAPES)
+def test_tiled_kernel_matches_dequantized_matmul(shape, rows):
+    weight = _weight(*shape, torch.bfloat16, layout="tiled")
+    x = torch.randn(rows, shape[1], device="cuda").to(torch.bfloat16)
+    _check(x, weight, tiled_max_rows=256)  # 65 and 130 rows: several 64-row launches
+
+
+@pytest.mark.parametrize("grid", ["one_block_per_slice", 1, 3, 7, 0])
+@pytest.mark.parametrize(
+    "rows,tile", [(5, "128x128"), (5, "64x256"), (20, "128x128"), (40, "64x256"), (40, "64x128"), (64, "64x256")]
+)
+def test_tiled_kernel_schedules_and_tiles(rows, tile, grid):
+    """grid = slices gives each block one slice (no cross-block sum, the
+    layout alone); 1, 3, 7 and the default make stripes that cross slices
+    and slices shared by several blocks."""
+    n, k = 1024, 2048
+    if grid == "one_block_per_slice":
+        grid = n // W4A16_TILED_TILES[tile][1]
+    weight = _weight(n, k, torch.bfloat16, layout="tiled")
+    x = torch.randn(rows, k, device="cuda").to(torch.bfloat16)
+    _check(x, weight, tiled_tile=tile, tiled_grid=grid)
+
+
+@pytest.mark.parametrize("rows", [3, 40])
+def test_tiled_kernel_in_fp16(rows):
+    weight = _weight(1024, 2048, torch.float16, layout="tiled")
+    x = torch.randn(rows, 2048, device="cuda").to(torch.float16)
+    _check(x, weight)
+    _check(x, weight, tiled_grid=5)
+
+
+def test_tiled_kernel_is_deterministic_and_leaves_the_buffers_zeroed():
+    """The slots are summed in block order, so repeated calls agree bit for
+    bit; the counters return to zero and the row kernels' workspace is never
+    touched."""
+    weight = _weight(4096, 14336, torch.bfloat16, layout="tiled")
+    for rows in (1, 16, 64):
+        x = torch.randn(rows, 14336, device="cuda").to(torch.bfloat16)
+        outs = [w4a16_linear(x, weight) for _ in range(3)]
+        assert all(torch.equal(outs[0], out) for out in outs[1:])
+    workspace, counters = w4a16_mod.w4a16_workspace(x.device, 4096)
+    torch.cuda.synchronize()
+    assert not workspace.any() and not counters.any()
+
+
+def test_tiled_large_batches_dequantize_and_call_f_linear():
+    rows = w4a16_mod.W4A16_CONFIG["tiled_max_rows"] + 1
+    weight = _weight(256, 512, torch.bfloat16, layout="tiled")
+    x = torch.randn(rows, 512, device="cuda").to(torch.bfloat16)
+    expected = torch.nn.functional.linear(x, dequantize_w4a16(weight))
+    assert torch.equal(w4a16_linear(x, weight), expected)
+
+
+@pytest.mark.parametrize("rows", [4, 40, 100])
+def test_tiled_kernel_is_captured_by_a_cuda_graph(rows):
+    weight = _weight(4096, 4096, torch.bfloat16, layout="tiled")
+    x = torch.randn(rows, 4096, device="cuda").to(torch.bfloat16)
+    config = {"tiled_max_rows": 128}
     w4a16_linear(x, weight, config=config)  # warm-up outside the capture
     graph = torch.cuda.CUDAGraph()
     with torch.cuda.graph(graph):

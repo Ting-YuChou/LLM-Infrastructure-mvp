@@ -81,12 +81,16 @@ def _generate(
 
 
 @pytest.mark.parametrize(
-    "scheduling,weight_quant", [("mixed", "none"), ("prefill_first", "none"), ("mixed", "w4a16")]
+    "scheduling,weight_quant,layout",
+    [("mixed", "none", "rows"), ("prefill_first", "none", "rows"), ("mixed", "w4a16", "rows"),
+     ("mixed", "w4a16", "tiled")],
 )
-def test_async_scheduling_matches_sync(scheduling, weight_quant, monkeypatch):
-    # Split-K W4A16 merges its splits with atomics, whose order varies from
-    # run to run; one split keeps the kernels bitwise reproducible.
+def test_async_scheduling_matches_sync(scheduling, weight_quant, layout, monkeypatch):
+    # Split-K W4A16 (row layout) merges its splits with atomics, whose order
+    # varies from run to run; one split keeps those kernels bitwise
+    # reproducible. The tiled kernel sums its partials in a fixed order.
     monkeypatch.setitem(w4a16.W4A16_CONFIG, "splits", 1)
+    monkeypatch.setitem(w4a16.W4A16_CONFIG, "layout", layout)
     settings = dict(scheduling=scheduling, weight_quant=weight_quant, late_request=True)
     expected = _generate(False, graphs=True, **settings)
     assert all(len(t) == 40 for t in expected)

@@ -72,20 +72,28 @@ def _random_weights(config):
 
 def _model(
     device, dtype, use_triton, attention_backend="torch", linear_backend="torch", weight_quant="none",
-    kv_cache_dtype="auto",
+    kv_cache_dtype="auto", w4a16_layout=None,
 ):
-    return NanoLlamaForCausalLM(
-        config=CONFIG,
-        weights=_random_weights(CONFIG),
-        device=torch.device(device),
-        dtype=dtype,
-        use_triton=use_triton,
-        attention_backend=attention_backend,
-        max_model_len=128,
-        linear_backend=linear_backend,
-        weight_quant=weight_quant,
-        kv_cache_dtype=kv_cache_dtype,
-    )
+    """``w4a16_layout`` overrides W4A16_CONFIG["layout"] while the weights are quantized."""
+    from serving.nano_vllm.kernels import w4a16
+
+    layout = w4a16.W4A16_CONFIG["layout"]
+    w4a16.W4A16_CONFIG["layout"] = w4a16_layout or layout
+    try:
+        return NanoLlamaForCausalLM(
+            config=CONFIG,
+            weights=_random_weights(CONFIG),
+            device=torch.device(device),
+            dtype=dtype,
+            use_triton=use_triton,
+            attention_backend=attention_backend,
+            max_model_len=128,
+            linear_backend=linear_backend,
+            weight_quant=weight_quant,
+            kv_cache_dtype=kv_cache_dtype,
+        )
+    finally:
+        w4a16.W4A16_CONFIG["layout"] = layout
 
 
 def _tables():
@@ -287,15 +295,18 @@ def test_fp8_kv_cache_tracks_the_full_precision_cache():
         assert cosine.min() > 0.995, cosine
 
 
-def test_w4a16_model_tracks_fp32_with_the_same_dequantized_weights():
+@pytest.mark.parametrize("layout", ["rows", "tiled"])
+def test_w4a16_model_tracks_fp32_with_the_same_dequantized_weights(layout):
     """bf16 + Triton + the W4A16 kernels vs fp32 F.linear on the dequantized weights."""
     import dataclasses
 
     from serving.nano_vllm.kernels import dequantize_w4a16
 
     quantized = _model(
-        "cuda", torch.bfloat16, use_triton=True, attention_backend="triton", weight_quant="w4a16"
+        "cuda", torch.bfloat16, use_triton=True, attention_backend="triton", weight_quant="w4a16",
+        w4a16_layout=layout,
     )
+    assert all(getattr(quantized.layers[0], name).layout == layout for name in ("qkv", "o_proj", "gate_up", "down"))
     reference = _model("cuda", torch.float32, use_triton=False)
     reference.layers = [
         dataclasses.replace(

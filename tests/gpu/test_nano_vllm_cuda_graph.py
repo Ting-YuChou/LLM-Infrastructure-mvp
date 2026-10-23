@@ -24,9 +24,11 @@ PROMPT_LENS = [17, 30, 5, 64, 33, 1, 47, 16]
 
 
 def _runner(attention_backend, max_graph_batch, weight_quant="none", kv_cache_dtype="auto"):
+    # "w4a16_tiled": W4A16 weights in the tiled layout (gemm_w4a16_tiled).
+    layout = "tiled" if weight_quant == "w4a16_tiled" else None
     model = _model(
         "cuda", torch.bfloat16, use_triton=True, attention_backend=attention_backend,
-        weight_quant=weight_quant, kv_cache_dtype=kv_cache_dtype,
+        weight_quant="w4a16" if layout else weight_quant, kv_cache_dtype=kv_cache_dtype, w4a16_layout=layout,
     )
     Sequence.block_size = BLOCK_SIZE
     cache = model.new_paged_cache(num_blocks=96, block_size=BLOCK_SIZE)
@@ -45,6 +47,7 @@ def _runner(attention_backend, max_graph_batch, weight_quant="none", kv_cache_dt
         ("triton", 3, 2, "none", "auto"),
         ("torch", 3, 8, "none", "auto"),
         ("triton", 3, 8, "w4a16", "auto"),
+        ("triton", 3, 8, "w4a16_tiled", "auto"),
         ("triton", 3, 8, "none", "fp8"),
     ],
 )
@@ -77,7 +80,13 @@ def test_graph_replay_matches_eager(attention_backend, batch, max_graph_batch, w
 
 @pytest.mark.parametrize(
     "attention_backend,weight_quant,kv_cache_dtype",
-    [("triton", "none", "auto"), ("torch", "none", "auto"), ("triton", "w4a16", "auto"), ("triton", "none", "fp8")],
+    [
+        ("triton", "none", "auto"),
+        ("torch", "none", "auto"),
+        ("triton", "w4a16", "auto"),
+        ("triton", "w4a16_tiled", "auto"),
+        ("triton", "none", "fp8"),
+    ],
 )
 def test_piecewise_replay_matches_eager(attention_backend, weight_quant, kv_cache_dtype):
     """Prefill, mixed, chunked-prefill and large decode steps in piecewise graphs.
