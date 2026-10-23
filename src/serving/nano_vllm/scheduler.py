@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import suppress
 from collections import deque
+from dataclasses import dataclass
 from typing import Optional
 
 from .block_manager import BlockManager
@@ -11,6 +12,16 @@ from .sequence import Sequence, SequenceStatus
 
 
 SCHEDULING_POLICIES = ("prefill_first", "mixed")
+
+
+@dataclass
+class Row:
+    """One sequence's part of a launched step."""
+
+    seq: Sequence
+    samples: bool  # the step samples a token for it (decode, or the last prompt chunk)
+    num_computed_tokens: int  # KV computed once the step finishes
+    epoch: int  # the block table it wrote into (see Sequence.epoch)
 
 
 class Scheduler:
@@ -82,25 +93,46 @@ class Scheduler:
     def postprocess(
         self, seqs: list[Sequence], token_ids: list[int], is_prefill: bool = False
     ) -> list[tuple[Sequence, int]]:
-        """Apply a finished model step; return the tokens actually appended.
-
-        A prefill chunk that leaves prompt tokens unprocessed samples a logit
-        that is meaningless, so it appends (and returns) nothing.
-        """
+        """Apply a finished model step; return the tokens actually appended."""
         del is_prefill  # each row knows from its own counters
+        return self.complete(self.launched(seqs), token_ids)
+
+    def launched(self, seqs: list[Sequence]) -> list[Row]:
+        """Advance the scheduled sequences as their step launches.
+
+        The KV of the scheduled tokens counts as computed from now on (later
+        steps on the same stream see it), and a sampled token is in flight
+        until :meth:`complete` brings its value.
+        """
+        rows = []
+        for seq in seqs:
+            end = seq.num_cached_tokens + seq.num_scheduled_tokens
+            # A prefill chunk that leaves prompt tokens unprocessed samples
+            # a meaningless logit.
+            samples = end >= seq.num_tokens
+            seq.num_cached_tokens = end
+            seq.num_scheduled_tokens = 0
+            if samples:
+                seq.num_inflight += 1
+            rows.append(Row(seq, samples, end, seq.epoch))
+        return rows
+
+    def complete(self, rows: list[Row], token_ids: list[int]) -> list[tuple[Sequence, int]]:
+        """Apply a finished step's sampled tokens; return the ones appended."""
         emitted: list[tuple[Sequence, int]] = []
-        for seq, token_id in zip(seqs, token_ids):
+        for row, token_id in zip(rows, token_ids):
+            seq = row.seq
             if seq.is_finished:
-                # Aborted while its batch was running: release it now.
+                # Finished or aborted while its step was running: release it.
                 self.abort(seq)
                 continue
-            self.block_manager.commit(seq)
-            seq.num_cached_tokens += seq.num_scheduled_tokens
-            seq.num_scheduled_tokens = 0
-
-            if seq.num_cached_tokens < seq.num_tokens:  # a prefill chunk, not the last
+            if row.epoch == seq.epoch:  # still the blocks this step wrote
+                self.block_manager.commit(seq, row.num_computed_tokens)
+            if not row.samples:
                 continue
-
+            # A preempted sequence keeps the token: the step that sampled it
+            # read valid KV, and the recompute prefills it with the rest.
+            seq.num_inflight -= 1
             seq.append_token(token_id)
             emitted.append((seq, token_id))
             if seq.should_finish(token_id):
@@ -108,6 +140,8 @@ class Scheduler:
                 self.block_manager.deallocate(seq)
                 with suppress(ValueError):
                     self.running.remove(seq)
+                with suppress(ValueError):
+                    self.waiting.remove(seq)
         return emitted
 
     def preempt(self, seq: Sequence) -> None:
@@ -140,8 +174,13 @@ class Scheduler:
         seq_budget = self.max_num_seqs if seq_budget is None else seq_budget
         scheduled: list[Sequence] = []
         num_batched_tokens = 0
-        while self.waiting and len(scheduled) < seq_budget:
-            seq = self.waiting[0]
+        for seq in list(self.waiting):
+            if len(scheduled) >= seq_budget:
+                break
+            if seq.num_inflight:
+                # Preempted with a token still in flight: it can prefill once
+                # that token's value is known.
+                continue
             remaining = token_budget - num_batched_tokens
             if remaining <= 0:
                 break
@@ -170,7 +209,7 @@ class Scheduler:
             num_batched_tokens += seq.num_scheduled_tokens
             if seq.num_cached_tokens + seq.num_scheduled_tokens == seq.num_tokens:
                 seq.status = SequenceStatus.RUNNING
-                self.waiting.popleft()
+                self.waiting.remove(seq)
                 self.running.append(seq)
             scheduled.append(seq)
         return scheduled
@@ -182,11 +221,17 @@ class Scheduler:
         sequences skipped this step sit at the front and go first next step.
         """
         scheduled: list[Sequence] = []
+        done: list[Sequence] = []
         budget = min(self.max_num_seqs, self.max_num_batched_tokens)
         current: Optional[Sequence] = None
         try:
             while self.running and len(scheduled) < budget:
                 seq = current = self.running.popleft()
+                if seq.num_completion_tokens + seq.num_inflight >= seq.sampling.max_tokens:
+                    # Its last token is in flight; it finishes when it lands.
+                    done.append(seq)
+                    current = None
+                    continue
                 while not self.block_manager.can_append(seq):
                     # Free a partly prefilled request's blocks first (it has
                     # produced nothing yet and stays queued), else preempt the
@@ -215,5 +260,6 @@ class Scheduler:
             # engine can still find (and fail) them.
             if current is not None:
                 self.running.appendleft(current)
+            self.running.extendleft(reversed(done))
             self.running.extend(scheduled)
         return scheduled

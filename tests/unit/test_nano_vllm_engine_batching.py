@@ -467,8 +467,9 @@ def test_cancelled_consumer_aborts_sequence_and_frees_kv_blocks():
     _assert_all_blocks_free(engine)
 
 
+@pytest.mark.parametrize("async_scheduling", [False, True])
 @pytest.mark.parametrize("scheduling", ["mixed", "prefill_first"])
-def test_paged_engine_matches_transformers_greedy_decode(tmp_path, scheduling):
+def test_paged_engine_matches_transformers_greedy_decode(tmp_path, scheduling, async_scheduling):
     from transformers import LlamaConfig, LlamaForCausalLM
 
     from serving.nano_vllm.model import NanoLlamaForCausalLM
@@ -519,6 +520,7 @@ def test_paged_engine_matches_transformers_greedy_decode(tmp_path, scheduling):
             max_num_batched_tokens=6,  # forces chunked prefill
             enable_prefix_cache=True,
             scheduling=scheduling,
+            async_scheduling=async_scheduling,
         )
         sampling = SamplingOptions(max_tokens=8, **GREEDY)
         try:
@@ -548,3 +550,86 @@ def test_kv_cache_size_zero_means_auto_and_cpu_gets_the_default():
     engine = _engine(FakeTokenizer(), FakePagedModel(), num_kvcache_blocks=0)
     assert engine.block_manager.num_blocks == CPU_KV_BLOCKS
     assert engine.config.num_kvcache_blocks == CPU_KV_BLOCKS
+
+
+
+def _run_prompts(model_factory, prompts, sampling, **overrides):
+    async def scenario():
+        engine = _engine(ListTokenizer(prompts), model_factory(), **overrides)
+        try:
+            results = await asyncio.gather(
+                *(engine.generate_async(name, sampling) for name in prompts)
+            )
+        finally:
+            await engine.shutdown()
+        return engine, results
+
+    return asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("scheduling", ["mixed", "prefill_first"])
+def test_async_scheduling_matches_sync_through_preemption(scheduling):
+    # 8 blocks of 4 slots for 4 requests growing to 24 tokens: decodes must
+    # preempt, and the async run has a token in flight when they do.
+    prompts = {name: [10 * i + 1 + j for j in range(6)] for i, name in enumerate("abcd")}
+    sampling = SamplingOptions(max_tokens=18, **GREEDY)
+    settings = dict(num_kvcache_blocks=8, max_num_batched_tokens=8, scheduling=scheduling)
+    _, sync = _run_prompts(successor_model, prompts, sampling, **settings)
+    engine, overlapped = _run_prompts(
+        successor_model, prompts, sampling, async_scheduling=True, **settings
+    )
+
+    assert [r.token_ids for r in overlapped] == [r.token_ids for r in sync]
+    assert all(len(r.token_ids) == 18 and r.finish_reason == "length" for r in overlapped)
+    _assert_all_blocks_free(engine)
+
+
+def test_async_scheduling_stops_on_eos_and_max_tokens_like_sync():
+    # Request "e" hits EOS (the tokenizer's id 99) after 4 tokens, "m" runs to max_tokens.
+    prompts = {"e": [95], "m": [10, 11, 12]}
+
+    class EosListTokenizer(ListTokenizer):
+        eos_token_id = 99
+
+    results = []
+    for overlap in (False, True):
+        async def scenario():
+            engine = _engine(EosListTokenizer(prompts), successor_model(), async_scheduling=overlap)
+            try:
+                outs = await asyncio.gather(
+                    *(engine.generate_async(n, SamplingOptions(max_tokens=7, **GREEDY)) for n in prompts)
+                )
+            finally:
+                await engine.shutdown()
+            return engine, outs
+
+        engine, outs = asyncio.run(scenario())
+        _assert_all_blocks_free(engine)
+        results.append([(r.token_ids, r.finish_reason) for r in outs])
+
+    assert results[0] == results[1]
+    assert results[1] == [([96, 97, 98, 99], "stop"), ([13, 14, 15, 16, 17, 18, 19], "length")]
+
+
+def test_async_scheduling_aborts_and_stop_strings_free_every_block():
+    prompt = "ab"
+    script = b"hello STOP world, this would keep going for a long while"
+
+    async def scenario():
+        engine = _engine(ByteTokenizer(), script_model(script, len(prompt)), async_scheduling=True)
+        try:
+            seq = engine.prepare_request(prompt, SamplingOptions(max_tokens=32, stop=["STOP"], **GREEDY))
+            outputs = await _collect(engine, seq)
+            other = engine.prepare_request(prompt, SamplingOptions(max_tokens=30, **GREEDY))
+            stream = engine.stream_request(other)
+            await stream.__anext__()
+            await stream.aclose()
+            await _wait_for(lambda: not engine.core.has_work())
+        finally:
+            await engine.shutdown()
+        return engine, outputs
+
+    engine, outputs = asyncio.run(scenario())
+    assert "".join(o.text for o in outputs) == "hello "
+    assert outputs[-1].finish_reason == "stop"
+    _assert_all_blocks_free(engine)

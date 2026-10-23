@@ -113,18 +113,28 @@ def _drive(core, num_requests: int, records: list, profile: bool) -> dict:
 
 def run_paged(engine: NanoLlamaEngine, prompts: list[list[int]], output_len: int, profile: bool) -> dict:
     core = engine.core
+    runner = core.model_runner
     records: list[dict] = []
-    original = core.run_batch
+    launch, collect = runner.launch, runner.collect
+    by_handle: dict[int, dict] = {}
 
-    def recorded(seqs, is_prefill):
+    # model_s: launching a step plus waiting for it (with async scheduling the
+    # wait overlaps the next step's launch, so it is no longer a model time).
+    def timed_launch(seqs, is_prefill, gather_rows=None):
         t0 = time.perf_counter()
-        token_ids = original(seqs, is_prefill)
-        records.append(
-            {"prefill": is_prefill, "seqs": len(seqs), "model_s": time.perf_counter() - t0}
-        )
+        handle = launch(seqs, is_prefill, gather_rows)
+        record = {"prefill": is_prefill, "seqs": len(seqs), "model_s": time.perf_counter() - t0}
+        records.append(record)
+        by_handle[id(handle)] = record
+        return handle
+
+    def timed_collect(handle):
+        t0 = time.perf_counter()
+        token_ids = collect(handle)
+        by_handle.pop(id(handle))["model_s"] += time.perf_counter() - t0
         return token_ids
 
-    core.run_batch = recorded
+    runner.launch, runner.collect = timed_launch, timed_collect
     sampling = SamplingOptions(max_tokens=output_len, temperature=0.0, ignore_eos=True)
     for prompt in prompts:
         core.add_request(
@@ -133,7 +143,7 @@ def run_paged(engine: NanoLlamaEngine, prompts: list[list[int]], output_len: int
     try:
         produced = _drive(core, len(prompts), records, profile)
     finally:
-        core.run_batch = original
+        runner.launch, runner.collect = launch, collect
     counts = set(produced.values())
     assert len(produced) == len(prompts) and counts == {output_len}, (
         f"expected {output_len} tokens per sequence, got {counts}"
@@ -188,6 +198,10 @@ def main() -> None:
     parser.add_argument(
         "--enforce-eager", action="store_true", help="no decode CUDA graphs (paged path)"
     )
+    parser.add_argument(
+        "--async-scheduling", action="store_true",
+        help="launch step N+1 before collecting step N (paged path)",
+    )
     args = parser.parse_args()
 
     runs = [tuple(r.split(":")) for r in args.runs.split(",")]
@@ -204,6 +218,7 @@ def main() -> None:
         max_num_batched_tokens=max(4096, max_len),
         # Phase 0/1 methodology: all prompts prefill, then the batch decodes.
         scheduling="prefill_first",
+        async_scheduling=args.async_scheduling,
         attention_backend=args.attention_backend,
         linear_backend=args.linear_backend,
         weight_quant=args.weight_quant,
@@ -234,6 +249,7 @@ def main() -> None:
         result["attention_backend"] = args.attention_backend
         result["linear_backend"] = args.linear_backend
         result["weight_quant"] = args.weight_quant
+        result["async_scheduling"] = args.async_scheduling
         result["cuda_graphs"] = (
             kind == "paged" and not args.enforce_eager and args.device == "cuda"
         )

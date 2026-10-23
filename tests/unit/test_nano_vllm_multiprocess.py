@@ -72,10 +72,13 @@ async def _generate_all(engine):
         await engine.shutdown()
 
 
-def test_core_process_matches_the_in_process_engine(model_dir):
+@pytest.mark.parametrize("async_scheduling", [False, True])
+def test_core_process_matches_the_in_process_engine(model_dir, async_scheduling):
     expected = []
     for multiprocess in (False, True):
-        engine = NanoLlamaEngine(_config(model_dir, multiprocess))
+        engine = NanoLlamaEngine(
+            _config(model_dir, multiprocess, async_scheduling=async_scheduling and multiprocess)
+        )
         engine.initialize()
         results = asyncio.run(_generate_all(engine))
         expected.append([(r.token_ids, r.text, r.finish_reason) for r in results])

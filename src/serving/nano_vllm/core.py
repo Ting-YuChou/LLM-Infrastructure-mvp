@@ -2,11 +2,18 @@
 
 EngineCore knows nothing about text or asyncio. A frontend submits requests
 as token ids (:class:`EngineRequest`), and each :meth:`EngineCore.step` returns
-the tokens that step produced (:class:`RequestOutput`). Requests and aborts go
-through a thread-safe inbox drained at the start of every step, so a
-frontend on another thread (the in-process engine runs steps in a worker
-thread) or in another process (:func:`run_core_process`) never touches
-scheduler state while a step runs.
+the tokens produced (:class:`RequestOutput`). Requests and aborts go through a
+thread-safe inbox drained at the start of every step, so a frontend on
+another thread (the in-process engine runs steps in a worker thread) or in
+another process (:func:`run_core_process`) never touches scheduler state
+while a step runs.
+
+With ``async_scheduling`` a step launches the next batch before collecting
+the previous one, so the host schedules, prepares and launches step N+1
+while the GPU runs step N (vLLM's async scheduling, SGLang's overlap
+scheduler). Tokens still in flight feed the next step on the device
+(ModelRunner's ``sampled`` buffer); finish checks run one step late, so a
+request that just hit EOS may run one extra, discarded, step.
 """
 
 from __future__ import annotations
@@ -26,10 +33,10 @@ from .block_manager import BlockManager
 from .config import NanoVLLMConfig
 from .kv_cache import PagedKVCache
 from .metadata import build_batch
-from .model_runner import ModelRunner
+from .model_runner import ModelRunner, StepHandle
 from .nvtx import nvtx_range
 from .sampling import SamplingOptions
-from .scheduler import Scheduler
+from .scheduler import Row, Scheduler
 from .sequence import Sequence, SequenceStatus
 
 logger = logging.getLogger(__name__)
@@ -88,9 +95,13 @@ class EngineCore:
         self.paged_cache = model.new_paged_cache(
             num_blocks=config.num_kvcache_blocks, block_size=config.kvcache_block_size
         )
-        self.model_runner = ModelRunner(model, self.paged_cache, self.block_manager)
+        self.model_runner = ModelRunner(
+            model, self.paged_cache, self.block_manager, max_rows=config.max_num_seqs
+        )
+        self.async_scheduling = config.async_scheduling
         self.requests: dict[int, Sequence] = {}
         self._inbox: deque[tuple[str, object]] = deque()
+        self._inflight: Optional[tuple[StepHandle, list[Row]]] = None
         self._step_count = 0
 
     def capture_graphs(self) -> None:
@@ -110,13 +121,18 @@ class EngineCore:
         self._inbox.append(("abort", list(req_ids)))
 
     def has_work(self) -> bool:
-        return bool(self._inbox) or not self.scheduler.is_finished()
+        return (
+            bool(self._inbox)
+            or not self.scheduler.is_finished()
+            or self._inflight is not None
+        )
 
     # --- the step (one thread at a time) --------------------------------------
 
     def step(self) -> list[RequestOutput]:
-        """Apply queued requests and aborts, then run one schedule -> model ->
-        postprocess round. Never raises: failures become error outputs."""
+        """Apply queued requests and aborts, then run one schedule -> launch ->
+        collect -> postprocess round (async: launch this batch, collect the
+        previous one). Never raises: failures become error outputs."""
         self._step_count += 1
         with nvtx_range(f"engine_step_{self._step_count}"):
             outputs = self._drain_inbox()
@@ -150,31 +166,73 @@ class EngineCore:
         return outputs
 
     def _step(self) -> list[RequestOutput]:
+        outputs: list[RequestOutput] = []
         try:
             with nvtx_range("schedule"):
                 seqs, has_prefill = self.scheduler.schedule()
         except Exception as exc:
             # Scheduler state for queued requests can't be trusted anymore.
             logger.exception("nano-vLLM schedule() failed; failing queued requests")
-            return self._fail([*self.scheduler.running, *self.scheduler.waiting], exc)
-        if not seqs:
-            stuck = self.scheduler.unschedulable_head()
-            if stuck is None:
-                return []
-            return self._fail(
-                [stuck],
-                RuntimeError(
-                    "Request cannot be scheduled: it needs more KV blocks "
-                    "than are free with nothing left to release"
-                ),
+            return self._collect_inflight() + self._fail(
+                [*self.scheduler.running, *self.scheduler.waiting], exc
             )
+        launched = None
+        if seqs:
+            launched, failed = self._launch(seqs, has_prefill)
+            outputs += failed
+        elif self._inflight is None:
+            stuck = self.scheduler.unschedulable_head()
+            if stuck is not None:
+                outputs += self._fail(
+                    [stuck],
+                    RuntimeError(
+                        "Request cannot be scheduled: it needs more KV blocks "
+                        "than are free with nothing left to release"
+                    ),
+                )
+        if self.async_scheduling:
+            outputs += self._collect_inflight()
+            self._inflight = launched
+        elif launched is not None:
+            outputs += self._complete(*launched)
+        return outputs
+
+    def _launch(
+        self, seqs: list[Sequence], has_prefill: bool
+    ) -> tuple[Optional[tuple[StepHandle, list[Row]]], list[RequestOutput]]:
+        # A decode row whose input token is still in flight reads it from the
+        # previous step's row on the device.
+        gather = None
+        if self.async_scheduling:
+            gather = [
+                seq.pending_row if not seq.is_prefill and seq.num_inflight else -1
+                for seq in seqs
+            ]
         try:
-            token_ids = self.run_batch(seqs, has_prefill)
-            with nvtx_range("postprocess"):
-                emitted = self.scheduler.postprocess(seqs, token_ids)
+            handle = self.model_runner.launch(seqs, has_prefill, gather)
         except Exception as exc:
             logger.exception("nano-vLLM model step failed")
-            return self._fail(seqs, exc)
+            return None, self._fail(seqs, exc)
+        rows = self.scheduler.launched(seqs)
+        for index, row in enumerate(rows):
+            if row.samples:
+                row.seq.pending_row = index
+        return (handle, rows), []
+
+    def _collect_inflight(self) -> list[RequestOutput]:
+        if self._inflight is None:
+            return []
+        inflight, self._inflight = self._inflight, None
+        return self._complete(*inflight)
+
+    def _complete(self, handle: StepHandle, rows: list[Row]) -> list[RequestOutput]:
+        try:
+            token_ids = self.model_runner.collect(handle)
+            with nvtx_range("postprocess"):
+                emitted = self.scheduler.complete(rows, token_ids)
+        except Exception as exc:
+            logger.exception("nano-vLLM model step failed")
+            return self._fail([row.seq for row in rows if not row.seq.is_finished], exc)
         outputs = []
         for seq, token_id in emitted:
             finish = seq.finish_reason if seq.is_finished else None
@@ -182,10 +240,6 @@ class EngineCore:
             if finish is not None:
                 self.requests.pop(seq.seq_id, None)
         return outputs
-
-    def run_batch(self, seqs: list[Sequence], has_prefill: bool) -> list[int]:
-        """The model step (benchmarks wrap this to time it)."""
-        return self.model_runner.run(seqs, has_prefill)
 
     def _fail(self, seqs: list[Sequence], exc: BaseException) -> list[RequestOutput]:
         outputs = []
@@ -201,7 +255,8 @@ class EngineCore:
 
     def fail_all(self, exc: BaseException) -> list[RequestOutput]:
         self._drain_inbox()
-        return self._fail([*self.scheduler.running, *self.scheduler.waiting], exc)
+        outputs = self._collect_inflight()
+        return outputs + self._fail([*self.scheduler.running, *self.scheduler.waiting], exc)
 
     # --- utilities -------------------------------------------------------------
 

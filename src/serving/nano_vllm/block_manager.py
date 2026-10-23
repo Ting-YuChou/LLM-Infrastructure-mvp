@@ -132,6 +132,7 @@ class BlockManager:
 
     def deallocate(self, seq: Sequence) -> None:
         """Unlock the sequence's tree path and free its private blocks."""
+        seq.epoch += 1
         for block_id in seq.block_table[seq.num_shared_blocks :]:
             self.free_block_ids.append(block_id)
         if seq.radix_node is not None:
@@ -160,19 +161,22 @@ class BlockManager:
 
     # --- prefix cache -------------------------------------------------------
 
-    def commit(self, seq: Sequence) -> None:
-        """Hand the blocks this step completed to the tree.
+    def commit(self, seq: Sequence, num_computed_tokens: Optional[int] = None) -> None:
+        """Hand the blocks a finished step completed to the tree.
 
-        Call before ``num_cached_tokens`` advances: blocks fully covered by
-        ``num_cached_tokens + num_scheduled_tokens`` become tree blocks, and
-        the sequence's lock moves down to the node that ends with them. A
-        block whose content the tree already holds is swapped for the tree's
-        copy and freed (the step that wrote it has finished).
+        Blocks fully covered by ``num_computed_tokens`` (default: before
+        ``num_cached_tokens`` advances, ``num_cached_tokens +
+        num_scheduled_tokens``) become tree blocks, and the sequence's lock
+        moves down to the node that ends with them. A block whose content the
+        tree already holds is swapped for the tree's copy and freed (the step
+        that wrote it has finished).
         """
         if not self.enable_prefix_cache or seq.radix_node is None:
             return
         bs = self.block_size
-        end = (seq.num_cached_tokens + seq.num_scheduled_tokens) // bs
+        if num_computed_tokens is None:
+            num_computed_tokens = seq.num_cached_tokens + seq.num_scheduled_tokens
+        end = num_computed_tokens // bs
         index = seq.num_shared_blocks
         if index >= end:
             return
@@ -291,9 +295,11 @@ class BlockManager:
         return seq.num_blocks - len(hit_blocks) + revived
 
     def _blocks_to_append(self, seq: Sequence) -> int:
-        # Blocks needed so every token, including the one about to be decoded,
-        # has a KV slot (block_size == 1 needs a block on every step).
-        return max(0, seq.num_blocks - len(seq.block_table))
+        # Blocks needed so every token, including the one about to be decoded
+        # (possibly still in flight), has a KV slot (block_size == 1 needs a
+        # block on every step).
+        needed = -(-seq.num_logical_tokens // self.block_size)
+        return max(0, needed - len(seq.block_table))
 
     def _split(self, node: RadixNode, matched: int) -> RadixNode:
         """Cut ``node``'s edge after ``matched`` blocks; return the new upper part."""

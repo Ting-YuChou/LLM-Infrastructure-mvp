@@ -57,6 +57,8 @@ def test_graph_replay_matches_eager(attention_backend, batch, max_graph_batch, w
         manager.allocate(seq)
         seq.num_scheduled_tokens = len(seq)
     logits = runner.forward(seqs, is_prefill=True).float().cpu()
+    for seq in seqs:  # what the scheduler does once the prefill launches
+        seq.num_cached_tokens, seq.num_scheduled_tokens, seq.is_prefill = len(seq), 0, False
 
     # 20 steps cross block boundaries, so block tables grow between replays.
     for _ in range(20):
@@ -67,3 +69,5 @@ def test_graph_replay_matches_eager(attention_backend, batch, max_graph_batch, w
         eager = runner.forward(seqs, is_prefill=False, use_graphs=False).float().cpu()
         torch.testing.assert_close(replayed, eager, rtol=2e-2, atol=2e-2)
         logits = eager
+        for seq in seqs:
+            seq.num_cached_tokens += 1

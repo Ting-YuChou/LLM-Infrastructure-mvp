@@ -71,6 +71,9 @@ class NanoVLLMConfig:
     # cuda_graph_max_bs) unless enforce_eager; CPU always runs eagerly.
     enforce_eager: bool = False
     cuda_graph_max_bs: int = 64
+    # Launch step N+1 before collecting step N, so scheduling and input
+    # preparation overlap the GPU; finish checks then lag one step.
+    async_scheduling: bool = False
     # Run the engine core (scheduler + model) in its own process; the server
     # process keeps tokenization, detokenization, stop strings and HTTP.
     multiprocess: bool = False
@@ -196,6 +199,10 @@ class NanoVLLMConfig:
                     "CUDA_GRAPH_MAX_BS",
                     engine.get("cuda_graph_max_bs", cls.cuda_graph_max_bs),
                 )
+            ),
+            async_scheduling=_bool_value(
+                _env("ASYNC_SCHEDULING", engine.get("async_scheduling")),
+                default=cls.async_scheduling,
             ),
             multiprocess=_bool_value(
                 _env("ENGINE_MULTIPROCESS", engine.get("multiprocess")),
