@@ -256,7 +256,9 @@ def tune_w4a16_tiled():
         current = {k: w4a16.W4A16_CONFIG[k] for k in keys}
         if shape["M"] > current["tiled_max_rows"]:
             return current
-        tile_k, tile_n, _ = w4a16.tiled_launch_config(shape["M"], shape["N"], current, 1)
+        tile_k, tile_n, _ = w4a16.tiled_launch_config(
+            shape["M"], shape["N"], shape["K"], {**w4a16.W4A16_CONFIG, **current}, 1
+        )
         name = next(name for name, tile in w4a16.W4A16_TILED_TILES.items() if tile == (tile_k, tile_n))
         return {**current, "tiled_tile": name, "tiled_max_rows": 256}
 

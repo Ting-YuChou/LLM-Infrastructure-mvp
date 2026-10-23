@@ -158,16 +158,20 @@ def test_tiled_layout_rejects_shapes_its_kernel_cannot_take(n, k, group):
 
 def test_tiled_launch_config_picks_a_tile_built_for_the_rows():
     config = dict(w4a16_mod.W4A16_CONFIG)
-    assert tiled_launch_config(1, 4096, config, 108) == (128, 128, 108)
-    assert tiled_launch_config(32, 4096, config, 108) == (128, 128, 108)
-    assert tiled_launch_config(33, 4096, config, 108) == (64, 256, 108)
-    assert tiled_launch_config(64, 384, config, 108) == (64, 128, 108)
-    assert tiled_launch_config(8, 4096, {**config, "tiled_blocks_per_sm": 2}, 108)[2] == 216
-    assert tiled_launch_config(8, 4096, {**config, "tiled_grid": 7}, 108)[2] == 7
+    assert tiled_launch_config(1, 4096, 4096, config, 108) == (256, 128, 108)
+    assert tiled_launch_config(32, 4096, 14336, config, 108) == (256, 128, 108)
+    assert tiled_launch_config(1, 4096, 384, config, 108) == (128, 128, 108)
+    assert tiled_launch_config(33, 4096, 4096, config, 108) == (64, 128, 108)
+    assert tiled_launch_config(64, 28672, 4096, config, 108) == (64, 256, 108)
+    assert tiled_launch_config(64, 384, 4096, config, 108) == (64, 128, 108)
+    assert tiled_launch_config(8, 4096, 4096, {**config, "tiled_blocks_per_sm": 2}, 108)[2] == 216
+    assert tiled_launch_config(8, 4096, 4096, {**config, "tiled_grid": 7}, 108)[2] == 7
     with pytest.raises(ValueError, match="not built"):
-        tiled_launch_config(64, 4096, {**config, "tiled_tile": "128x128"}, 108)
+        tiled_launch_config(64, 4096, 4096, {**config, "tiled_tile": "128x128"}, 108)
     with pytest.raises(ValueError, match="divisible"):
-        tiled_launch_config(8, 384, {**config, "tiled_tile": "64x256"}, 108)
+        tiled_launch_config(8, 384, 4096, {**config, "tiled_tile": "64x256"}, 108)
+    with pytest.raises(ValueError, match="divisible"):
+        tiled_launch_config(8, 4096, 384, {**config, "tiled_tile": "256x128"}, 108)
 
 
 @pytest.mark.parametrize("n, k", [(6144, 4096), (4096, 4096), (28672, 4096), (4096, 14336), (384, 256)])

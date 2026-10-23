@@ -80,11 +80,13 @@ W4A16_CONFIG = {
     # tiled kernel cannot take stay in rows.
     "layout": "rows",
     # gemm_w4a16_tiled: "auto" or one of W4A16_TILED_TILES; blocks per SM of
-    # the persistent grid, or an explicit grid size (tests force schedules).
+    # the persistent grid, or an explicit grid size (tests force schedules);
+    # up to tiled_max_rows rows it beats dequantize + F.linear (run marlin-t1c:
+    # at 128 rows 531 vs 913 us for a layer's four projections, at 256 even).
     "tiled_tile": "auto",
     "tiled_blocks_per_sm": 1,
     "tiled_grid": 0,
-    "tiled_max_rows": 64,
+    "tiled_max_rows": 128,
 }
 W4A16_LAYOUTS = ("rows", "tiled")
 # (TILE_K, TILE_N) the tiled kernel is built for, by m16 tiles (16-row
@@ -92,10 +94,16 @@ W4A16_LAYOUTS = ("rows", "tiled")
 # accumulators and x tiles grow (shared memory).
 W4A16_TILED_TILES = {
     "128x128": (128, 128),
+    "256x128": (256, 128),
     "64x256": (64, 256),
     "64x128": (64, 128),
 }
-_TILED_TILES_BY_MT = {1: ("128x128", "64x256"), 2: ("128x128", "64x256"), 3: ("64x256", "64x128"), 4: ("64x256", "64x128")}
+_TILED_TILES_BY_MT = {
+    1: ("128x128", "256x128", "64x256"),
+    2: ("128x128", "256x128", "64x256"),
+    3: ("64x256", "64x128"),
+    4: ("64x256", "64x128"),
+}
 W4A16_TILED_N_MULTIPLE = 128
 W4A16_TILED_MAX_LAUNCH_ROWS = 64
 _WORKSPACE: dict[torch.device, tuple[torch.Tensor, torch.Tensor]] = {}
@@ -308,7 +316,7 @@ def _tiled_linear(
             _, counters = w4a16_workspace(x.device, n)
             for r0 in range(0, rows, W4A16_TILED_MAX_LAUNCH_ROWS):
                 r1 = min(rows, r0 + W4A16_TILED_MAX_LAUNCH_ROWS)
-                tile_k, tile_n, grid = tiled_launch_config(r1 - r0, n, config, _sm_count(x.device))
+                tile_k, tile_n, grid = tiled_launch_config(r1 - r0, n, k, config, _sm_count(x.device))
                 extension.gemm_w4a16_tiled(
                     flat[r0:r1], weight.qweight, weight.scales, counters, out[r0:r1], tile_k, tile_n, grid
                 )
@@ -317,17 +325,20 @@ def _tiled_linear(
     return F.linear(x, dequantize_w4a16(weight, x.dtype), bias)
 
 
-def tiled_launch_config(rows: int, n: int, config: dict, sm_count: int) -> tuple[int, int, int]:
+def tiled_launch_config(rows: int, n: int, k: int, config: dict, sm_count: int) -> tuple[int, int, int]:
     """(TILE_K, TILE_N, grid) of one gemm_w4a16_tiled launch over ``rows`` <= 64 rows."""
     mt = (rows + 15) // 16
     name = config["tiled_tile"]
     if name == "auto":
-        name = "128x128" if mt <= 2 else ("64x256" if n % 256 == 0 else "64x128")
+        if mt <= 2:
+            name = "256x128" if k % 256 == 0 else "128x128"
+        else:  # wide slices only pay off when there are many of them (tune.py, run marlin-t1c)
+            name = "64x256" if n >= 16384 and n % 256 == 0 else "64x128"
     if name not in _TILED_TILES_BY_MT[mt]:
         raise ValueError(f"tile {name} is not built for {rows} rows (m16 tiles: {mt})")
     tile_k, tile_n = W4A16_TILED_TILES[name]
-    if n % tile_n:
-        raise ValueError(f"tile {name} needs out_features divisible by {tile_n}, got {n}")
+    if n % tile_n or k % tile_k:
+        raise ValueError(f"tile {name} needs a weight divisible by {tile_n} x {tile_k}, got {n} x {k}")
     grid = config["tiled_grid"] or sm_count * config["tiled_blocks_per_sm"]
     return tile_k, tile_n, grid
 
