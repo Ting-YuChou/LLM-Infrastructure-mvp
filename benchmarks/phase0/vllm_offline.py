@@ -106,6 +106,11 @@ def main() -> None:
         help="lower it under ncu, so its per-pass memory backup fits on the GPU",
     )
     parser.add_argument("--temperature", type=float, default=0.0, help="0: greedy")
+    parser.add_argument("--kv-cache-dtype", default="auto", help="e.g. fp8")
+    parser.add_argument(
+        "--attention-backend", default=None,
+        help="e.g. TRITON_ATTN (on sm80 FLASH_ATTN refuses an fp8 KV cache)",
+    )
     parser.add_argument("--top-p", type=float, default=1.0)
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
@@ -116,6 +121,8 @@ def main() -> None:
         max_model_len=4096,
         gpu_memory_utilization=args.gpu_memory_utilization,
         seed=0,
+        kv_cache_dtype=args.kv_cache_dtype,
+        **({"attention_backend": args.attention_backend} if args.attention_backend else {}),
     )
     rng = random.Random(0)
     prompts = [
@@ -138,6 +145,8 @@ def main() -> None:
         "cuda_graphs": not args.eager,
         "temperature": args.temperature,
         "top_p": args.top_p,
+        "kv_cache_dtype": args.kv_cache_dtype,
+        "attention_backend": args.attention_backend,
         "batch": args.batch,
         "input_len": args.input_len,
         "output_len": args.output_len,

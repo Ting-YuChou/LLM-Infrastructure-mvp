@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Teacher-forced quality of nano_vllm configs on the real model.
 
-Every config (label:attention:linear:weight_quant) runs the serving prefill
+Every config (label:attention:linear:weight_quant[:kv_cache_dtype]) runs the serving prefill
 path, forward_batch over a whole chunk with every position's logits, on the
 same wikitext-2 test chunks. Reports perplexity and, against the first
 config, how often the top-1 next token agrees. The default compares the
@@ -115,7 +115,8 @@ def main() -> None:
     data = chunks(args.model, args.length, args.chunks)
     results, baseline = [], None
     for config in args.configs.split():
-        label, attention, linear_backend, weight_quant = config.split(":")
+        label, attention, linear_backend, weight_quant, *rest = config.split(":")
+        kv_cache_dtype = rest[0] if rest else "auto"
         torch.cuda.reset_peak_memory_stats()
         t0 = time.perf_counter()
         model = NanoLlamaForCausalLM.from_pretrained(
@@ -127,6 +128,7 @@ def main() -> None:
             max_model_len=args.length,
             linear_backend=linear_backend,
             weight_quant=weight_quant,
+            kv_cache_dtype=kv_cache_dtype,
         )
         load_s = time.perf_counter() - t0
         weights_gib = torch.cuda.memory_allocated() / 1024**3
@@ -138,6 +140,7 @@ def main() -> None:
             "attention_backend": attention,
             "linear_backend": linear_backend,
             "weight_quant": weight_quant,
+            "kv_cache_dtype": kv_cache_dtype,
             "ppl": scores["ppl"],
             "tokens": scores["tokens"],
             "weights_gib": weights_gib,
@@ -161,14 +164,14 @@ def main() -> None:
     lines = [
         f"# Teacher-forced quality ({results[0]['tokens']} tokens, chunks of {args.length})",
         "",
-        "| config | attention | linear | weights | weight GiB | perplexity | top-1 agreement |",
-        "|---|---|---|---|---:|---:|---:|",
+        "| config | attention | linear | weights | KV cache | weight GiB | perplexity | top-1 agreement |",
+        "|---|---|---|---|---|---:|---:|---:|",
     ]
     for r in results:
         agree = f"{100 * r['top1_agreement']:.2f}% vs {r['top1_agreement_vs']}" if "top1_agreement" in r else "-"
         lines.append(
             f"| {r['label']} | {r['attention_backend']} | {r['linear_backend']} | {r['weight_quant']} "
-            f"| {r['weights_gib']:.1f} | {r['ppl']:.3f} | {agree} |"
+            f"| {r['kv_cache_dtype']} | {r['weights_gib']:.1f} | {r['ppl']:.3f} | {agree} |"
         )
     (out / "quality.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))

@@ -32,7 +32,10 @@
 # vLLM runs the paged ones), P1_NANO_CONFIGS (label:attention:linear:eager|graph[:weight_quant[:flags]]
 # per nano_bench run, default: the Phase 1 milestones in order; flags joined by +: async for async
 # scheduling, sampled for P1_SAMPLING instead of greedy (with any sampled config vLLM runs its
-# points sampled too), pf<N> for the W4A16 GEMV's prefetch depth N), P1_SAMPLING ("temperature top_p", default "0.7 0.9": the nano server's
+# points sampled too), pf<N> for the W4A16 GEMV's prefetch depth N, fp8kv for an fp8 KV cache
+# (with any fp8kv config vLLM runs its points with --kv-cache-dtype fp8 and
+# P1_VLLM_FP8_BACKEND, default TRITON_ATTN: FLASH_ATTN refuses fp8 on sm80)), P1_QUALITY_CONFIGS
+# (quality.py --configs), P1_SAMPLING ("temperature top_p", default "0.7 0.9": the nano server's
 # default sampling), P1_NCU_LAUNCHES (cap per kbench kernel, default
 # 300), P1_CUDA_VERSION (cuda129 step, default: the venv's torch.version.cuda),
 # P0_VLLM_VERSION (default 0.19.1).
@@ -63,6 +66,7 @@ E2E_RUNS="${P1_E2E_RUNS:-static:1:128:256,paged:1:128:256,paged:16:1024:256,page
 # w4a16_graph: 4-bit decoder weights (M7).
 NANO_CONFIGS="${P1_NANO_CONFIGS:-torch_eager:torch:torch:eager triton_eager:triton:torch:eager triton_graph:triton:torch:graph gemv_graph:triton:triton:graph cuda_gemv_graph:triton:cuda:graph w4a16_graph:triton:triton:graph:w4a16}"
 read -r SAMPLED_TEMPERATURE SAMPLED_TOP_P <<< "${P1_SAMPLING:-0.7 0.9}"
+VLLM_FP8_BACKEND="${P1_VLLM_FP8_BACKEND:-TRITON_ATTN}"
 CUDA_ENV="${ROOT}/cuda129.env"
 
 export HF_HOME="${ROOT}/hf_cache" UV_CACHE_DIR="${ROOT}/uv_cache" UV_PYTHON_INSTALL_DIR="${ROOT}/uv_python"
@@ -124,13 +128,14 @@ nano_config_args() {  # label:attention:linear:eager|graph[:weight_quant[:flags]
   [[ "+${flags}+" == *+async+* ]] && args+=" --async-scheduling"
   [[ "+${flags}+" == *+sampled+* ]] && args+=" $(sampled_args)"
   [[ "+${flags}+" =~ \+pf([0-9]+)\+ ]] && args+=" --w4a16-gemv-prefetch ${BASH_REMATCH[1]}"
+  [[ "+${flags}+" == *+fp8kv+* ]] && args+=" --kv-cache-dtype fp8"
   echo "${args}"
 }
 
 sampled_args() { echo "--temperature ${SAMPLED_TEMPERATURE} --top-p ${SAMPLED_TOP_P}"; }
 
 e2e() {
-  local rc=0 run kind batch input output config label last modes=greedy sampling tag args
+  local rc=0 run kind batch input output config label last modes=greedy mode tag args
   export PYTHONPATH="${REPO_DIR}"
   for config in ${NANO_CONFIGS}; do
     label="${config%%:*}"
@@ -140,12 +145,16 @@ e2e() {
     last="${config}"
   done
   [[ "${NANO_CONFIGS}" == *sampled* ]] && modes+=" sampled"
+  [[ "${NANO_CONFIGS}" == *fp8kv* ]] && modes+=" fp8kv"
   for run in ${E2E_RUNS//,/ }; do
     IFS=: read -r kind batch input output <<< "${run}"
     [[ "${kind}" == paged ]] || continue
-    for sampling in ${modes}; do
-      tag="" args=""
-      [[ "${sampling}" == sampled ]] && tag="sampled_" args="$(sampled_args)"
+    for mode in ${modes}; do
+      case "${mode}" in
+        greedy) tag="" args="" ;;
+        sampled) tag="sampled_" args="$(sampled_args)" ;;
+        fp8kv) tag="fp8kv_" args="--kv-cache-dtype fp8 --attention-backend ${VLLM_FP8_BACKEND}" ;;
+      esac
       # shellcheck disable=SC2086  # the flags are meant to split
       "${PY}" "${P0_DIR}/vllm_offline.py" --model "${MODEL}" --batch "${batch}" \
         --input-len "${input}" --output-len "${output}" ${args} \
@@ -180,7 +189,8 @@ download_w4_model() {  # download_model reads MODEL_ID and MODEL
 quality() {
   # wikitext-2 comes as parquet; the vLLM venv has neither datasets nor pyarrow.
   "${PY}" -c "import pyarrow" 2>/dev/null || uv pip install -p "${PY}" pyarrow || return 1
-  PYTHONPATH="${REPO_DIR}" "${PY}" "${CODE_DIR}/quality.py" --model "${MODEL}" --out "${OUT}/quality" &&
+  PYTHONPATH="${REPO_DIR}" "${PY}" "${CODE_DIR}/quality.py" --model "${MODEL}" --out "${OUT}/quality" \
+    ${P1_QUALITY_CONFIGS:+--configs "${P1_QUALITY_CONFIGS}"} &&
   cat "${OUT}/quality/quality.md" >&3
 }
 
@@ -219,6 +229,8 @@ export PATH="${VENVS}/vllm/bin:${PATH}"
 want cuda129 && run_step cuda129 cuda129
 # shellcheck source=/dev/null
 if [[ -f "${CUDA_ENV}" ]]; then source "${CUDA_ENV}"; fi
+# The C++ radix tree's tests (Phase 2) need nanobind; a rerun skips installs.
+want tests && { "${PY}" -c "import nanobind" 2>/dev/null || uv pip install -p "${PY}" nanobind > /dev/null; }
 want tests && run_step tests gpu_tests
 want kbench && run_step kbench kbench
 want tune && run_step tune tune

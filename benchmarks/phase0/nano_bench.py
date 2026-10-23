@@ -214,6 +214,7 @@ def main() -> None:
     parser.add_argument("--attention-backend", default="torch", choices=["torch", "triton"])
     parser.add_argument("--linear-backend", default="torch", choices=["torch", "triton", "cuda"])
     parser.add_argument("--weight-quant", default="none", choices=["none", "w4a16"])
+    parser.add_argument("--kv-cache-dtype", default="auto", choices=["auto", "fp8"])
     parser.add_argument(
         "--enforce-eager", action="store_true", help="no decode CUDA graphs (paged path)"
     )
@@ -252,6 +253,7 @@ def main() -> None:
         attention_backend=args.attention_backend,
         linear_backend=args.linear_backend,
         weight_quant=args.weight_quant,
+        kv_cache_dtype=args.kv_cache_dtype,
         enforce_eager=args.enforce_eager,
     )
     engine = NanoLlamaEngine(config)
@@ -280,6 +282,7 @@ def main() -> None:
         result["attention_backend"] = args.attention_backend
         result["linear_backend"] = args.linear_backend
         result["weight_quant"] = args.weight_quant
+        result["kv_cache_dtype"] = args.kv_cache_dtype
         result["w4a16_gemv_prefetch"] = w4a16.W4A16_CONFIG["gemv_prefetch"]
         result["async_scheduling"] = args.async_scheduling
         result["temperature"] = args.temperature if kind == "paged" else 0.0

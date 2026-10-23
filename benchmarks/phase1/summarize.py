@@ -69,8 +69,9 @@ def main() -> None:
         if not path.stem.endswith("_nsys")
         for d in (load_json(path) or [])
     ]
-    def point(d: dict) -> tuple:  # sampled runs are compared with sampled runs
-        return d["batch"], d["input_len"], d["output_len"], d.get("temperature", 0.0) > 0
+    def point(d: dict) -> tuple:  # sampled runs with sampled runs, fp8 KV with fp8 KV
+        return (d["batch"], d["input_len"], d["output_len"], d.get("temperature", 0.0) > 0,
+                d.get("kv_cache_dtype", "auto"))
 
     def vllm_runs(pattern: str) -> dict:
         return {

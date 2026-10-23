@@ -50,6 +50,7 @@ from bandwidth import copy_bandwidth  # noqa: E402
 # By module: kernels/__init__.py re-exports silu_mul the function over the submodule.
 from src.serving.nano_vllm.kernels.rmsnorm import TRITON_AVAILABLE  # noqa: E402
 from src.serving.nano_vllm.kernels.linear import linear, load_cuda_extension  # noqa: E402
+from src.serving.nano_vllm.kernels.fp8 import fp8_quantize_reference  # noqa: E402
 from src.serving.nano_vllm.kernels.paged_attention import (  # noqa: E402
     paged_decode_attention,
     paged_decode_attention_reference,
@@ -698,6 +699,36 @@ register(
             i["q"], i["k_cache"], i["v_cache"], i["tables"], i["context_lens"], SCALE),
         bytes=_decode_bytes,
         ncu="_paged_decode|flash_fwd",
+    )
+)
+
+
+def _fp8_paged_inputs(batch: int, context: int, dev: str) -> dict:
+    """_paged_inputs with the caches as e4m3 codes and per-vector scales."""
+    inputs = _paged_inputs(batch, context, [1] * batch, dev)
+    inputs["k_cache"], inputs["k_scales"] = fp8_quantize_reference(inputs["k_cache"])
+    inputs["v_cache"], inputs["v_scales"] = fp8_quantize_reference(inputs["v_cache"])
+    return inputs
+
+
+def _fp8_decode(i: dict, use_triton: bool):
+    return paged_decode_attention(
+        i["q"], i["k_cache"], i["v_cache"], i["tables"], i["context_lens"], SCALE,
+        use_triton=use_triton, key_scales=i["k_scales"], value_scales=i["v_scales"],
+    )
+
+
+# The bf16 kernel above at the same shapes is the comparison: GB/s here
+# counts the codes and scales (132 bytes per 128 values), half of bf16's.
+register(
+    Kernel(
+        name="paged_decode_attention_fp8",
+        shapes=[{"B": b, "ctx": c} for b in (1, 16, 64, 128) for c in (1024, 4096)],
+        inputs=lambda s, dev: _fp8_paged_inputs(s["B"], s["ctx"], dev),
+        impls={"triton": triton_impl(lambda i: _fp8_decode(i, use_triton=True))},
+        reference=lambda i: _fp8_decode(i, use_triton=False),
+        bytes=lambda s: 2 * s["B"] * s["ctx"] * KV_HEADS * (HEAD_DIM + 4),
+        ncu="_paged_decode",
     )
 )
 
