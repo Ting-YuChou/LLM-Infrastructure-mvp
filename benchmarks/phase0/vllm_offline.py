@@ -118,7 +118,7 @@ def main() -> None:
     llm = LLM(
         model=args.model,
         enforce_eager=args.eager,
-        max_model_len=4096,
+        max_model_len=max(4096, args.input_len + args.output_len + 16),
         gpu_memory_utilization=args.gpu_memory_utilization,
         seed=0,
         kv_cache_dtype=args.kv_cache_dtype,
