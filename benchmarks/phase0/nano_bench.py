@@ -230,13 +230,16 @@ def main() -> None:
     runs = [tuple(r.split(":")) for r in args.runs.split(",")]
     max_batch = max(int(b) for _, b, _, _ in runs)
     max_len = max(int(i) + int(o) for _, _, i, o in runs)
+    # Blocks for the largest run, not max_batch x max_len: b=64 at 1k and
+    # b=16 at 4k would otherwise ask for a 36 GB bf16 cache.
+    max_blocks = max(int(b) * ((int(i) + int(o)) // 16 + 2) for _, b, i, o in runs)
     config = NanoVLLMConfig(
         model_name=args.model,
         dtype="bfloat16" if args.device == "cuda" else "float32",
         device=args.device,
         max_model_len=max_len + 16,
         max_new_tokens=max_len,
-        num_kvcache_blocks=max_batch * (max_len // 16 + 2) + 64,
+        num_kvcache_blocks=max_blocks + 64,
         max_num_seqs=max_batch,
         max_num_batched_tokens=max(4096, max_len),
         # Phase 0/1 methodology: all prompts prefill, then the batch decodes.
