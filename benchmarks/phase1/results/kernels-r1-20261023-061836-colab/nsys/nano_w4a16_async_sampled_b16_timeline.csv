@@ -1,0 +1,1437 @@
+track,start_us,dur_us,name,category
+CPU (CUDA API),274.213,23.787,cudaMemcpyAsync,api
+CPU (CUDA API),315.19,5.45,cudaMemcpyAsync,api
+CPU (CUDA API),332.488,1.143,cudaStreamIsCapturing,api
+CPU (CUDA API),334.769,460.508,cudaGraphLaunch,api
+CPU (CUDA API),861.246,17.07,cudaLaunchKernel,api
+CPU (CUDA API),908.507,7.908,cudaEventQuery,api
+CPU (CUDA API),917.305,2.705,cudaEventQuery,api
+CPU (CUDA API),920.668,2.584,cudaEventQuery,api
+CPU (CUDA API),923.551,2.163,cudaEventQuery,api
+CPU (CUDA API),926.186,1.231,cudaEventQuery,api
+CPU (CUDA API),958.702,12.802,cudaMemcpyAsync,api
+CPU (CUDA API),978.688,1.079,cudaStreamIsCapturing,api
+CPU (CUDA API),980.311,2.824,cudaEventRecordWithFlags,api
+CPU (CUDA API),994.004,1.944,cudaEventQuery,api
+CPU (CUDA API),1014.241,6.176,cudaMemcpyAsync,api
+CPU (CUDA API),1025.485,0.724,cudaStreamIsCapturing,api
+CPU (CUDA API),1026.547,1.643,cudaEventRecordWithFlags,api
+CPU (CUDA API),1037.476,1.678,cudaEventQuery,api
+CPU (CUDA API),1055.739,6.219,cudaMemcpyAsync,api
+CPU (CUDA API),1066.991,0.684,cudaStreamIsCapturing,api
+CPU (CUDA API),1067.996,1.513,cudaEventRecordWithFlags,api
+CPU (CUDA API),1077.198,1.768,cudaEventQuery,api
+CPU (CUDA API),1095.619,5.621,cudaMemcpyAsync,api
+CPU (CUDA API),1106.075,0.675,cudaStreamIsCapturing,api
+CPU (CUDA API),1107.049,1.549,cudaEventRecordWithFlags,api
+CPU (CUDA API),1123.013,12.86,cudaLaunchKernel,api
+CPU (CUDA API),1163.385,8.139,cudaLaunchKernel,api
+CPU (CUDA API),1193.29,13.345,cudaMemcpyAsync,api
+CPU (CUDA API),1213.821,6.597,cudaLaunchKernel,api
+CPU (CUDA API),1231.5,6.53,cudaMemsetAsync,api
+CPU (CUDA API),1238.64,6.934,cudaMemsetAsync,api
+CPU (CUDA API),1270.201,6.684,cudaLaunchKernel,api
+CPU (CUDA API),1278.741,13.188,cudaLaunchKernel,api
+CPU (CUDA API),1293.07,6.129,cudaMemsetAsync,api
+CPU (CUDA API),1300.385,5.051,cudaLaunchKernel,api
+CPU (CUDA API),1306.536,5.003,cudaMemsetAsync,api
+CPU (CUDA API),1312.248,4.697,cudaLaunchKernel,api
+CPU (CUDA API),1317.953,4.633,cudaMemsetAsync,api
+CPU (CUDA API),1323.253,4.412,cudaLaunchKernel,api
+CPU (CUDA API),1328.633,4.543,cudaMemsetAsync,api
+CPU (CUDA API),1333.836,4.879,cudaLaunchKernel,api
+CPU (CUDA API),1349.824,3.372,cudaMemsetAsync,api
+CPU (CUDA API),1353.751,2.288,cudaMemsetAsync,api
+CPU (CUDA API),1360.017,5.573,cudaLaunchKernel,api
+CPU (CUDA API),1367.054,4.796,cudaLaunchKernel,api
+CPU (CUDA API),1372.977,5.171,cudaMemsetAsync,api
+CPU (CUDA API),1379.218,4.437,cudaLaunchKernel,api
+CPU (CUDA API),1387.481,5.252,cudaLaunchKernel,api
+CPU (CUDA API),1423.667,7.092,cudaLaunchKernel,api
+CPU (CUDA API),1460.828,7.975,cudaLaunchKernel,api
+CPU (CUDA API),1492.956,13.957,cudaMemcpyAsync,api
+CPU (CUDA API),1515.332,6.364,cudaLaunchKernel,api
+CPU (CUDA API),1541.481,7.325,cudaLaunchKernel,api
+CPU (CUDA API),1563.103,6.71,cudaLaunchKernel,api
+CPU (CUDA API),1585.166,12.002,cudaLaunchKernel,api
+CPU (CUDA API),1619.393,7.782,cudaLaunchKernel,api
+CPU (CUDA API),1645.013,18.671,cudaMemcpyAsync,api
+CPU (CUDA API),1670.954,6.071,cudaLaunchKernel,api
+CPU (CUDA API),1700.162,7.34,cudaLaunchKernel,api
+CPU (CUDA API),1728.636,6.981,cudaLaunchKernel,api
+CPU (CUDA API),1752.358,6.023,cudaLaunchKernel,api
+CPU (CUDA API),1768.537,5.948,cudaLaunchKernel,api
+CPU (CUDA API),1784.707,5.704,cudaLaunchKernel,api
+CPU (CUDA API),1811.141,7.913,cudaLaunchKernel,api
+CPU (CUDA API),1835.229,5.789,cudaLaunchKernel,api
+CPU (CUDA API),1859.937,6.597,cudaLaunchKernel,api
+CPU (CUDA API),1880.322,6.57,cudaLaunchKernel,api
+CPU (CUDA API),1904.725,6.644,cudaLaunchKernel,api
+CPU (CUDA API),1938.125,7.807,cudaLaunchKernel,api
+CPU (CUDA API),1970.703,7.287,cudaLaunchKernel,api
+CPU (CUDA API),2016.077,8.032,cudaMemsetAsync,api
+CPU (CUDA API),2025.944,7.617,cudaLaunchKernel,api
+CPU (CUDA API),2048.944,5.932,cudaLaunchKernel,api
+CPU (CUDA API),2070.665,3.545,cudaMemsetAsync,api
+CPU (CUDA API),2076.037,6.326,cudaLaunchKernel,api
+CPU (CUDA API),2094.92,5.628,cudaLaunchKernel,api
+CPU (CUDA API),2109.813,5.67,cudaLaunchKernel,api
+CPU (CUDA API),2122.075,5.313,cudaLaunchKernel,api
+CPU (CUDA API),2140.086,6.329,cudaLaunchKernel,api
+CPU (CUDA API),2157.683,5.571,cudaLaunchKernel,api
+CPU (CUDA API),2175.778,6.6,cudaLaunchKernel,api
+CPU (CUDA API),2192.287,5.107,cudaLaunchKernel,api
+CPU (CUDA API),2200.721,4.791,cudaLaunchKernel,api
+CPU (CUDA API),2220.889,1.157,cudaStreamIsCapturing,api
+CPU (CUDA API),2223.733,0.411,cudaStreamIsCapturing,api
+CPU (CUDA API),2225.592,5.705,cudaLaunchKernel,api
+CPU (CUDA API),2238.382,5.605,cudaLaunchKernel,api
+CPU (CUDA API),2286.635,7.846,cudaLaunchKernel,api
+CPU (CUDA API),2326.512,7.27,cudaLaunchKernel,api
+CPU (CUDA API),2364.113,7.242,cudaLaunchKernel,api
+CPU (CUDA API),2411.138,17.32,cudaMemcpyAsync,api
+CPU (CUDA API),2450.953,8.208,cudaMemcpyAsync,api
+CPU (CUDA API),2497.403,1.29,cudaStreamIsCapturing,api
+CPU (CUDA API),2499.251,3.425,cudaEventRecordWithFlags,api
+CPU (CUDA API),2536.977,6828.126,cudaEventSynchronize,api
+CPU (CUDA API),9865.407,17.777,cudaMemcpyAsync,api
+CPU (CUDA API),9898.671,5.598,cudaMemcpyAsync,api
+CPU (CUDA API),9916.207,1.306,cudaStreamIsCapturing,api
+CPU (CUDA API),9918.614,465.189,cudaGraphLaunch,api
+CPU (CUDA API),10449.594,17.771,cudaLaunchKernel,api
+CPU (CUDA API),10497.115,8.391,cudaEventQuery,api
+CPU (CUDA API),10506.314,2.573,cudaEventQuery,api
+CPU (CUDA API),10509.502,2.255,cudaEventQuery,api
+CPU (CUDA API),10512.141,2.658,cudaEventQuery,api
+CPU (CUDA API),10515.257,1.333,cudaEventQuery,api
+CPU (CUDA API),10547.751,12.606,cudaMemcpyAsync,api
+CPU (CUDA API),10567.429,1.125,cudaStreamIsCapturing,api
+CPU (CUDA API),10569.063,2.79,cudaEventRecordWithFlags,api
+CPU (CUDA API),10582.5,1.992,cudaEventQuery,api
+CPU (CUDA API),10608.867,6.726,cudaMemcpyAsync,api
+CPU (CUDA API),10621.058,0.743,cudaStreamIsCapturing,api
+CPU (CUDA API),10622.138,1.6,cudaEventRecordWithFlags,api
+CPU (CUDA API),10633.221,1.871,cudaEventQuery,api
+CPU (CUDA API),10651.9,5.797,cudaMemcpyAsync,api
+CPU (CUDA API),10662.649,0.708,cudaStreamIsCapturing,api
+CPU (CUDA API),10663.706,1.566,cudaEventRecordWithFlags,api
+CPU (CUDA API),10673.281,1.672,cudaEventQuery,api
+CPU (CUDA API),10691.819,5.719,cudaMemcpyAsync,api
+CPU (CUDA API),10702.368,0.675,cudaStreamIsCapturing,api
+CPU (CUDA API),10703.373,1.544,cudaEventRecordWithFlags,api
+CPU (CUDA API),10719.38,12.67,cudaLaunchKernel,api
+CPU (CUDA API),10759.891,8.834,cudaLaunchKernel,api
+CPU (CUDA API),10791.013,13.216,cudaMemcpyAsync,api
+CPU (CUDA API),10811.186,7.231,cudaLaunchKernel,api
+CPU (CUDA API),10829.5,6.529,cudaMemsetAsync,api
+CPU (CUDA API),10836.56,7.575,cudaMemsetAsync,api
+CPU (CUDA API),10849.747,5.95,cudaLaunchKernel,api
+CPU (CUDA API),10857.539,5.296,cudaLaunchKernel,api
+CPU (CUDA API),10863.927,4.79,cudaMemsetAsync,api
+CPU (CUDA API),10869.818,5.685,cudaLaunchKernel,api
+CPU (CUDA API),10876.66,5.109,cudaMemsetAsync,api
+CPU (CUDA API),10882.458,4.988,cudaLaunchKernel,api
+CPU (CUDA API),10888.508,4.573,cudaMemsetAsync,api
+CPU (CUDA API),10893.78,4.885,cudaLaunchKernel,api
+CPU (CUDA API),10899.637,5.076,cudaMemsetAsync,api
+CPU (CUDA API),10905.405,4.642,cudaLaunchKernel,api
+CPU (CUDA API),10920.147,2.799,cudaMemsetAsync,api
+CPU (CUDA API),10923.436,2.659,cudaMemsetAsync,api
+CPU (CUDA API),10929.914,5.335,cudaLaunchKernel,api
+CPU (CUDA API),10936.713,4.625,cudaLaunchKernel,api
+CPU (CUDA API),10942.439,4.819,cudaMemsetAsync,api
+CPU (CUDA API),10948.375,4.64,cudaLaunchKernel,api
+CPU (CUDA API),10957.167,5.13,cudaLaunchKernel,api
+CPU (CUDA API),10989.74,6.763,cudaLaunchKernel,api
+CPU (CUDA API),11023.551,7.218,cudaLaunchKernel,api
+CPU (CUDA API),11053.702,12.776,cudaMemcpyAsync,api
+CPU (CUDA API),11074.437,6.036,cudaLaunchKernel,api
+CPU (CUDA API),11099.31,7.12,cudaLaunchKernel,api
+CPU (CUDA API),11120.605,6.199,cudaLaunchKernel,api
+CPU (CUDA API),11142.118,6.536,cudaLaunchKernel,api
+CPU (CUDA API),11169.148,6.996,cudaLaunchKernel,api
+CPU (CUDA API),11193.544,11.096,cudaMemcpyAsync,api
+CPU (CUDA API),11210.88,5.726,cudaLaunchKernel,api
+CPU (CUDA API),11238.637,7.575,cudaLaunchKernel,api
+CPU (CUDA API),11291.181,8.571,cudaLaunchKernel,api
+CPU (CUDA API),11316.786,6.133,cudaLaunchKernel,api
+CPU (CUDA API),11332.939,5.559,cudaLaunchKernel,api
+CPU (CUDA API),11349.039,6.062,cudaLaunchKernel,api
+CPU (CUDA API),11377.133,7.228,cudaLaunchKernel,api
+CPU (CUDA API),11400.612,5.921,cudaLaunchKernel,api
+CPU (CUDA API),11425.807,7.151,cudaLaunchKernel,api
+CPU (CUDA API),11447.053,6.468,cudaLaunchKernel,api
+CPU (CUDA API),11471.01,6.412,cudaLaunchKernel,api
+CPU (CUDA API),11505.042,7.068,cudaLaunchKernel,api
+CPU (CUDA API),11537.201,7.018,cudaLaunchKernel,api
+CPU (CUDA API),11584.138,13.658,cudaMemsetAsync,api
+CPU (CUDA API),11599.738,8.338,cudaLaunchKernel,api
+CPU (CUDA API),11623.164,6.234,cudaLaunchKernel,api
+CPU (CUDA API),11645.046,3.696,cudaMemsetAsync,api
+CPU (CUDA API),11650.511,6.388,cudaLaunchKernel,api
+CPU (CUDA API),11668.693,5.425,cudaLaunchKernel,api
+CPU (CUDA API),11683.31,5.696,cudaLaunchKernel,api
+CPU (CUDA API),11695.838,5.524,cudaLaunchKernel,api
+CPU (CUDA API),11714.32,6.272,cudaLaunchKernel,api
+CPU (CUDA API),11732.542,6.017,cudaLaunchKernel,api
+CPU (CUDA API),11750.985,5.986,cudaLaunchKernel,api
+CPU (CUDA API),11766.628,5.178,cudaLaunchKernel,api
+CPU (CUDA API),11775.092,4.705,cudaLaunchKernel,api
+CPU (CUDA API),11795.38,1.106,cudaStreamIsCapturing,api
+CPU (CUDA API),11798.002,0.385,cudaStreamIsCapturing,api
+CPU (CUDA API),11799.771,6.018,cudaLaunchKernel,api
+CPU (CUDA API),11813.155,6.086,cudaLaunchKernel,api
+CPU (CUDA API),11828.152,5.934,cudaLaunchKernel,api
+CPU (CUDA API),11860.814,6.986,cudaLaunchKernel,api
+CPU (CUDA API),11895.825,6.785,cudaLaunchKernel,api
+CPU (CUDA API),11943.2,16.157,cudaMemcpyAsync,api
+CPU (CUDA API),11981.649,8.688,cudaMemcpyAsync,api
+CPU (CUDA API),12029.405,1.263,cudaStreamIsCapturing,api
+CPU (CUDA API),12031.278,3.543,cudaEventRecordWithFlags,api
+CPU (CUDA API),12068.686,6764.208,cudaEventSynchronize,api
+CPU (CUDA API),19179.105,16.189,cudaMemcpyAsync,api
+CPU (CUDA API),19210.355,5.207,cudaMemcpyAsync,api
+CPU (CUDA API),19226.95,1.173,cudaStreamIsCapturing,api
+CPU (CUDA API),19229.228,458.249,cudaGraphLaunch,api
+CPU (CUDA API),19752.8,17.883,cudaLaunchKernel,api
+CPU (CUDA API),19800.549,7.807,cudaEventQuery,api
+CPU (CUDA API),19809.221,2.841,cudaEventQuery,api
+CPU (CUDA API),19812.488,2.496,cudaEventQuery,api
+CPU (CUDA API),19815.349,2.147,cudaEventQuery,api
+CPU (CUDA API),19817.884,1.33,cudaEventQuery,api
+CPU (CUDA API),19851.121,12.697,cudaMemcpyAsync,api
+CPU (CUDA API),19871.119,1.21,cudaStreamIsCapturing,api
+CPU (CUDA API),19872.83,2.765,cudaEventRecordWithFlags,api
+CPU (CUDA API),19886.308,2.057,cudaEventQuery,api
+CPU (CUDA API),19906.494,6.156,cudaMemcpyAsync,api
+CPU (CUDA API),19917.661,0.747,cudaStreamIsCapturing,api
+CPU (CUDA API),19918.838,1.561,cudaEventRecordWithFlags,api
+CPU (CUDA API),19929.777,1.661,cudaEventQuery,api
+CPU (CUDA API),19948.016,6.022,cudaMemcpyAsync,api
+CPU (CUDA API),19958.996,0.694,cudaStreamIsCapturing,api
+CPU (CUDA API),19960.058,1.467,cudaEventRecordWithFlags,api
+CPU (CUDA API),19969.468,1.67,cudaEventQuery,api
+CPU (CUDA API),19987.711,5.415,cudaMemcpyAsync,api
+CPU (CUDA API),19997.873,0.682,cudaStreamIsCapturing,api
+CPU (CUDA API),19998.91,1.508,cudaEventRecordWithFlags,api
+CPU (CUDA API),20014.768,12.471,cudaLaunchKernel,api
+CPU (CUDA API),20054.539,8.111,cudaLaunchKernel,api
+CPU (CUDA API),20085.082,13.252,cudaMemcpyAsync,api
+CPU (CUDA API),20105.42,7.2,cudaLaunchKernel,api
+CPU (CUDA API),20123.868,6.237,cudaMemsetAsync,api
+CPU (CUDA API),20130.608,6.389,cudaMemsetAsync,api
+CPU (CUDA API),20142.725,6.214,cudaLaunchKernel,api
+CPU (CUDA API),20150.782,5.2,cudaLaunchKernel,api
+CPU (CUDA API),20157.096,5.255,cudaMemsetAsync,api
+CPU (CUDA API),20163.4,5.258,cudaLaunchKernel,api
+CPU (CUDA API),20169.785,4.748,cudaMemsetAsync,api
+CPU (CUDA API),20175.23,4.201,cudaLaunchKernel,api
+CPU (CUDA API),20180.44,4.824,cudaMemsetAsync,api
+CPU (CUDA API),20185.928,4.328,cudaLaunchKernel,api
+CPU (CUDA API),20191.231,4.166,cudaMemsetAsync,api
+CPU (CUDA API),20196.068,4.414,cudaLaunchKernel,api
+CPU (CUDA API),20217.559,3.529,cudaMemsetAsync,api
+CPU (CUDA API),20221.603,2.832,cudaMemsetAsync,api
+CPU (CUDA API),20228.434,6.332,cudaLaunchKernel,api
+CPU (CUDA API),20236.284,5.039,cudaLaunchKernel,api
+CPU (CUDA API),20242.455,18.581,cudaMemsetAsync,api
+CPU (CUDA API),20262.244,5.451,cudaLaunchKernel,api
+CPU (CUDA API),20272.077,16.939,cudaLaunchKernel,api
+CPU (CUDA API),20321.567,7.339,cudaLaunchKernel,api
+CPU (CUDA API),20359.482,7.777,cudaLaunchKernel,api
+CPU (CUDA API),20391.599,14.493,cudaMemcpyAsync,api
+CPU (CUDA API),20414.188,6.111,cudaLaunchKernel,api
+CPU (CUDA API),20440.154,7.346,cudaLaunchKernel,api
+CPU (CUDA API),20462.401,6.491,cudaLaunchKernel,api
+CPU (CUDA API),20484.074,6.25,cudaLaunchKernel,api
+CPU (CUDA API),20512.166,7.017,cudaLaunchKernel,api
+CPU (CUDA API),20536.709,12.223,cudaMemcpyAsync,api
+CPU (CUDA API),20555.202,5.724,cudaLaunchKernel,api
+CPU (CUDA API),20583.389,7.77,cudaLaunchKernel,api
+CPU (CUDA API),20618.359,7.267,cudaLaunchKernel,api
+CPU (CUDA API),20643.155,6.47,cudaLaunchKernel,api
+CPU (CUDA API),20659.636,5.507,cudaLaunchKernel,api
+CPU (CUDA API),20681.466,6.26,cudaLaunchKernel,api
+CPU (CUDA API),20709.199,7.55,cudaLaunchKernel,api
+CPU (CUDA API),20733.05,6.4,cudaLaunchKernel,api
+CPU (CUDA API),20759.491,6.747,cudaLaunchKernel,api
+CPU (CUDA API),20780.325,6.471,cudaLaunchKernel,api
+CPU (CUDA API),20804.603,6.526,cudaLaunchKernel,api
+CPU (CUDA API),20837.72,7.042,cudaLaunchKernel,api
+CPU (CUDA API),20869.73,7.339,cudaLaunchKernel,api
+CPU (CUDA API),20909.683,7.677,cudaMemsetAsync,api
+CPU (CUDA API),20919.107,7.103,cudaLaunchKernel,api
+CPU (CUDA API),20941.204,6.124,cudaLaunchKernel,api
+CPU (CUDA API),20962.118,3.754,cudaMemsetAsync,api
+CPU (CUDA API),20967.699,6.482,cudaLaunchKernel,api
+CPU (CUDA API),20992.301,6.429,cudaLaunchKernel,api
+CPU (CUDA API),21008.232,6.595,cudaLaunchKernel,api
+CPU (CUDA API),21021.586,5.587,cudaLaunchKernel,api
+CPU (CUDA API),21040.201,6.043,cudaLaunchKernel,api
+CPU (CUDA API),21057.976,6.307,cudaLaunchKernel,api
+CPU (CUDA API),21076.768,6.301,cudaLaunchKernel,api
+CPU (CUDA API),21092.933,6.067,cudaLaunchKernel,api
+CPU (CUDA API),21102.238,4.686,cudaLaunchKernel,api
+CPU (CUDA API),21122.177,1.186,cudaStreamIsCapturing,api
+CPU (CUDA API),21124.955,0.398,cudaStreamIsCapturing,api
+CPU (CUDA API),21126.791,5.626,cudaLaunchKernel,api
+CPU (CUDA API),21139.522,5.576,cudaLaunchKernel,api
+CPU (CUDA API),21154.014,5.607,cudaLaunchKernel,api
+CPU (CUDA API),21185.604,6.73,cudaLaunchKernel,api
+CPU (CUDA API),21220.743,7.104,cudaLaunchKernel,api
+CPU (CUDA API),21289.201,17.781,cudaMemcpyAsync,api
+CPU (CUDA API),21330.615,8.093,cudaMemcpyAsync,api
+CPU (CUDA API),21377.493,1.272,cudaStreamIsCapturing,api
+CPU (CUDA API),21379.346,3.382,cudaEventRecordWithFlags,api
+CPU (CUDA API),21416.792,6883.281,cudaEventSynchronize,api
+GPU,-32.749,63.841,_paged_decode_split_kernel,attention
+GPU,30.964,4.736,_paged_decode_reduce_kernel,attention
+GPU,35.572,17.856,gemm_w4a16_mma_kernel,gemm
+GPU,53.492,2.88,_fused_add_rms_norm_kernel,norm
+GPU,56.404,75.584,gemm_w4a16_mma_kernel,gemm
+GPU,131.86,2.784,_silu_and_mul_kernel,activation
+GPU,134.516,48.512,gemm_w4a16_mma_kernel,gemm
+GPU,182.9,2.784,_fused_add_rms_norm_kernel,norm
+GPU,185.716,22.944,gemm_w4a16_mma_kernel,gemm
+GPU,208.692,3.424,_rope_cache_write_kernel,rope
+GPU,212.148,55.104,_paged_decode_split_kernel,attention
+GPU,267.092,4.768,_paged_decode_reduce_kernel,attention
+GPU,271.636,17.856,gemm_w4a16_mma_kernel,gemm
+GPU,289.524,2.944,_fused_add_rms_norm_kernel,norm
+GPU,292.5,75.681,gemm_w4a16_mma_kernel,gemm
+GPU,368.021,2.784,_silu_and_mul_kernel,activation
+GPU,370.677,47.584,gemm_w4a16_mma_kernel,gemm
+GPU,418.133,3.008,_fused_add_rms_norm_kernel,norm
+GPU,420.981,22.687,gemm_w4a16_mma_kernel,gemm
+GPU,443.669,3.392,_rope_cache_write_kernel,rope
+GPU,447.093,55.936,_paged_decode_split_kernel,attention
+GPU,502.901,4.736,_paged_decode_reduce_kernel,attention
+GPU,507.381,18.08,gemm_w4a16_mma_kernel,gemm
+GPU,525.525,2.848,_fused_add_rms_norm_kernel,norm
+GPU,528.437,75.296,gemm_w4a16_mma_kernel,gemm
+GPU,603.605,2.784,_silu_and_mul_kernel,activation
+GPU,606.261,49.024,gemm_w4a16_mma_kernel,gemm
+GPU,654.997,2.945,_fused_add_rms_norm_kernel,norm
+GPU,657.814,22.56,gemm_w4a16_mma_kernel,gemm
+GPU,680.438,3.296,_rope_cache_write_kernel,rope
+GPU,683.798,56.0,_paged_decode_split_kernel,attention
+GPU,739.702,4.672,_paged_decode_reduce_kernel,attention
+GPU,744.246,18.048,gemm_w4a16_mma_kernel,gemm
+GPU,762.39,2.752,_fused_add_rms_norm_kernel,norm
+GPU,765.206,74.176,gemm_w4a16_mma_kernel,gemm
+GPU,839.286,2.752,_silu_and_mul_kernel,activation
+GPU,841.91,49.568,gemm_w4a16_mma_kernel,gemm
+GPU,891.35,3.168,_fused_add_rms_norm_kernel,norm
+GPU,894.39,22.592,gemm_w4a16_mma_kernel,gemm
+GPU,917.046,3.36,_rope_cache_write_kernel,rope
+GPU,920.47,55.168,_paged_decode_split_kernel,attention
+GPU,975.51,4.672,_paged_decode_reduce_kernel,attention
+GPU,980.054,17.921,gemm_w4a16_mma_kernel,gemm
+GPU,998.039,2.912,_fused_add_rms_norm_kernel,norm
+GPU,1001.015,75.488,gemm_w4a16_mma_kernel,gemm
+GPU,1076.375,2.784,_silu_and_mul_kernel,activation
+GPU,1079.031,48.608,gemm_w4a16_mma_kernel,gemm
+GPU,1127.511,2.976,_fused_add_rms_norm_kernel,norm
+GPU,1130.359,22.4,gemm_w4a16_mma_kernel,gemm
+GPU,1152.823,3.2,_rope_cache_write_kernel,rope
+GPU,1156.087,55.84,_paged_decode_split_kernel,attention
+GPU,1211.799,4.64,_paged_decode_reduce_kernel,attention
+GPU,1216.311,18.496,gemm_w4a16_mma_kernel,gemm
+GPU,1234.871,2.944,_fused_add_rms_norm_kernel,norm
+GPU,1237.847,75.232,gemm_w4a16_mma_kernel,gemm
+GPU,1312.919,2.784,_silu_and_mul_kernel,activation
+GPU,1315.543,48.385,gemm_w4a16_mma_kernel,gemm
+GPU,1363.768,3.008,_fused_add_rms_norm_kernel,norm
+GPU,1366.616,22.752,gemm_w4a16_mma_kernel,gemm
+GPU,1389.4,3.296,_rope_cache_write_kernel,rope
+GPU,1392.728,55.968,_paged_decode_split_kernel,attention
+GPU,1448.536,4.704,_paged_decode_reduce_kernel,attention
+GPU,1453.112,17.824,gemm_w4a16_mma_kernel,gemm
+GPU,1470.968,2.88,_fused_add_rms_norm_kernel,norm
+GPU,1473.912,74.88,gemm_w4a16_mma_kernel,gemm
+GPU,1548.632,2.752,_silu_and_mul_kernel,activation
+GPU,1551.224,47.872,gemm_w4a16_mma_kernel,gemm
+GPU,1598.968,2.976,_fused_add_rms_norm_kernel,norm
+GPU,1601.784,22.656,gemm_w4a16_mma_kernel,gemm
+GPU,1624.504,3.232,_rope_cache_write_kernel,rope
+GPU,1627.768,55.137,_paged_decode_split_kernel,attention
+GPU,1682.777,4.672,_paged_decode_reduce_kernel,attention
+GPU,1687.321,18.176,gemm_w4a16_mma_kernel,gemm
+GPU,1705.561,2.816,_fused_add_rms_norm_kernel,norm
+GPU,1708.409,74.624,gemm_w4a16_mma_kernel,gemm
+GPU,1782.873,2.816,_silu_and_mul_kernel,activation
+GPU,1785.529,48.256,gemm_w4a16_mma_kernel,gemm
+GPU,1833.625,2.88,_fused_add_rms_norm_kernel,norm
+GPU,1836.537,22.368,gemm_w4a16_mma_kernel,gemm
+GPU,1858.937,3.264,_rope_cache_write_kernel,rope
+GPU,1862.233,55.84,_paged_decode_split_kernel,attention
+GPU,1917.945,4.672,_paged_decode_reduce_kernel,attention
+GPU,1922.457,18.08,gemm_w4a16_mma_kernel,gemm
+GPU,1940.569,2.816,_fused_add_rms_norm_kernel,norm
+GPU,1943.417,76.321,gemm_w4a16_mma_kernel,gemm
+GPU,2019.61,2.784,_silu_and_mul_kernel,activation
+GPU,2022.298,47.52,gemm_w4a16_mma_kernel,gemm
+GPU,2069.722,2.912,_fused_add_rms_norm_kernel,norm
+GPU,2072.538,22.304,gemm_w4a16_mma_kernel,gemm
+GPU,2094.906,3.232,_rope_cache_write_kernel,rope
+GPU,2098.202,55.616,_paged_decode_split_kernel,attention
+GPU,2153.69,4.736,_paged_decode_reduce_kernel,attention
+GPU,2158.266,17.856,gemm_w4a16_mma_kernel,gemm
+GPU,2176.218,2.752,_fused_add_rms_norm_kernel,norm
+GPU,2179.034,75.232,gemm_w4a16_mma_kernel,gemm
+GPU,2254.17,2.72,_silu_and_mul_kernel,activation
+GPU,2256.762,48.48,gemm_w4a16_mma_kernel,gemm
+GPU,2305.114,2.88,_fused_add_rms_norm_kernel,norm
+GPU,2307.866,22.464,gemm_w4a16_mma_kernel,gemm
+GPU,2330.394,3.168,_rope_cache_write_kernel,rope
+GPU,2333.626,55.297,_paged_decode_split_kernel,attention
+GPU,2388.699,4.64,_paged_decode_reduce_kernel,attention
+GPU,2393.211,18.016,gemm_w4a16_mma_kernel,gemm
+GPU,2411.291,2.752,_fused_add_rms_norm_kernel,norm
+GPU,2414.107,74.464,gemm_w4a16_mma_kernel,gemm
+GPU,2488.475,2.752,_silu_and_mul_kernel,activation
+GPU,2491.099,47.712,gemm_w4a16_mma_kernel,gemm
+GPU,2538.683,2.944,_fused_add_rms_norm_kernel,norm
+GPU,2541.499,22.304,gemm_w4a16_mma_kernel,gemm
+GPU,2563.867,3.424,_rope_cache_write_kernel,rope
+GPU,2567.355,55.264,_paged_decode_split_kernel,attention
+GPU,2622.491,4.64,_paged_decode_reduce_kernel,attention
+GPU,2627.035,17.984,gemm_w4a16_mma_kernel,gemm
+GPU,2645.115,2.784,_fused_add_rms_norm_kernel,norm
+GPU,2647.995,75.809,gemm_w4a16_mma_kernel,gemm
+GPU,2723.708,2.72,_silu_and_mul_kernel,activation
+GPU,2726.332,49.248,gemm_w4a16_mma_kernel,gemm
+GPU,2775.644,3.04,_fused_add_rms_norm_kernel,norm
+GPU,2778.524,22.688,gemm_w4a16_mma_kernel,gemm
+GPU,2801.244,3.232,_rope_cache_write_kernel,rope
+GPU,2804.508,56.544,_paged_decode_split_kernel,attention
+GPU,2860.892,4.704,_paged_decode_reduce_kernel,attention
+GPU,2865.436,18.719,gemm_w4a16_mma_kernel,gemm
+GPU,2884.156,2.943,_fused_add_rms_norm_kernel,norm
+GPU,2887.1,76.096,gemm_w4a16_mma_kernel,gemm
+GPU,2963.036,2.784,_silu_and_mul_kernel,activation
+GPU,2965.66,48.64,gemm_w4a16_mma_kernel,gemm
+GPU,3014.172,2.912,_fused_add_rms_norm_kernel,norm
+GPU,3016.924,22.881,gemm_w4a16_mma_kernel,gemm
+GPU,3039.837,3.296,_rope_cache_write_kernel,rope
+GPU,3043.165,55.04,_paged_decode_split_kernel,attention
+GPU,3098.045,4.704,_paged_decode_reduce_kernel,attention
+GPU,3102.589,18.016,gemm_w4a16_mma_kernel,gemm
+GPU,3120.637,2.815,_fused_add_rms_norm_kernel,norm
+GPU,3123.453,74.976,gemm_w4a16_mma_kernel,gemm
+GPU,3198.301,2.784,_silu_and_mul_kernel,activation
+GPU,3200.893,48.768,gemm_w4a16_mma_kernel,gemm
+GPU,3249.501,3.072,_fused_add_rms_norm_kernel,norm
+GPU,3252.413,22.592,gemm_w4a16_mma_kernel,gemm
+GPU,3275.037,3.232,_rope_cache_write_kernel,rope
+GPU,3278.301,56.352,_paged_decode_split_kernel,attention
+GPU,3334.397,4.608,_paged_decode_reduce_kernel,attention
+GPU,3338.877,17.984,gemm_w4a16_mma_kernel,gemm
+GPU,3356.893,2.848,_fused_add_rms_norm_kernel,norm
+GPU,3359.742,75.264,gemm_w4a16_mma_kernel,gemm
+GPU,3434.878,2.752,_silu_and_mul_kernel,activation
+GPU,3437.502,48.704,gemm_w4a16_mma_kernel,gemm
+GPU,3486.078,2.944,_fused_add_rms_norm_kernel,norm
+GPU,3488.862,22.752,gemm_w4a16_mma_kernel,gemm
+GPU,3511.646,3.232,_rope_cache_write_kernel,rope
+GPU,3514.942,55.392,_paged_decode_split_kernel,attention
+GPU,3570.238,4.608,_paged_decode_reduce_kernel,attention
+GPU,3574.75,18.08,gemm_w4a16_mma_kernel,gemm
+GPU,3592.894,2.816,_fused_add_rms_norm_kernel,norm
+GPU,3595.774,74.496,gemm_w4a16_mma_kernel,gemm
+GPU,3670.174,2.784,_silu_and_mul_kernel,activation
+GPU,3672.83,47.777,gemm_w4a16_mma_kernel,gemm
+GPU,3720.511,3.136,_fused_add_rms_norm_kernel,norm
+GPU,3723.455,22.88,gemm_w4a16_mma_kernel,gemm
+GPU,3746.399,3.36,_rope_cache_write_kernel,rope
+GPU,3749.823,55.36,_paged_decode_split_kernel,attention
+GPU,3805.055,4.64,_paged_decode_reduce_kernel,attention
+GPU,3809.567,17.984,gemm_w4a16_mma_kernel,gemm
+GPU,3827.615,2.848,_fused_add_rms_norm_kernel,norm
+GPU,3830.559,75.36,gemm_w4a16_mma_kernel,gemm
+GPU,3905.823,2.88,_silu_and_mul_kernel,activation
+GPU,3908.543,49.088,gemm_w4a16_mma_kernel,gemm
+GPU,3957.535,2.88,_fused_add_rms_norm_kernel,norm
+GPU,3960.319,22.752,gemm_w4a16_mma_kernel,gemm
+GPU,3983.135,3.264,_rope_cache_write_kernel,rope
+GPU,3986.463,55.585,_paged_decode_split_kernel,attention
+GPU,4041.952,4.672,_paged_decode_reduce_kernel,attention
+GPU,4046.496,18.368,gemm_w4a16_mma_kernel,gemm
+GPU,4064.928,2.912,_fused_add_rms_norm_kernel,norm
+GPU,4067.904,74.976,gemm_w4a16_mma_kernel,gemm
+GPU,4142.784,2.752,_silu_and_mul_kernel,activation
+GPU,4145.44,48.32,gemm_w4a16_mma_kernel,gemm
+GPU,4193.632,3.104,_fused_add_rms_norm_kernel,norm
+GPU,4196.608,22.368,gemm_w4a16_mma_kernel,gemm
+GPU,4219.04,3.2,_rope_cache_write_kernel,rope
+GPU,4222.304,55.616,_paged_decode_split_kernel,attention
+GPU,4277.792,4.672,_paged_decode_reduce_kernel,attention
+GPU,4282.336,17.888,gemm_w4a16_mma_kernel,gemm
+GPU,4300.256,2.848,_fused_add_rms_norm_kernel,norm
+GPU,4303.136,75.489,gemm_w4a16_mma_kernel,gemm
+GPU,4378.465,2.784,_silu_and_mul_kernel,activation
+GPU,4381.089,49.184,gemm_w4a16_mma_kernel,gemm
+GPU,4430.113,2.944,_fused_add_rms_norm_kernel,norm
+GPU,4432.897,22.464,gemm_w4a16_mma_kernel,gemm
+GPU,4455.393,3.36,_rope_cache_write_kernel,rope
+GPU,4458.785,55.52,_paged_decode_split_kernel,attention
+GPU,4514.177,4.736,_paged_decode_reduce_kernel,attention
+GPU,4518.689,18.016,gemm_w4a16_mma_kernel,gemm
+GPU,4536.769,2.88,_fused_add_rms_norm_kernel,norm
+GPU,4539.681,75.424,gemm_w4a16_mma_kernel,gemm
+GPU,4614.977,2.72,_silu_and_mul_kernel,activation
+GPU,4617.569,48.32,gemm_w4a16_mma_kernel,gemm
+GPU,4665.761,2.752,_fused_add_rms_norm_kernel,norm
+GPU,4668.545,22.496,gemm_w4a16_mma_kernel,gemm
+GPU,4691.073,3.232,_rope_cache_write_kernel,rope
+GPU,4694.337,55.873,_paged_decode_split_kernel,attention
+GPU,4750.05,4.704,_paged_decode_reduce_kernel,attention
+GPU,4754.594,18.016,gemm_w4a16_mma_kernel,gemm
+GPU,4772.642,2.816,_fused_add_rms_norm_kernel,norm
+GPU,4775.49,75.744,gemm_w4a16_mma_kernel,gemm
+GPU,4851.074,2.784,_silu_and_mul_kernel,activation
+GPU,4853.73,48.16,gemm_w4a16_mma_kernel,gemm
+GPU,4901.762,2.976,_fused_add_rms_norm_kernel,norm
+GPU,4904.578,22.56,gemm_w4a16_mma_kernel,gemm
+GPU,4927.17,3.232,_rope_cache_write_kernel,rope
+GPU,4930.466,54.88,_paged_decode_split_kernel,attention
+GPU,4985.218,4.704,_paged_decode_reduce_kernel,attention
+GPU,4989.794,17.952,gemm_w4a16_mma_kernel,gemm
+GPU,5007.81,2.784,_fused_add_rms_norm_kernel,norm
+GPU,5010.658,74.273,gemm_w4a16_mma_kernel,gemm
+GPU,5084.835,2.784,_silu_and_mul_kernel,activation
+GPU,5087.491,48.544,gemm_w4a16_mma_kernel,gemm
+GPU,5135.907,2.912,_fused_add_rms_norm_kernel,norm
+GPU,5138.723,22.56,gemm_w4a16_mma_kernel,gemm
+GPU,5161.315,3.232,_rope_cache_write_kernel,rope
+GPU,5164.611,55.68,_paged_decode_split_kernel,attention
+GPU,5220.195,4.608,_paged_decode_reduce_kernel,attention
+GPU,5224.675,17.92,gemm_w4a16_mma_kernel,gemm
+GPU,5242.659,2.848,_fused_add_rms_norm_kernel,norm
+GPU,5245.571,74.912,gemm_w4a16_mma_kernel,gemm
+GPU,5320.291,2.72,_silu_and_mul_kernel,activation
+GPU,5322.915,48.16,gemm_w4a16_mma_kernel,gemm
+GPU,5370.979,3.104,_fused_add_rms_norm_kernel,norm
+GPU,5373.859,23.041,gemm_w4a16_mma_kernel,gemm
+GPU,5396.996,3.36,_rope_cache_write_kernel,rope
+GPU,5400.42,54.688,_paged_decode_split_kernel,attention
+GPU,5455.012,4.64,_paged_decode_reduce_kernel,attention
+GPU,5459.556,18.048,gemm_w4a16_mma_kernel,gemm
+GPU,5477.668,2.784,_fused_add_rms_norm_kernel,norm
+GPU,5480.516,75.488,gemm_w4a16_mma_kernel,gemm
+GPU,5555.876,2.752,_silu_and_mul_kernel,activation
+GPU,5558.5,48.672,gemm_w4a16_mma_kernel,gemm
+GPU,5607.076,2.944,_fused_add_rms_norm_kernel,norm
+GPU,5609.892,22.496,gemm_w4a16_mma_kernel,gemm
+GPU,5632.484,3.232,_rope_cache_write_kernel,rope
+GPU,5635.78,55.84,_paged_decode_split_kernel,attention
+GPU,5691.332,4.672,_paged_decode_reduce_kernel,attention
+GPU,5695.876,18.016,gemm_w4a16_mma_kernel,gemm
+GPU,5713.956,2.752,_fused_add_rms_norm_kernel,norm
+GPU,5716.772,75.137,gemm_w4a16_mma_kernel,gemm
+GPU,5791.813,2.784,_silu_and_mul_kernel,activation
+GPU,5794.437,48.384,gemm_w4a16_mma_kernel,gemm
+GPU,5842.693,2.816,_fused_add_rms_norm_kernel,norm
+GPU,5845.541,22.592,gemm_w4a16_mma_kernel,gemm
+GPU,5868.165,3.168,_rope_cache_write_kernel,rope
+GPU,5871.397,55.712,_paged_decode_split_kernel,attention
+GPU,5926.949,4.736,_paged_decode_reduce_kernel,attention
+GPU,5931.525,18.048,gemm_w4a16_mma_kernel,gemm
+GPU,5949.605,2.848,_fused_add_rms_norm_kernel,norm
+GPU,5952.485,74.88,gemm_w4a16_mma_kernel,gemm
+GPU,6027.237,2.784,_silu_and_mul_kernel,activation
+GPU,6029.861,49.217,gemm_w4a16_mma_kernel,gemm
+GPU,6078.95,3.008,_fused_add_rms_norm_kernel,norm
+GPU,6081.83,22.304,gemm_w4a16_mma_kernel,gemm
+GPU,6104.166,3.232,_rope_cache_write_kernel,rope
+GPU,6107.43,55.584,_paged_decode_split_kernel,attention
+GPU,6162.694,4.672,_paged_decode_reduce_kernel,attention
+GPU,6167.206,17.92,gemm_w4a16_mma_kernel,gemm
+GPU,6185.158,2.784,_fused_add_rms_norm_kernel,norm
+GPU,6187.974,74.656,gemm_w4a16_mma_kernel,gemm
+GPU,6262.47,2.816,_silu_and_mul_kernel,activation
+GPU,6265.158,48.192,gemm_w4a16_mma_kernel,gemm
+GPU,6313.19,3.104,_fused_add_rms_norm_kernel,norm
+GPU,6316.07,22.816,gemm_w4a16_mma_kernel,gemm
+GPU,6338.918,3.264,_rope_cache_write_kernel,rope
+GPU,6342.214,55.681,_paged_decode_split_kernel,attention
+GPU,6397.767,4.64,_paged_decode_reduce_kernel,attention
+GPU,6402.279,18.24,gemm_w4a16_mma_kernel,gemm
+GPU,6420.551,2.848,_fused_add_rms_norm_kernel,norm
+GPU,6423.431,75.744,gemm_w4a16_mma_kernel,gemm
+GPU,6499.015,2.848,_silu_and_mul_kernel,activation
+GPU,6501.735,48.032,gemm_w4a16_mma_kernel,gemm
+GPU,6549.639,3.04,_fused_add_rms_norm_kernel,norm
+GPU,6552.551,22.592,gemm_w4a16_mma_kernel,gemm
+GPU,6575.207,3.2,_rope_cache_write_kernel,rope
+GPU,6578.471,55.744,_paged_decode_split_kernel,attention
+GPU,6634.119,4.608,_paged_decode_reduce_kernel,attention
+GPU,6638.599,18.048,gemm_w4a16_mma_kernel,gemm
+GPU,6656.743,2.784,_fused_add_rms_norm_kernel,norm
+GPU,6659.591,76.705,gemm_w4a16_mma_kernel,gemm
+GPU,6736.168,2.784,_silu_and_mul_kernel,activation
+GPU,6738.824,48.0,gemm_w4a16_mma_kernel,gemm
+GPU,6786.696,2.816,_fused_add_rms_norm_kernel,norm
+GPU,6789.576,22.752,gemm_w4a16_mma_kernel,gemm
+GPU,6812.392,3.232,_rope_cache_write_kernel,rope
+GPU,6815.688,55.424,_paged_decode_split_kernel,attention
+GPU,6871.016,4.8,_paged_decode_reduce_kernel,attention
+GPU,6875.528,18.048,gemm_w4a16_mma_kernel,gemm
+GPU,6893.64,2.848,_fused_add_rms_norm_kernel,norm
+GPU,6896.552,74.784,gemm_w4a16_mma_kernel,gemm
+GPU,6971.24,2.784,_silu_and_mul_kernel,activation
+GPU,6973.896,49.856,gemm_w4a16_mma_kernel,gemm
+GPU,7023.624,3.136,_fused_add_rms_norm_kernel,norm
+GPU,7026.472,22.432,gemm_w4a16_mma_kernel,gemm
+GPU,7048.968,3.168,_rope_cache_write_kernel,rope
+GPU,7052.2,55.425,_paged_decode_split_kernel,attention
+GPU,7107.529,4.672,_paged_decode_reduce_kernel,attention
+GPU,7112.105,17.824,gemm_w4a16_mma_kernel,gemm
+GPU,7130.025,2.752,_fused_add_rms_norm_kernel,norm
+GPU,7132.841,75.264,gemm_w4a16_mma_kernel,gemm
+GPU,7208.009,2.784,_silu_and_mul_kernel,activation
+GPU,7210.697,48.064,gemm_w4a16_mma_kernel,gemm
+GPU,7258.825,2.752,_fused_add_rms_norm_kernel,norm
+GPU,7261.641,22.656,gemm_w4a16_mma_kernel,gemm
+GPU,7284.361,3.456,_rope_cache_write_kernel,rope
+GPU,7287.849,56.192,_paged_decode_split_kernel,attention
+GPU,7343.753,4.704,_paged_decode_reduce_kernel,attention
+GPU,7348.329,18.048,gemm_w4a16_mma_kernel,gemm
+GPU,7366.409,2.816,_fused_add_rms_norm_kernel,norm
+GPU,7369.257,75.009,gemm_w4a16_mma_kernel,gemm
+GPU,7444.106,2.816,_silu_and_mul_kernel,activation
+GPU,7446.794,48.192,gemm_w4a16_mma_kernel,gemm
+GPU,7494.858,2.368,vectorized_gather_kernel,elementwise/copy
+GPU,7497.098,2.336,vectorized_gather_kernel,elementwise/copy
+GPU,7499.466,2.72,_fused_add_rms_norm_kernel,norm
+GPU,7502.218,734.018,_gemv_kernel,gemm
+GPU,8237.644,55.072,reduce_kernel,sampling
+GPU,8322.636,10.592,unrolled_elementwise_kernel,elementwise/copy
+GPU,8334.508,10.464,elementwise_kernel,elementwise/copy
+GPU,8353.388,13.792,fill_index_and_segment_kernel,elementwise/copy
+GPU,8375.98,22.048,DeviceRadixSortHistogramKernel,sampling
+GPU,8399.116,2.272,DeviceRadixSortExclusiveSumKernel,sampling
+GPU,8406.476,47.265,DeviceRadixSortOnesweepKernel,sampling
+GPU,8458.573,43.168,DeviceRadixSortOnesweepKernel,sampling
+GPU,8506.477,51.424,DeviceRadixSortOnesweepKernel,sampling
+GPU,8562.701,48.512,DeviceRadixSortOnesweepKernel,sampling
+GPU,8621.261,10.272,DeviceRadixSortHistogramKernel,sampling
+GPU,8632.589,2.72,DeviceRadixSortExclusiveSumKernel,sampling
+GPU,8639.725,33.792,DeviceRadixSortOnesweepKernel,sampling
+GPU,8674.573,41.472,sort_postprocess_kernel,sampling
+GPU,8717.197,3.808,elementwise_kernel_with_index,elementwise/copy
+GPU,8722.285,10.144,elementwise_kernel,elementwise/copy
+GPU,8743.501,6.944,vectorized_elementwise_kernel,elementwise/copy
+GPU,8751.501,54.977,cunn_SoftMaxForward,attention
+GPU,8807.502,230.944,tensor_kernel_scan_innermost_dim,other
+GPU,9039.758,8.704,vectorized_elementwise_kernel,elementwise/copy
+GPU,9049.55,10.432,elementwise_kernel,elementwise/copy
+GPU,9068.846,6.912,vectorized_elementwise_kernel,elementwise/copy
+GPU,9076.814,22.336,reduce_kernel,other
+GPU,9100.271,6.432,vectorized_elementwise_kernel,elementwise/copy
+GPU,9107.983,4.352,vectorized_elementwise_kernel,elementwise/copy
+GPU,9114.575,4.128,vectorized_elementwise_kernel,elementwise/copy
+GPU,9119.951,4.064,vectorized_elementwise_kernel,elementwise/copy
+GPU,9125.263,23.68,reduce_kernel,other
+GPU,9149.999,2.464,vectorized_elementwise_kernel,elementwise/copy
+GPU,9153.743,2.624,vectorized_elementwise_kernel,elementwise/copy
+GPU,9157.455,2.4,vectorized_elementwise_kernel,elementwise/copy
+GPU,9161.167,3.296,vectorized_elementwise_kernel,elementwise/copy
+GPU,9165.615,4.544,unrolled_elementwise_kernel,elementwise/copy
+GPU,9171.439,11.616,elementwise_kernel,elementwise/copy
+GPU,9188.527,10.56,reduce_kernel,other
+GPU,9200.335,2.176,vectorized_elementwise_kernel,elementwise/copy
+GPU,9208.719,10.112,reduce_kernel,other
+GPU,9219.887,2.048,vectorized_elementwise_kernel,elementwise/copy
+GPU,9223.055,2.176,vectorized_elementwise_kernel,elementwise/copy
+GPU,9226.575,3.776,_assert_async_cuda_kernel,other
+GPU,9231.631,20.064,reduce_kernel,other
+GPU,9252.719,2.144,vectorized_elementwise_kernel,elementwise/copy
+GPU,9255.951,4.192,reduce_kernel,other
+GPU,9261.455,2.176,vectorized_elementwise_kernel,elementwise/copy
+GPU,9264.943,3.744,_assert_async_cuda_kernel,other
+GPU,9269.967,11.872,distribution_elementwise_grid_stride_kernel,sampling
+GPU,9283.087,9.376,vectorized_elementwise_kernel,elementwise/copy
+GPU,9293.551,41.024,reduce_kernel,sampling
+GPU,9335.855,3.584,_scatter_gather_elementwise_kernel,elementwise/copy
+GPU,9340.495,2.464,vectorized_elementwise_kernel,elementwise/copy
+GPU,9383.215,2.624,vectorized_elementwise_kernel,elementwise/copy
+GPU,9385.871,1.984,vectorized_elementwise_kernel,elementwise/copy
+GPU,9387.887,4.032,index_elementwise_kernel,elementwise/copy
+GPU,9391.983,2.24,vectorized_elementwise_kernel,elementwise/copy
+GPU,9394.575,2.24,vectorized_gather_kernel,elementwise/copy
+GPU,9396.847,2.048,vectorized_gather_kernel,elementwise/copy
+GPU,9398.927,2.528,vectorized_gather_kernel,elementwise/copy
+GPU,9401.551,2.72,_rms_norm_kernel,norm
+GPU,9404.303,26.496,gemm_w4a16_mma_kernel,gemm
+GPU,9431.343,3.104,_rope_cache_write_kernel,rope
+GPU,9434.479,63.969,_paged_decode_split_kernel,attention
+GPU,9498.32,4.672,_paged_decode_reduce_kernel,attention
+GPU,9502.864,17.856,gemm_w4a16_mma_kernel,gemm
+GPU,9520.752,2.784,_fused_add_rms_norm_kernel,norm
+GPU,9523.568,76.416,gemm_w4a16_mma_kernel,gemm
+GPU,9599.856,2.784,_silu_and_mul_kernel,activation
+GPU,9602.48,47.68,gemm_w4a16_mma_kernel,gemm
+GPU,9650.0,2.816,_fused_add_rms_norm_kernel,norm
+GPU,9652.88,22.496,gemm_w4a16_mma_kernel,gemm
+GPU,9675.408,3.296,_rope_cache_write_kernel,rope
+GPU,9678.736,55.776,_paged_decode_split_kernel,attention
+GPU,9734.384,4.736,_paged_decode_reduce_kernel,attention
+GPU,9738.96,18.048,gemm_w4a16_mma_kernel,gemm
+GPU,9757.04,2.848,_fused_add_rms_norm_kernel,norm
+GPU,9759.92,75.169,gemm_w4a16_mma_kernel,gemm
+GPU,9834.961,2.784,_silu_and_mul_kernel,activation
+GPU,9837.617,48.064,gemm_w4a16_mma_kernel,gemm
+GPU,9885.521,2.944,_fused_add_rms_norm_kernel,norm
+GPU,9888.337,22.591,gemm_w4a16_mma_kernel,gemm
+GPU,9910.929,3.36,_rope_cache_write_kernel,rope
+GPU,9914.353,57.248,_paged_decode_split_kernel,attention
+GPU,9971.473,4.672,_paged_decode_reduce_kernel,attention
+GPU,9976.049,18.048,gemm_w4a16_mma_kernel,gemm
+GPU,9994.161,2.752,_fused_add_rms_norm_kernel,norm
+GPU,9996.977,76.192,gemm_w4a16_mma_kernel,gemm
+GPU,10073.073,2.848,_silu_and_mul_kernel,activation
+GPU,10075.793,48.033,gemm_w4a16_mma_kernel,gemm
+GPU,10123.698,2.944,_fused_add_rms_norm_kernel,norm
+GPU,10126.514,22.176,gemm_w4a16_mma_kernel,gemm
+GPU,10148.786,3.264,_rope_cache_write_kernel,rope
+GPU,10152.114,55.904,_paged_decode_split_kernel,attention
+GPU,10207.922,4.8,_paged_decode_reduce_kernel,attention
+GPU,10212.466,18.208,gemm_w4a16_mma_kernel,gemm
+GPU,10230.738,2.848,_fused_add_rms_norm_kernel,norm
+GPU,10233.65,75.008,gemm_w4a16_mma_kernel,gemm
+GPU,10308.562,2.784,_silu_and_mul_kernel,activation
+GPU,10311.25,48.608,gemm_w4a16_mma_kernel,gemm
+GPU,10359.762,2.976,_fused_add_rms_norm_kernel,norm
+GPU,10362.642,22.304,gemm_w4a16_mma_kernel,gemm
+GPU,10385.01,3.232,_rope_cache_write_kernel,rope
+GPU,10388.306,55.584,_paged_decode_split_kernel,attention
+GPU,10443.762,4.608,_paged_decode_reduce_kernel,attention
+GPU,10448.242,17.953,gemm_w4a16_mma_kernel,gemm
+GPU,10466.259,2.752,_fused_add_rms_norm_kernel,norm
+GPU,10469.075,76.064,gemm_w4a16_mma_kernel,gemm
+GPU,10545.011,2.752,_silu_and_mul_kernel,activation
+GPU,10547.635,48.288,gemm_w4a16_mma_kernel,gemm
+GPU,10595.827,2.912,_fused_add_rms_norm_kernel,norm
+GPU,10598.643,22.464,gemm_w4a16_mma_kernel,gemm
+GPU,10621.171,3.104,_rope_cache_write_kernel,rope
+GPU,10624.371,56.384,_paged_decode_split_kernel,attention
+GPU,10680.627,4.64,_paged_decode_reduce_kernel,attention
+GPU,10685.171,17.824,gemm_w4a16_mma_kernel,gemm
+GPU,10703.059,2.784,_fused_add_rms_norm_kernel,norm
+GPU,10705.875,75.136,gemm_w4a16_mma_kernel,gemm
+GPU,10780.851,2.848,_silu_and_mul_kernel,activation
+GPU,10783.539,48.833,gemm_w4a16_mma_kernel,gemm
+GPU,10832.148,3.008,_fused_add_rms_norm_kernel,norm
+GPU,10834.996,22.528,gemm_w4a16_mma_kernel,gemm
+GPU,10857.588,3.232,_rope_cache_write_kernel,rope
+GPU,10860.852,56.16,_paged_decode_split_kernel,attention
+GPU,10916.884,4.64,_paged_decode_reduce_kernel,attention
+GPU,10921.396,17.824,gemm_w4a16_mma_kernel,gemm
+GPU,10939.252,2.816,_fused_add_rms_norm_kernel,norm
+GPU,10942.1,75.072,gemm_w4a16_mma_kernel,gemm
+GPU,11017.044,2.784,_silu_and_mul_kernel,activation
+GPU,11019.668,48.704,gemm_w4a16_mma_kernel,gemm
+GPU,11068.244,3.072,_fused_add_rms_norm_kernel,norm
+GPU,11071.156,22.624,gemm_w4a16_mma_kernel,gemm
+GPU,11093.812,3.488,_rope_cache_write_kernel,rope
+GPU,11097.332,55.169,_paged_decode_split_kernel,attention
+GPU,11152.373,4.672,_paged_decode_reduce_kernel,attention
+GPU,11156.917,18.048,gemm_w4a16_mma_kernel,gemm
+GPU,11174.997,2.88,_fused_add_rms_norm_kernel,norm
+GPU,11177.909,75.584,gemm_w4a16_mma_kernel,gemm
+GPU,11253.333,2.784,_silu_and_mul_kernel,activation
+GPU,11255.989,48.256,gemm_w4a16_mma_kernel,gemm
+GPU,11304.085,2.752,_fused_add_rms_norm_kernel,norm
+GPU,11306.901,22.496,gemm_w4a16_mma_kernel,gemm
+GPU,11329.429,3.232,_rope_cache_write_kernel,rope
+GPU,11332.725,55.328,_paged_decode_split_kernel,attention
+GPU,11387.893,4.832,_paged_decode_reduce_kernel,attention
+GPU,11392.405,18.016,gemm_w4a16_mma_kernel,gemm
+GPU,11410.453,2.816,_fused_add_rms_norm_kernel,norm
+GPU,11413.301,75.809,gemm_w4a16_mma_kernel,gemm
+GPU,11488.982,2.656,_silu_and_mul_kernel,activation
+GPU,11491.542,48.256,gemm_w4a16_mma_kernel,gemm
+GPU,11539.702,3.168,_fused_add_rms_norm_kernel,norm
+GPU,11542.582,22.656,gemm_w4a16_mma_kernel,gemm
+GPU,11565.302,3.2,_rope_cache_write_kernel,rope
+GPU,11568.566,55.616,_paged_decode_split_kernel,attention
+GPU,11624.054,4.64,_paged_decode_reduce_kernel,attention
+GPU,11628.598,17.824,gemm_w4a16_mma_kernel,gemm
+GPU,11646.486,2.816,_fused_add_rms_norm_kernel,norm
+GPU,11649.366,76.416,gemm_w4a16_mma_kernel,gemm
+GPU,11725.494,2.752,_silu_and_mul_kernel,activation
+GPU,11728.15,47.936,gemm_w4a16_mma_kernel,gemm
+GPU,11775.99,2.912,_fused_add_rms_norm_kernel,norm
+GPU,11778.774,22.304,gemm_w4a16_mma_kernel,gemm
+GPU,11801.142,3.201,_rope_cache_write_kernel,rope
+GPU,11804.407,57.312,_paged_decode_split_kernel,attention
+GPU,11861.623,4.576,_paged_decode_reduce_kernel,attention
+GPU,11866.103,17.92,gemm_w4a16_mma_kernel,gemm
+GPU,11884.087,2.816,_fused_add_rms_norm_kernel,norm
+GPU,11886.967,74.912,gemm_w4a16_mma_kernel,gemm
+GPU,11961.783,2.752,_silu_and_mul_kernel,activation
+GPU,11964.407,47.808,gemm_w4a16_mma_kernel,gemm
+GPU,12012.119,3.04,_fused_add_rms_norm_kernel,norm
+GPU,12014.999,22.4,gemm_w4a16_mma_kernel,gemm
+GPU,12037.463,3.264,_rope_cache_write_kernel,rope
+GPU,12040.791,56.224,_paged_decode_split_kernel,attention
+GPU,12096.855,4.64,_paged_decode_reduce_kernel,attention
+GPU,12101.367,17.984,gemm_w4a16_mma_kernel,gemm
+GPU,12119.415,2.784,_fused_add_rms_norm_kernel,norm
+GPU,12122.295,75.201,gemm_w4a16_mma_kernel,gemm
+GPU,12197.4,2.72,_silu_and_mul_kernel,activation
+GPU,12199.992,47.904,gemm_w4a16_mma_kernel,gemm
+GPU,12247.992,2.944,_fused_add_rms_norm_kernel,norm
+GPU,12250.776,22.592,gemm_w4a16_mma_kernel,gemm
+GPU,12273.4,3.232,_rope_cache_write_kernel,rope
+GPU,12276.664,55.328,_paged_decode_split_kernel,attention
+GPU,12331.832,4.704,_paged_decode_reduce_kernel,attention
+GPU,12336.408,17.76,gemm_w4a16_mma_kernel,gemm
+GPU,12354.2,2.784,_fused_add_rms_norm_kernel,norm
+GPU,12357.016,76.0,gemm_w4a16_mma_kernel,gemm
+GPU,12432.856,2.784,_silu_and_mul_kernel,activation
+GPU,12435.48,49.057,gemm_w4a16_mma_kernel,gemm
+GPU,12484.345,2.944,_fused_add_rms_norm_kernel,norm
+GPU,12487.129,22.944,gemm_w4a16_mma_kernel,gemm
+GPU,12510.105,3.232,_rope_cache_write_kernel,rope
+GPU,12513.369,56.448,_paged_decode_split_kernel,attention
+GPU,12569.657,4.768,_paged_decode_reduce_kernel,attention
+GPU,12574.297,17.952,gemm_w4a16_mma_kernel,gemm
+GPU,12592.281,2.847,_fused_add_rms_norm_kernel,norm
+GPU,12595.129,75.232,gemm_w4a16_mma_kernel,gemm
+GPU,12670.233,2.848,_silu_and_mul_kernel,activation
+GPU,12672.921,49.088,gemm_w4a16_mma_kernel,gemm
+GPU,12721.881,2.944,_fused_add_rms_norm_kernel,norm
+GPU,12724.665,22.464,gemm_w4a16_mma_kernel,gemm
+GPU,12747.161,3.2,_rope_cache_write_kernel,rope
+GPU,12750.425,55.616,_paged_decode_split_kernel,attention
+GPU,12805.721,4.608,_paged_decode_reduce_kernel,attention
+GPU,12810.201,17.921,gemm_w4a16_mma_kernel,gemm
+GPU,12828.154,2.88,_fused_add_rms_norm_kernel,norm
+GPU,12831.066,76.672,gemm_w4a16_mma_kernel,gemm
+GPU,12907.61,2.784,_silu_and_mul_kernel,activation
+GPU,12910.266,48.16,gemm_w4a16_mma_kernel,gemm
+GPU,12958.298,3.104,_fused_add_rms_norm_kernel,norm
+GPU,12961.274,22.368,gemm_w4a16_mma_kernel,gemm
+GPU,12983.706,3.328,_rope_cache_write_kernel,rope
+GPU,12987.098,55.68,_paged_decode_split_kernel,attention
+GPU,13042.682,4.704,_paged_decode_reduce_kernel,attention
+GPU,13047.258,17.92,gemm_w4a16_mma_kernel,gemm
+GPU,13065.242,2.816,_fused_add_rms_norm_kernel,norm
+GPU,13068.122,74.464,gemm_w4a16_mma_kernel,gemm
+GPU,13142.49,2.784,_silu_and_mul_kernel,activation
+GPU,13145.146,47.713,gemm_w4a16_mma_kernel,gemm
+GPU,13192.763,2.944,_fused_add_rms_norm_kernel,norm
+GPU,13195.611,22.432,gemm_w4a16_mma_kernel,gemm
+GPU,13218.139,3.328,_rope_cache_write_kernel,rope
+GPU,13221.563,55.424,_paged_decode_split_kernel,attention
+GPU,13276.891,4.608,_paged_decode_reduce_kernel,attention
+GPU,13281.403,17.952,gemm_w4a16_mma_kernel,gemm
+GPU,13299.419,2.784,_fused_add_rms_norm_kernel,norm
+GPU,13302.299,76.416,gemm_w4a16_mma_kernel,gemm
+GPU,13378.587,2.688,_silu_and_mul_kernel,activation
+GPU,13381.179,48.288,gemm_w4a16_mma_kernel,gemm
+GPU,13429.371,3.04,_fused_add_rms_norm_kernel,norm
+GPU,13432.123,22.752,gemm_w4a16_mma_kernel,gemm
+GPU,13454.939,3.168,_rope_cache_write_kernel,rope
+GPU,13458.171,57.249,_paged_decode_split_kernel,attention
+GPU,13515.292,4.736,_paged_decode_reduce_kernel,attention
+GPU,13519.836,18.048,gemm_w4a16_mma_kernel,gemm
+GPU,13537.948,2.784,_fused_add_rms_norm_kernel,norm
+GPU,13540.796,75.168,gemm_w4a16_mma_kernel,gemm
+GPU,13615.868,2.784,_silu_and_mul_kernel,activation
+GPU,13618.556,49.152,gemm_w4a16_mma_kernel,gemm
+GPU,13667.58,2.88,_fused_add_rms_norm_kernel,norm
+GPU,13670.332,22.432,gemm_w4a16_mma_kernel,gemm
+GPU,13692.828,3.168,_rope_cache_write_kernel,rope
+GPU,13696.06,55.072,_paged_decode_split_kernel,attention
+GPU,13751.004,4.672,_paged_decode_reduce_kernel,attention
+GPU,13755.516,18.336,gemm_w4a16_mma_kernel,gemm
+GPU,13773.884,2.912,_fused_add_rms_norm_kernel,norm
+GPU,13776.828,75.457,gemm_w4a16_mma_kernel,gemm
+GPU,13852.125,2.752,_silu_and_mul_kernel,activation
+GPU,13854.717,48.16,gemm_w4a16_mma_kernel,gemm
+GPU,13902.717,3.072,_fused_add_rms_norm_kernel,norm
+GPU,13905.629,22.432,gemm_w4a16_mma_kernel,gemm
+GPU,13928.093,3.264,_rope_cache_write_kernel,rope
+GPU,13931.421,55.776,_paged_decode_split_kernel,attention
+GPU,13987.069,4.704,_paged_decode_reduce_kernel,attention
+GPU,13991.613,18.112,gemm_w4a16_mma_kernel,gemm
+GPU,14009.789,2.784,_fused_add_rms_norm_kernel,norm
+GPU,14012.605,75.072,gemm_w4a16_mma_kernel,gemm
+GPU,14087.549,2.848,_silu_and_mul_kernel,activation
+GPU,14090.269,48.32,gemm_w4a16_mma_kernel,gemm
+GPU,14138.429,2.944,_fused_add_rms_norm_kernel,norm
+GPU,14141.405,22.752,gemm_w4a16_mma_kernel,gemm
+GPU,14164.189,3.233,_rope_cache_write_kernel,rope
+GPU,14167.454,56.896,_paged_decode_split_kernel,attention
+GPU,14224.222,4.672,_paged_decode_reduce_kernel,attention
+GPU,14228.766,18.112,gemm_w4a16_mma_kernel,gemm
+GPU,14246.91,2.976,_fused_add_rms_norm_kernel,norm
+GPU,14249.918,75.712,gemm_w4a16_mma_kernel,gemm
+GPU,14325.502,2.912,_silu_and_mul_kernel,activation
+GPU,14328.254,48.256,gemm_w4a16_mma_kernel,gemm
+GPU,14376.35,3.008,_fused_add_rms_norm_kernel,norm
+GPU,14379.198,22.271,gemm_w4a16_mma_kernel,gemm
+GPU,14401.47,3.136,_rope_cache_write_kernel,rope
+GPU,14404.638,56.032,_paged_decode_split_kernel,attention
+GPU,14460.51,4.672,_paged_decode_reduce_kernel,attention
+GPU,14465.054,17.92,gemm_w4a16_mma_kernel,gemm
+GPU,14483.006,2.848,_fused_add_rms_norm_kernel,norm
+GPU,14485.918,74.305,gemm_w4a16_mma_kernel,gemm
+GPU,14560.127,2.72,_silu_and_mul_kernel,activation
+GPU,14562.719,48.992,gemm_w4a16_mma_kernel,gemm
+GPU,14611.583,2.912,_fused_add_rms_norm_kernel,norm
+GPU,14614.367,22.496,gemm_w4a16_mma_kernel,gemm
+GPU,14636.927,3.2,_rope_cache_write_kernel,rope
+GPU,14640.191,55.648,_paged_decode_split_kernel,attention
+GPU,14695.743,4.672,_paged_decode_reduce_kernel,attention
+GPU,14700.287,17.856,gemm_w4a16_mma_kernel,gemm
+GPU,14718.207,2.816,_fused_add_rms_norm_kernel,norm
+GPU,14721.119,74.72,gemm_w4a16_mma_kernel,gemm
+GPU,14795.743,2.752,_silu_and_mul_kernel,activation
+GPU,14798.399,48.833,gemm_w4a16_mma_kernel,gemm
+GPU,14847.104,2.944,_fused_add_rms_norm_kernel,norm
+GPU,14849.952,22.848,gemm_w4a16_mma_kernel,gemm
+GPU,14872.864,3.296,_rope_cache_write_kernel,rope
+GPU,14876.224,55.392,_paged_decode_split_kernel,attention
+GPU,14931.52,4.672,_paged_decode_reduce_kernel,attention
+GPU,14936.096,17.696,gemm_w4a16_mma_kernel,gemm
+GPU,14953.856,2.784,_fused_add_rms_norm_kernel,norm
+GPU,14956.672,74.56,gemm_w4a16_mma_kernel,gemm
+GPU,15031.136,2.816,_silu_and_mul_kernel,activation
+GPU,15033.856,48.064,gemm_w4a16_mma_kernel,gemm
+GPU,15081.792,3.008,_fused_add_rms_norm_kernel,norm
+GPU,15084.672,22.496,gemm_w4a16_mma_kernel,gemm
+GPU,15107.232,3.36,_rope_cache_write_kernel,rope
+GPU,15110.688,56.192,_paged_decode_split_kernel,attention
+GPU,15166.752,4.64,_paged_decode_reduce_kernel,attention
+GPU,15171.296,17.953,gemm_w4a16_mma_kernel,gemm
+GPU,15189.313,2.752,_fused_add_rms_norm_kernel,norm
+GPU,15192.129,74.72,gemm_w4a16_mma_kernel,gemm
+GPU,15266.753,2.816,_silu_and_mul_kernel,activation
+GPU,15269.441,48.192,gemm_w4a16_mma_kernel,gemm
+GPU,15317.377,2.784,_fused_add_rms_norm_kernel,norm
+GPU,15320.193,22.752,gemm_w4a16_mma_kernel,gemm
+GPU,15342.977,3.136,_rope_cache_write_kernel,rope
+GPU,15346.177,56.864,_paged_decode_split_kernel,attention
+GPU,15402.913,4.704,_paged_decode_reduce_kernel,attention
+GPU,15407.457,18.048,gemm_w4a16_mma_kernel,gemm
+GPU,15425.537,2.944,_fused_add_rms_norm_kernel,norm
+GPU,15428.545,75.488,gemm_w4a16_mma_kernel,gemm
+GPU,15503.905,2.72,_silu_and_mul_kernel,activation
+GPU,15506.497,47.585,gemm_w4a16_mma_kernel,gemm
+GPU,15553.922,3.168,_fused_add_rms_norm_kernel,norm
+GPU,15556.93,22.432,gemm_w4a16_mma_kernel,gemm
+GPU,15579.394,3.328,_rope_cache_write_kernel,rope
+GPU,15582.754,55.84,_paged_decode_split_kernel,attention
+GPU,15638.466,4.64,_paged_decode_reduce_kernel,attention
+GPU,15642.978,17.856,gemm_w4a16_mma_kernel,gemm
+GPU,15660.866,2.784,_fused_add_rms_norm_kernel,norm
+GPU,15663.714,75.008,gemm_w4a16_mma_kernel,gemm
+GPU,15738.594,2.752,_silu_and_mul_kernel,activation
+GPU,15741.186,49.152,gemm_w4a16_mma_kernel,gemm
+GPU,15790.178,3.072,_fused_add_rms_norm_kernel,norm
+GPU,15793.09,22.368,gemm_w4a16_mma_kernel,gemm
+GPU,15815.49,3.295,_rope_cache_write_kernel,rope
+GPU,15818.786,56.641,_paged_decode_split_kernel,attention
+GPU,15875.299,4.704,_paged_decode_reduce_kernel,attention
+GPU,15879.875,17.984,gemm_w4a16_mma_kernel,gemm
+GPU,15897.891,2.816,_fused_add_rms_norm_kernel,norm
+GPU,15900.739,75.04,gemm_w4a16_mma_kernel,gemm
+GPU,15975.651,2.72,_silu_and_mul_kernel,activation
+GPU,15978.243,48.512,gemm_w4a16_mma_kernel,gemm
+GPU,16026.531,2.912,_fused_add_rms_norm_kernel,norm
+GPU,16029.347,22.464,gemm_w4a16_mma_kernel,gemm
+GPU,16051.875,3.2,_rope_cache_write_kernel,rope
+GPU,16055.139,56.512,_paged_decode_split_kernel,attention
+GPU,16111.555,4.64,_paged_decode_reduce_kernel,attention
+GPU,16116.067,17.92,gemm_w4a16_mma_kernel,gemm
+GPU,16134.051,2.784,_fused_add_rms_norm_kernel,norm
+GPU,16136.899,75.681,gemm_w4a16_mma_kernel,gemm
+GPU,16212.484,2.752,_silu_and_mul_kernel,activation
+GPU,16215.108,47.328,gemm_w4a16_mma_kernel,gemm
+GPU,16262.34,2.784,_fused_add_rms_norm_kernel,norm
+GPU,16265.188,22.528,gemm_w4a16_mma_kernel,gemm
+GPU,16287.78,3.2,_rope_cache_write_kernel,rope
+GPU,16291.044,55.296,_paged_decode_split_kernel,attention
+GPU,16346.212,4.64,_paged_decode_reduce_kernel,attention
+GPU,16350.724,17.856,gemm_w4a16_mma_kernel,gemm
+GPU,16368.644,2.784,_fused_add_rms_norm_kernel,norm
+GPU,16371.492,74.208,gemm_w4a16_mma_kernel,gemm
+GPU,16445.604,2.752,_silu_and_mul_kernel,activation
+GPU,16448.228,48.256,gemm_w4a16_mma_kernel,gemm
+GPU,16496.356,2.976,_fused_add_rms_norm_kernel,norm
+GPU,16499.204,22.464,gemm_w4a16_mma_kernel,gemm
+GPU,16521.732,3.232,_rope_cache_write_kernel,rope
+GPU,16525.028,55.841,_paged_decode_split_kernel,attention
+GPU,16580.773,4.608,_paged_decode_reduce_kernel,attention
+GPU,16585.253,17.824,gemm_w4a16_mma_kernel,gemm
+GPU,16603.141,2.912,_fused_add_rms_norm_kernel,norm
+GPU,16606.117,74.912,gemm_w4a16_mma_kernel,gemm
+GPU,16680.933,2.784,_silu_and_mul_kernel,activation
+GPU,16683.589,48.16,gemm_w4a16_mma_kernel,gemm
+GPU,16731.813,2.816,_fused_add_rms_norm_kernel,norm
+GPU,16734.693,22.304,gemm_w4a16_mma_kernel,gemm
+GPU,16757.061,3.296,_rope_cache_write_kernel,rope
+GPU,16760.421,56.192,_paged_decode_split_kernel,attention
+GPU,16816.485,4.768,_paged_decode_reduce_kernel,attention
+GPU,16821.029,18.016,gemm_w4a16_mma_kernel,gemm
+GPU,16839.077,2.752,_fused_add_rms_norm_kernel,norm
+GPU,16841.893,74.561,gemm_w4a16_mma_kernel,gemm
+GPU,16916.326,2.88,_silu_and_mul_kernel,activation
+GPU,16919.078,47.968,gemm_w4a16_mma_kernel,gemm
+GPU,16966.886,2.4,vectorized_gather_kernel,elementwise/copy
+GPU,16969.158,2.336,vectorized_gather_kernel,elementwise/copy
+GPU,16971.526,2.784,_fused_add_rms_norm_kernel,norm
+GPU,16974.342,732.002,_gemv_kernel,gemm
+GPU,17707.624,55.168,reduce_kernel,sampling
+GPU,17792.584,10.624,unrolled_elementwise_kernel,elementwise/copy
+GPU,17804.552,10.464,elementwise_kernel,elementwise/copy
+GPU,17823.72,13.76,fill_index_and_segment_kernel,elementwise/copy
+GPU,17846.28,22.08,DeviceRadixSortHistogramKernel,sampling
+GPU,17869.448,2.272,DeviceRadixSortExclusiveSumKernel,sampling
+GPU,17876.712,48.641,DeviceRadixSortOnesweepKernel,sampling
+GPU,17930.217,43.2,DeviceRadixSortOnesweepKernel,sampling
+GPU,17978.409,50.688,DeviceRadixSortOnesweepKernel,sampling
+GPU,18033.641,47.712,DeviceRadixSortOnesweepKernel,sampling
+GPU,18091.977,10.304,DeviceRadixSortHistogramKernel,sampling
+GPU,18103.561,2.848,DeviceRadixSortExclusiveSumKernel,sampling
+GPU,18110.665,35.04,DeviceRadixSortOnesweepKernel,sampling
+GPU,18146.985,41.344,sort_postprocess_kernel,sampling
+GPU,18189.385,3.744,elementwise_kernel_with_index,elementwise/copy
+GPU,18194.409,10.464,elementwise_kernel,elementwise/copy
+GPU,18215.689,7.137,vectorized_elementwise_kernel,elementwise/copy
+GPU,18223.946,55.712,cunn_SoftMaxForward,attention
+GPU,18280.938,230.912,tensor_kernel_scan_innermost_dim,other
+GPU,18512.906,8.512,vectorized_elementwise_kernel,elementwise/copy
+GPU,18522.698,10.368,elementwise_kernel,elementwise/copy
+GPU,18541.994,6.784,vectorized_elementwise_kernel,elementwise/copy
+GPU,18549.898,22.657,reduce_kernel,other
+GPU,18573.803,6.624,vectorized_elementwise_kernel,elementwise/copy
+GPU,18581.675,4.384,vectorized_elementwise_kernel,elementwise/copy
+GPU,18587.371,4.224,vectorized_elementwise_kernel,elementwise/copy
+GPU,18592.651,4.032,vectorized_elementwise_kernel,elementwise/copy
+GPU,18597.963,23.68,reduce_kernel,other
+GPU,18622.699,2.464,vectorized_elementwise_kernel,elementwise/copy
+GPU,18626.379,2.656,vectorized_elementwise_kernel,elementwise/copy
+GPU,18630.091,2.432,vectorized_elementwise_kernel,elementwise/copy
+GPU,18633.835,3.296,vectorized_elementwise_kernel,elementwise/copy
+GPU,18638.379,4.576,unrolled_elementwise_kernel,elementwise/copy
+GPU,18644.267,11.808,elementwise_kernel,elementwise/copy
+GPU,18662.379,10.4,reduce_kernel,other
+GPU,18674.251,2.144,vectorized_elementwise_kernel,elementwise/copy
+GPU,18682.955,10.176,reduce_kernel,other
+GPU,18694.379,2.08,vectorized_elementwise_kernel,elementwise/copy
+GPU,18697.579,2.144,vectorized_elementwise_kernel,elementwise/copy
+GPU,18701.067,3.776,_assert_async_cuda_kernel,other
+GPU,18706.123,20.128,reduce_kernel,other
+GPU,18727.275,2.144,vectorized_elementwise_kernel,elementwise/copy
+GPU,18730.795,4.16,reduce_kernel,other
+GPU,18736.299,2.176,vectorized_elementwise_kernel,elementwise/copy
+GPU,18739.787,3.744,_assert_async_cuda_kernel,other
+GPU,18744.651,11.872,distribution_elementwise_grid_stride_kernel,sampling
+GPU,18757.771,9.536,vectorized_elementwise_kernel,elementwise/copy
+GPU,18768.555,41.024,reduce_kernel,sampling
+GPU,18810.859,3.648,_scatter_gather_elementwise_kernel,elementwise/copy
+GPU,18815.563,2.464,vectorized_elementwise_kernel,elementwise/copy
+GPU,18849.099,2.624,vectorized_elementwise_kernel,elementwise/copy
+GPU,18851.755,1.984,vectorized_elementwise_kernel,elementwise/copy
+GPU,18853.771,4.096,index_elementwise_kernel,elementwise/copy
+GPU,18857.899,2.24,vectorized_elementwise_kernel,elementwise/copy
+GPU,18860.203,1.952,vectorized_gather_kernel,elementwise/copy
+GPU,18862.219,1.983,vectorized_gather_kernel,elementwise/copy
+GPU,18864.203,2.528,vectorized_gather_kernel,elementwise/copy
+GPU,18866.763,2.624,_rms_norm_kernel,norm
+GPU,18869.739,26.881,gemm_w4a16_mma_kernel,gemm
+GPU,18897.132,3.104,_rope_cache_write_kernel,rope
+GPU,18900.268,64.16,_paged_decode_split_kernel,attention
+GPU,18964.3,4.736,_paged_decode_reduce_kernel,attention
+GPU,18968.908,17.824,gemm_w4a16_mma_kernel,gemm
+GPU,18986.764,2.912,_fused_add_rms_norm_kernel,norm
+GPU,18989.708,75.328,gemm_w4a16_mma_kernel,gemm
+GPU,19064.908,2.912,_silu_and_mul_kernel,activation
+GPU,19067.532,48.128,gemm_w4a16_mma_kernel,gemm
+GPU,19115.5,3.008,_fused_add_rms_norm_kernel,norm
+GPU,19118.38,22.976,gemm_w4a16_mma_kernel,gemm
+GPU,19141.388,3.296,_rope_cache_write_kernel,rope
+GPU,19144.716,56.16,_paged_decode_split_kernel,attention
+GPU,19200.716,4.768,_paged_decode_reduce_kernel,attention
+GPU,19205.324,18.08,gemm_w4a16_mma_kernel,gemm
+GPU,19223.436,2.848,_fused_add_rms_norm_kernel,norm
+GPU,19226.316,75.297,gemm_w4a16_mma_kernel,gemm
+GPU,19301.453,2.848,_silu_and_mul_kernel,activation
+GPU,19304.141,48.608,gemm_w4a16_mma_kernel,gemm
+GPU,19352.621,3.04,_fused_add_rms_norm_kernel,norm
+GPU,19355.501,22.624,gemm_w4a16_mma_kernel,gemm
+GPU,19378.157,3.296,_rope_cache_write_kernel,rope
+GPU,19381.485,57.248,_paged_decode_split_kernel,attention
+GPU,19438.605,4.64,_paged_decode_reduce_kernel,attention
+GPU,19443.149,18.304,gemm_w4a16_mma_kernel,gemm
+GPU,19461.517,2.752,_fused_add_rms_norm_kernel,norm
+GPU,19464.333,75.392,gemm_w4a16_mma_kernel,gemm
+GPU,19539.597,2.72,_silu_and_mul_kernel,activation
+GPU,19542.189,47.425,gemm_w4a16_mma_kernel,gemm
+GPU,19589.518,2.976,_fused_add_rms_norm_kernel,norm
+GPU,19592.398,22.528,gemm_w4a16_mma_kernel,gemm
+GPU,19614.99,3.232,_rope_cache_write_kernel,rope
+GPU,19618.286,57.216,_paged_decode_split_kernel,attention
+GPU,19675.406,4.672,_paged_decode_reduce_kernel,attention
+GPU,19679.95,18.144,gemm_w4a16_mma_kernel,gemm
+GPU,19698.19,2.912,_fused_add_rms_norm_kernel,norm
+GPU,19701.198,74.784,gemm_w4a16_mma_kernel,gemm
+GPU,19775.854,2.784,_silu_and_mul_kernel,activation
+GPU,19778.542,48.384,gemm_w4a16_mma_kernel,gemm
+GPU,19826.798,2.976,_fused_add_rms_norm_kernel,norm
+GPU,19829.678,22.368,gemm_w4a16_mma_kernel,gemm
+GPU,19852.11,3.168,_rope_cache_write_kernel,rope
+GPU,19855.374,56.993,_paged_decode_split_kernel,attention
+GPU,19912.239,4.672,_paged_decode_reduce_kernel,attention
+GPU,19916.815,17.984,gemm_w4a16_mma_kernel,gemm
+GPU,19934.863,2.752,_fused_add_rms_norm_kernel,norm
+GPU,19937.711,76.0,gemm_w4a16_mma_kernel,gemm
+GPU,20013.615,2.784,_silu_and_mul_kernel,activation
+GPU,20016.271,47.936,gemm_w4a16_mma_kernel,gemm
+GPU,20064.079,2.912,_fused_add_rms_norm_kernel,norm
+GPU,20066.863,22.752,gemm_w4a16_mma_kernel,gemm
+GPU,20089.679,3.36,_rope_cache_write_kernel,rope
+GPU,20093.103,55.648,_paged_decode_split_kernel,attention
+GPU,20148.655,4.608,_paged_decode_reduce_kernel,attention
+GPU,20153.167,18.112,gemm_w4a16_mma_kernel,gemm
+GPU,20171.375,2.815,_fused_add_rms_norm_kernel,norm
+GPU,20174.191,75.969,gemm_w4a16_mma_kernel,gemm
+GPU,20249.936,2.752,_silu_and_mul_kernel,activation
+GPU,20252.528,48.32,gemm_w4a16_mma_kernel,gemm
+GPU,20300.688,2.944,_fused_add_rms_norm_kernel,norm
+GPU,20303.472,22.304,gemm_w4a16_mma_kernel,gemm
+GPU,20325.808,3.2,_rope_cache_write_kernel,rope
+GPU,20329.04,56.48,_paged_decode_split_kernel,attention
+GPU,20385.36,4.672,_paged_decode_reduce_kernel,attention
+GPU,20389.904,17.984,gemm_w4a16_mma_kernel,gemm
+GPU,20407.92,2.816,_fused_add_rms_norm_kernel,norm
+GPU,20410.768,74.72,gemm_w4a16_mma_kernel,gemm
+GPU,20485.36,2.784,_silu_and_mul_kernel,activation
+GPU,20488.016,49.088,gemm_w4a16_mma_kernel,gemm
+GPU,20536.784,2.976,_fused_add_rms_norm_kernel,norm
+GPU,20539.6,22.624,gemm_w4a16_mma_kernel,gemm
+GPU,20562.256,3.328,_rope_cache_write_kernel,rope
+GPU,20565.616,55.425,_paged_decode_split_kernel,attention
+GPU,20620.881,4.768,_paged_decode_reduce_kernel,attention
+GPU,20625.425,17.952,gemm_w4a16_mma_kernel,gemm
+GPU,20643.409,2.912,_fused_add_rms_norm_kernel,norm
+GPU,20646.353,74.848,gemm_w4a16_mma_kernel,gemm
+GPU,20721.041,2.816,_silu_and_mul_kernel,activation
+GPU,20723.697,48.032,gemm_w4a16_mma_kernel,gemm
+GPU,20771.569,2.784,_fused_add_rms_norm_kernel,norm
+GPU,20774.385,22.528,gemm_w4a16_mma_kernel,gemm
+GPU,20796.945,3.392,_rope_cache_write_kernel,rope
+GPU,20800.369,55.776,_paged_decode_split_kernel,attention
+GPU,20856.017,4.736,_paged_decode_reduce_kernel,attention
+GPU,20860.593,18.208,gemm_w4a16_mma_kernel,gemm
+GPU,20878.833,2.848,_fused_add_rms_norm_kernel,norm
+GPU,20881.713,75.777,gemm_w4a16_mma_kernel,gemm
+GPU,20957.362,2.784,_silu_and_mul_kernel,activation
+GPU,20960.018,47.52,gemm_w4a16_mma_kernel,gemm
+GPU,21007.41,2.912,_fused_add_rms_norm_kernel,norm
+GPU,21010.194,22.624,gemm_w4a16_mma_kernel,gemm
+GPU,21032.882,3.2,_rope_cache_write_kernel,rope
+GPU,21036.146,56.64,_paged_decode_split_kernel,attention
+GPU,21092.658,4.672,_paged_decode_reduce_kernel,attention
+GPU,21097.234,17.888,gemm_w4a16_mma_kernel,gemm
+GPU,21115.218,2.784,_fused_add_rms_norm_kernel,norm
+GPU,21118.066,75.904,gemm_w4a16_mma_kernel,gemm
+GPU,21193.874,2.72,_silu_and_mul_kernel,activation
+GPU,21196.498,48.192,gemm_w4a16_mma_kernel,gemm
+GPU,21244.562,2.944,_fused_add_rms_norm_kernel,norm
+GPU,21247.378,22.561,gemm_w4a16_mma_kernel,gemm
+GPU,21270.003,3.2,_rope_cache_write_kernel,rope
+GPU,21273.267,55.296,_paged_decode_split_kernel,attention
+GPU,21328.435,4.608,_paged_decode_reduce_kernel,attention
+GPU,21332.947,17.856,gemm_w4a16_mma_kernel,gemm
+GPU,21350.867,2.752,_fused_add_rms_norm_kernel,norm
+GPU,21353.683,75.232,gemm_w4a16_mma_kernel,gemm
+GPU,21428.627,2.752,_silu_and_mul_kernel,activation
+GPU,21431.283,48.352,gemm_w4a16_mma_kernel,gemm
+GPU,21479.507,3.04,_fused_add_rms_norm_kernel,norm
+GPU,21482.451,22.24,gemm_w4a16_mma_kernel,gemm
+GPU,21504.755,3.2,_rope_cache_write_kernel,rope
+GPU,21508.019,55.296,_paged_decode_split_kernel,attention
+GPU,21563.155,4.64,_paged_decode_reduce_kernel,attention
+GPU,21567.667,17.888,gemm_w4a16_mma_kernel,gemm
+GPU,21585.651,2.752,_fused_add_rms_norm_kernel,norm
+GPU,21588.467,75.585,gemm_w4a16_mma_kernel,gemm
+GPU,21663.924,2.848,_silu_and_mul_kernel,activation
+GPU,21666.676,49.056,gemm_w4a16_mma_kernel,gemm
+GPU,21715.796,2.944,_fused_add_rms_norm_kernel,norm
+GPU,21718.58,22.4,gemm_w4a16_mma_kernel,gemm
+GPU,21741.012,3.264,_rope_cache_write_kernel,rope
+GPU,21744.308,55.552,_paged_decode_split_kernel,attention
+GPU,21799.732,4.704,_paged_decode_reduce_kernel,attention
+GPU,21804.276,17.824,gemm_w4a16_mma_kernel,gemm
+GPU,21822.132,2.784,_fused_add_rms_norm_kernel,norm
+GPU,21824.948,75.584,gemm_w4a16_mma_kernel,gemm
+GPU,21900.372,2.784,_silu_and_mul_kernel,activation
+GPU,21903.028,48.193,gemm_w4a16_mma_kernel,gemm
+GPU,21951.061,3.072,_fused_add_rms_norm_kernel,norm
+GPU,21953.973,22.592,gemm_w4a16_mma_kernel,gemm
+GPU,21976.629,3.232,_rope_cache_write_kernel,rope
+GPU,21979.893,55.584,_paged_decode_split_kernel,attention
+GPU,22035.349,4.736,_paged_decode_reduce_kernel,attention
+GPU,22039.925,17.984,gemm_w4a16_mma_kernel,gemm
+GPU,22057.941,2.848,_fused_add_rms_norm_kernel,norm
+GPU,22060.821,75.264,gemm_w4a16_mma_kernel,gemm
+GPU,22135.925,2.848,_silu_and_mul_kernel,activation
+GPU,22138.613,48.352,gemm_w4a16_mma_kernel,gemm
+GPU,22186.805,2.976,_fused_add_rms_norm_kernel,norm
+GPU,22189.653,22.496,gemm_w4a16_mma_kernel,gemm
+GPU,22212.181,3.296,_rope_cache_write_kernel,rope
+GPU,22215.509,55.008,_paged_decode_split_kernel,attention
+GPU,22270.389,4.641,_paged_decode_reduce_kernel,attention
+GPU,22274.902,18.304,gemm_w4a16_mma_kernel,gemm
+GPU,22293.238,2.784,_fused_add_rms_norm_kernel,norm
+GPU,22296.054,76.16,gemm_w4a16_mma_kernel,gemm
+GPU,22372.086,2.784,_silu_and_mul_kernel,activation
+GPU,22374.742,49.024,gemm_w4a16_mma_kernel,gemm
+GPU,22423.638,2.912,_fused_add_rms_norm_kernel,norm
+GPU,22426.422,22.656,gemm_w4a16_mma_kernel,gemm
+GPU,22449.11,3.424,_rope_cache_write_kernel,rope
+GPU,22452.63,55.616,_paged_decode_split_kernel,attention
+GPU,22508.118,4.768,_paged_decode_reduce_kernel,attention
+GPU,22512.662,17.952,gemm_w4a16_mma_kernel,gemm
+GPU,22530.678,2.752,_fused_add_rms_norm_kernel,norm
+GPU,22533.494,75.36,gemm_w4a16_mma_kernel,gemm
+GPU,22608.758,2.689,_silu_and_mul_kernel,activation
+GPU,22611.319,47.936,gemm_w4a16_mma_kernel,gemm
+GPU,22659.159,2.976,_fused_add_rms_norm_kernel,norm
+GPU,22662.007,22.496,gemm_w4a16_mma_kernel,gemm
+GPU,22684.567,3.2,_rope_cache_write_kernel,rope
+GPU,22687.863,55.744,_paged_decode_split_kernel,attention
+GPU,22743.479,4.704,_paged_decode_reduce_kernel,attention
+GPU,22748.087,17.92,gemm_w4a16_mma_kernel,gemm
+GPU,22766.103,2.784,_fused_add_rms_norm_kernel,norm
+GPU,22768.951,76.96,gemm_w4a16_mma_kernel,gemm
+GPU,22845.719,2.784,_silu_and_mul_kernel,activation
+GPU,22848.375,48.576,gemm_w4a16_mma_kernel,gemm
+GPU,22896.855,2.912,_fused_add_rms_norm_kernel,norm
+GPU,22899.671,22.368,gemm_w4a16_mma_kernel,gemm
+GPU,22922.103,3.232,_rope_cache_write_kernel,rope
+GPU,22925.399,56.321,_paged_decode_split_kernel,attention
+GPU,22981.624,4.672,_paged_decode_reduce_kernel,attention
+GPU,22986.2,18.016,gemm_w4a16_mma_kernel,gemm
+GPU,23004.28,2.816,_fused_add_rms_norm_kernel,norm
+GPU,23007.16,74.912,gemm_w4a16_mma_kernel,gemm
+GPU,23081.976,2.784,_silu_and_mul_kernel,activation
+GPU,23084.632,49.344,gemm_w4a16_mma_kernel,gemm
+GPU,23133.88,2.976,_fused_add_rms_norm_kernel,norm
+GPU,23136.728,22.432,gemm_w4a16_mma_kernel,gemm
+GPU,23159.256,3.168,_rope_cache_write_kernel,rope
+GPU,23162.488,55.488,_paged_decode_split_kernel,attention
+GPU,23217.848,4.672,_paged_decode_reduce_kernel,attention
+GPU,23222.36,17.728,gemm_w4a16_mma_kernel,gemm
+GPU,23240.152,2.816,_fused_add_rms_norm_kernel,norm
+GPU,23243.0,75.521,gemm_w4a16_mma_kernel,gemm
+GPU,23318.361,2.816,_silu_and_mul_kernel,activation
+GPU,23321.017,48.128,gemm_w4a16_mma_kernel,gemm
+GPU,23368.985,2.912,_fused_add_rms_norm_kernel,norm
+GPU,23371.737,22.784,gemm_w4a16_mma_kernel,gemm
+GPU,23394.585,3.296,_rope_cache_write_kernel,rope
+GPU,23397.913,55.808,_paged_decode_split_kernel,attention
+GPU,23453.593,4.704,_paged_decode_reduce_kernel,attention
+GPU,23458.137,18.048,gemm_w4a16_mma_kernel,gemm
+GPU,23476.217,2.848,_fused_add_rms_norm_kernel,norm
+GPU,23479.097,74.912,gemm_w4a16_mma_kernel,gemm
+GPU,23553.881,2.784,_silu_and_mul_kernel,activation
+GPU,23556.537,48.896,gemm_w4a16_mma_kernel,gemm
+GPU,23605.305,2.752,_fused_add_rms_norm_kernel,norm
+GPU,23608.089,22.433,gemm_w4a16_mma_kernel,gemm
+GPU,23630.554,3.232,_rope_cache_write_kernel,rope
+GPU,23633.818,55.936,_paged_decode_split_kernel,attention
+GPU,23689.594,4.672,_paged_decode_reduce_kernel,attention
+GPU,23694.106,18.016,gemm_w4a16_mma_kernel,gemm
+GPU,23712.186,2.976,_fused_add_rms_norm_kernel,norm
+GPU,23715.194,75.616,gemm_w4a16_mma_kernel,gemm
+GPU,23790.682,2.816,_silu_and_mul_kernel,activation
+GPU,23793.338,48.704,gemm_w4a16_mma_kernel,gemm
+GPU,23841.882,2.976,_fused_add_rms_norm_kernel,norm
+GPU,23844.698,22.464,gemm_w4a16_mma_kernel,gemm
+GPU,23867.194,3.328,_rope_cache_write_kernel,rope
+GPU,23870.554,56.96,_paged_decode_split_kernel,attention
+GPU,23927.386,4.736,_paged_decode_reduce_kernel,attention
+GPU,23931.93,17.792,gemm_w4a16_mma_kernel,gemm
+GPU,23949.754,2.816,_fused_add_rms_norm_kernel,norm
+GPU,23952.634,74.241,gemm_w4a16_mma_kernel,gemm
+GPU,24026.779,2.752,_silu_and_mul_kernel,activation
+GPU,24029.435,48.416,gemm_w4a16_mma_kernel,gemm
+GPU,24077.723,3.072,_fused_add_rms_norm_kernel,norm
+GPU,24080.667,22.336,gemm_w4a16_mma_kernel,gemm
+GPU,24103.067,3.2,_rope_cache_write_kernel,rope
+GPU,24106.331,57.152,_paged_decode_split_kernel,attention
+GPU,24163.387,4.608,_paged_decode_reduce_kernel,attention
+GPU,24167.867,17.824,gemm_w4a16_mma_kernel,gemm
+GPU,24185.787,2.848,_fused_add_rms_norm_kernel,norm
+GPU,24188.731,75.264,gemm_w4a16_mma_kernel,gemm
+GPU,24263.867,2.784,_silu_and_mul_kernel,activation
+GPU,24266.555,48.289,gemm_w4a16_mma_kernel,gemm
+GPU,24314.748,3.008,_fused_add_rms_norm_kernel,norm
+GPU,24317.66,22.656,gemm_w4a16_mma_kernel,gemm
+GPU,24340.38,3.424,_rope_cache_write_kernel,rope
+GPU,24343.868,55.584,_paged_decode_split_kernel,attention
+GPU,24399.324,4.768,_paged_decode_reduce_kernel,attention
+GPU,24403.868,18.016,gemm_w4a16_mma_kernel,gemm
+GPU,24421.948,2.752,_fused_add_rms_norm_kernel,norm
+GPU,24424.732,74.912,gemm_w4a16_mma_kernel,gemm
+GPU,24499.548,2.784,_silu_and_mul_kernel,activation
+GPU,24502.204,48.448,gemm_w4a16_mma_kernel,gemm
+GPU,24550.556,2.912,_fused_add_rms_norm_kernel,norm
+GPU,24553.34,22.656,gemm_w4a16_mma_kernel,gemm
+GPU,24576.092,3.2,_rope_cache_write_kernel,rope
+GPU,24579.356,56.032,_paged_decode_split_kernel,attention
+GPU,24635.292,4.641,_paged_decode_reduce_kernel,attention
+GPU,24639.805,17.856,gemm_w4a16_mma_kernel,gemm
+GPU,24657.725,2.752,_fused_add_rms_norm_kernel,norm
+GPU,24660.541,75.52,gemm_w4a16_mma_kernel,gemm
+GPU,24735.933,2.848,_silu_and_mul_kernel,activation
+GPU,24738.653,48.032,gemm_w4a16_mma_kernel,gemm
+GPU,24786.525,2.752,_fused_add_rms_norm_kernel,norm
+GPU,24789.309,22.848,gemm_w4a16_mma_kernel,gemm
+GPU,24812.221,3.232,_rope_cache_write_kernel,rope
+GPU,24815.517,55.712,_paged_decode_split_kernel,attention
+GPU,24871.101,4.704,_paged_decode_reduce_kernel,attention
+GPU,24875.645,18.144,gemm_w4a16_mma_kernel,gemm
+GPU,24893.821,2.784,_fused_add_rms_norm_kernel,norm
+GPU,24896.637,75.072,gemm_w4a16_mma_kernel,gemm
+GPU,24971.581,2.849,_silu_and_mul_kernel,activation
+GPU,24974.27,48.96,gemm_w4a16_mma_kernel,gemm
+GPU,25023.102,3.104,_fused_add_rms_norm_kernel,norm
+GPU,25025.886,22.304,gemm_w4a16_mma_kernel,gemm
+GPU,25048.222,3.264,_rope_cache_write_kernel,rope
+GPU,25051.518,56.384,_paged_decode_split_kernel,attention
+GPU,25107.774,4.64,_paged_decode_reduce_kernel,attention
+GPU,25112.254,17.792,gemm_w4a16_mma_kernel,gemm
+GPU,25130.11,2.848,_fused_add_rms_norm_kernel,norm
+GPU,25132.99,74.976,gemm_w4a16_mma_kernel,gemm
+GPU,25207.806,2.816,_silu_and_mul_kernel,activation
+GPU,25210.462,48.128,gemm_w4a16_mma_kernel,gemm
+GPU,25258.462,3.2,_fused_add_rms_norm_kernel,norm
+GPU,25261.374,22.816,gemm_w4a16_mma_kernel,gemm
+GPU,25284.222,3.328,_rope_cache_write_kernel,rope
+GPU,25287.582,55.745,_paged_decode_split_kernel,attention
+GPU,25343.199,4.672,_paged_decode_reduce_kernel,attention
+GPU,25347.743,17.984,gemm_w4a16_mma_kernel,gemm
+GPU,25365.759,2.784,_fused_add_rms_norm_kernel,norm
+GPU,25368.575,74.72,gemm_w4a16_mma_kernel,gemm
+GPU,25443.167,2.752,_silu_and_mul_kernel,activation
+GPU,25445.759,49.184,gemm_w4a16_mma_kernel,gemm
+GPU,25494.783,2.912,_fused_add_rms_norm_kernel,norm
+GPU,25497.567,22.432,gemm_w4a16_mma_kernel,gemm
+GPU,25520.063,3.232,_rope_cache_write_kernel,rope
+GPU,25523.359,55.232,_paged_decode_split_kernel,attention
+GPU,25578.463,4.608,_paged_decode_reduce_kernel,attention
+GPU,25582.975,17.92,gemm_w4a16_mma_kernel,gemm
+GPU,25600.991,2.816,_fused_add_rms_norm_kernel,norm
+GPU,25603.871,75.553,gemm_w4a16_mma_kernel,gemm
+GPU,25679.328,2.784,_silu_and_mul_kernel,activation
+GPU,25681.984,48.512,gemm_w4a16_mma_kernel,gemm
+GPU,25730.4,2.784,_fused_add_rms_norm_kernel,norm
+GPU,25733.248,22.624,gemm_w4a16_mma_kernel,gemm
+GPU,25755.936,3.2,_rope_cache_write_kernel,rope
+GPU,25759.232,55.424,_paged_decode_split_kernel,attention
+GPU,25814.56,4.672,_paged_decode_reduce_kernel,attention
+GPU,25819.104,18.048,gemm_w4a16_mma_kernel,gemm
+GPU,25837.216,2.784,_fused_add_rms_norm_kernel,norm
+GPU,25840.064,74.464,gemm_w4a16_mma_kernel,gemm
+GPU,25914.432,2.816,_silu_and_mul_kernel,activation
+GPU,25917.152,47.872,gemm_w4a16_mma_kernel,gemm
+GPU,25964.896,3.04,_fused_add_rms_norm_kernel,norm
+GPU,25967.84,22.369,gemm_w4a16_mma_kernel,gemm
+GPU,25990.273,3.2,_rope_cache_write_kernel,rope
+GPU,25993.569,55.84,_paged_decode_split_kernel,attention
+GPU,26049.281,4.672,_paged_decode_reduce_kernel,attention
+GPU,26053.825,17.92,gemm_w4a16_mma_kernel,gemm
+GPU,26071.809,2.816,_fused_add_rms_norm_kernel,norm
+GPU,26074.689,74.816,gemm_w4a16_mma_kernel,gemm
+GPU,26149.409,2.816,_silu_and_mul_kernel,activation
+GPU,26152.097,47.712,gemm_w4a16_mma_kernel,gemm
+GPU,26199.873,2.784,_fused_add_rms_norm_kernel,norm
+GPU,26202.721,22.432,gemm_w4a16_mma_kernel,gemm
+GPU,26225.217,3.264,_rope_cache_write_kernel,rope
+GPU,26228.513,55.584,_paged_decode_split_kernel,attention
+GPU,26283.937,4.704,_paged_decode_reduce_kernel,attention
+GPU,26288.481,18.048,gemm_w4a16_mma_kernel,gemm
+GPU,26306.561,2.944,_fused_add_rms_norm_kernel,norm
+GPU,26309.569,74.945,gemm_w4a16_mma_kernel,gemm
+GPU,26384.386,2.848,_silu_and_mul_kernel,activation
+GPU,26387.106,47.68,gemm_w4a16_mma_kernel,gemm
+GPU,26434.626,2.4,vectorized_gather_kernel,elementwise/copy
+GPU,26436.866,2.336,vectorized_gather_kernel,elementwise/copy
+GPU,26439.234,2.56,_fused_add_rms_norm_kernel,norm
+GPU,26441.826,733.634,_gemv_kernel,gemm
+GPU,27176.932,54.848,reduce_kernel,sampling
+GPU,27261.572,10.72,unrolled_elementwise_kernel,elementwise/copy
+GPU,27273.348,10.432,elementwise_kernel,elementwise/copy
+GPU,27292.292,13.792,fill_index_and_segment_kernel,elementwise/copy
+GPU,27316.004,22.305,DeviceRadixSortHistogramKernel,sampling
+GPU,27339.461,2.272,DeviceRadixSortExclusiveSumKernel,sampling
+GPU,27346.821,48.128,DeviceRadixSortOnesweepKernel,sampling
+GPU,27399.589,43.2,DeviceRadixSortOnesweepKernel,sampling
+GPU,27447.205,50.336,DeviceRadixSortOnesweepKernel,sampling
+GPU,27502.405,48.192,DeviceRadixSortOnesweepKernel,sampling
+GPU,27560.453,10.304,DeviceRadixSortHistogramKernel,sampling
+GPU,27572.037,2.752,DeviceRadixSortExclusiveSumKernel,sampling
+GPU,27579.269,34.88,DeviceRadixSortOnesweepKernel,sampling
+GPU,27615.301,41.344,sort_postprocess_kernel,sampling
+GPU,27657.829,3.904,elementwise_kernel_with_index,elementwise/copy
+GPU,27662.853,10.112,elementwise_kernel,elementwise/copy
+GPU,27684.006,7.008,vectorized_elementwise_kernel,elementwise/copy
+GPU,27692.102,55.552,cunn_SoftMaxForward,attention
+GPU,27748.934,230.88,tensor_kernel_scan_innermost_dim,other
+GPU,27980.87,8.576,vectorized_elementwise_kernel,elementwise/copy
+GPU,27990.534,10.368,elementwise_kernel,elementwise/copy
+GPU,28009.958,7.009,vectorized_elementwise_kernel,elementwise/copy
+GPU,28017.991,22.272,reduce_kernel,other
+GPU,28041.575,6.368,vectorized_elementwise_kernel,elementwise/copy
+GPU,28048.967,4.352,vectorized_elementwise_kernel,elementwise/copy
+GPU,28054.311,4.128,vectorized_elementwise_kernel,elementwise/copy
+GPU,28059.591,4.16,vectorized_elementwise_kernel,elementwise/copy
+GPU,28064.807,23.552,reduce_kernel,other
+GPU,28089.511,2.496,vectorized_elementwise_kernel,elementwise/copy
+GPU,28093.031,2.624,vectorized_elementwise_kernel,elementwise/copy
+GPU,28096.711,2.432,vectorized_elementwise_kernel,elementwise/copy
+GPU,28100.455,3.392,vectorized_elementwise_kernel,elementwise/copy
+GPU,28104.871,4.768,unrolled_elementwise_kernel,elementwise/copy
+GPU,28110.631,11.84,elementwise_kernel,elementwise/copy
+GPU,28128.711,10.496,reduce_kernel,other
+GPU,28140.455,2.176,vectorized_elementwise_kernel,elementwise/copy
+GPU,28148.071,10.176,reduce_kernel,other
+GPU,28159.591,2.048,vectorized_elementwise_kernel,elementwise/copy
+GPU,28162.951,2.176,vectorized_elementwise_kernel,elementwise/copy
+GPU,28166.471,3.744,_assert_async_cuda_kernel,other
+GPU,28171.527,20.032,reduce_kernel,other
+GPU,28192.615,2.144,vectorized_elementwise_kernel,elementwise/copy
+GPU,28195.815,4.16,reduce_kernel,other
+GPU,28200.999,2.176,vectorized_elementwise_kernel,elementwise/copy
+GPU,28204.487,3.744,_assert_async_cuda_kernel,other
+GPU,28209.543,11.872,distribution_elementwise_grid_stride_kernel,sampling
+GPU,28222.535,9.472,vectorized_elementwise_kernel,elementwise/copy
+GPU,28233.031,40.672,reduce_kernel,sampling
+GPU,28274.823,3.712,_scatter_gather_elementwise_kernel,elementwise/copy
+GPU,28279.815,2.464,vectorized_elementwise_kernel,elementwise/copy
+GPU,28322.279,2.624,vectorized_elementwise_kernel,elementwise/copy
+GPU,28324.935,2.016,vectorized_elementwise_kernel,elementwise/copy
+GPU,28326.983,4.032,index_elementwise_kernel,elementwise/copy
+GPU,28331.047,2.272,vectorized_elementwise_kernel,elementwise/copy
+GPU,28333.351,2.048,vectorized_gather_kernel,elementwise/copy
+GPU,28335.463,1.952,vectorized_gather_kernel,elementwise/copy
+GPU,28337.447,2.4,vectorized_gather_kernel,elementwise/copy
+GPU,28339.879,2.432,_rms_norm_kernel,norm
+GPU,28342.343,26.593,gemm_w4a16_mma_kernel,gemm
+NVTX,0.0,9575.269,engine_step_36,nvtx
+NVTX,1228.73,111.636,cub::DeviceRadixSort,nvtx
+NVTX,1348.274,36.776,cub::DeviceRadixSort,nvtx
+NVTX,9595.315,9307.83,engine_step_37,nvtx
+NVTX,10826.885,84.652,cub::DeviceRadixSort,nvtx
+NVTX,10918.632,35.759,cub::DeviceRadixSort,nvtx
+NVTX,18921.268,9454.128,engine_step_38,nvtx
+NVTX,20121.305,80.612,cub::DeviceRadixSort,nvtx
+NVTX,20208.54,60.575,cub::DeviceRadixSort,nvtx

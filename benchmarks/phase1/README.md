@@ -141,6 +141,72 @@ kbench，CUDA graph replay，輸入輪替超過 L2。表裡是 run 5 的結果�
 
 計畫要求 bf16 的 top-1 一致率 ≥ 99%，實測 98.81%。perplexity 到小數第三位相同，差異只在 attention（Triton 照 FA2 的做法把 softmax 機率轉成 bf16 再乘 V），不一致的都是接近平手的 token。W4A16 的 RTN 讓 perplexity 增加 11%，和文獻上 Llama 3 8B 的結果同一個量級。
 
+## Phase 2 之後：Kernel 改進清單第一輪（runs `kernels-r1` 到 `kernels-r4`、`kernels-serve`）
+
+Phase 1 結束時，路線圖 doc 的「Kernel 改進清單」列了 12 項。Phase 2 之後重新評估，這一輪做了 5 項，其餘的改列下一輪或不做。分支 `claude/inference-kernels`，只在本機。
+
+| # | 項目 | 結果 |
+|---|---|---|
+| 10 | async scheduling 改成預設 | 完成。W4A16 也省 0.23 / 0.42 / 1.01 ms（b=1/16/64） |
+| 12 | sync guard 擴到 sampled、eager、mixed | 完成。GPU 上沒有抓到任何同步 |
+| 5 | 採樣路徑的量測 | 完成量測。b=64 時 nano 的採樣比 vLLM 貴 0.96 ms，不排序的採樣器列為下一輪 |
+| 1 | W4A16 GEMV 暫存器預取 | 負面結果，revert。預取越深越慢 |
+| 3 | FP8 KV cache | 完成，選用（`kv_cache_dtype: fp8`）。b=64 快 1.7 ms，perplexity +0.2% |
+| 2、6、7 | Marlin 式 W4A16 和它的 epilogue/prologue 融合 | 下一輪。W4A16 在 b=64 仍落後 AWQ 44% |
+| 4、8、9、11 | reduce 併進 split kernel、prefill tile 順序、bf16 CUDA GEMV、CUDA event 計時 | 不做：收益太小、TTFT 已贏 vLLM、不在預設路徑、async 之後用不到 |
+
+### 端到端 decode（ms/step，b=1 / 16 / 64；b=16、4096 token）
+
+| 設定 | b=1 | b=16 | b=64 | b=16，4096 |
+|---|---:|---:|---:|---:|
+| nano bf16（async scheduling，現在的預設） | 12.05 | 14.13 | 22.60 | 18.73 |
+| nano bf16 + fp8 KV | **12.01** | **13.81** | **20.87** | 17.16 |
+| vLLM bf16（FA2） | 12.60 | 14.82 | 23.04 | - |
+| vLLM bf16 + fp8 KV（FLASHINFER） | 13.05 | 14.50 | 21.30 | - |
+| nano W4A16 | 5.68 | 8.48 | 23.27 | 13.01 |
+| nano W4A16 + fp8 KV | **5.65** | 8.25 | 21.52 | 11.60 |
+| vLLM AWQ（Marlin） | 5.56 | 7.86 | 16.19 | - |
+| vLLM AWQ + fp8 KV（FLASHINFER） | 6.05 | **7.55** | **14.44** | - |
+
+run `kernels-r4`（同一台 VM、同一輪）。vLLM 的 4096 點失敗了（`vllm_offline.py` 的 `max_model_len` 寫死 4096，已修）。
+
+### FP8 KV cache
+
+- **做法**（`kernels/fp8.py`）：Triton 3.6 的 CUDA backend 在 sm80 不接受 `float8e4nv`，A100 也沒有 fp8 轉換指令，所以 kernel 把 cache 當 uint8，用整數運算處理 e4m3：
+  - **解碼**：把 7 個 exponent 和 mantissa bit 放到 bf16 的 bit 4–10，得到「原值 × 2^-120」，直接進 `tl.dot`。
+  - **scale**：每個 (token, kv head) 一個 fp32 scale（amax / 448）。K 的 scale 乘在 score 上，V 的 scale 乘在機率上，不做逐元素反量化。q 先乘 2^60，輸出最後乘 2^60，中間值都遠離 fp32 的 subnormal。
+  - **容量**：每 128 個值佔 132 bytes，bf16 是 256，自動 KV sizing 會給出約 1.9 倍的 block。
+- **vLLM 0.19.1 在 A100 上的 fp8 KV**：FLASH_ATTN 直接拒絕；TRITON_ATTN 撞到同樣的 `fp8e4nv` 限制，編譯失敗；只有 FLASHINFER 能跑，但它在 b=1 比 vLLM 自己的 FA2 慢 0.45 ms。
+- **kernel**（decode attention，µs，bf16 / fp8；fp8 用自己調過的 launch 級距）：
+
+  | | B=1 | B=16 | B=64 | B=128 |
+  |---|---:|---:|---:|---:|
+  | ctx=1024 | 14.4 / 12.0 | 62.3 / 53.9 | 201.0 / 147.3 | 379.9 / 273.2 |
+  | ctx=4096 | 20.9 / 19.8 | 204.6 / 156.1 | 770.2 / 541.6 | 1484.9 / 1033.8 |
+
+  bytes 少了將近一半，時間少 4–30%。fp8 只到 HBM 峰值的 60–69%（bf16 是 86–93%），整數解碼成了新的上限。
+- **品質**（wikitext-2 test，288,627 個 token）：bf16 的 perplexity 從 7.232 變成 7.248（+0.22%），top-1 一致率對 bf16 是 97.55%；W4A16 從 8.024 變成 8.040。
+- **線上**（run `kernels-serve`，Phase 2 的 harness，每個 server 依 0.9 的 GPU 記憶體自己配置 KV）：
+  - **容量**：nano 從 157,744 增加到 305,920 個 token（1.94 倍），vLLM 從 159,072 增加到 326,352。
+  - **W2b**：48 個 4096-token 的 prefix，總長超過 bf16 的容量。fp8 讓兩邊的命中率都從約 48% 升到 70.6%。nano 的 req/s 從 3.33 升到 3.99，TTFT p50 從 405 降到 160 ms；vLLM fp8 是 4.16 req/s、259 ms。
+  - **W1 c=64**：ITL p50 依序是 nano fp8 21.00、vLLM fp8 21.38、nano 22.65、vLLM 23.24 ms。
+- **門檻 G4**：perplexity 增加 ≤ 1%，通過；top-1 一致率 ≥ 98%，差 0.45 個百分點（bf16 的 Triton 和 torch 路徑之間，光是數值差異就只有 98.81%）；b=64 每步省 2 ms，實測 1.73 ms，也差一點。兩項都只是小幅未達，所以保留成選用，預設維持 `auto`，和 vLLM 一樣。
+
+### 負面結果：GEMV 暫存器預取
+
+假設是「每個 warp 一輪只發一次 load，延遲露出來」。實作成 register ring，每輪發出後面 1、2 或 4 輪的 load，結果每個深度都更慢：down_proj M=1 在深度 0 / 1 / 2 / 4 分別是 37.7 / 39.2 / 39.4 / 48.3 µs，e2e 的 W4A16 b=1 在深度 0 / 2 / 4 是 5.74 / 6.00 / 6.32 ms。ring 吃暫存器、降低 occupancy；深度 0 的 achieved occupancy 已經有 30%，延遲本來就由其他 warp 蓋住。e53207f revert。Marlin 快的原因不只是預取，而是常駐 grid、`cp.async` 多段 pipeline 和條狀切分一起作用，這要整個重寫（下一輪）。
+
+### 採樣路徑
+
+所有 benchmark 之前都是 greedy，但 server 的預設是 temperature 0.7、top-p 0.9：
+
+| sampled 減 greedy（ms/step） | b=1 | b=16 | b=64 |
+|---|---:|---:|---:|
+| nano | 0.42 | 1.02 | 2.62 |
+| vLLM | 0.25 | 1.33 | 1.66 |
+
+nsys（b=16，每步）：`torch.cumsum` 沿 128k vocab 的 innermost scan 要 231 µs，radix sort 約 265 µs，兩次 argmax 共 96 µs（greedy 的 bf16 argmax 每步都算，一列只用一個 block）。線上的 W1s（c=1/16/64）nano 是 78 / 855 / 1,711 tok/s，vLLM 75 / 609 / 1,693；c=64 的 ITL p50 是 25.31 對 25.03 ms，nano 慢 1.1%。下一輪改用不排序的採樣器（FlashInfer 的 rejection sampling，或 DeepInfer 的 radix select）。
+
 ## 檔案
 
 | 檔案 | 內容 |

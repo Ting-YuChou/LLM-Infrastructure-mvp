@@ -405,3 +405,138 @@ decode ms/step（`nano_bench.py` 和 `vllm_offline.py`，相同的 batch / in / 
 - **結論**：我們的三個 kernel 都既不是頻寬瓶頸，也不是算力瓶頸，而是被記憶體延遲卡住。warp 大多在等 global load（long_scoreboard），因為每個 thread 同時只有大約一組（64 B）權重在路上；多開 warp 也沒用，GEMV 的 occupancy 是 Marlin 的兩倍，DRAM 還是比較低。Marlin 每個 SM 只放一個常駐 block，用多段 `cp.async` pipeline 讓權重和 x 都提早好幾段載入，occupancy 只有 12% 就能到 62% DRAM。M=64 時 wide 的 SM 使用率只有 21%，除了等記憶體，還有 mma 之間的相依（wait）。
 - **下一步**（Phase 1 先停在這裡）：權重也經過 shared memory，用 3–4 段 `cp.async` pipeline；grid 改成常駐、跨 SM 條狀分配 K（Marlin 的 striped partition），取代現在的 K 切分加 atomic；M≥32 時用 `ldmatrix` 讀 A，並讓每個 warp 管更多欄來攤平 A 的讀取。
 - 跑完之後把 Colab VM 關掉了。
+
+## 2026-10-23 06:18 — run `kernels-r1-20261023-061836-colab`：Kernel 改進清單第一輪
+
+Phase 2 之後重新評估路線圖 doc 的「Kernel 改進清單」（計畫在 `~/.claude/plans/abundant-shimmying-crab.md`），這一輪做 async 預設（#10）、sync guard（#12）、採樣路徑的量測（#5 的前半）、GEMV 暫存器預取（#1）和 FP8 KV（#3）。分支 `claude/inference-kernels`（從 `claude/inference-phase2` 開，只在本機）。
+
+設定：`P1_STEPS="installs cuda129 tests kbench tune ncu e2e summarize" P1_KERNELS=w4a16_linear P1_TUNE=w4a16`，e2e 是 b=1/16/64 的 bf16 和 W4A16，sync 和 async，greedy 和 sampled（temperature 0.7、top-p 0.9，nano server 的預設），W4A16 另外跑預取深度 2 和 4；vLLM 跑 bf16 和 AWQ，greedy 和 sampled。
+
+- **tests**：455 passed、27 skipped，step 算失敗。skip 全是 C++ radix tree 的測試：Phase 1 的 installs 沒裝 nanobind（Phase 2 的有）。新的 GPU 測試全過：async 的 W4A16 和中途加入的 request、sync guard（greedy/sampled × graph/eager × decode/mixed，沒有抓到任何同步）、fp8 codec（每個 code 的解碼、tie、subnormal、飽和都和 torch 逐 bit 相同）、GEMV 預取的每個深度。修正：tests step 前先裝 nanobind（72e64ed）。
+- **GEMV 預取（#1）是負面結果**。tune（µs，r = rows_per_warp，p = 預取深度）：
+
+  | shape | r1 p0 | r1 p1 | r1 p2 | r1 p4 | r2 p0 | r2 p2 | r2 p4 |
+  |---|---:|---:|---:|---:|---:|---:|---:|
+  | down M=1 | **37.7** | 39.2 | 39.4 | 48.3 | 39.0 | 40.1 | 40.9 |
+  | gate_up M=1 | 63.4 | 66.4 | 68.9 | 73.7 | **60.1** | 64.1 | 70.7 |
+  | qkv M=1 | 21.0 | 20.6 | 19.7 | 21.7 | **18.1** | 19.1 | 21.0 |
+  | o_proj M=1 | **13.1** | 14.5 | 14.3 | 17.9 | 13.5 | 14.0 | 15.1 |
+
+  e2e 的 W4A16 async b=1：深度 0 / 2 / 4 是 5.74 / 6.00 / 6.32 ms。原因：ring 吃暫存器、降低 occupancy（ncu 的 M=8 版本 achieved occupancy 22% → 16% → 12%）；M=1、深度 0 已經有 30% achieved（理論 62%），延遲本來就由其他 warp 蓋住，單一 warp 的 load 串行不是瓶頸。G1 不通過，revert（e53207f）。ncu 的 300 個 kernel 上限沒錄到 M=1 的預取版本，但 tune 和 e2e 已經夠下結論。
+- **e2e**（ms/step）：
+
+  | | b=1 | b=16 | b=64 |
+  |---|---:|---:|---:|
+  | nano bf16，sync | 12.28 | 14.55 | 23.59 |
+  | nano bf16，async | **12.05** | **14.12** | **22.60** |
+  | vLLM bf16 | 12.62 | 14.82 | 23.11 |
+  | nano bf16，async，sampled | 12.47 | 15.14 | 25.22 |
+  | vLLM bf16，sampled | 12.87 | 16.15 | 24.77 |
+  | nano W4A16，sync | 5.97 | 8.89 | 24.28 |
+  | nano W4A16，async | 5.74 | 8.47 | 23.27 |
+  | vLLM AWQ（Marlin） | **5.54** | **7.86** | **16.19** |
+  | nano W4A16，async，sampled | 6.16 | 9.48 | 25.87 |
+  | vLLM AWQ，sampled | 5.82 | 9.34 | 18.10 |
+
+  - async 在 W4A16 上省 0.23 / 0.42 / 1.01 ms，和 bf16 差不多；W4A16 還是落後 AWQ 3.6% / 7.8% / 44%。b=64 落後超過 10%，Marlin 式 kernel（#2）列為下一輪。
+  - **採樣的成本**（sampled 減 greedy）：nano 0.42 / 1.02 / 2.62 ms，vLLM 0.25 / 1.33 / 1.66 ms。b=16 nano 比較便宜，b=64 貴 0.96 ms，超過 G3 的 0.3 ms 門檻：不排序的採樣器列為下一輪。nsys（W4A16 async sampled b=16，每步）：`torch.cumsum` 的 innermost scan 231 µs、float radix sort 4 × 48 µs 加 `sort_postprocess` 41 µs 加 index 的 long sort 34 µs、兩次 argmax 55（greedy 的 bf16 argmax，每步都算）+ 41 µs（multinomial 的 exponential trick），合計約 0.7 ms。greedy 的 argmax 55 µs 就是 Phase 1 留下的那個缺口，`reduce_kernel` 一列一個 block，16 列只用 16 個 SM。
+- **kbench**（W4A16，`cuda_auto` / `vllm_marlin` 的時間比）：down_proj 在 M=1–64 都是 1.5–2.1 倍，gate_up 1.0–1.8 倍，M≥32 時四個 layer 都是 1.4–2.1 倍；o_proj 和 qkv 在 M≤16 時和 Marlin 打平或更快。這是下一輪 Marlin 式 kernel 的起點。
+
+## 2026-10-23 06:55 — run `kernels-r2-20261023-065546-colab`：FP8 KV cache 第一次上 GPU（同一台 VM）
+
+FP8 KV（#3）在 R1 跑的同時寫完（540cc8d）。Triton 3.6 的 CUDA backend 在 sm80 只接受 fp8e5 和 fp8e4b15，`float8e4nv` 要 sm89 以上，A100 也沒有 fp8 轉換指令，所以 kernel 把 cache 當 uint8，用整數運算編碼和解碼 e4m3（`kernels/fp8.py`）：解碼把 7 個 bit 放到 bf16 的 bit 4–10，得到「原值 × 2^-120」直接進 `tl.dot`；每個 (token, kv head) 一個 fp32 scale，K 的 scale 乘在 score、V 的 scale 乘在機率上，q 先乘 2^60、輸出最後乘 2^60，中間值都離 fp32 的 subnormal 很遠。本機先用 interpreter 檢查（它的 bf16 `tl.dot` 是壞的，所以 fp32 query 時解碼成 fp32，2^-120 的關係一樣成立）：59/59 通過。
+
+設定：`P1_STEPS="tests kbench e2e quality summarize"`，kbench 跑 bf16 和 fp8 的 decode attention，e2e 是 bf16 / W4A16 × bf16 / fp8 KV（async），加上 b=16、4096 token 的點，vLLM 跑預設和 `--kv-cache-dtype fp8 --attention-backend TRITON_ATTN`；quality 比四組。
+
+- **tests**：535 passed、9 failed，全是新的 fp8 測試的容差，沒有結構性錯誤。kernel 測試的 K/V 刻意跨兩個數量級，輸出也跟著放大，1–9 個元素（最多 2M 個）超出絕對容差（fp32 最多 1.6e-4，bf16 最多 0.059，都不到最大輸出的 1%）；模型層級的 fp32 嚴格比對通過，bf16 模型量化的是 bf16 捨入過的 K，有些 code 和 fp32 模型差一格；fp8 對全精度的 cosine 0.9985，而這個隨機權重的模型連 fp32 reference 路徑都只有 0.9986（CPU 上量）。修正：kernel 測試改成「誤差不超過輸出最大值的某個比例」，bf16 模型層級改比 cosine，門檻 0.995（2b5daa7）。
+- **kbench**（decode attention，µs，bf16 / fp8，同一個 Triton kernel 和 launch 設定）：
+
+  | | B=1 | B=16 | B=64 | B=128 |
+  |---|---:|---:|---:|---:|
+  | ctx=1024 | 14.4 / 14.2 | 62.3 / 58.7 | 201.0 / 147.9 | 379.9 / 273.3 |
+  | ctx=4096 | 20.9 / 23.1 | 204.6 / 188.5 | 770.2 / 543.3 | 1484.9 / 1032.1 |
+
+  B≥64 快 26–30%，B≤16 幾乎沒差，B=1、4096 反而慢 10%。bytes 少了將近一半，但 fp8 只到 HBM 峰值的 60–69%（bf16 是 86–93%）：launch 設定是照 bf16 調的，加上整數解碼。tune.py 加了 `decode_fp8` 的掃描（b3dc532）。
+- **e2e 失敗兩處**：
+  - nano 的兩組 bf16 KV config OOM：nano_bench 用 max_batch × max_len 配置 KV，b=64 加上 4096 的點等於要 281k token、36 GB。改成依最大的那個 run 配置（fd8102c）。
+  - vLLM 的 fp8 run 全部失敗：torch inductor 編出的 Triton kernel 報 `type fp8e4nv not supported in this architecture. The supported fp8 dtypes are ('fp8e4b15', 'fp8e5')`，和我們碰到的限制一樣。vLLM 0.19.1 在 A100 上用 TRITON_ATTN 開不了 fp8 KV（FLASH_ATTN 本來就拒絕）。下一輪試 FLASHINFER。
+- **e2e 的 nano fp8**（ms/step，括號是 R1 的 bf16 KV）：bf16 權重 12.09（12.05）/ 14.01（14.12）/ 20.87（22.60），W4A16 5.79（5.74）/ 8.46（8.47）/ 21.50（23.27）；b=16、4096 token：bf16 18.07、W4A16 12.56。b=64 省 1.73–1.77 ms，比 G4 的 2 ms 少一點；b≤16 沒有差別，和 kbench 一致。
+- **quality**（wikitext-2 test，288,627 個 token）：
+
+  | 設定 | perplexity | top-1 一致率（對 bf16） |
+  |---|---:|---:|
+  | bf16 | 7.232 | - |
+  | bf16 + fp8 KV | 7.248（+0.22%） | 97.55% |
+  | W4A16 | 8.024 | 85.88% |
+  | W4A16 + fp8 KV | 8.040（+0.20%） | 85.79% |
+
+  perplexity 遠低於 G4 的 1%，top-1 97.55% 比 98% 低 0.45 個百分點。參考：Phase 1 的 bf16 Triton 對 torch 路徑，光是數值差異就是 98.81%。
+
+## 2026-10-23 07:16 — run `kernels-r3-20261023-071605-colab`：fp8 decode 的 launch 設定（同一台 VM）
+
+`P1_STEPS="tune summarize" P1_TUNE=decode_fp8`：block_n 32–256 × warps 4/8 × stages 1–4，在 fp8 cache 上掃（µs，目前設定 → 最佳）：
+
+| shape | 目前（bf16 的級距） | 最佳 | 最佳設定 |
+|---|---:|---:|---|
+| B=1 ctx=1024 | 14.2 | 12.0 | block_n 32、4 warps、2 段 |
+| B=1 ctx=4096 | 22.9 | 19.3 | block_n 64、4 warps、1 段 |
+| B=16 ctx=1024 | 58.5 | 51.3 | block_n 128、4 warps、2 段 |
+| B=16 ctx=4096 | 188.7 | 154.5 | block_n 128、4 warps、4 段 |
+| B=64 ctx=1024 | 147.9 | 147.7 | bf16 的級距 |
+| B=64 ctx=4096 | 541.9 | 541.9 | bf16 的級距 |
+| B=128 ctx=1024 | 271.9 | 271.9 | bf16 的級距 |
+
+設定只能看 batch size（CUDA graph 要固定），所以每一級挑兩種 ctx 下最差情況最小的：B<16 用 block_n 32、4 warps、2 段（最差離最佳 2.3%），B≥16 用 block_n 128、4 warps、3 段（最差 4.8%，B≥64 就是原本的級距）。`DECODE_CONFIGS_FP8`、`decode_config(batch, kv_fp8)`（c235073）。
+
+## 2026-10-23 07:21 — run `kernels-r4-20261023-072114-colab`：fp8 KV 的 e2e，vLLM 改用 FLASHINFER（同一台 VM）
+
+`P1_STEPS="kbench e2e summarize"`，nano_bench 改成依最大的 run 配置 KV（fd8102c），fp8 用新的 decode 級距（c235073），vLLM 的 fp8 改用 `--attention-backend FLASHINFER`。
+
+- `colab exec` 在 run 中途斷線（"colab exec ended (exit 1) before the run finished"），run 在 VM 上照常跑完，之後用 `tail` 確認、`fetch` 下載。
+- **kbench**（fp8，新級距）：B=1 12.0 / 19.8 µs（ctx 1024 / 4096，bf16 是 14.4 / 20.9），B=16 53.9 / 156.1 µs（bf16 62.3 / 204.6），B≥64 不變。
+- **FLASHINFER 讓 vLLM 在 A100 上開得了 fp8 KV**（JIT 用 cuda129 的 nvcc）。
+- **e2e**（ms/step）：
+
+  | | b=1 | b=16 | b=64 | b=16，4096 token |
+  |---|---:|---:|---:|---:|
+  | nano bf16 | 12.05 | 14.13 | 22.60 | 18.73 |
+  | nano bf16 + fp8 KV | **12.01** | **13.81** | **20.87** | 17.16 |
+  | vLLM bf16（FA2） | 12.60 | 14.82 | 23.04 | - |
+  | vLLM bf16 + fp8 KV（FLASHINFER） | 13.05 | 14.50 | 21.30 | - |
+  | nano W4A16 | 5.68 | 8.48 | 23.27 | 13.01 |
+  | nano W4A16 + fp8 KV | **5.65** | 8.25 | 21.52 | 11.60 |
+  | vLLM AWQ | 5.56 | 7.86 | 16.19 | - |
+  | vLLM AWQ + fp8 KV（FLASHINFER） | 6.05 | **7.55** | **14.44** | - |
+
+  - nano 的 fp8 KV：b=64 省 1.73–1.75 ms，b=16、4096 token 省 1.41–1.57 ms，b=16、1024 省 0.23–0.32 ms，b=1 不變。G4 的速度門檻（b=64 省 2 ms）差 0.27 ms。
+  - 同樣開 fp8 KV，nano bf16 比 vLLM 快 8% / 5% / 2%；vLLM 的 FLASHINFER 在 b=1 比它自己的 FA2 慢 0.45 ms，所以 nano W4A16 + fp8 KV 在 b=1 反而比 vLLM AWQ + fp8 KV 快。
+  - vLLM 的 4096 點全部失敗：`vllm_offline.py` 的 `max_model_len` 寫死 4096，裝不下 4096 + 輸出。改成依 run 設定。
+
+## 2026-10-23 07:53 — run `kernels-serve-20261023-075342-colab`：線上，greedy 和 sampled，bf16 和 fp8 KV（同一台 VM，Phase 2 的 harness）
+
+`BENCH_PHASE=phase2 P2_STEPS="tests serve summarize" P2_CONCURRENCY="1 16 64"`；nano 用 Phase 2 最後一輪的設定（core process、async、2048-token chunk），KV 改成依 0.9 的 GPU 記憶體自動配置（`NUM_KVCACHE_BLOCKS=0`，和 vLLM 的預設一樣），vLLM 的 fp8 用 FLASHINFER。
+
+- **tests**：514 passed，沒有 skip、沒有失敗（含修過容差的 fp8 測試；比 R2 少的 30 個是 revert 掉的 GEMV 預取測試）。
+- **KV 容量**：nano 157,744 / fp8 305,920 token（1.94 倍），vLLM 159,072 / fp8 326,352（2.05 倍，vLLM 的 fp8 是每個 tensor 一個 scale，不佔額外 bytes）。
+- **W1**（output tok/s · ITL p50 ms）：
+
+  | | c=1 | c=16 | c=64 | TTFT p50 c=64 |
+  |---|---:|---:|---:|---:|
+  | vLLM | 78 · 12.80 | 940 · 14.87 | 1,777 · 23.24 | 495 ms |
+  | vLLM fp8 | 76 · 13.12 | 952 · 14.57 | 1,915 · 21.38 | 470 ms |
+  | nano | 82 · 12.08 | 976 · 14.13 | 1,839 · 22.65 | 250 ms |
+  | nano fp8 | 83 · 12.04 | 985 · 13.81 | 1,880 · 21.00 | 259 ms |
+
+  c=64 的吞吐量兩邊都比 Phase 2 最後一輪低（vLLM 1,976、nano 1,997），c=64 本來就隨 request 的排列浮動；同一輪裡 nano fp8 的 ITL 最低。
+- **W1s（temperature 0.7、top-p 0.9）**：nano 78 / 855 / 1,711 tok/s，vLLM 75 / 609 / 1,693；ITL p50 nano 12.50 / 15.17 / 25.31 ms，vLLM 13.07 / 16.28 / 25.03 ms。c=64 時 nano 的 ITL 比 vLLM 高 1.1%，沒有到 G3 的線上門檻（3%）；G3 由 offline 的 b=64 成立（採樣多 0.96 ms）。vLLM 在 c=16 sampled 只有 609 tok/s（greedy 940），TTFT p50 489 ms，原因沒查。
+- **W2b**（48 個 4096-token prefix，總長超過 bf16 的 KV 容量，c=16）：
+
+  | | req/s | TTFT p50 | 命中率 |
+  |---|---:|---:|---:|
+  | nano | 3.33 | 405 ms | 48.2% |
+  | nano fp8 | 3.99 | 160 ms | 70.6% |
+  | vLLM | 3.22 | 544 ms | 48.9% |
+  | vLLM fp8 | 4.16 | 259 ms | 70.6% |
+
+  fp8 讓兩邊的命中率都從約 48% 升到 70.6%；nano fp8 的 req/s 比 vLLM fp8 低 4%，TTFT p50 低 38%。
+- 跑完把 Colab VM 關掉了。

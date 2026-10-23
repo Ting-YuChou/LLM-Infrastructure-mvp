@@ -1,0 +1,826 @@
+{
+  "env": {
+    "device_type": "cuda",
+    "torch": "2.10.0+cu128",
+    "triton": "3.6.0",
+    "device": "NVIDIA A100-SXM4-40GB",
+    "l2_bytes": 41943040,
+    "peak_GBps": 1555.0,
+    "peak_TFLOPs": 312.0,
+    "copy_GBps": 1384.5329455508904
+  },
+  "rows": [
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 1,
+        "ctx": 128
+      },
+      "label": "B=1 ctx=128",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 6.944498665348724,
+      "timing": "graph",
+      "copies": 898,
+      "calls": 898,
+      "GBps": 75.49688253466925,
+      "pct_peak": 4.855104986152364,
+      "pct_copy": 5.452877288133427,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "torch",
+      "shape": {
+        "B": 1,
+        "ctx": 128
+      },
+      "label": "B=1 ctx=128",
+      "ok": true,
+      "max_abs_err": 0.0,
+      "us": 50.35274650046979,
+      "timing": "graph",
+      "copies": 898,
+      "calls": 898,
+      "GBps": 10.412301938586575,
+      "pct_peak": 0.6696014108415803,
+      "pct_copy": 0.7520443606665953,
+      "x_base": 0.1379169786753128
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "triton",
+      "shape": {
+        "B": 1,
+        "ctx": 128
+      },
+      "label": "B=1 ctx=128",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 16.711269030326726,
+      "timing": "graph",
+      "copies": 898,
+      "calls": 898,
+      "GBps": 31.373320544870044,
+      "pct_peak": 2.0175768839144723,
+      "pct_copy": 2.265985843506739,
+      "x_base": 0.4155578282383113
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 1,
+        "ctx": 1024
+      },
+      "label": "B=1 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 15.595682083614289,
+      "timing": "graph",
+      "copies": 126,
+      "calls": 126,
+      "GBps": 268.94008081934254,
+      "pct_peak": 17.29518204625997,
+      "pct_copy": 19.42460680936229,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "torch",
+      "shape": {
+        "B": 1,
+        "ctx": 1024
+      },
+      "label": "B=1 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0,
+      "us": 84.7481924390036,
+      "timing": "graph",
+      "copies": 126,
+      "calls": 126,
+      "GBps": 49.49136824385719,
+      "pct_peak": 3.1827246459072147,
+      "pct_copy": 3.574589424028846,
+      "x_base": 0.1840237724815084
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "triton",
+      "shape": {
+        "B": 1,
+        "ctx": 1024
+      },
+      "label": "B=1 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 14.376634643191384,
+      "timing": "graph",
+      "copies": 126,
+      "calls": 126,
+      "GBps": 291.74449404168286,
+      "pct_peak": 18.76170379689279,
+      "pct_copy": 21.071690274990235,
+      "x_base": 1.084793657951114
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 1,
+        "ctx": 4096
+      },
+      "label": "B=1 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 29.97999917715788,
+      "timing": "graph",
+      "copies": 32,
+      "calls": 128,
+      "GBps": 559.6136244320768,
+      "pct_peak": 35.98801443293098,
+      "pct_copy": 40.41894605905623,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "torch",
+      "shape": {
+        "B": 1,
+        "ctx": 4096
+      },
+      "label": "B=1 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.0,
+      "us": 226.8799990415573,
+      "timing": "graph",
+      "copies": 32,
+      "calls": 128,
+      "GBps": 73.94753204722528,
+      "pct_peak": 4.755468298856931,
+      "pct_copy": 5.340973090228804,
+      "x_base": 0.13214033543638407
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "triton",
+      "shape": {
+        "B": 1,
+        "ctx": 4096
+      },
+      "label": "B=1 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 20.96799947321415,
+      "timing": "graph",
+      "copies": 32,
+      "calls": 128,
+      "GBps": 800.1343199875733,
+      "pct_peak": 51.45558327894363,
+      "pct_copy": 57.79091949807007,
+      "x_base": 1.4297977837826745
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 16,
+        "ctx": 128
+      },
+      "label": "B=16 ctx=128",
+      "ok": true,
+      "max_abs_err": 0.00390625,
+      "us": 23.182222767481726,
+      "timing": "graph",
+      "copies": 63,
+      "calls": 126,
+      "GBps": 361.85520621287907,
+      "pct_peak": 23.270431267709263,
+      "pct_copy": 26.1355432079589,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "torch",
+      "shape": {
+        "B": 16,
+        "ctx": 128
+      },
+      "label": "B=16 ctx=128",
+      "ok": true,
+      "max_abs_err": 0.0,
+      "us": 125.6675568837968,
+      "timing": "graph",
+      "copies": 63,
+      "calls": 126,
+      "GBps": 66.75237593547585,
+      "pct_peak": 4.292757294885908,
+      "pct_copy": 4.821291985140579,
+      "x_base": 0.18447261443077176
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "triton",
+      "shape": {
+        "B": 16,
+        "ctx": 128
+      },
+      "label": "B=16 ctx=128",
+      "ok": true,
+      "max_abs_err": 0.00390625,
+      "us": 17.050411966111923,
+      "timing": "graph",
+      "copies": 63,
+      "calls": 126,
+      "GBps": 491.98858166433433,
+      "pct_peak": 31.63913708452311,
+      "pct_copy": 35.53462438328454,
+      "x_base": 1.359628307723996
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 16,
+        "ctx": 1024
+      },
+      "label": "B=16 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 75.68738552240225,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 886.6585037494374,
+      "pct_peak": 57.01983946941719,
+      "pct_copy": 64.04026040685119,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "torch",
+      "shape": {
+        "B": 16,
+        "ctx": 1024
+      },
+      "label": "B=16 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0,
+      "us": 932.9575391916128,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 71.93131646500049,
+      "pct_peak": 4.625808132797459,
+      "pct_copy": 5.1953488500325875,
+      "x_base": 0.08112629175812622
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "triton",
+      "shape": {
+        "B": 16,
+        "ctx": 1024
+      },
+      "label": "B=16 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 61.83876899572519,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 1085.2231551478512,
+      "pct_peak": 69.78927042751455,
+      "pct_copy": 78.38189467684013,
+      "x_base": 1.2239471572863037
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 16,
+        "ctx": 4096
+      },
+      "label": "B=16 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 223.35487365722656,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1201.8338870543596,
+      "pct_peak": 77.28835286523213,
+      "pct_copy": 86.8042823333585,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "torch",
+      "shape": {
+        "B": 16,
+        "ctx": 4096
+      },
+      "label": "B=16 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.0,
+      "us": 3573.8726806640625,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 75.11052574769448,
+      "pct_peak": 4.830258890526976,
+      "pct_copy": 5.4249720809502895,
+      "x_base": 0.06249659504258694
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "triton",
+      "shape": {
+        "B": 16,
+        "ctx": 4096
+      },
+      "label": "B=16 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 205.00991821289062,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1309.3778990792325,
+      "pct_peak": 84.20436650027219,
+      "pct_copy": 94.57181234197685,
+      "x_base": 1.0894832581967366
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 64,
+        "ctx": 128
+      },
+      "label": "B=64 ctx=128",
+      "ok": true,
+      "max_abs_err": 0.00390625,
+      "us": 44.425142662865774,
+      "timing": "graph",
+      "copies": 16,
+      "calls": 112,
+      "GBps": 755.3027404917618,
+      "pct_peak": 48.572523504293365,
+      "pct_copy": 54.55289041108626,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "torch",
+      "shape": {
+        "B": 64,
+        "ctx": 128
+      },
+      "label": "B=64 ctx=128",
+      "ok": true,
+      "max_abs_err": 0.0,
+      "us": 482.11658000946045,
+      "timing": "graph",
+      "copies": 16,
+      "calls": 112,
+      "GBps": 69.5981706319695,
+      "pct_peak": 4.475766600126656,
+      "pct_copy": 5.026833839932726,
+      "x_base": 0.09214605866073726
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "triton",
+      "shape": {
+        "B": 64,
+        "ctx": 128
+      },
+      "label": "B=64 ctx=128",
+      "ok": true,
+      "max_abs_err": 0.00390625,
+      "us": 34.95314291545323,
+      "timing": "graph",
+      "copies": 16,
+      "calls": 112,
+      "GBps": 959.9832576190213,
+      "pct_peak": 61.735257724695906,
+      "pct_copy": 69.3362523949948,
+      "x_base": 1.2709913603570355
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 64,
+        "ctx": 1024
+      },
+      "label": "B=64 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 219.72479820251465,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1221.689395989751,
+      "pct_peak": 78.56523446879427,
+      "pct_copy": 88.23837669703512,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "torch",
+      "shape": {
+        "B": 64,
+        "ctx": 1024
+      },
+      "label": "B=64 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0,
+      "us": 3582.3666381835938,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 74.93243520604796,
+      "pct_peak": 4.818806122575431,
+      "pct_copy": 5.412109220429794,
+      "x_base": 0.06133509503480752
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "triton",
+      "shape": {
+        "B": 64,
+        "ctx": 1024
+      },
+      "label": "B=64 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 200.5043125152588,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1338.801408471309,
+      "pct_peak": 86.0965535994411,
+      "pct_copy": 96.69697010630648,
+      "x_base": 1.095860709658268
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 64,
+        "ctx": 4096
+      },
+      "label": "B=64 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 814.3820953369141,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1318.4742520103998,
+      "pct_peak": 84.78934096529903,
+      "pct_copy": 95.22881028199683,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "torch",
+      "shape": {
+        "B": 64,
+        "ctx": 4096
+      },
+      "label": "B=64 ctx=4096",
+      "skipped": "reference too slow to time at this size",
+      "by_design": true
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "triton",
+      "shape": {
+        "B": 64,
+        "ctx": 4096
+      },
+      "label": "B=64 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 770.1606750488281,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1394.178979512197,
+      "pct_peak": 89.65781218727955,
+      "pct_copy": 100.69669948933345,
+      "x_base": 1.057418434517294
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 128,
+        "ctx": 128
+      },
+      "label": "B=128 ctx=128",
+      "ok": true,
+      "max_abs_err": 0.00390625,
+      "us": 72.36430736688467,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 927.3751997619526,
+      "pct_peak": 59.63827651202267,
+      "pct_copy": 66.98108576917686,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "torch",
+      "shape": {
+        "B": 128,
+        "ctx": 128
+      },
+      "label": "B=128 ctx=128",
+      "ok": true,
+      "max_abs_err": 0.0,
+      "us": 924.0713853102463,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 72.62303006760563,
+      "pct_peak": 4.670291322675602,
+      "pct_copy": 5.245308918142769,
+      "x_base": 0.07831029995868684
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "triton",
+      "shape": {
+        "B": 128,
+        "ctx": 128
+      },
+      "label": "B=128 ctx=128",
+      "ok": true,
+      "max_abs_err": 0.00390625,
+      "us": 61.4153857414539,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 1092.704428862736,
+      "pct_peak": 70.27038127734636,
+      "pct_copy": 78.92224106144046,
+      "x_base": 1.1782765262034414
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 128,
+        "ctx": 1024
+      },
+      "label": "B=128 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 403.67103576660156,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1329.9713490229535,
+      "pct_peak": 85.52870411723174,
+      "pct_copy": 96.05920561852523,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "torch",
+      "shape": {
+        "B": 128,
+        "ctx": 1024
+      },
+      "label": "B=128 ctx=1024",
+      "skipped": "reference too slow to time at this size",
+      "by_design": true
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "triton",
+      "shape": {
+        "B": 128,
+        "ctx": 1024
+      },
+      "label": "B=128 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 380.5337715148926,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1410.836441303841,
+      "pct_peak": 90.7290315951023,
+      "pct_copy": 101.8998100288964,
+      "x_base": 1.0608021310686835
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 128,
+        "ctx": 4096
+      },
+      "label": "B=128 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 1530.1734924316406,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1403.4249440482563,
+      "pct_peak": 90.25240797737982,
+      "pct_copy": 101.3645033553065,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "torch",
+      "shape": {
+        "B": 128,
+        "ctx": 4096
+      },
+      "label": "B=128 ctx=4096",
+      "skipped": "reference too slow to time at this size",
+      "by_design": true
+    },
+    {
+      "kernel": "paged_decode_attention",
+      "impl": "triton",
+      "shape": {
+        "B": 128,
+        "ctx": 4096
+      },
+      "label": "B=128 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 1477.422103881836,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1453.5342623869094,
+      "pct_peak": 93.47487217922247,
+      "pct_copy": 104.98372516578608,
+      "x_base": 1.0357050218831867
+    },
+    {
+      "kernel": "paged_decode_attention_fp8",
+      "impl": "triton",
+      "shape": {
+        "B": 1,
+        "ctx": 1024
+      },
+      "label": "B=1 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 12.029901391170064,
+      "timing": "graph",
+      "copies": 244,
+      "calls": 244,
+      "GBps": 179.77603719905892,
+      "pct_peak": 11.561159948492534,
+      "pct_copy": 12.984598003013067,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_decode_attention_fp8",
+      "impl": "triton",
+      "shape": {
+        "B": 1,
+        "ctx": 4096
+      },
+      "label": "B=1 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 19.782194206791537,
+      "timing": "graph",
+      "copies": 62,
+      "calls": 124,
+      "GBps": 437.2999228280785,
+      "pct_peak": 28.122181532352315,
+      "pct_copy": 31.584652733133893,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_decode_attention_fp8",
+      "impl": "triton",
+      "shape": {
+        "B": 16,
+        "ctx": 1024
+      },
+      "label": "B=16 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 53.86057070323399,
+      "timing": "graph",
+      "copies": 16,
+      "calls": 112,
+      "GBps": 642.4552794039055,
+      "pct_peak": 41.3154520516981,
+      "pct_copy": 46.40231071917755,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_decode_attention_fp8",
+      "impl": "triton",
+      "shape": {
+        "B": 16,
+        "ctx": 4096
+      },
+      "label": "B=16 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 156.14464282989502,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 886.4347152197015,
+      "pct_peak": 57.00544792409656,
+      "pct_copy": 64.02409693956389,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_decode_attention_fp8",
+      "impl": "triton",
+      "shape": {
+        "B": 64,
+        "ctx": 1024
+      },
+      "label": "B=64 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 147.31776237487793,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 939.547477294587,
+      "pct_peak": 60.42105963309241,
+      "pct_copy": 67.8602470467578,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_decode_attention_fp8",
+      "impl": "triton",
+      "shape": {
+        "B": 64,
+        "ctx": 4096
+      },
+      "label": "B=64 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 541.6447830200195,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1022.1609168153603,
+      "pct_peak": 65.73382101706498,
+      "pct_copy": 73.82712849845937,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_decode_attention_fp8",
+      "impl": "triton",
+      "shape": {
+        "B": 128,
+        "ctx": 1024
+      },
+      "label": "B=128 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 273.2236862182617,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1013.1773999230146,
+      "pct_peak": 65.15610288893984,
+      "pct_copy": 73.17828031314072,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_decode_attention_fp8",
+      "impl": "triton",
+      "shape": {
+        "B": 128,
+        "ctx": 4096
+      },
+      "label": "B=128 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 1033.8253021240234,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1071.067088148286,
+      "pct_peak": 68.87891242111165,
+      "pct_copy": 77.35945118461015,
+      "x_base": 1.0
+    }
+  ]
+}
