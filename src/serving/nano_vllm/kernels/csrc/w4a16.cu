@@ -14,7 +14,10 @@
 // weights sit in one quantization group (group_size is a multiple of 32),
 // so the group scale is applied once per 32 products. x is tiny and shared
 // by every warp, so it is read through the read-only cache instead of being
-// staged in shared memory, and the K loop needs no barriers.
+// staged in shared memory, and the K loop needs no barriers. With PREFETCH
+// > 0 the weight loads of the next PREFETCH steps are in flight while a step
+// computes (a register ring); with 0 a step loads, then computes, so the
+// DRAM latency of every step is exposed (K = 4096 is only 4 steps per warp).
 //
 // One launch handles up to 8 rows of x; the op loops over 8-row chunks.
 //
@@ -105,7 +108,59 @@ __device__ __forceinline__ void load8(const T* p, float out[8]) {
   }
 }
 
+// One K step of a warp's ROWS rows: each lane's 128-bit word (32 weights)
+// and its group scale per row, zeros past n or k.
+template <typename T, int ROWS>
+__device__ __forceinline__ void gemv_load_step(const uint32_t* __restrict__ qweight,
+                                               const T* __restrict__ scales, int row0, int n, int k0, int k,
+                                               int group_size, uint4 (&wq)[ROWS], float (&scale)[ROWS]) {
+  const int words_per_row = k / 8;
+  const int groups_per_row = k / group_size;
+#pragma unroll
+  for (int r = 0; r < ROWS; ++r) {
+    const int row = row0 + r;
+    if (row < n && k0 < k) {
+      wq[r] = __ldg(reinterpret_cast<const uint4*>(
+          qweight + static_cast<int64_t>(row) * words_per_row + k0 / 8));
+      scale[r] = Traits<T>::to_float(scales[static_cast<int64_t>(row) * groups_per_row + k0 / group_size]);
+    } else {
+      wq[r] = make_uint4(0, 0, 0, 0);
+      scale[r] = 0.f;
+    }
+  }
+}
+
+// acc[m][r] += scale[r] * (x[m, k0:k0+32] . w[r, k0:k0+32]).
 template <typename T, int M, int ROWS>
+__device__ __forceinline__ void gemv_fma_step(const T* __restrict__ x, int k, int k0, const uint4 (&wq)[ROWS],
+                                              const float (&scale)[ROWS], float (&acc)[M][ROWS]) {
+  float part[M][ROWS];
+#pragma unroll
+  for (int m = 0; m < M; ++m)
+#pragma unroll
+    for (int r = 0; r < ROWS; ++r) part[m][r] = 0.f;
+#pragma unroll
+  for (int j = 0; j < 4; ++j) {
+    float wf[ROWS][8];
+#pragma unroll
+    for (int r = 0; r < ROWS; ++r) dequant8<T>(reinterpret_cast<const uint32_t*>(&wq[r])[j], wf[r]);
+#pragma unroll
+    for (int m = 0; m < M; ++m) {
+      float xf[8];
+      load8<T>(x + static_cast<int64_t>(m) * k + k0 + 8 * j, xf);
+#pragma unroll
+      for (int r = 0; r < ROWS; ++r)
+#pragma unroll
+        for (int i = 0; i < 8; ++i) part[m][r] = fmaf(xf[i], wf[r][i], part[m][r]);
+    }
+  }
+#pragma unroll
+  for (int m = 0; m < M; ++m)
+#pragma unroll
+    for (int r = 0; r < ROWS; ++r) acc[m][r] = fmaf(part[m][r], scale[r], acc[m][r]);
+}
+
+template <typename T, int M, int ROWS, int PREFETCH>
 __global__ void __launch_bounds__(kThreads) gemv_w4a16_kernel(
     const T* __restrict__ x,
     const uint32_t* __restrict__ qweight,
@@ -115,11 +170,10 @@ __global__ void __launch_bounds__(kThreads) gemv_w4a16_kernel(
     int k,
     int group_size) {
   using Tr = Traits<T>;
+  constexpr int kStep = 32 * 32;  // K values a warp covers per step
   const int warp = threadIdx.x / 32;
   const int lane = threadIdx.x % 32;
   const int row0 = (blockIdx.x * kWarps + warp) * ROWS;
-  const int words_per_row = k / 8;
-  const int groups_per_row = k / group_size;
 
   float acc[M][ROWS];
 #pragma unroll
@@ -127,47 +181,42 @@ __global__ void __launch_bounds__(kThreads) gemv_w4a16_kernel(
 #pragma unroll
     for (int r = 0; r < ROWS; ++r) acc[m][r] = 0.f;
 
-  for (int k0 = lane * 32; k0 < k; k0 += 32 * 32) {
-    uint4 wq[ROWS];
-    float scale[ROWS];
-    // Issue every row's load before using any of them.
+  if constexpr (PREFETCH == 0) {
+    for (int k0 = lane * 32; k0 < k; k0 += kStep) {
+      uint4 wq[ROWS];
+      float scale[ROWS];
+      // Issue every row's load before using any of them.
+      gemv_load_step<T, ROWS>(qweight, scales, row0, n, k0, k, group_size, wq, scale);
+      gemv_fma_step<T, M, ROWS>(x, k, k0, wq, scale, acc);
+    }
+  } else {
+    // Slot s holds the steps i with i % PREFETCH == s. A step is copied out
+    // of its slot, the slot is refilled with step i + PREFETCH, and only
+    // then does step i compute. The slot index is static after unrolling,
+    // so the ring stays in registers.
+    uint4 wq[PREFETCH][ROWS];
+    float scale[PREFETCH][ROWS];
 #pragma unroll
-    for (int r = 0; r < ROWS; ++r) {
-      const int row = row0 + r;
-      if (row < n) {
-        wq[r] = __ldg(reinterpret_cast<const uint4*>(
-            qweight + static_cast<int64_t>(row) * words_per_row + k0 / 8));
-        scale[r] = Tr::to_float(scales[static_cast<int64_t>(row) * groups_per_row + k0 / group_size]);
-      } else {
-        wq[r] = make_uint4(0, 0, 0, 0);
-        scale[r] = 0.f;
+    for (int s = 0; s < PREFETCH; ++s)
+      gemv_load_step<T, ROWS>(qweight, scales, row0, n, lane * 32 + s * kStep, k, group_size, wq[s], scale[s]);
+    for (int base = lane * 32; base < k; base += PREFETCH * kStep) {
+#pragma unroll
+      for (int s = 0; s < PREFETCH; ++s) {
+        const int k0 = base + s * kStep;
+        if (k0 < k) {
+          uint4 cur[ROWS];
+          float cur_scale[ROWS];
+#pragma unroll
+          for (int r = 0; r < ROWS; ++r) {
+            cur[r] = wq[s][r];
+            cur_scale[r] = scale[s][r];
+          }
+          gemv_load_step<T, ROWS>(qweight, scales, row0, n, k0 + PREFETCH * kStep, k, group_size, wq[s],
+                                  scale[s]);
+          gemv_fma_step<T, M, ROWS>(x, k, k0, cur, cur_scale, acc);
+        }
       }
     }
-    float part[M][ROWS];
-#pragma unroll
-    for (int m = 0; m < M; ++m)
-#pragma unroll
-      for (int r = 0; r < ROWS; ++r) part[m][r] = 0.f;
-#pragma unroll
-    for (int j = 0; j < 4; ++j) {
-      float wf[ROWS][8];
-#pragma unroll
-      for (int r = 0; r < ROWS; ++r)
-        dequant8<T>(reinterpret_cast<const uint32_t*>(&wq[r])[j], wf[r]);
-#pragma unroll
-      for (int m = 0; m < M; ++m) {
-        float xf[8];
-        load8<T>(x + static_cast<int64_t>(m) * k + k0 + 8 * j, xf);
-#pragma unroll
-        for (int r = 0; r < ROWS; ++r)
-#pragma unroll
-          for (int i = 0; i < 8; ++i) part[m][r] = fmaf(xf[i], wf[r][i], part[m][r]);
-      }
-    }
-#pragma unroll
-    for (int m = 0; m < M; ++m)
-#pragma unroll
-      for (int r = 0; r < ROWS; ++r) acc[m][r] = fmaf(part[m][r], scale[r], acc[m][r]);
   }
 
 #pragma unroll
@@ -568,34 +617,45 @@ struct Problem {
   int group_size;
 };
 
-template <typename T, int M, int ROWS>
+template <typename T, int M, int ROWS, int PREFETCH>
 void launch(const Problem& p, cudaStream_t stream) {
   const dim3 grid((p.n + kWarps * ROWS - 1) / (kWarps * ROWS));
-  gemv_w4a16_kernel<T, M, ROWS><<<grid, kThreads, 0, stream>>>(
+  gemv_w4a16_kernel<T, M, ROWS, PREFETCH><<<grid, kThreads, 0, stream>>>(
       static_cast<const T*>(p.x), static_cast<const uint32_t*>(p.qweight),
       static_cast<const T*>(p.scales), static_cast<T*>(p.y), p.n, p.k, p.group_size);
 }
 
-template <typename T, int ROWS>
+template <typename T, int ROWS, int PREFETCH>
 void launch_rows(const Problem& p, int m, cudaStream_t stream) {
   switch (m) {
-    case 1: launch<T, 1, ROWS>(p, stream); break;
-    case 2: launch<T, 2, ROWS>(p, stream); break;
-    case 3: launch<T, 3, ROWS>(p, stream); break;
-    case 4: launch<T, 4, ROWS>(p, stream); break;
-    case 5: launch<T, 5, ROWS>(p, stream); break;
-    case 6: launch<T, 6, ROWS>(p, stream); break;
-    case 7: launch<T, 7, ROWS>(p, stream); break;
-    default: launch<T, 8, ROWS>(p, stream); break;
+    case 1: launch<T, 1, ROWS, PREFETCH>(p, stream); break;
+    case 2: launch<T, 2, ROWS, PREFETCH>(p, stream); break;
+    case 3: launch<T, 3, ROWS, PREFETCH>(p, stream); break;
+    case 4: launch<T, 4, ROWS, PREFETCH>(p, stream); break;
+    case 5: launch<T, 5, ROWS, PREFETCH>(p, stream); break;
+    case 6: launch<T, 6, ROWS, PREFETCH>(p, stream); break;
+    case 7: launch<T, 7, ROWS, PREFETCH>(p, stream); break;
+    default: launch<T, 8, ROWS, PREFETCH>(p, stream); break;
+  }
+}
+
+template <typename T, int ROWS>
+void launch_prefetch(const Problem& p, int m, int64_t prefetch, cudaStream_t stream) {
+  switch (prefetch) {
+    case 0: launch_rows<T, ROWS, 0>(p, m, stream); break;
+    case 1: launch_rows<T, ROWS, 1>(p, m, stream); break;
+    case 2: launch_rows<T, ROWS, 2>(p, m, stream); break;
+    case 4: launch_rows<T, ROWS, 4>(p, m, stream); break;
+    default: TORCH_CHECK(false, "gemv_w4a16: prefetch must be 0, 1, 2 or 4");
   }
 }
 
 template <typename T>
-void launch_type(const Problem& p, int m, int64_t rows_per_warp, cudaStream_t stream) {
+void launch_type(const Problem& p, int m, int64_t rows_per_warp, int64_t prefetch, cudaStream_t stream) {
   switch (rows_per_warp) {
-    case 1: launch_rows<T, 1>(p, m, stream); break;
-    case 2: launch_rows<T, 2>(p, m, stream); break;
-    case 4: launch_rows<T, 4>(p, m, stream); break;
+    case 1: launch_prefetch<T, 1>(p, m, prefetch, stream); break;
+    case 2: launch_prefetch<T, 2>(p, m, prefetch, stream); break;
+    case 4: launch_prefetch<T, 4>(p, m, prefetch, stream); break;
     default: TORCH_CHECK(false, "gemv_w4a16: rows_per_warp must be 1, 2 or 4");
   }
 }
@@ -617,7 +677,7 @@ void check_weight(const torch::Tensor& qweight, const torch::Tensor& scales, int
 }  // namespace
 
 torch::Tensor gemv_w4a16(torch::Tensor x, torch::Tensor qweight, torch::Tensor scales,
-                         int64_t group_size, int64_t rows_per_warp) {
+                         int64_t group_size, int64_t rows_per_warp, int64_t prefetch) {
   check_weight(qweight, scales, group_size);
   TORCH_CHECK(x.is_cuda() && x.dim() == 2 && x.is_contiguous(), "gemv_w4a16: contiguous CUDA x expected");
   TORCH_CHECK(x.scalar_type() == scales.scalar_type(), "gemv_w4a16: x and scales must share a dtype");
@@ -634,9 +694,9 @@ torch::Tensor gemv_w4a16(torch::Tensor x, torch::Tensor qweight, torch::Tensor s
                     scales.data_ptr(), static_cast<char*>(y.data_ptr()) + m0 * n * elem,
                     static_cast<int>(n), static_cast<int>(k), static_cast<int>(group_size)};
     if (x.scalar_type() == torch::kBFloat16) {
-      launch_type<__nv_bfloat16>(p, rows, rows_per_warp, stream);
+      launch_type<__nv_bfloat16>(p, rows, rows_per_warp, prefetch, stream);
     } else {
-      launch_type<__half>(p, rows, rows_per_warp, stream);
+      launch_type<__half>(p, rows, rows_per_warp, prefetch, stream);
     }
   }
   return y;
@@ -811,7 +871,8 @@ torch::Tensor dequantize_w4a16(torch::Tensor qweight, torch::Tensor scales, int6
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, module) {
   module.def("gemv_w4a16", &gemv_w4a16, "W4A16 GEMV (y = x @ dequant(qweight, scales).T)",
              pybind11::arg("x"), pybind11::arg("qweight"), pybind11::arg("scales"),
-             pybind11::arg("group_size") = 128, pybind11::arg("rows_per_warp") = 4);
+             pybind11::arg("group_size") = 128, pybind11::arg("rows_per_warp") = 4,
+             pybind11::arg("prefetch") = 0);
   module.def("gemm_w4a16_mma", &gemm_w4a16_mma, "W4A16 tensor-core GEMM for 1-64 rows",
              pybind11::arg("x"), pybind11::arg("qweight"), pybind11::arg("scales"),
              pybind11::arg("workspace"), pybind11::arg("counters"),
