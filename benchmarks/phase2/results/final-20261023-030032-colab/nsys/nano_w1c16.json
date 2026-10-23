@@ -1,0 +1,261 @@
+{
+  "label": "nano_w1c16",
+  "window_ms": 5811.494872,
+  "gpu_busy_frac": 0.9939748600366656,
+  "per_step_source": "median of 242 NVTX step ranges",
+  "steps": 274,
+  "batch": 1,
+  "per_step": {
+    "wall_ms": 14.017867,
+    "gpu_busy_ms": 13.9827115,
+    "gpu_idle_ms": 0.0351555,
+    "kernels": 423.0,
+    "launch_calls": 2.0,
+    "launch_api_ms": 0.4665165
+  },
+  "kernel_time_by_category": {
+    "gemm": {
+      "ms": 4901.293748,
+      "frac": 0.848058214773898
+    },
+    "attention": {
+      "ms": 653.799742,
+      "frac": 0.11312528294114296
+    },
+    "norm": {
+      "ms": 82.740501,
+      "frac": 0.014316375466414488
+    },
+    "activation": {
+      "ms": 80.639874,
+      "frac": 0.01395290939498125
+    },
+    "rope": {
+      "ms": 39.254651,
+      "frac": 0.006792131008719212
+    },
+    "sampling": {
+      "ms": 15.111062,
+      "frac": 0.0026146280802465563
+    },
+    "elementwise/copy": {
+      "ms": 6.5912,
+      "frac": 0.0011404583345976014
+    }
+  },
+  "top_kernels": [
+    {
+      "name": "_gemv_kernel",
+      "category": "gemm",
+      "count": 31121,
+      "total_ms": 2774.596052,
+      "avg_us": 89.15510594132579,
+      "frac": 0.4800811980587753
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn",
+      "category": "gemm",
+      "count": 4096,
+      "total_ms": 2080.693235,
+      "avg_us": 507.9817468261719,
+      "frac": 0.3600169834926259
+    },
+    {
+      "name": "_paged_decode_split_kernel",
+      "category": "attention",
+      "count": 8704,
+      "total_ms": 500.021787,
+      "avg_us": 57.44735604319853,
+      "frac": 0.08651748004377603
+    },
+    {
+      "name": "_paged_prefill_kernel",
+      "category": "attention",
+      "count": 1024,
+      "total_ms": 112.831467,
+      "avg_us": 110.1869794921875,
+      "frac": 0.01952293769647776
+    },
+    {
+      "name": "_fused_add_rms_norm_kernel",
+      "category": "norm",
+      "count": 17472,
+      "total_ms": 81.830254,
+      "avg_us": 4.683508127289378,
+      "frac": 0.014158877775904041
+    },
+    {
+      "name": "_silu_and_mul_kernel",
+      "category": "activation",
+      "count": 8736,
+      "total_ms": 80.639874,
+      "avg_us": 9.230754807692309,
+      "frac": 0.01395290939498125
+    },
+    {
+      "name": "_gemv_reduce_kernel",
+      "category": "gemm",
+      "count": 23136,
+      "total_ms": 46.004461,
+      "avg_us": 1.9884362465421852,
+      "frac": 0.007960033222496709
+    },
+    {
+      "name": "_paged_decode_reduce_kernel",
+      "category": "attention",
+      "count": 8704,
+      "total_ms": 40.946488,
+      "avg_us": 4.704329963235294,
+      "frac": 0.0070848652008891665
+    },
+    {
+      "name": "_rope_cache_write_kernel",
+      "category": "rope",
+      "count": 8736,
+      "total_ms": 39.254651,
+      "avg_us": 4.493435325091575,
+      "frac": 0.006792131008719212
+    },
+    {
+      "name": "reduce_kernel",
+      "category": "sampling",
+      "count": 273,
+      "total_ms": 15.111062,
+      "avg_us": 55.35187545787546,
+      "frac": 0.0026146280802465563
+    },
+    {
+      "name": "vectorized_gather_kernel",
+      "category": "elementwise/copy",
+      "count": 1358,
+      "total_ms": 3.55705,
+      "avg_us": 2.6193298969072165,
+      "frac": 0.0006154671864122464
+    },
+    {
+      "name": "vectorized_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 816,
+      "total_ms": 1.863091,
+      "avg_us": 2.2831997549019607,
+      "frac": 0.00032236583005579864
+    },
+    {
+      "name": "index_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 279,
+      "total_ms": 1.171059,
+      "avg_us": 4.197344086021505,
+      "frac": 0.00020262531812955645
+    },
+    {
+      "name": "_rms_norm_kernel",
+      "category": "norm",
+      "count": 273,
+      "total_ms": 0.910247,
+      "avg_us": 3.3342380952380952,
+      "frac": 0.00015749769051044772
+    }
+  ],
+  "cuda_api": {
+    "cudaEventSynchronize": {
+      "calls": 273,
+      "total_ms": 4436.595784
+    },
+    "cudaGraphLaunch": {
+      "calls": 241,
+      "total_ms": 111.860005
+    },
+    "cudaLaunchKernel": {
+      "calls": 4652,
+      "total_ms": 109.561622
+    },
+    "cuLaunchKernelEx": {
+      "calls": 7168,
+      "total_ms": 67.653696
+    },
+    "cudaMemcpyAsync": {
+      "calls": 1121,
+      "total_ms": 14.321524
+    },
+    "cudaMemsetAsync": {
+      "calls": 1024,
+      "total_ms": 8.617663
+    },
+    "cudaMalloc": {
+      "calls": 11,
+      "total_ms": 2.143719
+    },
+    "cudaEventRecordWithFlags": {
+      "calls": 366,
+      "total_ms": 1.287762
+    },
+    "cudaStreamIsCapturing": {
+      "calls": 618,
+      "total_ms": 0.899878
+    },
+    "cudaEventQuery": {
+      "calls": 151,
+      "total_ms": 0.737824
+    },
+    "cudaHostAlloc": {
+      "calls": 2,
+      "total_ms": 0.042915
+    },
+    "cudaEventCreateWithFlags": {
+      "calls": 3,
+      "total_ms": 0.013201
+    }
+  },
+  "timeline_slice_ns": [
+    14349029146,
+    14391082747
+  ],
+  "nvtx_phases": {
+    "collect": {
+      "count": 273,
+      "median_us": 12902.757,
+      "total_ms": 4445.227585
+    },
+    "forward": {
+      "count": 31,
+      "median_us": 29041.627,
+      "total_ms": 906.34077
+    },
+    "replay": {
+      "count": 241,
+      "median_us": 759.465,
+      "total_ms": 187.4812
+    },
+    "sample": {
+      "count": 273,
+      "median_us": 182.833,
+      "total_ms": 113.627395
+    },
+    "detokenize": {
+      "count": 4095,
+      "median_us": 19.387,
+      "total_ms": 103.228119
+    },
+    "prepare": {
+      "count": 31,
+      "median_us": 1400.724,
+      "total_ms": 43.520004
+    },
+    "postprocess": {
+      "count": 272,
+      "median_us": 54.4465,
+      "total_ms": 24.841769
+    },
+    "publish": {
+      "count": 273,
+      "median_us": 52.881,
+      "total_ms": 14.679308
+    },
+    "schedule": {
+      "count": 273,
+      "median_us": 51.83,
+      "total_ms": 14.434283
+    }
+  }
+}

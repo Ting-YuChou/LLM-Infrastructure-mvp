@@ -141,3 +141,51 @@ the full output length). nano got 9,942 KV blocks (M0's vLLM capacity).
   matches vLLM's default (153 ms) as it should.
 - `NUM_KVCACHE_BLOCKS=0` sized the cache to 9,958 blocks (159k tokens, vLLM
   has 159-163k) with 35,980 MiB in use at gpu_memory_utilization 0.9.
+
+## Final round
+
+### Run final-20261023-030032-colab (tests, serve, nsys, offline)
+
+- 436 GPU and unit tests passed, none skipped, including the new
+  `test_no_kernel_compiles_after_warm_up` (torch and Triton linears, sync
+  and async): no kernel compiled after `capture_graphs` in a mixed workload
+  covering 9+ decode row counts.
+- `nano_m2_coldjit` repeated the first M2 server's W1 (one process,
+  synchronous, 512-token chunks) with an empty `TRITON_CACHE_DIR`: c=16 /
+  32 / 64 gave 852 / 1,234 / 1,618 tok/s with TPOT p90 19.5 / 27.2 ms,
+  against 719 / 1,073 / 1,551 and 27.3 / 35.7 ms before the fix, and in line
+  with the warm-cache 2048-chunk run (857 / 1,236 / 1,611). The stalls are
+  gone. Startup takes 30 s instead of 20 s with a cold cache.
+- vLLM's W1 came out 0-4% above its M0 run (1,976 vs 1,906 tok/s at c=64),
+  a measure of run-to-run spread; the final tables compare servers from
+  this run only. vLLM's KV capacity was 163,168 tokens this time; nano kept
+  9,942 blocks (159k tokens), slightly less.
+- SGLang collapsed at W1 c=64 again (1,284 tok/s, TTFT p50 2.2 s), as in M0:
+  with 140k KV tokens and 4096-token prefill chunks it queues admissions.
+  Left as measured.
+- `colab exec` timed out ("Timeout waiting for reply") after the report was
+  written; the driver's fetch still downloaded it.
+- The offline step now ran the Triton kernels (b=1/16/64 sync: 12.27 /
+  14.55 / 23.55 ms per decode step, Phase 1: 12.15 / 14.63 / 23.51), but
+  with async scheduling the mean was above the median (15.03 vs 14.10 ms at
+  b=16; b=64 23.38 vs 22.42): nano_bench gave each step the wall time of the
+  core.step() call that launched it, and with async scheduling that call
+  waits for the previous step, so the first decode step absorbed the last
+  prefill chunk (~240 ms over 255 steps). nano_bench now times a step by
+  the call that collects its tokens; rerun below.
+
+### Run final-offline-20261023-034858-colab (offline only)
+
+- With steps timed by the call that collects them, async scheduling's mean
+  and median agree: 12.04 / 14.13 / 22.57 ms per decode step at b=1/16/64
+  (median 12.04 / 14.11 / 22.43), synchronous 12.27 / 14.54 / 23.54.
+- The kernel kept the earlier run's `--env` settings: `colab exec --env`
+  sets variables in the Jupyter kernel, which lives as long as the VM, so
+  the final round inherited `P2_NANO_KV_BLOCKS=9942` from the M1-M6 run
+  (nano had 9,942 blocks, not vLLM's 10,198-block capacity of that run).
+  The driver now also passes the names it set (`P0_ENV_NAMES`) and the
+  launcher drops every other P0_/P1_/P2_ variable.
+- Host checks: 3 gateway integration tests fail on this machine because a
+  local Redis is running and keeps `/usage` counters across test runs
+  (`total_requests` 41 where the test expects 1). Unrelated to Phase 2; the
+  branch does not touch the gateway.

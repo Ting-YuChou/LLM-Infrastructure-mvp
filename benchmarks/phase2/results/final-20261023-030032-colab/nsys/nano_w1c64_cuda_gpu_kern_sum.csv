@@ -1,0 +1,24 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+66.0,4936560177,11232,439508.6,263680.0,207327,1312286,321197.1,ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn
+12.2,910287515,6176,147391.1,160959.5,11456,221120,68481.4,_paged_decode_split_kernel
+4.0,295829024,3040,97312.2,97311.0,94496,101728,949.7,ampere_s16816gemm_bf16_128x64_ldg8_stages_64x4_tn
+3.8,282170642,1183,238521.3,211200.0,95488,785152,216587.2,ampere_bf16_s16816gemm_bf16_256x64_ldg8_f2f_stages_64x3_tn
+3.0,227009301,2467,92018.4,86624.0,27264,740031,94869.8,_gemv_kernel
+3.0,223774421,2048,109264.9,108032.0,102784,145504,4809.8,_paged_prefill_kernel
+1.8,136541724,3040,44915.0,44928.0,42912,46496,543.5,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn
+1.8,135241079,6208,21785.0,4096.0,2016,64320,25853.5,_silu_and_mul_kernel
+1.7,129315136,4064,31819.7,30176.0,28704,44160,4198.5,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn
+1.4,103759477,12416,8356.9,3264.0,2528,25024,7596.8,_fused_add_rms_norm_kernel
+0.6,45119908,6208,7268.0,3616.0,2912,18016,5348.2,_rope_cache_write_kernel
+0.2,15397541,3328,4626.7,4416.0,2848,7360,941.7,_paged_decode_reduce_kernel
+0.2,13230089,3040,4352.0,4480.0,3455,4800,367.3,"void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, float, __nv_bfloat16, float, __nv_bfloat16, (bool)0, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, (bool)1, (bool)0, (bool)0>(cublasLt::cublasSplitKParams<T6>, const T4 *, const T10 *, T9 *, T5 *, const T6 *, const T6 *, const T11 *, const T4 *, T11 *, void *, long, T6 *, int *, T6 *, T6 *, const T6 *, const T6 *, const T6 *, const T6 *, const T6 *)"
+0.1,10932206,194,56351.6,56255.5,53792,67391,1755.0,"void at::native::reduce_kernel<(int)512, (int)1, at::native::ReduceOp<c10::BFloat16, at::native::ArgMaxOps<float>, unsigned int, long, (int)4, (int)4>>(T3)"
+0.0,3620921,1824,1985.2,1952.0,1600,2624,166.9,_gemv_reduce_kernel
+0.0,3040762,948,3207.6,2560.0,1984,12224,1848.5,"void at::native::vectorized_gather_kernel<(int)16, long>(char *, char *, T2 *, int, long, long, long, long, bool)"
+0.0,1756574,512,3430.8,3424.0,3296,3648,61.2,"void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, __nv_bfloat16, __nv_bfloat16, float, __nv_bfloat16, (bool)0, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, (bool)1, (bool)0, (bool)0>(cublasLt::cublasSplitKParams<T6>, const T4 *, const T10 *, T9 *, T5 *, const T6 *, const T6 *, const T11 *, const T4 *, T11 *, void *, long, T6 *, int *, T6 *, T6 *, const T6 *, const T6 *, const T6 *, const T6 *, const T6 *)"
+0.0,947771,194,4885.4,3104.0,2272,10976,2942.1,_rms_norm_kernel
+0.0,873331,193,4525.0,3872.0,2752,8000,1380.0,"void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)8>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)"
+0.0,485407,193,2515.1,2560.0,2240,3360,182.1,"void at::native::vectorized_elementwise_kernel<(int)4, void at::native::compare_scalar_kernel<long>(at::TensorIteratorBase &, at::native::<unnamed>::OpType, T1)::[lambda(long) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)"
+0.0,445856,193,2310.1,2240.0,1888,3264,260.5,"void at::native::vectorized_elementwise_kernel<(int)2, at::native::<unnamed>::where_kernel_impl(at::TensorIterator &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 8)]::operator ()() const::[lambda(bool, long, long) (instance 1)], std::array<char *, (unsigned long)4>>(int, T2, T3)"
+0.0,391896,193,2030.5,1920.0,1728,2816,195.0,"void at::native::vectorized_elementwise_kernel<(int)2, at::native::<unnamed>::launch_clamp_scalar(at::TensorIteratorBase &, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 4)]::operator ()() const::[lambda(long) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)"
+0.0,129631,22,5892.3,5616.0,2944,11392,2387.5,"void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)2>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)"
