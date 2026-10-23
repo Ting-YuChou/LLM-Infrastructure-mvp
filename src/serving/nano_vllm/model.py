@@ -485,6 +485,7 @@ class NanoLlamaForCausalLM:
         metadata: BatchMetadata,
     ) -> torch.Tensor:
         scale = 1.0 / math.sqrt(self.config.head_dim)
+        use_triton = self.attention_backend == "triton"
         if metadata.decode_only:
             return paged_decode_attention(
                 query,
@@ -493,20 +494,50 @@ class NanoLlamaForCausalLM:
                 metadata.block_tables,
                 metadata.context_lens,
                 scale,
-                use_triton=self.attention_backend == "triton",
+                use_triton=use_triton,
             )
-        return paged_prefill_attention(
-            query,
+        decode_rows = metadata.num_decode_rows
+        if decode_rows == 0:
+            return paged_prefill_attention(
+                query,
+                key_cache,
+                value_cache,
+                metadata.block_tables,
+                metadata.cu_seqlens_q,
+                metadata.context_lens,
+                metadata.query_lens,
+                metadata.context_lens_host,
+                scale,
+                use_triton=use_triton,
+            )
+        # Mixed batch: the decode rows come first (one token each, so token i
+        # is row i) and take the split-KV decode kernel; the prefill rows
+        # after them take the varlen prefill kernel.
+        out = torch.empty_like(query)
+        paged_decode_attention(
+            query[:decode_rows],
             key_cache,
             value_cache,
-            metadata.block_tables,
-            metadata.cu_seqlens_q,
-            metadata.context_lens,
-            metadata.query_lens,
-            metadata.context_lens_host,
+            metadata.block_tables[:decode_rows],
+            metadata.context_lens[:decode_rows],
             scale,
-            use_triton=self.attention_backend == "triton",
+            use_triton=use_triton,
+            out=out[:decode_rows],
         )
+        paged_prefill_attention(
+            query[decode_rows:],
+            key_cache,
+            value_cache,
+            metadata.block_tables[decode_rows:],
+            metadata.prefill_cu_seqlens_q,
+            metadata.context_lens[decode_rows:],
+            metadata.query_lens[decode_rows:],
+            metadata.context_lens_host[decode_rows:],
+            scale,
+            use_triton=use_triton,
+            out=out[decode_rows:],
+        )
+        return out
 
     def _mlp(self, x: torch.Tensor, layer: _LayerWeights) -> torch.Tensor:
         x_norm = rms_norm(

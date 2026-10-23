@@ -196,6 +196,59 @@ def test_all_triton_paths_track_fp32():
         torch.testing.assert_close(actual, expected, rtol=0.05, atol=0.05)
 
 
+def _rows(cache, rows):
+    """build_batch arguments for (tokens, start, table) rows."""
+    input_ids, positions, slots, context_lens, query_lens, tables = [], [], [], [], [], []
+    for tokens, start, table in rows:
+        pos = list(range(start, start + len(tokens)))
+        input_ids += tokens
+        positions += pos
+        slots += [table[p // BLOCK_SIZE] * BLOCK_SIZE + p % BLOCK_SIZE for p in pos]
+        context_lens.append(start + len(tokens))
+        query_lens.append(len(tokens))
+        tables.append(table)
+    return dict(
+        input_ids=input_ids, positions=positions, slots=slots, block_tables=tables,
+        context_lens=context_lens, query_lens=query_lens, null_block=cache.null_block,
+        num_slots=cache.total_slots,
+    )
+
+
+def _mixed_step(model):
+    """Prefill two prompts, then decode both while a third prompt prefills."""
+    cache = model.new_paged_cache(num_blocks=16, block_size=BLOCK_SIZE)
+    first, second, third = PROMPTS[0], PROMPTS[1], list(range(200, 240))
+    tables = [[1, 3, 5], [7, 9], [11, 13, 15]]
+    ids, positions, metadata = build_batch(
+        **_rows(cache, [(first, 0, tables[0]), (second, 0, tables[1])]),
+        is_prefill=True, device=model.device,
+    )
+    model.forward_batch(ids, positions, cache, metadata)
+    ids, positions, metadata = build_batch(
+        **_rows(cache, [
+            ([first[-1] + 1], len(first), tables[0]),
+            ([second[-1] + 1], len(second), tables[1]),
+            (third, 0, tables[2]),
+        ]),
+        is_prefill=True, device=model.device,
+    )
+    assert metadata.num_decode_rows == 2
+    return model.forward_batch(ids, positions, cache, metadata).float().cpu()
+
+
+def test_mixed_batch_triton_matches_the_reference():
+    reference = _mixed_step(_model("cuda", torch.float32, use_triton=False))
+    triton_fp32 = _mixed_step(
+        _model("cuda", torch.float32, use_triton=False, attention_backend="triton")
+    )
+    triton_bf16 = _mixed_step(
+        _model("cuda", torch.bfloat16, use_triton=True, attention_backend="triton")
+    )
+
+    torch.testing.assert_close(triton_fp32, reference, rtol=1e-4, atol=1e-4)
+    torch.testing.assert_close(triton_bf16, reference, rtol=0.05, atol=0.05)
+
+
 def test_w4a16_model_tracks_fp32_with_the_same_dequantized_weights():
     """bf16 + Triton + the W4A16 kernels vs fp32 F.linear on the dequantized weights."""
     import dataclasses

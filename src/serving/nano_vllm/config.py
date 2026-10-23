@@ -51,6 +51,10 @@ class NanoVLLMConfig:
     gpu_memory_utilization: float = 0.9
     max_num_seqs: int = 16
     max_num_batched_tokens: int = 512
+    # "mixed": each step decodes every running sequence and spends the rest
+    # of max_num_batched_tokens on prefill chunks; "prefill_first": prefill
+    # steps and decode steps alternate, and a prefill stalls the decodes.
+    scheduling: str = "mixed"
     enable_prefix_cache: bool = True
     # "triton": the paged decode/prefill attention and fused RoPE + KV write
     # kernels (benchmarks/phase1); off CUDA they fall back to the PyTorch
@@ -84,6 +88,8 @@ class NanoVLLMConfig:
             raise ValueError("max_num_seqs must be positive")
         if self.max_num_batched_tokens <= 0:
             raise ValueError("max_num_batched_tokens must be positive")
+        if self.scheduling not in {"mixed", "prefill_first"}:
+            raise ValueError("scheduling must be one of: mixed, prefill_first")
         if self.cuda_graph_max_bs <= 0:
             raise ValueError("cuda_graph_max_bs must be positive")
         if self.attention_backend not in {"torch", "triton", "flash_attn"}:
@@ -157,6 +163,7 @@ class NanoVLLMConfig:
                     ),
                 )
             ),
+            scheduling=str(_env("SCHEDULING", engine.get("scheduling", cls.scheduling))),
             enable_prefix_cache=_bool_value(
                 _env("ENABLE_PREFIX_CACHE", engine.get("enable_prefix_cache")),
                 default=cls.enable_prefix_cache,

@@ -265,3 +265,48 @@ def test_sequence_finish_reasons_cover_eos_lists_stop_ids_and_length():
     seq = Sequence([1], SamplingOptions(max_tokens=1), eos_token_id=[5])
     seq.append_token(4)
     assert seq.should_finish(4) and seq.finish_reason == "length"
+
+
+def test_mixed_policy_decodes_first_and_fills_the_budget_with_prefill_chunks():
+    manager = BlockManager(num_blocks=16, block_size=4, enable_prefix_cache=False)
+    scheduler = Scheduler(manager, max_num_seqs=4, max_num_batched_tokens=6, policy="mixed")
+    a = _seq([1, 2, 3], max_tokens=8)
+    scheduler.add(a)
+    scheduled, has_prefill = scheduler.schedule()
+    assert scheduled == [a] and has_prefill
+    scheduler.postprocess(scheduled, [7])
+
+    b = _seq([10, 11, 12, 13, 14, 15, 16, 17], max_tokens=8)
+    scheduler.add(b)
+    scheduled, has_prefill = scheduler.schedule()
+    # a decodes (1 token); b gets the other 5 tokens of the budget.
+    assert scheduled == [a, b] and has_prefill
+    assert (a.is_prefill, a.num_scheduled_tokens) == (False, 1)
+    assert (b.is_prefill, b.num_scheduled_tokens) == (True, 5)
+    assert scheduler.postprocess(scheduled, [8, 99]) == [(a, 8)]  # b's chunk samples nothing
+
+    scheduled, has_prefill = scheduler.schedule()
+    assert scheduled == [a, b] and has_prefill and b.num_scheduled_tokens == 3
+    assert scheduler.postprocess(scheduled, [9, 20]) == [(a, 9), (b, 20)]
+
+    scheduled, has_prefill = scheduler.schedule()
+    assert scheduled == [a, b] and not has_prefill
+
+
+def test_decode_frees_a_partial_prefill_before_preempting_running_sequences():
+    manager = BlockManager(num_blocks=5, block_size=2, enable_prefix_cache=False)
+    scheduler = Scheduler(manager, max_num_seqs=2, max_num_batched_tokens=3, policy="mixed")
+    a = _seq([1, 2], max_tokens=8, block_size=2)
+    scheduler.add(a)
+    scheduler.postprocess(scheduler.schedule()[0], [3])  # a: 3 tokens, 2 blocks at decode
+    b = _seq([4, 5, 6, 7, 8, 9], max_tokens=2, block_size=2)
+    scheduler.add(b)
+    scheduler.postprocess(scheduler.schedule()[0], [10, 0])  # b admitted: 3 blocks, none free
+    scheduler.postprocess(scheduler.schedule()[0], [11, 0])  # a now has 5 tokens
+    assert manager.num_free_blocks == 0 and b.block_table
+
+    scheduled, _ = scheduler.schedule()  # a needs a third block
+
+    assert scheduled == [a] and a.status == SequenceStatus.RUNNING
+    assert b.block_table == [] and b.num_cached_tokens == 0
+    assert list(scheduler.waiting) == [b]

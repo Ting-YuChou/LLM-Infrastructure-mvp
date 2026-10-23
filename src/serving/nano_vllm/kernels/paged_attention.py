@@ -462,16 +462,19 @@ def paged_decode_attention(
     use_triton: bool = False,
     num_splits: Optional[int] = None,
     config: Optional[dict] = None,
+    out: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
-    """[batch, q_heads, head_dim] decode queries -> attention output, same shape."""
+    """[batch, q_heads, head_dim] decode queries -> attention output, same shape
+    (written into ``out`` when given, e.g. a row slice of a mixed batch's output)."""
     if use_triton and TRITON_AVAILABLE and query.is_cuda:  # pragma: no cover
         return _paged_decode_attention_triton(
             query, key_cache, value_cache, block_tables, context_lens, scale, num_splits,
-            config or decode_config(query.shape[0]),
+            config or decode_config(query.shape[0]), out,
         )
-    return paged_decode_attention_reference(
+    result = paged_decode_attention_reference(
         query, key_cache, value_cache, block_tables, context_lens, scale
     )
+    return result if out is None else out.copy_(result)
 
 
 def _paged_decode_attention_triton(  # pragma: no cover - depends on CUDA/Triton
@@ -483,6 +486,7 @@ def _paged_decode_attention_triton(  # pragma: no cover - depends on CUDA/Triton
     scale: float,
     num_splits: Optional[int],
     config: dict,
+    out: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     batch, q_heads, head_dim = query.shape
     _, page_size, kv_heads, cache_head_dim = key_cache.shape
@@ -498,7 +502,8 @@ def _paged_decode_attention_triton(  # pragma: no cover - depends on CUDA/Triton
     if num_splits & (num_splits - 1):
         raise ValueError("num_splits must be a power of two")
 
-    out = torch.empty_like(query)
+    if out is None:
+        out = torch.empty_like(query)
     if batch == 0:
         return out
     if num_splits == 1:
@@ -576,11 +581,12 @@ def paged_prefill_attention(
     scale: float,
     use_triton: bool = False,
     config: Optional[dict] = None,
+    out: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     """Causal attention for packed queries [num_tokens, q_heads, head_dim].
 
     The kernel reads lengths from the device tensors; the reference (and the
-    kernel's grid size) use the host copies.
+    kernel's grid size) use the host copies. Written into ``out`` when given.
     """
     if use_triton and TRITON_AVAILABLE and query.is_cuda:  # pragma: no cover
         return _paged_prefill_attention_triton(
@@ -593,10 +599,12 @@ def paged_prefill_attention(
             max(query_lens_host, default=0),
             scale,
             config or PREFILL_CONFIG,
+            out,
         )
-    return paged_prefill_attention_reference(
+    result = paged_prefill_attention_reference(
         query, key_cache, value_cache, block_tables, query_lens_host, context_lens_host, scale
     )
+    return result if out is None else out.copy_(result)
 
 
 def _paged_prefill_attention_triton(  # pragma: no cover - depends on CUDA/Triton
@@ -609,6 +617,7 @@ def _paged_prefill_attention_triton(  # pragma: no cover - depends on CUDA/Trito
     max_query_len: int,
     scale: float,
     config: dict,
+    out: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     num_tokens, q_heads, head_dim = query.shape
     _, page_size, kv_heads, cache_head_dim = key_cache.shape
@@ -618,7 +627,8 @@ def _paged_prefill_attention_triton(  # pragma: no cover - depends on CUDA/Trito
         raise ValueError("the Triton prefill kernel needs a power-of-two head_dim >= 16")
     if query.stride(-1) != 1 or key_cache.stride(-1) != 1 or value_cache.stride(-1) != 1:
         raise ValueError("head_dim must be the contiguous dimension")
-    out = torch.empty_like(query)
+    if out is None:
+        out = torch.empty_like(query)
     num_seqs = cu_seqlens_q.numel() - 1
     if num_tokens == 0 or num_seqs == 0:
         return out

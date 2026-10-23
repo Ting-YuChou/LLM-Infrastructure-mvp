@@ -467,7 +467,8 @@ def test_cancelled_consumer_aborts_sequence_and_frees_kv_blocks():
     _assert_all_blocks_free(engine)
 
 
-def test_paged_engine_matches_transformers_greedy_decode(tmp_path):
+@pytest.mark.parametrize("scheduling", ["mixed", "prefill_first"])
+def test_paged_engine_matches_transformers_greedy_decode(tmp_path, scheduling):
     from transformers import LlamaConfig, LlamaForCausalLM
 
     from serving.nano_vllm.model import NanoLlamaForCausalLM
@@ -517,6 +518,7 @@ def test_paged_engine_matches_transformers_greedy_decode(tmp_path):
             max_new_tokens=8,
             max_num_batched_tokens=6,  # forces chunked prefill
             enable_prefix_cache=True,
+            scheduling=scheduling,
         )
         sampling = SamplingOptions(max_tokens=8, **GREEDY)
         try:

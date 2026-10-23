@@ -29,12 +29,21 @@ class BatchMetadata:
     # Rows that get logits, normally the last token of each sequence. None
     # means every row (the per-position checks against transformers use it).
     logits_indices: Optional[torch.Tensor] = None
+    # A mixed batch puts its decode rows (one query token each) first; the
+    # prefill rows after them get query offsets of their own, starting at 0.
+    prefill_cu_seqlens_q: Optional[torch.Tensor] = None
     # Every sequence has exactly one query token, so the batched decode
     # attention applies (also true for a prefill chunk of one token).
     decode_only: bool = field(init=False)
+    # Leading rows with one query token: the decode kernel takes them.
+    num_decode_rows: int = field(init=False)
 
     def __post_init__(self) -> None:
         self.decode_only = all(query_len == 1 for query_len in self.query_lens)
+        self.num_decode_rows = next(
+            (i for i, query_len in enumerate(self.query_lens) if query_len != 1),
+            len(self.query_lens),
+        )
 
     @property
     def num_seqs(self) -> int:
@@ -74,6 +83,13 @@ def build_batch(
     for query_len in query_lens:
         cu_seqlens.append(cu_seqlens[-1] + query_len)
     logits_indices = [] if all_logits else [end - 1 for end in cu_seqlens[1:]]
+    num_decode_rows = next((i for i, n in enumerate(query_lens) if n != 1), num_seqs)
+    # Prefill rows' own offsets when decode rows come first (a mixed batch).
+    prefill_cu = (
+        [c - cu_seqlens[num_decode_rows] for c in cu_seqlens[num_decode_rows:]]
+        if 0 < num_decode_rows < num_seqs
+        else []
+    )
     width = max([len(table) for table in block_tables] + [1])
     flat_tables: list[int] = []
     for table in block_tables:
@@ -87,7 +103,7 @@ def build_batch(
         pin_memory=pin,
     ).to(device, non_blocking=True)
     ints = torch.tensor(
-        cu_seqlens + context_lens + flat_tables,
+        cu_seqlens + context_lens + flat_tables + prefill_cu,
         dtype=torch.int32,
         pin_memory=pin,
     ).to(device, non_blocking=True)
@@ -95,8 +111,8 @@ def build_batch(
     input_ids_t, positions_t, slots_t, logits_t = longs.split(
         [num_tokens, num_tokens, num_tokens, len(logits_indices)]
     )
-    cu_seqlens_t, context_lens_t, tables_t = ints.split(
-        [num_seqs + 1, num_seqs, num_seqs * width]
+    cu_seqlens_t, context_lens_t, tables_t, prefill_cu_t = ints.split(
+        [num_seqs + 1, num_seqs, num_seqs * width, len(prefill_cu)]
     )
     metadata = BatchMetadata(
         slot_mapping=slots_t,
@@ -107,5 +123,6 @@ def build_batch(
         context_lens_host=list(context_lens),
         is_prefill=is_prefill,
         logits_indices=None if all_logits else logits_t,
+        prefill_cu_seqlens_q=prefill_cu_t if prefill_cu else None,
     )
     return input_ids_t, positions_t, metadata

@@ -36,6 +36,9 @@ engine:
   gpu_memory_utilization: 0.9
   max_num_seqs: 16
   max_num_batched_tokens: 512
+  # "mixed": decodes and prefill chunks share each step's token budget
+  # (chunked prefill); "prefill_first": prefill steps stall the decodes.
+  scheduling: "mixed"
   enable_prefix_cache: true
 
 server:

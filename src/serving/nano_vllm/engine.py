@@ -511,6 +511,7 @@ class NanoLlamaEngine:
             block_manager=self.block_manager,
             max_num_seqs=self.config.max_num_seqs,
             max_num_batched_tokens=self.config.max_num_batched_tokens,
+            policy=self.config.scheduling,
         )
         self.paged_cache = self.model.new_paged_cache(
             num_blocks=self.config.num_kvcache_blocks,

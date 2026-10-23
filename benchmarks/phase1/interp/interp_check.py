@@ -101,6 +101,31 @@ def prefill_case(heads, page, shapes, dtype):
     check(f"prefill heads={heads} page={page} shapes={shapes} {dtype}", out, ref, tol, tol)
 
 
+def mixed_case(heads, page, decode_ctxs, prefill_shapes, dtype):
+    """A mixed batch: decode rows into out[:B], prefill rows (own offsets) into out[B:]."""
+    qh, kvh, d = heads
+    qlens = [1] * len(decode_ctxs) + [q for q, _ in prefill_shapes]
+    ctxs = list(decode_ctxs) + [c for _, c in prefill_shapes]
+    nb = sum((c + page - 1) // page for c in ctxs) + 2
+    k, v = cache(nb, page, kvh, d, dtype)
+    t = tables(ctxs, page, nb)
+    q = torch.randn(sum(qlens), qh, d).to(dtype)
+    lens = torch.tensor(ctxs, dtype=torch.int32)
+    b = len(decode_ctxs)
+    prefill_cu = torch.tensor([0] + qlens[b:]).cumsum(0).to(torch.int32)
+    scale = 1 / math.sqrt(d)
+    out = torch.full_like(q, float("nan"))
+    PA._paged_decode_attention_triton(
+        q[:b], k, v, t[:b], lens[:b], scale, 2, PA.decode_config(b), out[:b]
+    )
+    PA._paged_prefill_attention_triton(
+        q[b:], k, v, t[b:], prefill_cu, lens[b:], max(qlens[b:]), scale, PA.PREFILL_CONFIG, out[b:]
+    )
+    ref = PA.paged_prefill_attention_reference(q, k, v, t, qlens, ctxs, scale)
+    tol = 1e-4 if dtype == torch.float32 else 2e-2
+    check(f"mixed heads={heads} page={page} decode={decode_ctxs} prefill={prefill_shapes} {dtype}", out, ref, tol, tol)
+
+
 def rope_case(heads, n, dtype):
     qh, kvh, d = heads
     inv = K.rotary.compute_inv_freq(d, 500000.0)
@@ -165,6 +190,8 @@ for heads in (TINY, LLAMA):
         run("decode config", lambda: decode_case(heads, 16, [1, 129, 300, 0], 2, torch.float32, config))
     run("prefill", lambda: prefill_case(heads, 4, [(5, 5), (3, 10), (1, 7), (70, 70)], torch.float32))
     run("prefill fp16", lambda: prefill_case(heads, 16, [(20, 40), (65, 65)], torch.float16))
+    run("mixed", lambda: mixed_case(heads, 4, [9, 33], [(5, 12), (20, 20)], torch.float32))
+    run("mixed fp16", lambda: mixed_case(heads, 16, [1, 70, 130], [(40, 40)], torch.float16))
     for n in (1, 5):
         run("rope", lambda: rope_case(heads, n, torch.float32))
     run("rope bf16", lambda: rope_case(heads, 3, torch.bfloat16))

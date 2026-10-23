@@ -316,6 +316,35 @@ def test_forward_batch_returns_logits_for_last_token_of_each_sequence(tmp_path):
     torch.testing.assert_close(prefill[1], _hf_logits(hf_model, [7, 50, 1])[-1], **tol)
 
 
+def test_mixed_batch_decodes_and_prefills_in_one_forward(tmp_path):
+    hf_model, path = _save_tiny_hf_llama(tmp_path)
+    model = _load_nano(path)
+    cache = model.new_paged_cache(num_blocks=8, block_size=4)
+    _prefill_two_sequences(model, cache)
+    # Decode rows for A and B first, then a new 5-token prompt C in blocks 3, 4.
+    ids, positions, metadata = build_batch(
+        input_ids=[25, 60] + [11, 12, 13, 14, 15],
+        positions=[6, 3] + list(range(5)),
+        slots=[10, 31] + [12, 13, 14, 15, 16],
+        block_tables=[[5, 2], [7], [3, 4]],
+        context_lens=[7, 4, 5],
+        query_lens=[1, 1, 5],
+        is_prefill=True,
+        null_block=cache.null_block,
+        num_slots=cache.total_slots,
+        device=model.device,
+    )
+    assert metadata.num_decode_rows == 2 and not metadata.decode_only
+    assert metadata.prefill_cu_seqlens_q.tolist() == [0, 5]
+
+    logits = model.forward_batch(ids, positions, cache, metadata)
+
+    tol = dict(rtol=1e-5, atol=1e-5)
+    torch.testing.assert_close(logits[0], _hf_logits(hf_model, [5, 17, 3, 88, 42, 9, 25])[-1], **tol)
+    torch.testing.assert_close(logits[1], _hf_logits(hf_model, [7, 50, 1, 60])[-1], **tol)
+    torch.testing.assert_close(logits[2], _hf_logits(hf_model, [11, 12, 13, 14, 15])[-1], **tol)
+
+
 def test_padding_rows_into_the_null_block_leave_real_rows_unchanged(tmp_path):
     _, path = _save_tiny_hf_llama(tmp_path)
     model = _load_nano(path)

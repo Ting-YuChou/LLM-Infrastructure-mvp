@@ -84,13 +84,15 @@ class ModelRunner:
     def prepare(
         self, seqs: list[Sequence], is_prefill: bool
     ) -> tuple[torch.Tensor, torch.Tensor, BatchMetadata]:
+        """Pack the rows; ``is_prefill`` says the batch has prefill rows (a mixed
+        batch lists its decode rows first), each row follows ``seq.is_prefill``."""
         input_ids: list[int] = []
         positions: list[int] = []
         slots: list[int] = []
         context_lens: list[int] = []
         query_lens: list[int] = []
         for seq in seqs:
-            if is_prefill:
+            if seq.is_prefill:
                 # Uncached prompt tokens (or this chunk of them).
                 start = seq.num_cached_tokens
                 end = start + seq.num_scheduled_tokens
