@@ -450,20 +450,25 @@ class NanoVLLMServer:
         arrival: float,
         state: _StreamState,
     ) -> AsyncIterator[str]:
-        """Yield non-empty text chunks, recording latency metrics and state."""
+        """Yield a chunk per generated token, recording latency metrics and state.
+
+        Like vLLM, a token whose text is held back (an incomplete UTF-8
+        character, a possible stop string) still gets a chunk, with empty
+        text, so clients time every token.
+        """
         first_token_seen = False
         last_token_time: Optional[float] = None
         async with aclosing(open_stream()) as outputs:
             async for output in outputs:
                 if isinstance(output, str):
-                    text = output
+                    text, new_tokens = output, False
                 else:
-                    text = output.text
+                    text, new_tokens = output.text, bool(output.token_ids)
                     if output.finished:
                         state.finish_reason = output.finish_reason or "stop"
                         state.prompt_tokens = output.prompt_tokens
                         state.completion_tokens = output.completion_tokens
-                if not text:
+                if not text and not new_tokens:
                     continue
                 state.text += text
                 now = time.time()

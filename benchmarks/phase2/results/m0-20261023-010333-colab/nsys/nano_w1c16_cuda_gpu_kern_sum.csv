@@ -1,0 +1,14 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+49.9,2947282911,32830,89774.1,87424.0,27616,742463,85174.5,_gemv_kernel
+33.9,2003170724,8192,244527.7,191216.0,87104,653183,174355.2,ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn
+8.1,479655960,8128,59012.8,58976.0,53887,64960,2034.8,_paged_decode_split_kernel
+2.5,146846197,2048,71702.2,77216.0,49664,114976,20612.0,_paged_prefill_kernel
+1.5,87230164,20352,4286.1,2784.0,2528,15232,3079.5,_fused_add_rms_norm_kernel
+1.5,85600226,10176,8412.0,2912.0,2720,31584,11007.8,_silu_and_mul_kernel
+0.8,48875203,24384,2004.4,1984.0,1792,2624,70.3,_gemv_reduce_kernel
+0.7,41490436,10176,4077.3,3200.0,3040,9824,1746.6,_rope_cache_write_kernel
+0.6,38162691,8128,4695.2,4704.0,4576,4960,54.0,_paged_decode_reduce_kernel
+0.3,17572174,318,55258.4,55120.0,53152,65248,1122.6,"void at::native::reduce_kernel<(int)512, (int)1, at::native::ReduceOp<c10::BFloat16, at::native::ArgMaxOps<float>, unsigned int, long, (int)4, (int)4>>(T3)"
+0.1,3768900,1462,2577.9,2272.0,1952,8480,885.1,"void at::native::vectorized_gather_kernel<(int)16, long>(char *, char *, T2 *, int, long, long, long, long, bool)"
+0.0,1030516,318,3240.6,2688.0,2272,7168,1237.7,_rms_norm_kernel
+0.0,851680,128,6653.8,6656.0,6176,8416,425.0,"void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)2>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)"

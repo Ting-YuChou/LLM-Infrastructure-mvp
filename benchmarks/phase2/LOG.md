@@ -22,3 +22,33 @@ results/<run_id>/.
   64 sequences, 256 admitted requests, max_model_len 8192, 4096 max new tokens,
   bf16. Engine behaviour is unchanged: prefill-first scheduling with 512-token
   chunks and the hash-chained prefix cache.
+
+### Run m0-20261023-010333-colab (M0 baseline: vLLM, SGLang, nano as of Phase 1)
+
+- 8 GPU tests failed, all CUDA-extension builds (the CUDA GEMV and W4A16
+  kernels): phase 2's installs had no `cuda129` step (CUDA 12 nvcc for
+  cpp_extension) and no ninja. Moved `cuda129` into lib.sh and added both.
+  The serving numbers do not use those kernels (linear_backend triton).
+- `serve` and `nsys` passed. summarize.py looked for the P2_SERVE lines in
+  logs/serve.log, but bench_serve prints them to the console: fixed, the
+  summary was regenerated from console.log.
+- The driver hit a syntax error after downloading the results: I edited
+  colab_phase0.sh while it was running, and bash reads scripts as it goes.
+  The VM was kept (COLAB_KEEP=1), so nothing was lost. Don't edit a script a
+  running driver is executing.
+- nano's ITL p50 at c=1 read 24.7 ms with a TPOT of 12.38 ms: nano's server
+  sent a chunk only when it had text, so a token whose text was held back
+  (an incomplete UTF-8 character) merged into the next chunk and doubled
+  that interval. vLLM sends a chunk per token (empty text if held back).
+  From M1 on nano does the same; for M0, compare decode speed by TPOT.
+- The workload-snapshot code (prefix-cache hit rates) landed after this run
+  started, so M0 has no hit rates.
+- The GIL diagnostic (NANO_SWITCH_INTERVAL=0.0005, W1 c=32) did not help:
+  1098 vs 1252 tok/s, ITL p50 20.1 vs 20.4 ms. A shorter switch interval
+  costs more than it recovers, so it does not isolate GIL waits; nsys does
+  (below).
+- nsys of the nano server: GPU idle 2.0 ms of a 16.1 ms step at c=16 and
+  4.5 of 33.2 ms at c=64 (offline: 0.66-0.87 ms). The graph-replay host
+  phase (filling the staging buffers) takes 0.67 ms at c=16 and 2.9 ms in
+  W3, where 32 streams' detokenization and SSE run on the event loop thread
+  at the same time: the model thread waits for the GIL.

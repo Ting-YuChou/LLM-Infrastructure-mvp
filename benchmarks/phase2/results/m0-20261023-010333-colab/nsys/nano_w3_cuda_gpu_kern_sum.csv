@@ -1,0 +1,20 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+59.8,32522662232,196349,165637.0,209600.0,96192,781376,94085.9,ampere_bf16_s16816gemm_bf16_256x64_ldg8_f2f_stages_64x3_tn
+14.2,7740402104,98208,78816.4,77248.0,31104,219488,29998.7,_paged_decode_split_kernel
+13.2,7173185928,194848,36814.3,32000.0,29472,44896,6000.9,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn
+7.2,3897398822,15904,245057.8,250047.5,86912,653982,164039.4,ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn
+1.2,655596339,203648,3219.3,2976.0,2624,14432,1366.8,_fused_add_rms_norm_kernel
+0.8,438643046,3616,121306.2,50496.0,21216,332320,104123.7,_paged_prefill_kernel
+0.8,414714786,101824,4072.9,3104.0,2880,32512,5016.5,_silu_and_mul_kernel
+0.7,375361236,101824,3686.4,3552.0,3264,9888,745.9,_rope_cache_write_kernel
+0.6,337134391,96640,3488.6,3488.0,3328,3744,46.4,"void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, __nv_bfloat16, __nv_bfloat16, float, __nv_bfloat16, (bool)0, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, (bool)1, (bool)0, (bool)0>(cublasLt::cublasSplitKParams<T6>, const T4 *, const T10 *, T9 *, T5 *, const T6 *, const T6 *, const T11 *, const T4 *, T11 *, void *, long, T6 *, int *, T6 *, T6 *, const T6 *, const T6 *, const T6 *, const T6 *, const T6 *)"
+0.6,335096390,98208,3412.1,3392.0,3200,4736,134.2,_paged_decode_reduce_kernel
+0.3,176070984,3182,55333.4,55296.0,52800,66847,652.0,"void at::native::reduce_kernel<(int)512, (int)1, at::native::ReduceOp<c10::BFloat16, at::native::ArgMaxOps<float>, unsigned int, long, (int)4, (int)4>>(T3)"
+0.3,150744459,1568,96138.0,96032.0,94432,99071,776.9,ampere_s16816gemm_bf16_128x64_ldg8_stages_64x4_tn
+0.1,81025313,113,717038.2,716864.0,711294,723198,2586.9,_gemv_kernel
+0.1,69223549,1568,44147.7,44128.0,41888,45696,456.5,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn
+0.1,39186390,15778,2483.6,2368.0,1984,8256,390.7,"void at::native::vectorized_gather_kernel<(int)16, long>(char *, char *, T2 *, int, long, long, long, long, bool)"
+0.0,8303873,128,64874.0,66896.0,55520,72927,6908.3,ampere_bf16_s16816gemm_bf16_128x128_ldg8_f2f_stages_64x3_tn
+0.0,8189322,3182,2573.6,2431.0,2336,7232,603.4,_rms_norm_kernel
+0.0,5585466,1568,3562.2,3552.0,3328,3808,57.1,"void cublasLt::splitKreduce_kernel<(int)32, (int)16, int, float, __nv_bfloat16, float, __nv_bfloat16, (bool)0, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, (bool)1, (bool)0, (bool)0>(cublasLt::cublasSplitKParams<T6>, const T4 *, const T10 *, T9 *, T5 *, const T6 *, const T6 *, const T11 *, const T4 *, T11 *, void *, long, T6 *, int *, T6 *, T6 *, const T6 *, const T6 *, const T6 *, const T6 *, const T6 *)"
+0.0,841086,132,6371.9,6624.0,5664,8224,574.6,"void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)2>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)"

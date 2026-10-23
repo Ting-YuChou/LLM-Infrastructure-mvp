@@ -21,10 +21,14 @@ from pathlib import Path
 
 
 def serve_rows(out: Path) -> list[dict]:
-    rows = []
-    for path in sorted((out / "logs").glob("serve*.log")):
+    """The P2_SERVE lines (bench_serve prints them to the run's console)."""
+    rows, seen = [], set()
+    for path in [out / "console.log", *sorted((out / "logs").glob("*.log"))]:
+        if not path.exists():
+            continue
         for line in path.read_text(errors="replace").splitlines():
-            if line.startswith("P2_SERVE {"):
+            if line.startswith("P2_SERVE {") and line not in seen:
+                seen.add(line)
                 rows.append(json.loads(line[len("P2_SERVE ") :]))
     return rows
 
