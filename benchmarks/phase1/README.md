@@ -152,7 +152,7 @@ Phase 1 結束時，路線圖 doc 的「Kernel 改進清單」列了 12 項。Ph
 | 5 | 採樣路徑的量測 | 完成量測。b=64 時 nano 的採樣比 vLLM 貴 0.96 ms，不排序的採樣器列為下一輪 |
 | 1 | W4A16 GEMV 暫存器預取 | 負面結果，revert。預取越深越慢 |
 | 3 | FP8 KV cache | 完成，選用（`kv_cache_dtype: fp8`）。b=64 快 1.7 ms，perplexity +0.2% |
-| 2、6、7 | Marlin 式 W4A16 和它的 epilogue/prologue 融合 | 下一輪。W4A16 在 b=64 仍落後 AWQ 44% |
+| 2、6、7 | Marlin 式 W4A16 和它的 epilogue/prologue 融合 | 下一輪。W4A16 在 b=64 仍落後 AWQ 44%（#2 第二輪已完成，見下一節） |
 | 4、8、9、11 | reduce 併進 split kernel、prefill tile 順序、bf16 CUDA GEMV、CUDA event 計時 | 不做：收益太小、TTFT 已贏 vLLM、不在預設路徑、async 之後用不到 |
 
 ### 端到端 decode（ms/step，b=1 / 16 / 64；b=16、4096 token）
@@ -206,6 +206,87 @@ run `kernels-r4`（同一台 VM、同一輪）。vLLM 的 4096 點失敗了（`v
 | vLLM | 0.25 | 1.33 | 1.66 |
 
 nsys（b=16，每步）：`torch.cumsum` 沿 128k vocab 的 innermost scan 要 231 µs，radix sort 約 265 µs，兩次 argmax 共 96 µs（greedy 的 bf16 argmax 每步都算，一列只用一個 block）。線上的 W1s（c=1/16/64）nano 是 78 / 855 / 1,711 tok/s，vLLM 75 / 609 / 1,693；c=64 的 ITL p50 是 25.31 對 25.03 ms，nano 慢 1.1%。下一輪改用不排序的採樣器（FlashInfer 的 rejection sampling，或 DeepInfer 的 radix select）。
+
+## Kernel 改進清單第二輪：Marlin 式 W4A16（runs `marlin-t1` 到 `marlin-t2`）
+
+第一輪結束時，W4A16 在 b=64 還比 vLLM 的 AWQ 慢 44%（23.27 對 16.19 ms），kbench 也顯示差距幾乎都在 GEMM。這一輪自己寫了一個 Marlin 設計的 kernel `gemm_w4a16_tiled`（`kernels/csrc/w4a16.cu`），沒有用 vLLM 的程式碼；預設 layout 改成 tiled。分支同樣是 `claude/inference-kernels`，只在本機。
+
+### 設計
+
+- **tiled layout**（`kernels/w4a16.py`，載入時重排）：
+  - qweight 是 int32 `[K/16, N/64, 32, 4]`。每 512 bytes 是 mma.m16n8k16 一個 16 × 64 tile 的 B operand；一個 lane 用一次 16-byte 的 shared load，就拿到 8 個 n8 tile 的 b0/b1。
+  - scales 排成 `[K/128, N/64, 8, 8]`，一個 lane 的 8 欄 scale 放在一起。
+  - 存成 4 維，舊 kernel 的形狀檢查會拒絕它。
+- **pipeline**：
+  - 4 段 cp.async，每段放 x tile（swizzle 後用 ldmatrix 讀）、權重 tile 和 scale；
+  - 一個 n64 欄的幾個 warp 分攤這一段的 k16 列；
+  - 反量化後先乘 scale（只 round 一次），再進 mma。
+- **persistent striped grid**（Marlin 的切法）：
+  - 所有 (欄 slice, k tile) 依序編號，每個 block 拿連續的一段，不論 shape 都平均；
+  - loader 用全域 tile 編號定址，預取跨過 slice 邊界也不會清空 pipeline（Marlin 會清空再重填）。
+- **跨 block 相加**：
+  - 共用一個 slice 的 block，各自把 fp32 部分和寫進 slot，再 atomicAdd 這個 slice 的 counter；
+  - 最後到的 block 依 block 順序加總、寫出結果；
+  - 結果 deterministic，也沒有 block 要等別的 block（Marlin 是串行的 lock 鏈）。
+  - 同步的 W4A16 不再需要 `splits=1` 才能逐 token 重現。
+- **超過 64 列**：每 64 列 launch 一次，最多到 `tiled_max_rows`（128）；再多就用 tiled 的反量化 kernel 加 F.linear。tiled 反量化和 rows 的結果 bitwise 相同，速度也一樣（78–80% 峰值）。
+
+### 怎麼追上 Marlin
+
+| run | 改了什麼 | 四層加總對 Marlin（M=1 / 16 / 64） |
+|---|---|---|
+| t1 | 第一版 | 1.21 / 1.15 / 1.11 |
+| t1c | 位址遞增、fragment double buffer（跨 k16 步和跨 stage）、256x128 tile | 1.03 / 0.98 / 1.11 |
+| t1d | MT≥3 用 64x128 tile、slot 相加的 fence 減到一次 | 1.02 / 0.98 / 1.04 |
+| t1e | 反量化的 AND 和 OR 合成一個 `lop3` | **0.96 / 0.96 / 0.98** |
+
+- **ncu（t1b）**：
+  - M=1 不是頻寬限制而是指令限制：同樣的工作，第一版發出的指令多約 45%；
+  - 從 base clock 換到 boost clock，Marlin 快了 43%，我們只快 6%。
+- **nvdisasm（t1d）**：
+  - nvcc 把 `(w >> 4s) & 0x000F000F | magic` 編成兩個 LOP3，每對 code 要 5 個指令；
+  - 改用 inline `lop3.b32 …, 0xEA` 之後是 4 個；
+  - 光這一項，M=1 的加總就從 121 降到 115 µs。
+- **tune（t1c）**：
+  - M ≤ 32 用 256x128（每次 barrier 搬 16 KB 權重）；
+  - M=64 用 64x128，N ≥ 16384 時（gate_up）用 64x256；
+  - 每個 SM 2 個 block 一律比較慢。
+
+### kernel（kbench，run `marlin-t2-20261023-104627-colab`，µs，tiled / vLLM `gptq_marlin`，同一組 4-bit code）
+
+| M | qkv | o_proj | gate_up | down | 加總 | 加總，舊 kernel |
+|---|---:|---:|---:|---:|---:|---:|
+| 1 | 17.5 / 19.1 | 15.8 / 17.4 | 52.4 / 59.1 | 28.8 / 23.3 | **114.5** / 118.9 | 126.3 |
+| 16 | 18.2 / 21.2 | 16.1 / 19.6 | 62.6 / 65.3 | 31.0 / 27.5 | **127.9** / 133.6 | 149.9 |
+| 32 | 23.0 / 27.5 | 20.6 / 22.2 | 72.1 / 72.1 | 41.4 / 37.4 | **157.1** / 159.2 | 258.6 |
+| 64 | 40.1 / 45.2 | 33.5 / 35.9 | 105.5 / 113.6 | 73.1 / 63.1 | **252.2** / 257.8 | 449.9 |
+
+down_proj（N=4096、K=14336）在每個 M 都還是 Marlin 的 1.1–1.3 倍，其他三層都追平或更快。
+
+### 端到端 decode（run `marlin-t2-20261023-104627-colab`，ms/step）
+
+| 設定 | b=1 | b=16 | b=64 |
+|---|---:|---:|---:|
+| nano W4A16 tiled（新預設） | **5.35** | **7.31** | 16.82 |
+| nano W4A16 rows（舊 kernel） | 5.70 | 8.29 | 23.03 |
+| vLLM AWQ（awq_marlin） | 5.56 | 7.85 | **16.23** |
+| nano bf16 | 12.06 | 14.12 | 22.61 |
+| vLLM bf16 | 12.61 | 14.84 | 23.07 |
+
+- b=1 和 b=16 比 vLLM AWQ 快 4% 和 7%；b=64 從慢 42% 縮小到慢 4%。
+- b=64 剩下的 0.59 ms 不在 kbench 量的 GEMM 上：四層加總 252 對 258 µs。拿 bf16 的 e2e 扣掉 cuBLAS 的時間，vLLM 的 AWQ GEMM 在 e2e 裡每層約 224 µs，比 kbench 的 `gptq_marlin` 少，原因沒查。
+- nsys（b=1 / b=16）：GPU 空檔 0.04 ms，每步 330 個 kernel，GEMM 佔 84% / 66%。
+
+### 門檻
+
+- **G1 正確性**：通過。
+  - GPU 測試 629 passed，沒有 skip，包含 tiled 的排程、fp16、CUDA graph，以及 model、graph、async 測試在 tiled 下跑；
+  - 同一個 config 連跑 bitwise 相同；
+  - tiled 和 rows 的反量化 bitwise 相同，所以 prefill 和 `quality.py`（teacher forcing 走反量化）的 perplexity 不變，這一輪沒有重跑 quality。
+- **G2 kernel**：
+  - 四層加總在 M=1、16、64 都 ≤ Marlin 的 1.05 倍，通過；
+  - 單點不慢於 1.25 倍：down_proj M=8 是 1.29 倍，沒過。
+- **G3 e2e**：b=64 ≤ 17.5、b=16 ≤ 8.1、b=1 ≤ 5.68 ms，三項都過，所以預設 layout 改成 tiled。
 
 ## 檔案
 

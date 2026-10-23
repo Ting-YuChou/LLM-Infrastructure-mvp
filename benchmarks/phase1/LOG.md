@@ -540,3 +540,117 @@ FP8 KV（#3）在 R1 跑的同時寫完（540cc8d）。Triton 3.6 的 CUDA backe
 
   fp8 讓兩邊的命中率都從約 48% 升到 70.6%；nano fp8 的 req/s 比 vLLM fp8 低 4%，TTFT p50 低 38%。
 - 跑完把 Colab VM 關掉了。
+
+## 2026-10-23 09:22 — run `marlin-t1-20261023-092256-colab`：Marlin 式 W4A16 第一版（新 VM `marlin`）
+
+清單第二輪（#2）。`gemm_w4a16_tiled`（5feb015）：tiled layout、4 段 cp.async、persistent striped grid、slot 式跨 block 相加。`P1_STEPS="installs cuda129 tests kbench summarize"`，`P1_TESTS` 只跑 `test_nano_vllm_w4a16_kernels.py`。
+
+- **tests**：197 passed，第一次就全過。包括 grid = slice 數（沒有跨 block 相加）、grid 1/3/7（stripe 跨 slice）、fp16、連跑 3 次 bitwise 相同、CUDA graph、tiled 反量化和 rows 的 bitwise 相同。
+- **kbench**（µs，tiled / vLLM Marlin；每層 4 個投影加總）：
+
+  | M | qkv | o_proj | gate_up | down | 加總 | 舊 kernel（auto）加總 |
+  |---|---:|---:|---:|---:|---:|---:|
+  | 1 | 21.0 / 18.8 | 16.3 / 17.4 | 68.4 / 58.8 | 37.0 / 23.3 | 142.7 / 118.3（1.21×） | 126.1 |
+  | 16 | 22.0 / 21.4 | 17.3 / 19.4 | 73.7 / 65.1 | 40.2 / 27.7 | 153.2 / 133.6（1.15×） | 156.0 |
+  | 32 | 27.2 / 27.4 | 21.8 / 22.0 | 88.4 / 71.9 | 48.9 / 37.0 | 186.3 / 158.3（1.18×） | 263.7 |
+  | 64 | 44.9 / 45.0 | 40.1 / 35.7 | 120.6 / 113.3 | 78.8 / 62.7 | 284.4 / 256.7（1.11×） | 457.2 |
+
+  - M≥32 大幅改善：M=64 從 457 降到 284 µs。qkv、o_proj 在 M ≤ 32 已經追平或超過 Marlin。
+  - down_proj 在每個 M 都只有 Marlin 的 63–80%，gate_up 在 M ≤ 16 也差 12–14%。M=1 反而比舊的 GEMV 慢。
+
+## 2026-10-23 09:30 — run `marlin-t1b-20261023-093008-colab`：ncu（tiled 對 Marlin）
+
+`P1_STEPS="tune ncu"`，ncu 只錄 down、gate_up、o_proj 的 M=1 和 M=64。tune 因為 `tune.py` 的 default 函式少傳 `tiled_grid` 而失敗（已修）。
+
+ncu（base clock，每次 launch 前清 cache）：
+
+| | µs | DRAM % | tensor % | issue/cycle | 前幾名 stall |
+|---|---:|---:|---:|---:|---|
+| tiled down M=1 | 39.4 | 53.0 | 15.4 | 0.43 | wait、barrier、math_pipe_throttle |
+| Marlin down M=1 | 33.3 | 62.6 | 9.5 | 0.35 | long_scoreboard、wait、barrier |
+| tiled down M=64 | 81.3 | 27.7 | 30.6 | 0.34 | wait、math_pipe_throttle |
+| Marlin down M=64（128 threads） | 67.9 | 33.5 | 36.0 | 0.24 | wait、barrier |
+| tiled gate_up M=64 | 121.4 | 42.0 | 40.0 | 0.34 | wait、math_pipe_throttle |
+| Marlin gate_up M=64 | 90.7 | 51.5 | 53.4 | 0.30 | wait、math_pipe_throttle |
+
+- **M=1 不是頻寬限制，是指令和延遲**：同樣的工作，tiled 發出的指令約多 45%（issue 0.43 × 39.4 µs 對 0.35 × 33.3 µs）。Marlin 從 ncu 的 base clock 換到 kbench 的 boost clock 快了 43%（33.3 → 23.3 µs），tiled 只快 6%（39.4 → 37.0）。
+- **指令多在哪**：每個 tile 都要算 `t / k_tiles` 的除法和 64 位元位址；每個 warp 每個 tile 只算 2 個 k16 列，fragment 在 stage 之間要先等 ldmatrix 和 LDS 回來才能打 mma。
+- **改法**：
+  - 位址改成遞增：每個 thread 的權重偏移只算一次，載入端和計算端各自維護 (slice, k tile) 游標；
+  - fragment double buffer：下一列的 fragment 在打這一列的 mma 之前就先讀；每個 stage 最後一列之前先補下一個 stage、等它到，再讀它的第一列（Marlin 的做法）；
+  - 小 M 加 256x128 tile：每次 barrier 搬 16 KB，在路上的權重也加倍。
+
+## 2026-10-23 10:12 — run `marlin-t1c-20261023-101227-colab`：double buffer、遞增位址、256x128（新 VM）
+
+第一次跑 T1c 時 Colab VM 中途消失（`colab exec` 斷線，之後 session 404），改開新 VM 從 installs 重跑。
+
+- **tests**：207 passed（多了 256x128 的排程案例）。
+- **kbench**（µs，tiled / Marlin；加總對 Marlin）：
+
+  | M | qkv | o_proj | gate_up | down | 加總 |
+  |---|---:|---:|---:|---:|---:|
+  | 1 | 18.6 / 19.1 | 16.5 / 17.4 | 55.9 / 58.8 | 30.9 / 23.3 | 1.03 |
+  | 16 | 19.2 / 21.2 | 16.6 / 19.8 | 62.0 / 65.2 | 33.1 / 27.6 | 0.98 |
+  | 32 | 24.2 / 27.5 | 21.7 / 22.2 | 77.3 / 72.1 | 43.9 / 37.4 | 1.05 |
+  | 64 | 43.9 / 45.2 | 40.0 / 35.9 | 112.5 / 100.9 | 76.1 / 63.0 | 1.11 |
+
+  M ≤ 16 追平 Marlin，gate_up 在 M ≤ 16 比 Marlin 快。
+- **tune**（`w4a16_tiled`）：
+  - M ≤ 32 每一層都是 256x128、每個 SM 1 個 block 最快；每個 SM 2 個 block 一律比較慢，MT=1 已經用了 168 個以上的暫存器，兩個 block 也擺不下。
+  - M=64：qkv、o_proj 用 64x128 比較快（41.9 / 33.8 µs，64x256 是 44.1 / 39.9），gate_up 還是 64x256 快（112.6 對 141.2），down 兩者差不多。
+  - 超過 64 列：每 64 列 launch 一次，M=128 時四層加總 531 µs，dequant + F.linear 是 913 µs；M=256 時 1,062 對 1,000，差不多。
+  - 所以預設改成 MT≥3 用 64x128（N ≥ 16384 才用 64x256），`tiled_max_rows` 改成 128。
+- **down_proj 仍慢**：用 tiles/block 回歸，每個 kernel 約有 6 µs 的固定時間，懷疑是最後的 slot 相加，所以改成：
+  - release 只由 thread 0 在 barrier 後做一次 fence（CUTLASS semaphore、Marlin lock 的作法）；
+  - 讀 slot 時一次發 4 個 load（MT=3 發 2 個；MT=4 一次 1 個，否則會 spill）；
+  - scale 改成 packed 存（每份 4 個暫存器），用的時候才 broadcast，MT=4 才不會 spill。
+
+## 2026-10-23 10:31 — run `marlin-t1d-20261023-103133-colab`：slot 相加和預設 tile
+
+- **tests**：207 passed。
+- **kbench** 加總對 Marlin：M=1 1.02、M=4 1.01、M=8 1.02、M=16 0.98、M=32 1.01、M=64 1.04。o_proj M=64 用 64x128 之後是 35.6 µs（Marlin 35.8）。
+- **down_proj 沒變**：M=1 30.7 對 23.6 µs，M=64 80.9 對 63.0。固定時間不在 slot 相加。
+- **改看 SASS**：把 cubin 用 nvdisasm 反組譯（Docker 裡另裝 `cuda-nvdisasm-12-8`）：
+  - MT=1 256x128 的主迴圈裡，每對 code 要 5 個指令：SHF、LOP3（AND）、LOP3（OR）、HFMA2（減 136）、HFMA2（乘 scale）；
+  - nvcc 沒有把 `(w >> 4s) & 0x000F000F | magic` 合成一個三輸入的 LOP3。
+  - 拿 o_proj（K=4096）和 down（K=14336）相減，增加的部分約 1.46 TB/s，所以 down 慢的原因不是頻寬，而是每個 16 KB tile 要約 1.5 µs 的指令時間。
+- **改法**：用 inline `lop3.b32 …, 0xEA`（(a & b) | c），和 Marlin 一樣。LOP3 從 165 個降到 101 個，全部 instantiation 仍然 0 spill。
+
+## 2026-10-23 10:52 — run `marlin-t1e-20261023-104222-colab`：lop3
+
+- **tests**：207 passed。
+- **kbench**（µs，tiled / Marlin）：
+
+  | M | qkv | o_proj | gate_up | down | 加總對 Marlin |
+  |---|---:|---:|---:|---:|---:|
+  | 1 | 17.5 / 19.1 | 15.8 / 17.5 | 52.4 / 59.1 | 28.8 / 23.3 | 0.96 |
+  | 4 | 17.6 / 19.1 | 15.8 / 17.6 | 53.7 / 59.1 | 28.9 / 23.3 | 0.97 |
+  | 8 | 17.9 / 19.1 | 15.7 / 17.6 | 54.7 / 59.7 | 29.9 / 23.2 | 0.99 |
+  | 16 | 18.2 / 21.2 | 16.1 / 19.6 | 62.6 / 65.4 | 30.9 / 27.5 | 0.96 |
+  | 32 | 22.9 / 27.5 | 20.6 / 22.2 | 72.4 / 72.0 | 41.3 / 37.4 | 0.99 |
+  | 64 | 40.0 / 45.1 | 33.4 / 35.8 | 105.5 / 112.1 | 73.1 / 63.0 | 0.98 |
+
+  - 一個 lop3 就讓 M=1 的加總從 121.2 降到 114.5 µs，代表 M=1 確實是被指令數卡住。
+  - G2 的加總門檻在 M=1、16、64 都過了。單點方面，down_proj 是 Marlin 的 1.10–1.29 倍，M=8 的 1.29 超過 1.25 倍的門檻。
+- commit f541f3a。
+
+## 2026-10-23 10:46 — run `marlin-t2-20261023-104627-colab`：全套測試、kbench、e2e（同一台 VM）
+
+`P1_STEPS="tests kbench e2e summarize"`，nano 設定是 bf16_async、w4a16_rows（`async+rows`）、w4a16_tiled（`async+tiled`），vLLM 跑 bf16 和 AWQ。
+
+- **tests**：629 passed，沒有 skip。
+- **kbench**：和 t1e 相同（加總對 Marlin 0.96 / 0.97 / 0.99 / 0.96 / 0.99 / 0.98）。tiled 反量化和 rows 一樣快：qkv 52.6 對 52.4 µs，gate_up 242.2 對 238.7 µs。
+- **e2e**（ms/step）：
+
+  | | b=1 | b=16 | b=64 |
+  |---|---:|---:|---:|
+  | nano bf16 | 12.06 | 14.12 | 22.61 |
+  | vLLM bf16 | 12.61 | 14.84 | 23.07 |
+  | nano W4A16 rows | 5.70 | 8.29 | 23.03 |
+  | nano W4A16 tiled | **5.35** | **7.31** | 16.82 |
+  | vLLM AWQ | 5.56 | 7.85 | **16.23** |
+
+  - G3 的三個門檻都過了，預設 layout 改成 tiled。
+  - b=64 還慢 vLLM AWQ 0.59 ms，但 kbench 的 GEMM 加總已經比 Marlin 少：拿 bf16 的 e2e 扣掉 cuBLAS 的時間，vLLM 的 AWQ GEMM 在 e2e 裡每層約 224 µs，比 kbench 的 `gptq_marlin` 少 30 µs，原因沒查。
+- **nsys**（tiled，b=1 / 16）：5.38 / 7.18 ms/step，GPU 空檔 0.04 ms，每步 330 / 332 個 kernel，GEMM 佔 84% / 66%。
+- 跑完把 Colab VM 關掉了。
