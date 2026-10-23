@@ -50,6 +50,14 @@ DECODE_CONFIGS = (  # (smallest batch, config)
     (16, {"block_n": 32, "num_warps": 4, "num_stages": 2}),
     (64, {"block_n": 128, "num_warps": 4, "num_stages": 3}),
 )
+# On an fp8 cache a tile carries half the bytes (LOG.md, run kernels-r3):
+# within 2.3% (B=1) and 4.8% (B=16) of the best swept config at ctx 1024
+# and 4096, 1.14-1.22x over the bf16 tiers there; from B=64 the bf16 tier
+# is already the best.
+DECODE_CONFIGS_FP8 = (
+    (1, {"block_n": 32, "num_warps": 4, "num_stages": 2}),
+    (16, {"block_n": 128, "num_warps": 4, "num_stages": 3}),
+)
 # Prefill: query rows x context tokens per program iteration. Within 1.3%
 # of the best config on every swept shape (1.3-1.4x over 64 x 64).
 PREFILL_CONFIG = {"block_m": 128, "block_n": 32, "num_warps": 4, "num_stages": 2}
@@ -425,9 +433,10 @@ def decode_num_splits(batch_size: int, kv_heads: int, device: torch.device) -> i
     return min(MAX_DECODE_SPLITS, triton.next_power_of_2(max(1, wanted)))
 
 
-def decode_config(batch_size: int) -> dict:
-    """Launch settings of the Triton decode kernel for a batch size."""
-    return next(c for smallest, c in reversed(DECODE_CONFIGS) if batch_size >= smallest)
+def decode_config(batch_size: int, kv_fp8: bool = False) -> dict:
+    """Launch settings of the Triton decode kernel for a batch size (and cache dtype)."""
+    tiers = DECODE_CONFIGS_FP8 if kv_fp8 else DECODE_CONFIGS
+    return next(c for smallest, c in reversed(tiers) if batch_size >= smallest)
 
 
 def _gather_blocks(cache: torch.Tensor, block_table: torch.Tensor) -> torch.Tensor:
@@ -547,7 +556,8 @@ def paged_decode_attention(
     if use_triton and TRITON_AVAILABLE and query.is_cuda:  # pragma: no cover
         return _paged_decode_attention_triton(
             query, key_cache, value_cache, block_tables, context_lens, scale, num_splits,
-            config or decode_config(query.shape[0]), out, key_scales, value_scales,
+            config or decode_config(query.shape[0], key_scales is not None), out, key_scales,
+            value_scales,
         )
     result = paged_decode_attention_reference(
         query, key_cache, value_cache, block_tables, context_lens, scale, key_scales, value_scales

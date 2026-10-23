@@ -122,7 +122,8 @@ def tune_decode_fp8():
         return 2 * shape["B"] * shape["ctx"] * 8 * (128 + 4)
 
     return sweep(
-        "decode_fp8", shapes, configs, make_call, input_bytes, lambda s: attention.decode_config(s["B"])
+        "decode_fp8", shapes, configs, make_call, input_bytes,
+        lambda s: attention.decode_config(s["B"], kv_fp8=True),
     )
 
 
