@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """summary.md for one Phase 2 run directory (run_phase2.sh's summarize step).
 
-Reads the P2_SERVE lines in logs/serve.log (one per `vllm bench serve` run),
+Reads the P2_SERVE lines from the run's console (one per `vllm bench serve` run),
 the nsys/*.json reports and status.tsv, and writes tables per workload:
   w1  throughput, TTFT and ITL by concurrency, per server config
   w2  shared-prefix runs
@@ -21,9 +21,14 @@ from pathlib import Path
 
 
 def serve_rows(out: Path) -> list[dict]:
-    """The P2_SERVE lines (bench_serve prints them to the run's console)."""
+    """The P2_SERVE lines (bench_serve prints them to the run's console).
+
+    On the VM the console is <root>/console.log next to results/<run>; the
+    report tarball puts a copy in the run directory.
+    """
     rows, seen = [], set()
-    for path in [out / "console.log", *sorted((out / "logs").glob("*.log"))]:
+    consoles = [out / "console.log", out.resolve().parents[1] / "console.log"]
+    for path in [*consoles, *sorted((out / "logs").glob("*.log"))]:
         if not path.exists():
             continue
         for line in path.read_text(errors="replace").splitlines():

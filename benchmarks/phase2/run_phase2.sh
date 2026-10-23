@@ -252,7 +252,9 @@ offline() {
   local rc=0 mode flag runs="${P2_OFFLINE_RUNS:-paged:1:128:256,paged:16:1024:256,paged:64:1024:256}"
   export PYTHONPATH="${REPO_DIR}"
   for mode in sync async; do
-    flag=""; [[ "${mode}" == async ]] && flag=--async-scheduling
+    # The server's kernels (config/nano_vllm_config.yaml); nano_bench defaults to torch.
+    flag="--attention-backend triton --linear-backend triton"
+    [[ "${mode}" == async ]] && flag+=" --async-scheduling"
     "${PY}" "${P0_DIR}/nano_bench.py" --model "${MODEL}" --runs "${runs}" ${flag} \
       --out "${OUT}/offline/nano_${mode}.json" || rc=1
     NANO_NVTX=1 nsys_run "nano_offline_${mode}_b16" "${PY}" "${P0_DIR}/nano_bench.py" --model "${MODEL}" \

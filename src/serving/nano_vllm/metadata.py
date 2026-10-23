@@ -72,11 +72,11 @@ def build_batch(
     in pinned memory on CUDA, so a batch costs two asynchronous H2D copies.
 
     Every field starts on a 16-byte boundary. Triton specializes a kernel on
-    whether each pointer argument is 16-byte aligned, so a field at an offset
-    that depends on the batch shape compiles a new kernel variant (seconds,
-    mid-serving) the first time its alignment changes. For the same reason a
-    mixed batch's prefill rows get fields of their own instead of slices
-    starting at row num_decode_rows.
+    whether each pointer argument is 16-byte aligned (and each integer one
+    divisible by 16), so a field at an offset that depends on the batch shape
+    compiles a new kernel variant (seconds, mid-serving) the first time its
+    alignment changes. For the same reason a mixed batch's prefill rows get
+    fields of their own instead of slices starting at row num_decode_rows.
     """
     num_tokens = len(input_ids)
     num_seqs = len(query_lens)
@@ -94,7 +94,9 @@ def build_batch(
         cu_seqlens.append(cu_seqlens[-1] + query_len)
     logits_indices = [] if all_logits else [end - 1 for end in cu_seqlens[1:]]
     num_decode_rows = next((i for i, n in enumerate(query_lens) if n != 1), num_seqs)
-    width = max([len(table) for table in block_tables] + [1])
+    # Rounded up to a multiple of 16: the width is the kernels' block-table
+    # stride, and Triton specializes integer arguments on divisibility by 16.
+    width = -(-max([len(table) for table in block_tables] + [1]) // 16) * 16
     flat_tables: list[int] = []
     for table in block_tables:
         flat_tables.extend(table)

@@ -159,7 +159,8 @@ def test_build_batch_pads_tables_and_points_logits_at_last_tokens():
     assert input_ids.tolist() == [5, 6, 7, 8]
     assert positions.tolist() == [0, 1, 2, 9]
     assert metadata.block_tables.dtype == torch.int32
-    assert metadata.block_tables.tolist() == [[0, 8, 8], [2, 3, 1]]
+    # Padded with the null block to a width of 16 (a multiple of 16).
+    assert metadata.block_tables.tolist() == [[0] + [8] * 15, [2, 3, 1] + [8] * 13]
     assert metadata.cu_seqlens_q.tolist() == [0, 3, 4]
     assert metadata.context_lens.tolist() == [3, 10]
     assert metadata.logits_indices.tolist() == [2, 3]
@@ -198,6 +199,7 @@ def test_build_batch_aligns_every_field_to_16_bytes(num_decode_rows, prefill_len
     else:
         assert metadata.prefill_block_tables is None
     assert all(t.data_ptr() % 16 == 0 for t in fields)
+    assert metadata.block_tables.stride(0) % 16 == 0  # an integer kernel argument
 
 
 def test_build_batch_rejects_slots_outside_the_cache():

@@ -200,6 +200,49 @@ class ModelRunner:
         )
         return torch.where(rows >= 0, self.sampled[rows.clamp(min=0)], input_ids)
 
+    # --- eager kernel variants ------------------------------------------
+
+    def warm_up_eager(self, max_seqs: int) -> None:
+        """Compile every kernel variant an eager step can use, before serving.
+
+        The decode kernel's split count and launch settings are compile-time
+        constants chosen from the number of decode rows, so an eager step
+        with a row count no CUDA graph covers (a mixed step with 15 decode
+        rows, say) would compile one mid-serving, stalling every running
+        request for seconds. A mixed batch per decode row count, all on the
+        null block, compiles them, and two decode-only batches cover a full
+        batch and the GEMV's one-row specialization; build_batch keeps every
+        other specialization (pointer alignment, block-table stride) the same
+        for all batches.
+        """
+        if self.model.device.type != "cuda":
+            return
+        null = self.cache.null_block
+        start = time.perf_counter()
+        batches = [[1] * rows + [2] for rows in range(max_seqs)] + [[1], [1] * max_seqs]
+        for query_lens in batches:
+            prefill = query_lens[-1] > 1
+            tokens = sum(query_lens)
+            input_ids, positions, metadata = build_batch(
+                input_ids=[0] * tokens,
+                positions=[p for n in query_lens for p in range(n)],
+                slots=[null * self.cache.block_size] * tokens,
+                block_tables=[[null]] * len(query_lens),
+                context_lens=list(query_lens),
+                query_lens=query_lens,
+                is_prefill=prefill,
+                null_block=null,
+                num_slots=self.cache.total_slots,
+                device=self.model.device,
+            )
+            self.model.forward_batch(input_ids, positions, self.cache, metadata)
+        torch.cuda.synchronize(self.model.device)
+        logger.info(
+            "nano-vLLM compiled the eager step's kernels for 0-%d decode rows in %.1f s",
+            max_seqs,
+            time.perf_counter() - start,
+        )
+
     # --- CUDA graphs for decode ------------------------------------------
 
     def capture_decode_graphs(self, max_batch: int, max_model_len: int) -> None:

@@ -108,8 +108,12 @@ class EngineCore:
         self._step_count = 0
 
     def capture_graphs(self) -> None:
-        """Decode CUDA graphs, unless enforce_eager or the model is on the CPU."""
-        if not self.config.enforce_eager and self.model.device.type == "cuda":
+        """Before serving on CUDA: compile the eager step's kernel variants,
+        then capture the decode CUDA graphs (unless enforce_eager)."""
+        if self.model.device.type != "cuda":
+            return
+        self.model_runner.warm_up_eager(self.config.max_num_seqs)
+        if not self.config.enforce_eager:
             self.model_runner.capture_decode_graphs(
                 max_batch=min(self.config.max_num_seqs, self.config.cuda_graph_max_bs),
                 max_model_len=self.config.max_model_len,
