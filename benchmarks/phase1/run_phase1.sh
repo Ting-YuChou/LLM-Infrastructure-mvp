@@ -26,7 +26,8 @@
 # Env: P0_ROOT (default /workspace/p0), P0_RUN_ID (default: UTC timestamp),
 # P0_REPO_DIR (default: the checkout holding this script), P1_STEPS,
 # P1_MODEL (default unsloth/Meta-Llama-3.1-8B-Instruct), P1_TUNE (tune.py
-# kernels: decode,decode_fp8,prefill,gemv,cuda_gemv,w4a16,w4a16_tiled), P1_KERNELS (kbench and
+# kernels: decode,decode_fp8,prefill,gemv,cuda_gemv,w4a16,w4a16_tiled), P1_TESTS (pytest paths for
+# the tests step instead of all of tests/gpu and the nano_vllm unit tests), P1_KERNELS (kbench and
 # ncu filter, comma-separated), P1_KBENCH_SHAPES (regex on the shape label,
 # same two steps), P1_E2E_RUNS (nano_bench kind:batch:in:out list;
 # vLLM runs the paged ones), P1_NANO_CONFIGS (label:attention:linear:eager|graph[:weight_quant[:flags]]

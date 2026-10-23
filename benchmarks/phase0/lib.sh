@@ -115,11 +115,16 @@ EOF
 }
 
 # --- tests: nano_vllm on the GPU (REPO_DIR, OUT/tests) ------------------------
-gpu_tests() {
-  local paths=() rc=0
-  if [[ -d "${REPO_DIR}/tests/gpu" ]]; then paths+=(tests/gpu); else echo "no tests/gpu yet: nano_vllm unit tests only"; fi
+gpu_tests() {  # P1_TESTS / P2_TESTS: pytest paths instead of everything (a development loop)
+  local paths=() rc=0 selected="${P1_TESTS:-${P2_TESTS:-}}"
+  if [[ -n "${selected}" ]]; then
+    read -r -a paths <<< "${selected}"
+  else
+    if [[ -d "${REPO_DIR}/tests/gpu" ]]; then paths+=(tests/gpu); else echo "no tests/gpu yet: nano_vllm unit tests only"; fi
+    paths+=("${REPO_DIR}"/tests/unit/test_nano_vllm_*.py)
+  fi
   (cd "${REPO_DIR}" && PYTHONPATH="${REPO_DIR}" "${PY}" -m pytest -q -rs --junitxml="${OUT}/tests/junit.xml" \
-    ${paths[@]+"${paths[@]}"} tests/unit/test_nano_vllm_*.py) | tee "${OUT}/tests/pytest.log" || rc=1
+    "${paths[@]}") | tee "${OUT}/tests/pytest.log" || rc=1
   # Same rule as CI's training job: on the GPU every test must run.
   if grep -q '^SKIPPED' "${OUT}/tests/pytest.log"; then echo "tests were skipped on the GPU"; rc=1; fi
   { tail -1 "${OUT}/tests/pytest.log"; grep '^SKIPPED\|^FAILED\|^ERROR' "${OUT}/tests/pytest.log"; } >&3
