@@ -84,8 +84,14 @@ def run_static(engine: NanoLlamaEngine, prompt: list[int], output_len: int, prof
     return {"prefill_s": prefill_s, "decode_step_s": step_s}
 
 
-def _drive(core, num_requests: int, records: list, profile: bool) -> dict:
-    """Step the engine core until every request finishes; tokens per request."""
+def _drive(core, num_requests: int, collected: list, profile: bool) -> dict:
+    """Step the engine core until every request finishes; tokens per request.
+
+    A step's step_s is the wall time of the core.step() call that returned
+    its tokens (``collected`` lists the steps collected during the call).
+    With async scheduling that call launched the next step and then waited
+    for this one, so in steady state it is the time between two steps.
+    """
     produced: dict[int, int] = {}
     step = 0
     profiling = False
@@ -93,13 +99,13 @@ def _drive(core, num_requests: int, records: list, profile: bool) -> dict:
         if profile and not profiling and len(produced) == num_requests:
             profiler(True)  # every sequence is past its prefill
             profiling = True
-        before = len(records)
+        collected.clear()
         t0 = time.perf_counter()
         # With NANO_NVTX=1 the core marks its own steps and phases.
         with contextlib.nullcontext() if engine_nvtx.ENABLED else nvtx(f"engine_step_{step}"):
             outputs = core.step()
-        if len(records) > before:  # a step that scheduled nothing ran no model
-            records[-1]["step_s"] = time.perf_counter() - t0
+        for record in collected:  # a call that scheduled nothing ran no model
+            record["step_s"] = time.perf_counter() - t0
         for output in outputs:
             if output.error is not None:
                 raise output.error
@@ -115,6 +121,7 @@ def run_paged(engine: NanoLlamaEngine, prompts: list[list[int]], output_len: int
     core = engine.core
     runner = core.model_runner
     records: list[dict] = []
+    collected: list[dict] = []  # steps collected during the current core.step()
     launch, collect = runner.launch, runner.collect
     by_handle: dict[int, dict] = {}
 
@@ -131,7 +138,9 @@ def run_paged(engine: NanoLlamaEngine, prompts: list[list[int]], output_len: int
     def timed_collect(handle):
         t0 = time.perf_counter()
         token_ids = collect(handle)
-        by_handle.pop(id(handle))["model_s"] += time.perf_counter() - t0
+        record = by_handle.pop(id(handle))
+        record["model_s"] += time.perf_counter() - t0
+        collected.append(record)
         return token_ids
 
     runner.launch, runner.collect = timed_launch, timed_collect
@@ -141,7 +150,7 @@ def run_paged(engine: NanoLlamaEngine, prompts: list[list[int]], output_len: int
             EngineRequest(req_id=next(Sequence._counter), prompt_token_ids=prompt, sampling=sampling)
         )
     try:
-        produced = _drive(core, len(prompts), records, profile)
+        produced = _drive(core, len(prompts), collected, profile)
     finally:
         runner.launch, runner.collect = launch, collect
     counts = set(produced.values())

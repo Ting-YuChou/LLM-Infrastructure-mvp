@@ -63,10 +63,12 @@ upload_code() {
 }
 
 run() {
-  local env_args=(--env "P0_RUN_ID=${RUN_ID}" --env "BENCH_PHASE=${PHASE}") name
+  local env_args=(--env "P0_RUN_ID=${RUN_ID}" --env "BENCH_PHASE=${PHASE}") name names=()
   for name in P0_STEPS P0_CONCURRENCY P0_SGLANG_SPEC ${!P1_@} ${!P2_@}; do
-    if [[ -n "${!name:-}" ]]; then env_args+=(--env "${name}=${!name}"); fi
+    if [[ -n "${!name:-}" ]]; then env_args+=(--env "${name}=${!name}"); names+=("${name}"); fi
   done
+  # The kernel keeps every --env of earlier runs; the launcher drops those.
+  env_args+=(--env "P0_ENV_NAMES=${names[*]-}")
   mkdir -p "${RESULTS}"
   log "running ${PHASE} (run ${RUN_ID}); console also in ${RESULTS}/${RUN_ID}.launcher.log"
   local rc=0

@@ -41,7 +41,14 @@ def main() -> None:
     run_id = os.environ["P0_RUN_ID"]
     phase = os.environ.get("BENCH_PHASE", "phase0")
     script = CODE_DIR / f"benchmarks/{phase}/run_{phase}.sh"
-    env = dict(os.environ)
+    # `colab exec --env` sets variables in the kernel, which outlives a run:
+    # keep only the P0_/P1_/P2_ settings this run's driver passed.
+    passed = set(os.environ.get("P0_ENV_NAMES", "").split()) | {"P0_RUN_ID"}
+    env = {
+        name: value
+        for name, value in os.environ.items()
+        if not name.startswith(("P0_", "P1_", "P2_")) or name in passed
+    }
     # The kernel's MPLBACKEND (matplotlib_inline) does not exist in the venvs and
     # makes any matplotlib import fail (vLLM imports it); /env/python is Colab's.
     env.pop("PYTHONPATH", None)
