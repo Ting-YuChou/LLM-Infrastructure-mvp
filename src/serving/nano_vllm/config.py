@@ -71,6 +71,9 @@ class NanoVLLMConfig:
     # cuda_graph_max_bs) unless enforce_eager; CPU always runs eagerly.
     enforce_eager: bool = False
     cuda_graph_max_bs: int = 64
+    # Run the engine core (scheduler + model) in its own process; the server
+    # process keeps tokenization, detokenization, stop strings and HTTP.
+    multiprocess: bool = False
     eager_load: bool = True
     host: str = "0.0.0.0"
     port: int = 8000
@@ -193,6 +196,10 @@ class NanoVLLMConfig:
                     "CUDA_GRAPH_MAX_BS",
                     engine.get("cuda_graph_max_bs", cls.cuda_graph_max_bs),
                 )
+            ),
+            multiprocess=_bool_value(
+                _env("ENGINE_MULTIPROCESS", engine.get("multiprocess")),
+                default=cls.multiprocess,
             ),
             eager_load=_bool_value(
                 _env("EAGER_LOAD", engine.get("eager_load")),

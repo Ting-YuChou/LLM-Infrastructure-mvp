@@ -4,9 +4,9 @@
 Two paths, both as they are today:
   static  NanoLlamaForCausalLM.forward on a StaticKVCache, batch 1, one
           argmax + .item() per token (what NanoLlamaEngine.generate does);
-  paged   the continuous-batching engine: scheduler -> ModelRunner (forward
-          over the batch, batched sampling) -> postprocess, driven step by
-          step. --attention-backend and --enforce-eager pick the Phase 1
+  paged   the continuous-batching engine core: scheduler -> ModelRunner
+          (forward over the batch, batched sampling) -> postprocess, driven
+          step by step (EngineCore.step). --attention-backend and --enforce-eager pick the Phase 1
           paths (Triton attention, decode CUDA graphs).
 
 EOS is disabled so every sequence decodes exactly --output-len tokens. The
@@ -22,7 +22,6 @@ Needs this repo on PYTHONPATH (src.serving.nano_vllm).
 from __future__ import annotations
 
 import argparse
-import asyncio
 import contextlib
 import json
 import random
@@ -31,6 +30,7 @@ import time
 import torch
 
 from src.serving.nano_vllm import NanoLlamaEngine, NanoVLLMConfig, SamplingOptions, Sequence
+from src.serving.nano_vllm.core import EngineRequest
 from src.serving.nano_vllm import nvtx as engine_nvtx
 
 
@@ -84,30 +84,37 @@ def run_static(engine: NanoLlamaEngine, prompt: list[int], output_len: int, prof
     return {"prefill_s": prefill_s, "decode_step_s": step_s}
 
 
-async def _drive(engine: NanoLlamaEngine, seqs: list[Sequence], records: list, profile: bool) -> None:
-    for seq in seqs:
-        engine._submit_sequence(seq)
+def _drive(core, num_requests: int, records: list, profile: bool) -> dict:
+    """Step the engine core until every request finishes; tokens per request."""
+    produced: dict[int, int] = {}
     step = 0
     profiling = False
-    while not engine.scheduler.is_finished():
-        if profile and not profiling and all(s.num_completion_tokens > 0 for s in seqs):
+    while core.has_work():
+        if profile and not profiling and len(produced) == num_requests:
             profiler(True)  # every sequence is past its prefill
             profiling = True
         before = len(records)
         t0 = time.perf_counter()
-        # With NANO_NVTX=1 the engine marks its own steps and phases.
+        # With NANO_NVTX=1 the core marks its own steps and phases.
         with contextlib.nullcontext() if engine_nvtx.ENABLED else nvtx(f"engine_step_{step}"):
-            await engine._step()
+            outputs = core.step()
         if len(records) > before:  # a step that scheduled nothing ran no model
             records[-1]["step_s"] = time.perf_counter() - t0
+        for output in outputs:
+            if output.error is not None:
+                raise output.error
+            if output.token_id is not None:
+                produced[output.req_id] = produced.get(output.req_id, 0) + 1
         step += 1
     if profiling:
         profiler(False)
+    return produced
 
 
 def run_paged(engine: NanoLlamaEngine, prompts: list[list[int]], output_len: int, profile: bool) -> dict:
+    core = engine.core
     records: list[dict] = []
-    original = engine._run_scheduled_batch
+    original = core.run_batch
 
     def recorded(seqs, is_prefill):
         t0 = time.perf_counter()
@@ -117,17 +124,20 @@ def run_paged(engine: NanoLlamaEngine, prompts: list[list[int]], output_len: int
         )
         return token_ids
 
-    engine._run_scheduled_batch = recorded
-    sampling = SamplingOptions(max_tokens=output_len, temperature=0.0)
-    seqs = [
-        Sequence(prompt_token_ids=p, sampling=sampling, ignore_eos=True) for p in prompts
-    ]
+    core.run_batch = recorded
+    sampling = SamplingOptions(max_tokens=output_len, temperature=0.0, ignore_eos=True)
+    for prompt in prompts:
+        core.add_request(
+            EngineRequest(req_id=next(Sequence._counter), prompt_token_ids=prompt, sampling=sampling)
+        )
     try:
-        asyncio.run(_drive(engine, seqs, records, profile))
+        produced = _drive(core, len(prompts), records, profile)
     finally:
-        engine._run_scheduled_batch = original
-    produced = {len(s.completion_token_ids) for s in seqs}
-    assert produced == {output_len}, f"expected {output_len} tokens per sequence, got {produced}"
+        core.run_batch = original
+    counts = set(produced.values())
+    assert len(produced) == len(prompts) and counts == {output_len}, (
+        f"expected {output_len} tokens per sequence, got {counts}"
+    )
     return {"steps": records}
 
 
@@ -156,7 +166,7 @@ def summarize(kind: str, batch: int, input_len: int, output_len: int, raw: dict)
     if kind == "paged":
         decode = [r for r in raw["steps"] if not r["prefill"] and r["seqs"] == batch]
         model_mean = sum(r["model_s"] for r in decode) / len(decode)
-        # Step time outside _run_scheduled_batch: scheduling, postprocess, asyncio.
+        # Step time outside run_batch: scheduling, postprocess.
         result["decode_model_ms_per_step"] = model_mean * 1e3
         result["decode_engine_overhead_ms"] = (mean - model_mean) * 1e3
     return result
@@ -192,6 +202,8 @@ def main() -> None:
         num_kvcache_blocks=max_batch * (max_len // 16 + 2) + 64,
         max_num_seqs=max_batch,
         max_num_batched_tokens=max(4096, max_len),
+        # Phase 0/1 methodology: all prompts prefill, then the batch decodes.
+        scheduling="prefill_first",
         attention_backend=args.attention_backend,
         linear_backend=args.linear_backend,
         weight_quant=args.weight_quant,
