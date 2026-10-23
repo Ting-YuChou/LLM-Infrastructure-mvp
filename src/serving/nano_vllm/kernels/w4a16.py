@@ -14,8 +14,22 @@ Layout:
   is what the CUDA kernel dequantizes two at a time.
 - scales: [N, K // group_size] in the activation dtype.
 
-Decode-sized batches use csrc/w4a16.cu, which has three kernels over the
-same qweight:
+The "tiled" layout (layout="tiled") reorders the same codes for the
+Marlin-style kernel, gemm_w4a16_tiled:
+- qweight: int32 [K // 16, N // 64, 32, 4]. Each [32, 4] block is the
+  mma.m16n8k16 B operand of a 16 x 64 (k x n) tile: lane 4g + c holds
+  column g of the eight n8 tiles at k = 2c, 2c + 1, 2c + 8, 2c + 9, so one
+  16-byte load gives a lane all its fragments. Word i holds n8 tiles 2i and
+  2i + 1; the mask 0x000F000F << 4s picks pair s = (tile 2i, k 2c + {0, 1}),
+  (tile 2i, k 2c + 8 + {0, 1}), (tile 2i + 1, k 2c + {0, 1}),
+  (tile 2i + 1, k 2c + 8 + {0, 1}) for s = 0..3, i.e. the b0 and b1
+  registers of the two tiles, low half first.
+- scales: [K // 128, N // 64, 8, 8], [.., g, j] being column 64t + 8j + g,
+  so one 16-byte load gives lane (g, c) the scales of its eight columns.
+It needs group_size 128 and N a multiple of 128 (W4A16_TILED_N_MULTIPLE).
+
+Decode-sized batches of row-layout weights use csrc/w4a16.cu, which has
+three kernels over the same qweight:
 - gemv: CUDA cores, 8 rows of x per launch (looped up to
   W4A16_GEMV_MAX_ROWS); fp32 FMAs limit it to small batches;
 - mma: tensor cores (mma.m16n8k16), up to W4A16_MMA_MAX_ROWS rows in one
@@ -24,6 +38,8 @@ same qweight:
   in shared memory, scales folded into the dequantized weights.
 The tensor-core kernels split K across blocks when the weight is short; the
 splits meet in a persistent fp32 workspace (w4a16_workspace).
+Tiled weights use gemm_w4a16_tiled (one launch per 64 rows, up to
+W4A16_CONFIG["tiled_max_rows"]); see the kernel for its schedule.
 Bigger batches dequantize the whole weight and call F.linear: they are
 compute-bound, so the extra pass over the weight is a small share of their
 time.
@@ -31,6 +47,7 @@ time.
 
 from __future__ import annotations
 
+import functools
 import logging
 import sys
 from dataclasses import dataclass
@@ -59,7 +76,28 @@ W4A16_CONFIG = {
     "auto_mma_rows": 16,
     "rows_per_warp": 2,
     "splits": 0,
+    # The layout the model quantizes into ("rows" or "tiled"); weights the
+    # tiled kernel cannot take stay in rows.
+    "layout": "rows",
+    # gemm_w4a16_tiled: "auto" or one of W4A16_TILED_TILES; blocks per SM of
+    # the persistent grid, or an explicit grid size (tests force schedules).
+    "tiled_tile": "auto",
+    "tiled_blocks_per_sm": 1,
+    "tiled_grid": 0,
+    "tiled_max_rows": 64,
 }
+W4A16_LAYOUTS = ("rows", "tiled")
+# (TILE_K, TILE_N) the tiled kernel is built for, by m16 tiles (16-row
+# groups of x): wide K tiles while x is small, wide N tiles once the fp32
+# accumulators and x tiles grow (shared memory).
+W4A16_TILED_TILES = {
+    "128x128": (128, 128),
+    "64x256": (64, 256),
+    "64x128": (64, 128),
+}
+_TILED_TILES_BY_MT = {1: ("128x128", "64x256"), 2: ("128x128", "64x256"), 3: ("64x256", "64x128"), 4: ("64x256", "64x128")}
+W4A16_TILED_N_MULTIPLE = 128
+W4A16_TILED_MAX_LAUNCH_ROWS = 64
 _WORKSPACE: dict[torch.device, tuple[torch.Tensor, torch.Tensor]] = {}
 _RETIRED: list[tuple[torch.Tensor, torch.Tensor]] = []
 
@@ -71,9 +109,12 @@ class W4A16Weight:
     qweight: torch.Tensor
     scales: torch.Tensor
     group_size: int = W4A16_GROUP_SIZE
+    layout: str = "rows"
 
     @property
     def shape(self) -> torch.Size:
+        if self.layout == "tiled":
+            return torch.Size((self.qweight.shape[1] * 64, self.qweight.shape[0] * 16))
         return torch.Size((self.qweight.shape[0], self.qweight.shape[1] * 8))
 
     @property
@@ -88,37 +129,96 @@ class W4A16Weight:
         return self.qweight.numel() * 4 + self.scales.numel() * self.scales.element_size()
 
 
-def quantize_w4a16(weight: torch.Tensor, group_size: int = W4A16_GROUP_SIZE) -> W4A16Weight:
+def w4a16_tiled_supported(n: int, k: int, group_size: int = W4A16_GROUP_SIZE) -> bool:
+    """Whether a [n, k] weight fits the tiled layout and its kernel."""
+    return group_size == 128 and k % 128 == 0 and n % W4A16_TILED_N_MULTIPLE == 0
+
+
+def quantize_w4a16(
+    weight: torch.Tensor, group_size: int = W4A16_GROUP_SIZE, layout: str = "rows"
+) -> W4A16Weight:
     """RTN-quantize a [N, K] weight; scales keep the weight's dtype."""
     if weight.ndim != 2:
         raise ValueError("quantize_w4a16 expects a 2-D [out_features, in_features] weight")
     if sys.byteorder != "little":  # pragma: no cover
         raise RuntimeError("the int4 packing assumes a little-endian host")
+    if layout not in W4A16_LAYOUTS:
+        raise ValueError(f"layout must be one of: {', '.join(W4A16_LAYOUTS)}")
     n, k = weight.shape
     if group_size % 32 or k % group_size:
         raise ValueError(
             f"in_features ({k}) must be a multiple of group_size ({group_size}), "
             "itself a multiple of 32"
         )
+    if layout == "tiled" and not w4a16_tiled_supported(n, k, group_size):
+        raise ValueError(
+            f"the tiled layout needs group_size 128 and out_features a multiple of "
+            f"{W4A16_TILED_N_MULTIPLE} (got {n} x {k}, group_size {group_size})"
+        )
     groups = weight.float().reshape(n, k // group_size, group_size)
     scales = groups.abs().amax(dim=-1) / 7.5
     # An all-zero group would divide by zero; any scale reproduces it.
     scales = torch.where(scales == 0, torch.ones_like(scales), scales).to(weight.dtype)
     q = torch.round(groups / scales.float().unsqueeze(-1)) + 8
-    q = q.clamp_(0, 15).to(torch.uint8).reshape(n, k // 8, 8)
-    nibbles = q[..., list(W4A16_PACK_ORDER)]
+    q = q.clamp_(0, 15).to(torch.uint8).reshape(n, k)
+    if layout == "tiled":
+        return W4A16Weight(
+            qweight=_pack_tiled(q), scales=_tile_scales(scales), group_size=group_size, layout="tiled"
+        )
+    nibbles = q.reshape(n, k // 8, 8)[..., list(W4A16_PACK_ORDER)]
     packed = nibbles[..., 0::2] | (nibbles[..., 1::2] << 4)  # [N, K/8, 4] bytes
     qweight = packed.contiguous().view(torch.int32).reshape(n, k // 8)
     return W4A16Weight(qweight=qweight, scales=scales.contiguous(), group_size=group_size)
 
 
-def unpack_w4a16(qweight: torch.Tensor) -> torch.Tensor:
-    """int32 [N, K // 8] -> uint8 [N, K] values in 0..15, in K order.
+def _pack_tiled(q: torch.Tensor) -> torch.Tensor:
+    """uint8 codes [N, K] -> int32 [K/16, N/64, 32, 4].
 
-    k = 2i sits at bits 4i and k = 2i + 1 at bits 16 + 4i of its word. The
-    shifts are built on the device (no host-to-device copy), so this also
+    Code (n, k), n = 64t + 8(2i + jj) + g and k = 16r + 8b + 2c + h, sits in
+    word [r, t, 4g + c, i] at nibble 4h + 2jj + b (module docstring). The
+    views split n and k into those factors: (t, i, jj, g, r, b, c, h) for
+    [N, K], (r, t, g, c, i, h, jj, b) for the words.
+    """
+    n, k = q.shape
+    t = q.view(n // 64, 4, 2, 8, k // 16, 2, 4, 2)
+    t = t.permute(4, 0, 3, 6, 1, 7, 2, 5).reshape(k // 16, n // 64, 32, 4, 8)
+    packed = t[..., 0::2] | (t[..., 1::2] << 4)  # bytes: nibbles (0, 1), (2, 3), (4, 5), (6, 7)
+    return packed.contiguous().view(torch.int32).reshape(k // 16, n // 64, 32, 4)
+
+
+def _unpack_tiled(qweight: torch.Tensor) -> torch.Tensor:
+    """int32 [K/16, N/64, 32, 4] -> uint8 codes [N, K]."""
+    rows16, tiles = qweight.shape[:2]
+    shifts = 4 * torch.arange(8, device=qweight.device, dtype=torch.int32)
+    nibbles = ((qweight.unsqueeze(-1) >> shifts) & 0xF).to(torch.uint8)
+    t = nibbles.view(rows16, tiles, 8, 4, 4, 2, 2, 2)
+    return t.permute(1, 4, 6, 2, 0, 7, 3, 5).reshape(tiles * 64, rows16 * 16)
+
+
+def _tile_scales(scales: torch.Tensor) -> torch.Tensor:
+    """[N, K/128] -> [K/128, N/64, 8 (g), 8 (j)], column 64t + 8j + g."""
+    n, groups = scales.shape
+    return scales.view(n // 64, 8, 8, groups).permute(3, 0, 2, 1).contiguous()
+
+
+def w4a16_row_scales(weight: W4A16Weight) -> torch.Tensor:
+    """The scales as [N, K / group_size] whatever the layout."""
+    if weight.layout != "tiled":
+        return weight.scales
+    groups, tiles = weight.scales.shape[:2]
+    return weight.scales.permute(1, 3, 2, 0).reshape(tiles * 64, groups)
+
+
+def unpack_w4a16(qweight: torch.Tensor) -> torch.Tensor:
+    """int32 [N, K // 8] (rows) or [K // 16, N // 64, 32, 4] (tiled) -> uint8 [N, K]
+    values in 0..15, in K order.
+
+    Rows: k = 2i sits at bits 4i and k = 2i + 1 at bits 16 + 4i of its word.
+    The shifts are built on the device (no host-to-device copy), so this also
     runs inside a CUDA-graph capture.
     """
+    if qweight.ndim == 4:
+        return _unpack_tiled(qweight)
     n, words = qweight.shape
     k = torch.arange(8, device=qweight.device, dtype=torch.int32)
     shifts = 4 * (k // 2) + 16 * (k % 2)
@@ -132,10 +232,13 @@ def dequantize_w4a16(weight: W4A16Weight, dtype: Optional[torch.dtype] = None) -
     if weight.qweight.is_cuda and dtype == weight.dtype:
         extension = load_cuda_extension("w4a16")
         if extension is not None:  # pragma: no cover - depends on CUDA
+            if weight.layout == "tiled":
+                return extension.dequantize_w4a16_tiled(weight.qweight, weight.scales)
             return extension.dequantize_w4a16(weight.qweight, weight.scales, weight.group_size)
     n, k = weight.shape
     q = unpack_w4a16(weight.qweight).float() - 8
-    w = q.reshape(n, k // weight.group_size, weight.group_size) * weight.scales.float().unsqueeze(-1)
+    scales = w4a16_row_scales(weight).float().unsqueeze(-1)
+    w = q.reshape(n, k // weight.group_size, weight.group_size) * scales
     return w.reshape(n, k).to(dtype)
 
 
@@ -159,6 +262,8 @@ def w4a16_linear(
         raise ValueError(f"x has {k} features, the weight expects {weight.shape[1]}")
     rows = x.numel() // k if k else 0
     config = {**W4A16_CONFIG, **(config or {})}
+    if weight.layout == "tiled":
+        return _tiled_linear(x, weight, bias, rows, config)
     kernel = _pick_kernel(rows, weight, config)
     if (
         kernel is not None
@@ -185,10 +290,81 @@ def w4a16_linear(
     return F.linear(x, dequantize_w4a16(weight, x.dtype), bias)
 
 
+def _tiled_linear(
+    x: torch.Tensor, weight: W4A16Weight, bias: Optional[torch.Tensor], rows: int, config: dict
+) -> torch.Tensor:
+    """gemm_w4a16_tiled, one launch per 64 rows, up to tiled_max_rows rows."""
+    n, k = weight.shape
+    if (
+        x.is_cuda
+        and x.dtype == weight.dtype
+        and x.dtype in (torch.bfloat16, torch.float16)
+        and 0 < rows <= config["tiled_max_rows"]
+    ):  # pragma: no cover - depends on CUDA
+        extension = load_cuda_extension("w4a16")
+        if extension is not None:
+            flat = x.reshape(rows, k).contiguous()
+            out = torch.empty(rows, n, dtype=x.dtype, device=x.device)
+            _, counters = w4a16_workspace(x.device, n)
+            for r0 in range(0, rows, W4A16_TILED_MAX_LAUNCH_ROWS):
+                r1 = min(rows, r0 + W4A16_TILED_MAX_LAUNCH_ROWS)
+                tile_k, tile_n, grid = tiled_launch_config(r1 - r0, n, config, _sm_count(x.device))
+                extension.gemm_w4a16_tiled(
+                    flat[r0:r1], weight.qweight, weight.scales, counters, out[r0:r1], tile_k, tile_n, grid
+                )
+            out = out.view(*x.shape[:-1], n)
+            return out if bias is None else out + bias
+    return F.linear(x, dequantize_w4a16(weight, x.dtype), bias)
+
+
+def tiled_launch_config(rows: int, n: int, config: dict, sm_count: int) -> tuple[int, int, int]:
+    """(TILE_K, TILE_N, grid) of one gemm_w4a16_tiled launch over ``rows`` <= 64 rows."""
+    mt = (rows + 15) // 16
+    name = config["tiled_tile"]
+    if name == "auto":
+        name = "128x128" if mt <= 2 else ("64x256" if n % 256 == 0 else "64x128")
+    if name not in _TILED_TILES_BY_MT[mt]:
+        raise ValueError(f"tile {name} is not built for {rows} rows (m16 tiles: {mt})")
+    tile_k, tile_n = W4A16_TILED_TILES[name]
+    if n % tile_n:
+        raise ValueError(f"tile {name} needs out_features divisible by {tile_n}, got {n}")
+    grid = config["tiled_grid"] or sm_count * config["tiled_blocks_per_sm"]
+    return tile_k, tile_n, grid
+
+
+def tiled_schedule(n: int, k: int, tile_k: int, tile_n: int, grid: int) -> dict:
+    """The work split of gemm_w4a16_tiled, computed as the kernel does.
+
+    Tiles are numbered slice * (K / TILE_K) + k tile, a slice being TILE_N
+    output columns. Block b takes tiles [b * iters, (b + 1) * iters): a
+    stripe that may start or end inside a slice, so every block gets the
+    same work whatever the shape. Blocks sharing a slice each store their
+    fp32 partial in slot (block + slice) and the last to arrive sums the
+    slots in block order. Returns iters, each block's tile range, each
+    slice's first and last block, and the number of slots.
+    """
+    k_tiles, slices = k // tile_k, n // tile_n
+    total = k_tiles * slices
+    iters = -(-total // grid)
+    blocks = -(-total // iters)
+    return {
+        "iters": iters,
+        "ranges": [(b * iters, min((b + 1) * iters, total)) for b in range(blocks)],
+        "owners": [(s * k_tiles // iters, (s * k_tiles + k_tiles - 1) // iters) for s in range(slices)],
+        "slots": blocks + slices,
+    }
+
+
+@functools.lru_cache(maxsize=None)
+def _sm_count(device: torch.device) -> int:  # pragma: no cover - depends on CUDA
+    return torch.cuda.get_device_properties(device).multi_processor_count
+
+
 def w4a16_workspace(device: torch.device, out_features: int) -> tuple[torch.Tensor, torch.Tensor]:
     """Zeroed split-K buffers for up to W4A16_MMA_MAX_ROWS x ``out_features``.
 
     The kernels leave them zeroed, so one pair per device serves every call.
+    gemm_w4a16_tiled uses only the counters (one per output slice).
     CUDA graphs keep raw pointers, so a buffer that grows is retired, not
     freed, and growing during a capture is refused: reserve the largest
     out_features first (the model does at load).

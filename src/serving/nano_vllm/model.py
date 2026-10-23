@@ -28,7 +28,7 @@ from .kernels import (
 )
 from .kernels.fp8 import KV_CACHE_DTYPES
 from .kernels.rotary import compute_inv_freq, validate_rope_scaling
-from .kernels.w4a16 import w4a16_workspace
+from .kernels.w4a16 import W4A16_CONFIG, w4a16_tiled_supported, w4a16_workspace
 from .kv_cache import PagedKVCache, StaticKVCache
 from .metadata import BatchMetadata, build_batch
 
@@ -714,11 +714,14 @@ class NanoLlamaForCausalLM:
         """Move one checkpoint tensor; quantize it here under weight_quant.
 
         One weight at a time, so the full-precision copy of a quantized
-        projection is on the device only while it is being quantized.
+        projection is on the device only while it is being quantized. The
+        layout follows W4A16_CONFIG["layout"]; a shape the tiled kernel
+        cannot take stays in rows.
         """
         moved = self._move_weight(tensor)
         if self.weight_quant == "w4a16" and name.endswith(QUANTIZED_LINEARS):
-            return quantize_w4a16(moved)
+            tiled = W4A16_CONFIG["layout"] == "tiled" and w4a16_tiled_supported(*moved.shape)
+            return quantize_w4a16(moved, layout="tiled" if tiled else "rows")
         return moved
 
     def _layer_weights(self, layer_idx: int) -> _LayerWeights:
