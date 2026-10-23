@@ -1,0 +1,128 @@
+[
+  {
+    "impl": "hash (Phase 1)",
+    "workload": "shared",
+    "requests": 192,
+    "hit_rate": 0.9362745098039216,
+    "admit": {
+      "mean_us": 18512.670328125,
+      "p50_us": 18542.234,
+      "p99_us": 20158.785
+    },
+    "prefill_commit": {
+      "mean_us": 59.142093749999994,
+      "p50_us": 53.533,
+      "p99_us": 82.526
+    },
+    "decode_commit": {
+      "mean_us": 0.8051350911458334,
+      "p50_us": 0.363,
+      "p99_us": 7.272
+    }
+  },
+  {
+    "impl": "radix (Python)",
+    "workload": "shared",
+    "requests": 192,
+    "hit_rate": 0.9362745098039216,
+    "admit": {
+      "mean_us": 168.46183854166665,
+      "p50_us": 167.501,
+      "p99_us": 180.111
+    },
+    "prefill_commit": {
+      "mean_us": 4.660473958333333,
+      "p50_us": 4.368,
+      "p99_us": 10.209
+    },
+    "decode_commit": {
+      "mean_us": 0.55478369140625,
+      "p50_us": 0.388,
+      "p99_us": 2.965
+    }
+  },
+  {
+    "impl": "radix (C++)",
+    "workload": "shared",
+    "requests": 192,
+    "hit_rate": 0.9362745098039216,
+    "admit": {
+      "mean_us": 16.683645833333333,
+      "p50_us": 16.234,
+      "p99_us": 24.353
+    },
+    "prefill_commit": {
+      "mean_us": 1.94328125,
+      "p50_us": 1.779,
+      "p99_us": 5.492
+    },
+    "decode_commit": {
+      "mean_us": 0.5152369791666667,
+      "p50_us": 0.381,
+      "p99_us": 2.755
+    }
+  },
+  {
+    "impl": "hash (Phase 1)",
+    "workload": "many",
+    "requests": 192,
+    "hit_rate": 0.47219669117647056,
+    "admit": {
+      "mean_us": 10249.330864583333,
+      "p50_us": 3064.877,
+      "p99_us": 36836.717
+    },
+    "prefill_commit": {
+      "mean_us": 855.0699947916668,
+      "p50_us": 976.646,
+      "p99_us": 1668.007
+    },
+    "decode_commit": {
+      "mean_us": 0.8734456380208333,
+      "p50_us": 0.394,
+      "p99_us": 7.774
+    }
+  },
+  {
+    "impl": "radix (Python)",
+    "workload": "many",
+    "requests": 192,
+    "hit_rate": 0.47219669117647056,
+    "admit": {
+      "mean_us": 203.15553125,
+      "p50_us": 314.165,
+      "p99_us": 387.409
+    },
+    "prefill_commit": {
+      "mean_us": 14.716531250000001,
+      "p50_us": 21.072,
+      "p99_us": 32.958
+    },
+    "decode_commit": {
+      "mean_us": 1.0642635091145833,
+      "p50_us": 0.413,
+      "p99_us": 16.783
+    }
+  },
+  {
+    "impl": "radix (C++)",
+    "workload": "many",
+    "requests": 192,
+    "hit_rate": 0.47219669117647056,
+    "admit": {
+      "mean_us": 33.625588541666666,
+      "p50_us": 32.666,
+      "p99_us": 49.596
+    },
+    "prefill_commit": {
+      "mean_us": 3.8626822916666668,
+      "p50_us": 4.67,
+      "p99_us": 6.263
+    },
+    "decode_commit": {
+      "mean_us": 0.5928079427083334,
+      "p50_us": 0.411,
+      "p99_us": 4.374
+    }
+  }
+]

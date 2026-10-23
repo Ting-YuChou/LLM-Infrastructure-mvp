@@ -1,0 +1,1 @@
+{"kv_blocks_total":9942,"kv_blocks_free":5,"kv_blocks_cached":9937,"kv_blocks_used":0,"prefix_query_tokens":567296,"prefix_hit_tokens":285600,"prefix_hit_rate":0.5034408844765343,"recompute_query_tokens":0,"recompute_hit_tokens":0,"evicted_blocks":12800,"kv_internal_fragmentation":0.0,"num_running":0,"num_waiting":0}

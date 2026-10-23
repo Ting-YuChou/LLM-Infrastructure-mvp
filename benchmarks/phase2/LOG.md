@@ -71,3 +71,73 @@ results/<run_id>/.
   the rerun includes it (every install is skipped when already done).
 - Stopped the remote run by hand (pkill through `colab console`) before the
   serving numbers, which would have decoded from wrong tokens.
+
+### Run m1tests-20261023-015432-colab (installs, GPU tests, prefix_bench)
+
+- `cuda129` installed CUDA 12.8 nvcc (39 s). 417 tests passed, none skipped:
+  the GPU suite (decode graphs with the fixed capture, async scheduling
+  against sync in graph and eager mode, a mixed batch against the
+  reference, KV sizing) plus the nano unit tests, including the
+  multiprocess and C++ radix-tree ones.
+- prefix_bench on the VM's CPU (slower than the Mac): a 2k-token
+  shared-prefix admission takes 18.5 ms with Phase 1's hash chain, 168 us
+  with the Python radix tree and 16 us in C++; with eviction (W2b) 3.1 ms,
+  314 us and 33 us at p50, 36.8 ms, 387 us and 50 us at p99. Same hit rate
+  everywhere (93.6% / 47.2%).
+
+### Run m1to6-20261023-015904-colab (serve, nsys, offline)
+
+Every server and workload passed the `ok` check (all requests completed with
+the full output length). nano got 9,942 KV blocks (M0's vLLM capacity).
+
+- `colab exec` lost its connection after 2,950 s ("Connection was lost.")
+  during the offline step; the run finished on the VM and
+  `colab_phase0.sh fetch` downloaded it.
+- summarize on the VM printed no serve tables: it looked for console.log in
+  the run directory, but the launcher writes the console to
+  `/content/p0/console.log` and copies it into the report tarball only
+  afterwards. summarize.py now also reads `<root>/console.log`; summary.md
+  was regenerated locally.
+- The offline step ran nano_bench with its default torch attention and
+  linear paths (16.5 / 51.8 / 162 ms per decode step at b=1/16/64, against
+  12.15 / 14.63 / 23.51 ms with Triton in Phase 1), so its numbers and both
+  offline nsys captures are void. The step now passes the server's backends
+  (`--attention-backend triton --linear-backend triton`).
+- **Mid-serving Triton compiles.** nano_m2's W1 (the first mixed-scheduling
+  server on this VM) had TPOT p90 27.3 / 35.7 ms at c=16 / 32 against p50
+  16.3 / 22.3, while nano_m2_b2048 a few minutes later had 19.4 / 27.6: a
+  quarter of the requests (those in flight at one moment) lost ~3 s each,
+  once per concurrency level. Triton compiles a kernel variant per
+  specialization of its arguments: whether each pointer is 16-byte aligned,
+  whether each integer is 1 or divisible by 16, and every constexpr value.
+  Mixed batches changed all three with the batch shape: build_batch packed
+  the int32 fields back to back (and the prefill rows' context lengths and
+  block tables were slices at row num_decode_rows), the block-table stride
+  was the batch's widest table, and the eager decode kernel's NUM_SPLITS
+  comes from the decode row count (15 rows: a split count no decode graph
+  was captured with). Each new combination compiled mid-step; later servers
+  loaded the variants from Triton's on-disk cache, which is why only the
+  first W1 shows it. W3 on the same server came after W1 and was clean.
+  Fixes: every build_batch field starts on 16 bytes and the prefill rows
+  get fields of their own (5c315c4); the block-table width is rounded up to
+  a multiple of 16; capture_graphs first runs one eager batch per decode
+  row count (`ModelRunner.warm_up_eager`, about 66 forward passes).
+  tests/gpu/test_nano_vllm_warmup.py installs Triton's JIT cache-miss hook
+  after the warm-up and fails on any kernel compiled during a mixed
+  workload with every decode row count.
+- Async scheduling in the frontend's process (nano_m4_inproc) gets the same
+  W1 throughput as with the core in its own process (1,958 vs 1,973 tok/s at
+  c=64): the GPU always has the next step queued, so the host's time,
+  waiting for the GIL included, is hidden as long as it is shorter than a
+  step. The separate process still halves TTFT at c=64 (330 vs 666 ms p50).
+- nsys of the server with the M4 settings: GPU idle 0.04 ms of a 14.1 ms
+  step at W1 c=16, 0.03 of 16.3 ms in W3, 0.84 of 30.9 ms at c=64 (M0: 2.0,
+  3.9 and 4.5 ms). The c=64 median step is an eager mixed step (362 kernels,
+  364 launches); its 0.84 ms idle is 2.7% of the step, the most M5 (CUDA
+  graphs for mixed steps) could recover, so M5 is not done.
+- vLLM 0.19.1 runs with async scheduling by default ("Asynchronous
+  scheduling is enabled") and, on this 40 GB A100, max_num_batched_tokens
+  2048 ("compile range (1, 2048)"). nano_m2_b2048's W3 ITL max (156 ms)
+  matches vLLM's default (153 ms) as it should.
+- `NUM_KVCACHE_BLOCKS=0` sized the cache to 9,958 blocks (159k tokens, vLLM
+  has 159-163k) with 35,980 MiB in use at gpu_memory_utilization 0.9.
