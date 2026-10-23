@@ -634,7 +634,12 @@ struct TiledShape {
   static constexpr int kSWords = kGroups * kCols * 8;               // 16-byte words of scales per stage
   static constexpr int kStageBytes = kABytes + 16 * (kBWords + kSWords);
   static constexpr int kTileStride = TILE_N + 8;  // fp32 slice tile row; the pad spreads banks
-  static constexpr int kSmemBytes = kTiledStages * kStageBytes + kRows * kTileStride * 4;
+  static constexpr int kTileOffset = kTiledStages * kStageBytes;
+  // Then the last-arrival flag and the trace build's stamps.
+  static constexpr int kFlagOffset = kTileOffset + kRows * kTileStride * 4;
+  static constexpr int kTraceOffset = kFlagOffset + 16;
+  static constexpr int kSmemBytes = kTraceOffset + kTraceEvents * 8;
+  static_assert(kStageBytes % 128 == 0, "stages start on 128-byte lines");
   static_assert(kKRows % kWarpsPerCol == 0 && kRowsPerWarp >= 1, "the warps of a column split the k16 rows");
   static_assert(kAChunks >= 8, "the x swizzle spans 8 chunks");
   static_assert(kBWords % kTiledThreads == 0 && kSWords <= kTiledThreads, "whole cp.async rounds");
@@ -676,9 +681,13 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
     long long* __restrict__ trace) {
   using Sh = TiledShape<MT, TILE_K, TILE_N>;
   constexpr int R = Sh::kRowsPerWarp;
-  extern __shared__ __align__(16) unsigned char smem[];
-  __shared__ int last_block;
-  __shared__ long long trace_sh[kTrace ? kTraceEvents : 1];
+  // Everything lives in the dynamic allocation, which then starts at shared
+  // address 0: a static __shared__ variable would shift it by 16 bytes, and
+  // with the stages off 128-byte lines every cp.async of a warp moved each
+  // L2 sector twice (ncu, run down-d1).
+  extern __shared__ __align__(128) unsigned char smem[];
+  int& last_block = *reinterpret_cast<int*>(smem + Sh::kFlagOffset);
+  long long* trace_sh = reinterpret_cast<long long*>(smem + Sh::kTraceOffset);
   const int tid = threadIdx.x;
   const int warp = tid / 32;
   const int lane = tid % 32;
@@ -705,7 +714,7 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
       trace_sh[kTraceTiles] = end - begin;
     }
   }
-  float* tile = reinterpret_cast<float*>(smem + kTiledStages * Sh::kStageBytes);
+  float* tile = reinterpret_cast<float*>(smem + Sh::kTileOffset);
   auto stage = [&](int s) { return smem + s * Sh::kStageBytes; };
 
   // Rows m .. 16 MT - 1 of x are never loaded: zero them once in every stage.
