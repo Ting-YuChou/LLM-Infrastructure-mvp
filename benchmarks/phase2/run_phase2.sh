@@ -19,8 +19,11 @@
 #          percentiles show the decode stalls
 #
 # Steps (P2_STEPS, default all; colab_phase0.sh rerun drops installs):
-#   installs  vLLM venv (shared with phases 0-1) + pytest, SGLang venv, nsys, model
+#   installs  vLLM venv (shared with phases 0-1) + pytest/ninja, SGLang venv, nsys,
+#             the model, and CUDA 12 nvcc for the CUDA kernels' tests (cuda129)
 #   tests     tests/gpu + tests/unit/test_nano_vllm_*.py; any SKIPPED fails it
+#   prefix_bench  host cost of the radix-tree prefix cache against Phase 1's hash
+#             chain at serving scale (CPU only; prefix_bench.py)
 #   serve     each P2_RUNS entry: start its server, run its workloads, stop it
 #   nsys      the nano server under nsys for each P2_NSYS workload, with the
 #             engine's NVTX phase ranges (NANO_NVTX=1)
@@ -50,7 +53,7 @@ PY="${VENVS}/vllm/bin/python"
 VLLM_VERSION="${P0_VLLM_VERSION:-0.19.1}"
 SGLANG_SPEC="${P0_SGLANG_SPEC:-sglang[all]}"
 REPO_DIR="${P0_REPO_DIR:-$(cd "${CODE_DIR}/../.." && pwd)}"
-STEPS="${P2_STEPS:-installs tests serve nsys summarize}"
+STEPS="${P2_STEPS:-installs tests prefix_bench serve nsys summarize}"
 read -r -a CONCURRENCY <<< "${P2_CONCURRENCY:-1 2 4 8 16 32 64}"
 # M0 baseline: vLLM first (nano's KV size comes from its log), then nano as
 # it is (prefill-first, 512-token chunks, hash prefix cache), nano without the
@@ -66,6 +69,7 @@ nano:nano_gil:w1c32:NANO_SWITCH_INTERVAL=0.0005 \
 sglang:sglang:w1,w2a,w2b,w3}"
 NSYS_WORKLOADS="${P2_NSYS:-w1c16 w1c64 w3}"
 NANO_PORT=8100
+CUDA_ENV="${ROOT}/cuda129.env"
 
 export HF_HOME="${ROOT}/hf_cache" UV_CACHE_DIR="${ROOT}/uv_cache" UV_PYTHON_INSTALL_DIR="${ROOT}/uv_python"
 export PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false MPLBACKEND=Agg SERVE_TAG=P2_SERVE BENCH_TEMPERATURE=0
@@ -85,16 +89,18 @@ install_venv() {  # reuse the VM's vLLM venv when an earlier phase made it
     rm -rf "${VENVS}/vllm"
     install_vllm || return 1
   fi
-  uv pip install -p "${PY}" pytest &&
+  uv pip install -p "${PY}" pytest ninja &&
   "${PY}" -c "import torch, vllm; print('vllm', vllm.__version__, '| torch', torch.__version__)"
 }
 
 installs() {
   local rc=0
+  command -v uv > /dev/null || python3 -m pip install -q uv > "${OUT}/logs/install_uv.log" 2>&1
   run_step install_venv install_venv || rc=1
   [[ -x "${VENVS}/sglang/bin/python" ]] || run_step install_sglang install_sglang || rc=1
   run_step install_nsys install_nsys || rc=1
   [[ -f "${MODEL}/config.json" ]] || run_step download_model download_model || rc=1
+  [[ -f "${CUDA_ENV}" ]] || run_step cuda129 cuda129 || rc=1  # the CUDA kernels' tests
   return "${rc}"
 }
 
@@ -187,10 +193,17 @@ run_server() {  # engine label workloads extra
       --attention-backend triton --sampling-backend pytorch || return 1
   fi
   for w in ${workloads//,/ }; do
+    snapshot "${label}_${w}_before" "${port}"
     "${w}" "${label}" "${port}" || rc=1
+    snapshot "${label}_${w}_after" "${port}"
   done
   stop_server
   return "${rc}"
+}
+
+snapshot() {  # name port: the server's /metrics (and nano's /stats) around a workload
+  curl -sf "http://127.0.0.1:$2/metrics" > "${OUT}/serve/$1.metrics.txt" 2>/dev/null || rm -f "${OUT}/serve/$1.metrics.txt"
+  curl -sf "http://127.0.0.1:$2/stats" > "${OUT}/serve/$1.stats.json" 2>/dev/null || rm -f "${OUT}/serve/$1.stats.json"
 }
 
 serve() {
@@ -231,13 +244,24 @@ nsys_step() {
   return "${rc}"
 }
 
+prefix_bench() {
+  PYTHONPATH="${REPO_DIR}" "${PY}" "${CODE_DIR}/prefix_bench.py" --out "${OUT}/prefix_bench" &&
+  cat "${OUT}/prefix_bench/prefix_bench.md" >&3
+}
+
 summarize() {
   "${PY}" "${CODE_DIR}/summarize.py" "${OUT}" && cat "${OUT}/summary.md" >&3
 }
 
 log "run ${RUN_ID}: steps '${STEPS}', model ${MODEL_ID}"
+nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader >&3
 want installs && installs
+# ninja (cpp_extension JIT) and pytest come from the venv.
+export PATH="${VENVS}/vllm/bin:${PATH}"
+# shellcheck source=/dev/null
+if [[ -f "${CUDA_ENV}" ]]; then source "${CUDA_ENV}"; fi
 want tests && run_step tests gpu_tests
+want prefix_bench && run_step prefix_bench prefix_bench
 want serve && run_step serve serve
 want nsys && run_step nsys nsys_step
 want summarize && run_step summarize summarize

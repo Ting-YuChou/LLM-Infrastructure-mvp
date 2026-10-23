@@ -16,6 +16,7 @@ import torch
 from .block_manager import BlockManager
 from .config import NanoVLLMConfig
 from .kv_cache import PagedKVCache
+from .metadata import build_batch
 from .model import NanoLlamaForCausalLM
 from .model_runner import ModelRunner
 from .nvtx import nvtx_range
@@ -25,6 +26,12 @@ from .sequence import GenerationEvent, Sequence, SequenceStatus
 
 
 logger = logging.getLogger(__name__)
+
+# num_kvcache_blocks: 0 on CPU (nothing to profile).
+CPU_KV_BLOCKS = 1024
+# GPU memory kept out of the KV budget for the decode CUDA graphs' pool, the
+# sampler's fp32 logits/sort buffers and cuBLAS/Triton workspaces.
+KV_RESERVE_BYTES = 512 * 1024**2
 
 
 class InvalidRequestError(ValueError):
@@ -335,7 +342,8 @@ class NanoLlamaEngine:
         if not self.initialized or self.model is None or self.tokenizer is None:
             raise RuntimeError("nano-vLLM engine is not initialized")
         prompt_ids = self._encode(prompt)
-        kv_capacity = self.config.num_kvcache_blocks * self.config.kvcache_block_size
+        self._ensure_batching_state()
+        kv_capacity = self.block_manager.num_blocks * self.block_manager.block_size
         max_tokens = self._resolve_max_tokens(
             len(prompt_ids), sampling.max_tokens, kv_capacity=kv_capacity
         )
@@ -491,6 +499,8 @@ class NanoLlamaEngine:
     def _initialize_batching_state(self) -> None:
         if self.model is None:
             return
+        if self.config.num_kvcache_blocks == 0:
+            self.config.num_kvcache_blocks = self._size_kv_cache()
         Sequence.block_size = self.config.kvcache_block_size
         self.block_manager = BlockManager(
             num_blocks=self.config.num_kvcache_blocks,
@@ -507,6 +517,95 @@ class NanoLlamaEngine:
             block_size=self.config.kvcache_block_size,
         )
         self.model_runner = ModelRunner(self.model, self.paged_cache, self.block_manager)
+
+    @torch.inference_mode()
+    def _size_kv_cache(self) -> int:
+        """KV blocks that fit in gpu_memory_utilization of the GPU.
+
+        One eager prefill of max_num_batched_tokens tokens on a scratch cache
+        measures the activation peak (and JIT-compiles the prefill kernels);
+        the KV cache gets what is left of the budget after everything already
+        on the GPU, that peak and KV_RESERVE_BYTES.
+        """
+        config, model = self.config, self.model
+        if model.device.type != "cuda":
+            return CPU_KV_BLOCKS
+        block_size = config.kvcache_block_size
+        tokens = min(config.max_num_batched_tokens, config.max_model_len)
+        scratch_blocks = -(-tokens // block_size)
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+        before = torch.cuda.memory_allocated()
+        cache = model.new_paged_cache(num_blocks=scratch_blocks, block_size=block_size)
+        with_cache = torch.cuda.memory_allocated()
+        input_ids, positions, metadata = build_batch(
+            input_ids=[0] * tokens,
+            positions=list(range(tokens)),
+            slots=list(range(tokens)),
+            block_tables=[list(range(scratch_blocks))],
+            context_lens=[tokens],
+            query_lens=[tokens],
+            is_prefill=True,
+            null_block=cache.null_block,
+            num_slots=cache.total_slots,
+            device=model.device,
+        )
+        model.forward_batch(input_ids, positions, cache, metadata)
+        torch.cuda.synchronize()
+        activation_peak = torch.cuda.max_memory_allocated() - with_cache
+        del cache, input_ids, positions, metadata
+        torch.cuda.empty_cache()
+        free, total = torch.cuda.mem_get_info()
+        budget = (
+            config.gpu_memory_utilization * total
+            - (total - free)
+            - activation_peak
+            - KV_RESERVE_BYTES
+        )
+        per_block = PagedKVCache.bytes_per_block(
+            model.config.num_hidden_layers,
+            block_size,
+            model.config.num_key_value_heads,
+            model.config.head_dim,
+            model.dtype,
+        )
+        num_blocks = int(budget // per_block)
+        needed = -(-config.max_model_len // block_size)
+        if num_blocks < needed:
+            raise RuntimeError(
+                f"Only {max(num_blocks, 0)} KV blocks fit in gpu_memory_utilization="
+                f"{config.gpu_memory_utilization} but one max_model_len sequence needs "
+                f"{needed}; raise gpu_memory_utilization or lower max_model_len"
+            )
+        logger.info(
+            "nano-vLLM KV cache: %d blocks (%d tokens, %.2f GiB); %.2f GiB already on the "
+            "GPU of %.2f GiB, activation peak %.2f GiB for %d tokens (allocated before: %.2f GiB)",
+            num_blocks,
+            num_blocks * block_size,
+            num_blocks * per_block / 1024**3,
+            (total - free) / 1024**3,
+            total / 1024**3,
+            activation_peak / 1024**3,
+            tokens,
+            before / 1024**3,
+        )
+        return num_blocks
+
+    def stats(self) -> dict:
+        """KV block usage, prefix-cache counters and queue lengths."""
+        if self.block_manager is None or self.scheduler is None:
+            return {}
+        active = [*self.scheduler.running, *(s for s in self.scheduler.waiting if s.block_table)]
+        allocated = sum(len(seq.block_table) for seq in active) * self.block_manager.block_size
+        filled = sum(min(seq.num_tokens, len(seq.block_table) * seq.block_size) for seq in active)
+        return {
+            **self.block_manager.stats_dict(),
+            # Allocated slots no token occupies: the tail of each last block.
+            "kv_internal_fragmentation": 1 - filled / allocated if allocated else 0.0,
+            "num_running": len(self.scheduler.running),
+            "num_waiting": len(self.scheduler.waiting),
+        }
 
     def _ensure_batching_state(self) -> None:
         if (

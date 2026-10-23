@@ -45,7 +45,10 @@ class NanoVLLMConfig:
     max_model_len: int = 2048
     max_new_tokens: int = 256
     kvcache_block_size: int = 16
-    num_kvcache_blocks: int = 1024
+    # 0: as many blocks as fit in gpu_memory_utilization of the GPU after the
+    # weights and a profiled forward pass (CPU: 1024).
+    num_kvcache_blocks: int = 0
+    gpu_memory_utilization: float = 0.9
     max_num_seqs: int = 16
     max_num_batched_tokens: int = 512
     enable_prefix_cache: bool = True
@@ -73,8 +76,10 @@ class NanoVLLMConfig:
     def __post_init__(self) -> None:
         if self.kvcache_block_size <= 0:
             raise ValueError("kvcache_block_size must be positive")
-        if self.num_kvcache_blocks <= 0:
-            raise ValueError("num_kvcache_blocks must be positive")
+        if self.num_kvcache_blocks < 0:
+            raise ValueError("num_kvcache_blocks must be positive, or 0 to size it from memory")
+        if not 0.0 < self.gpu_memory_utilization <= 1.0:
+            raise ValueError("gpu_memory_utilization must be in (0, 1]")
         if self.max_num_seqs <= 0:
             raise ValueError("max_num_seqs must be positive")
         if self.max_num_batched_tokens <= 0:
@@ -132,6 +137,12 @@ class NanoVLLMConfig:
                 _env(
                     "NUM_KVCACHE_BLOCKS",
                     engine.get("num_kvcache_blocks", cls.num_kvcache_blocks),
+                )
+            ),
+            gpu_memory_utilization=float(
+                _env(
+                    "GPU_MEMORY_UTILIZATION",
+                    engine.get("gpu_memory_utilization", cls.gpu_memory_utilization),
                 )
             ),
             max_num_seqs=int(

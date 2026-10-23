@@ -135,6 +135,14 @@ class PagedKVCache:
     def null_block(self) -> int:
         return self.num_blocks
 
+    @staticmethod
+    def bytes_per_block(
+        num_layers: int, block_size: int, num_key_value_heads: int, head_dim: int, dtype: torch.dtype
+    ) -> int:
+        """K and V bytes of one block across all layers."""
+        element = torch.empty((), dtype=dtype).element_size()
+        return 2 * num_layers * block_size * num_key_value_heads * head_dim * element
+
     @property
     def total_slots(self) -> int:
         """Addressable slots, including the null block's."""

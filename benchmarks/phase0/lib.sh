@@ -62,6 +62,35 @@ cuda_apt_repo() {  # probe_package: add NVIDIA's CUDA apt repo unless apt alread
   fi
 }
 
+# CUDA 12 nvcc for torch.utils.cpp_extension (nano_vllm's CUDA kernels); needs
+# ROOT, PY and CUDA_ENV (the env file it writes; later steps source it).
+cuda129() {
+  # torch.utils.cpp_extension builds with $CUDA_HOME/bin/nvcc and only checks the
+  # CUDA major version, so Colab's system nvcc 13.0 would build against cudart 13
+  # while torch runs on CUDA 12. Install the toolkit torch was built with.
+  local version cuda pkg
+  version="${P1_CUDA_VERSION:-$("${PY}" -c "import torch; print(torch.version.cuda)")}" || return 1
+  [[ "${version}" == 12.* ]] || { echo "unexpected CUDA version '${version}'"; return 1; }
+  [[ "${version}" == 12.9 ]] || echo "NOTE: the venv's torch is CUDA ${version}, not 12.9; installing ${version}"
+  cuda="/usr/local/cuda-${version}"
+  pkg="${version/./-}"
+  echo "/usr/local/cuda -> $(readlink -f /usr/local/cuda) before"
+  if [[ ! -x "${cuda}/bin/nvcc" ]]; then
+    cuda_apt_repo "cuda-nvcc-${pkg}" &&
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+      "cuda-nvcc-${pkg}" "cuda-cudart-dev-${pkg}" "cuda-cccl-${pkg}" || return 1
+  fi
+  echo "/usr/local/cuda -> $(readlink -f /usr/local/cuda) after"
+  "${cuda}/bin/nvcc" --version || return 1
+  cat > "${CUDA_ENV}" <<EOF
+export CUDA_HOME=${cuda}
+export PATH=${cuda}/bin:\${PATH}
+export TORCH_CUDA_ARCH_LIST=8.0
+export TORCH_EXTENSIONS_DIR=${ROOT}/torch_ext
+EOF
+  cat "${CUDA_ENV}"
+}
+
 install_nsys() {
   if [[ -n "$(find_nsys)" ]]; then find_nsys; return 0; fi
   cuda_apt_repo cuda-nsight-systems-12-8

@@ -418,3 +418,26 @@ def test_models_and_profile_routes():
     with TestClient(_server_with_engine(engine, eager_load=False).app) as client:
         assert client.post("/start_profile").status_code == 200  # no-op on CPU
         assert client.post("/stop_profile").status_code == 200
+
+
+def test_stats_route_and_metrics_report_prefix_cache_hits():
+    from test_nano_vllm_engine_batching import ListTokenizer, _engine, successor_model
+
+    prompt = list(range(10, 19))  # two full 4-token blocks + 1
+    engine = _engine(
+        ListTokenizer({"p": prompt}), successor_model(), enable_prefix_cache=True
+    )
+    config = NanoVLLMConfig(served_model_name="nano-test", model_name="/tmp/not-used",
+                            eager_load=False, enable_metrics=True)
+    server = NanoVLLMServer(config, engine=engine)
+    body = {"prompt": "p", "max_tokens": 2, "temperature": 0.0}
+    with TestClient(server.app) as client:
+        client.post("/v1/completions", json=body)
+        client.post("/v1/completions", json=body)  # same prompt: 2 blocks hit
+        stats = client.get("/stats").json()
+        metrics = client.get("/metrics").text
+
+    assert stats["prefix_query_tokens"] == 18
+    assert stats["prefix_hit_tokens"] == 8
+    assert stats["kv_blocks_used"] == 0 and stats["num_running"] == 0
+    assert 'llm_engine_prefix_hit_tokens{model="nano-test"} 8.0' in metrics

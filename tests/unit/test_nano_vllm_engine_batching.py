@@ -538,3 +538,11 @@ def test_paged_engine_matches_transformers_greedy_decode(tmp_path):
     assert [result.token_ids for result in first] == expected
     assert [result.token_ids for result in second] == expected
     _assert_all_blocks_free(engine)
+
+
+def test_kv_cache_size_zero_means_auto_and_cpu_gets_the_default():
+    from serving.nano_vllm.engine import CPU_KV_BLOCKS
+
+    engine = _engine(FakeTokenizer(), FakePagedModel(), num_kvcache_blocks=0)
+    assert engine.block_manager.num_blocks == CPU_KV_BLOCKS
+    assert engine.config.num_kvcache_blocks == CPU_KV_BLOCKS

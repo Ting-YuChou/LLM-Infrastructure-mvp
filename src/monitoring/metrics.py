@@ -139,6 +139,44 @@ kv_cache_usage = Gauge(
 )
 
 
+
+class _EngineStatsCollector:
+    """Exports an engine's stats() dict as llm_engine_<key> gauges, read at scrape time."""
+
+    def __init__(self):
+        self.source: Optional[Callable[[], dict]] = None
+        self.model = ""
+
+    def describe(self):
+        return []
+
+    def collect(self):
+        from prometheus_client.core import GaugeMetricFamily
+
+        if self.source is None:
+            return
+        try:
+            stats = self.source()
+        except Exception:  # never break /metrics
+            logger.exception("engine stats() failed")
+            return
+        for key, value in stats.items():
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                family = GaugeMetricFamily(f"llm_engine_{key}", f"Engine stat {key}", labels=["model"])
+                family.add_metric([self.model], float(value))
+                yield family
+
+
+_engine_stats = _EngineStatsCollector()
+registry.register(_engine_stats)
+
+
+def register_engine_stats(model_name: str, source: Callable[[], dict]) -> None:
+    """Export ``source()`` (KV blocks, prefix-cache counters, ...) on every scrape."""
+    _engine_stats.source = source
+    _engine_stats.model = model_name
+
+
 # ============================================================================
 # GPU Metrics
 # ============================================================================

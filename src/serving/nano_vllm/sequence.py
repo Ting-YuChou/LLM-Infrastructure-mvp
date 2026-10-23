@@ -42,6 +42,10 @@ class Sequence:
     num_scheduled_tokens: int = 0
     is_prefill: bool = True
     block_table: list[int] = field(default_factory=list)
+    # Prefix cache: the first num_shared_blocks of block_table belong to the
+    # radix tree, on the path to radix_node that this sequence has locked.
+    num_shared_blocks: int = 0
+    radix_node: Optional[object] = field(default=None, repr=False)
     finish_reason: Optional[str] = None
     token_ids: list[int] = field(init=False)
     events: Optional[asyncio.Queue[GenerationEvent]] = None

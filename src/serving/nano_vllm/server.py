@@ -25,6 +25,7 @@ try:
         finish_request_tracking,
         record_inter_token_latency,
         record_time_to_first_token,
+        register_engine_stats,
         start_request_tracking,
     )
 except ModuleNotFoundError:
@@ -33,6 +34,7 @@ except ModuleNotFoundError:
         finish_request_tracking,
         record_inter_token_latency,
         record_time_to_first_token,
+        register_engine_stats,
         start_request_tracking,
     )
 
@@ -113,6 +115,8 @@ class NanoVLLMServer:
         )
         if config.enable_metrics:
             add_metrics_endpoint(self.app)
+            if hasattr(self.engine, "stats"):
+                register_engine_stats(config.served_model_name, self.engine.stats)
         self._register_routes()
 
     @asynccontextmanager
@@ -179,6 +183,13 @@ class NanoVLLMServer:
                     }
                 ],
             }
+
+        @self.app.get("/stats")
+        async def engine_stats():
+            stats = getattr(self.engine, "stats", None)
+            if stats is None:
+                raise HTTPException(status_code=501, detail="engine has no stats")
+            return stats()
 
         # nsys --capture-range=cudaProfilerApi records between these calls
         # (vllm bench serve --profile hits the same paths).

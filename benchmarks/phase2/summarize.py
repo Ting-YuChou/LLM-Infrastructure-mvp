@@ -66,22 +66,59 @@ def w1_tables(rows: list[dict]) -> list[str]:
     return lines
 
 
-def w2_table(rows: list[dict]) -> list[str]:
+def _prom_total(text: str, names: tuple[str, ...]) -> float | None:
+    """Sum of the samples of the first metric name present in a /metrics dump."""
+    for name in names:
+        values = [
+            float(line.rsplit(" ", 1)[1])
+            for line in text.splitlines()
+            if line.startswith(name) and (line[len(name)] in " {")
+        ]
+        if values:
+            return sum(values)
+    return None
+
+
+def hit_rate(out: Path, label: str, workload: str) -> float | None:
+    """Prefix-cache token hit rate during one workload, from the snapshots around it."""
+    serve = out / "serve"
+    before, after = serve / f"{label}_{workload}_before", serve / f"{label}_{workload}_after"
+    stats = [p.with_suffix(".stats.json") for p in (before, after)]
+    if all(p.exists() for p in stats):  # nano
+        b, a = (json.loads(p.read_text()) for p in stats)
+        queries = a.get("prefix_query_tokens", 0) - b.get("prefix_query_tokens", 0)
+        hits = a.get("prefix_hit_tokens", 0) - b.get("prefix_hit_tokens", 0)
+        return hits / queries if queries else None
+    dumps = [p.with_suffix(".metrics.txt") for p in (before, after)]
+    if all(p.exists() for p in dumps):  # vLLM: prefix_cache_{queries,hits} counters
+        b, a = (p.read_text() for p in dumps)
+        names_q = ("vllm:prefix_cache_queries_total", "vllm:gpu_prefix_cache_queries_total")
+        names_h = ("vllm:prefix_cache_hits_total", "vllm:gpu_prefix_cache_hits_total")
+        qb, qa = _prom_total(b, names_q), _prom_total(a, names_q)
+        hb, ha = _prom_total(b, names_h), _prom_total(a, names_h)
+        if None not in (qb, qa, hb, ha) and qa > qb:
+            return (ha - hb) / (qa - qb)
+    return None
+
+
+def w2_table(rows: list[dict], out: Path) -> list[str]:
     picked = [r for r in rows if r["run"] in ("w2a", "w2b")]
     if not picked:
         return []
     lines = [
         "## W2: shared prefixes", "",
         "w2a: one 2048-token prefix + 128 tokens, output 128, c=16. "
-        "w2b: 48 prefixes of 4096 tokens + 256, output 128, c=16.", "",
-        "| config | run | ok | req/s | output tok/s | TTFT p50 | TTFT p99 | ITL p50 |",
-        "|---|---|---|---:|---:|---:|---:|---:|",
+        "w2b: 48 prefixes of 4096 tokens + 256, output 128, c=16. "
+        "Hit rate: prompt tokens served from the prefix cache during the run.", "",
+        "| config | run | ok | req/s | output tok/s | TTFT p50 | TTFT p99 | ITL p50 | hit rate |",
+        "|---|---|---|---:|---:|---:|---:|---:|---:|",
     ]
     for r in sorted(picked, key=lambda r: (r["run"], r["engine"])):
+        rate = hit_rate(out, r["engine"], r["run"])
         lines.append(
             f"| {r['engine']} | {r['run']} | {'yes' if r.get('ok') else 'no'} | {fmt(r.get('req_s'), 2)} "
             f"| {fmt(r.get('out_tok_s'), 0)} | {fmt(r.get('ttft_p50_ms'))} | {fmt(r.get('ttft_p99_ms'))} "
-            f"| {fmt(r.get('itl_p50_ms'), 2)} |"
+            f"| {fmt(r.get('itl_p50_ms'), 2)} | {'-' if rate is None else f'{100 * rate:.1f}%'} |"
         )
     return lines + [""]
 
@@ -156,7 +193,10 @@ def main() -> None:
     bad = [f"{r['engine']}/{r['run']}" for r in rows if not r.get("ok")]
     if bad:
         lines += [f"Runs that did not complete every request with the full output: {', '.join(bad)}", ""]
-    lines += w1_tables(rows) + w2_table(rows) + w3_table(rows) + nsys_table(out) + server_settings(out)
+    bench = out / "prefix_bench" / "prefix_bench.md"
+    if bench.exists():
+        lines += ["## " + bench.read_text().lstrip("# "), ""]
+    lines += w1_tables(rows) + w2_table(rows, out) + w3_table(rows) + nsys_table(out) + server_settings(out)
     (out / "summary.md").write_text("\n".join(lines) + "\n")
     (out / "serve_rows.json").write_text(json.dumps(rows, indent=2))
 

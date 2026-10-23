@@ -72,7 +72,7 @@ class Scheduler:
                 # Aborted while its batch was running: release it now.
                 self.abort(seq)
                 continue
-            self.block_manager.hash_blocks(seq)
+            self.block_manager.commit(seq)
             seq.num_cached_tokens += seq.num_scheduled_tokens
             seq.num_scheduled_tokens = 0
 

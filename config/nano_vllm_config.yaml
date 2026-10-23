@@ -30,7 +30,10 @@ engine:
   eager_load: true
   max_new_tokens: 256
   kvcache_block_size: 16
-  num_kvcache_blocks: 1024
+  # 0 sizes the paged KV cache from gpu_memory_utilization after loading the
+  # weights and profiling one max_num_batched_tokens forward (CPU: 1024).
+  num_kvcache_blocks: 0
+  gpu_memory_utilization: 0.9
   max_num_seqs: 16
   max_num_batched_tokens: 512
   enable_prefix_cache: true
