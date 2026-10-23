@@ -32,6 +32,7 @@ import torch
 from src.serving.nano_vllm import NanoLlamaEngine, NanoVLLMConfig, SamplingOptions, Sequence
 from src.serving.nano_vllm.core import EngineRequest
 from src.serving.nano_vllm import nvtx as engine_nvtx
+from src.serving.nano_vllm.kernels.w4a16 import W4A16_CONFIG, W4A16_LAYOUTS
 
 
 CUDA = torch.cuda.is_available()
@@ -215,6 +216,9 @@ def main() -> None:
     parser.add_argument("--weight-quant", default="none", choices=["none", "w4a16"])
     parser.add_argument("--kv-cache-dtype", default="auto", choices=["auto", "fp8"])
     parser.add_argument(
+        "--w4a16-layout", choices=W4A16_LAYOUTS, help="W4A16_CONFIG['layout'] (default: its current value)"
+    )
+    parser.add_argument(
         "--enforce-eager", action="store_true", help="no decode CUDA graphs (paged path)"
     )
     parser.add_argument(
@@ -227,6 +231,8 @@ def main() -> None:
     parser.add_argument("--top-p", type=float, default=1.0, help="paged path")
     args = parser.parse_args()
 
+    if args.w4a16_layout:
+        W4A16_CONFIG["layout"] = args.w4a16_layout
     runs = [tuple(r.split(":")) for r in args.runs.split(",")]
     max_batch = max(int(b) for _, b, _, _ in runs)
     max_len = max(int(i) + int(o) for _, _, i, o in runs)
@@ -278,6 +284,7 @@ def main() -> None:
         result["linear_backend"] = args.linear_backend
         result["weight_quant"] = args.weight_quant
         result["kv_cache_dtype"] = args.kv_cache_dtype
+        result["w4a16_layout"] = W4A16_CONFIG["layout"] if args.weight_quant == "w4a16" else None
         result["async_scheduling"] = args.async_scheduling
         result["temperature"] = args.temperature if kind == "paged" else 0.0
         result["top_p"] = args.top_p if kind == "paged" else 1.0

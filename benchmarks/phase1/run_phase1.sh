@@ -26,13 +26,13 @@
 # Env: P0_ROOT (default /workspace/p0), P0_RUN_ID (default: UTC timestamp),
 # P0_REPO_DIR (default: the checkout holding this script), P1_STEPS,
 # P1_MODEL (default unsloth/Meta-Llama-3.1-8B-Instruct), P1_TUNE (tune.py
-# kernels: decode,decode_fp8,prefill,gemv,cuda_gemv,w4a16), P1_KERNELS (kbench and
+# kernels: decode,decode_fp8,prefill,gemv,cuda_gemv,w4a16,w4a16_tiled), P1_KERNELS (kbench and
 # ncu filter, comma-separated), P1_KBENCH_SHAPES (regex on the shape label,
 # same two steps), P1_E2E_RUNS (nano_bench kind:batch:in:out list;
 # vLLM runs the paged ones), P1_NANO_CONFIGS (label:attention:linear:eager|graph[:weight_quant[:flags]]
 # per nano_bench run, default: the Phase 1 milestones in order; flags joined by +: async for async
 # scheduling, sampled for P1_SAMPLING instead of greedy (with any sampled config vLLM runs its
-# points sampled too), fp8kv for an fp8 KV cache
+# points sampled too), tiled / rows for the W4A16 weight layout, fp8kv for an fp8 KV cache
 # (with any fp8kv config vLLM runs its points with --kv-cache-dtype fp8 and
 # P1_VLLM_FP8_BACKEND, default TRITON_ATTN: FLASH_ATTN refuses fp8 on sm80)), P1_QUALITY_CONFIGS
 # (quality.py --configs), P1_SAMPLING ("temperature top_p", default "0.7 0.9": the nano server's
@@ -128,6 +128,8 @@ nano_config_args() {  # label:attention:linear:eager|graph[:weight_quant[:flags]
   [[ "+${flags}+" == *+async+* ]] && args+=" --async-scheduling"
   [[ "+${flags}+" == *+sampled+* ]] && args+=" $(sampled_args)"
   [[ "+${flags}+" == *+fp8kv+* ]] && args+=" --kv-cache-dtype fp8"
+  [[ "+${flags}+" == *+tiled+* ]] && args+=" --w4a16-layout tiled"
+  [[ "+${flags}+" == *+rows+* ]] && args+=" --w4a16-layout rows"
   echo "${args}"
 }
 

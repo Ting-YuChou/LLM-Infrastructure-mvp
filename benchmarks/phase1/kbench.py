@@ -74,6 +74,7 @@ from src.serving.nano_vllm.kernels.silu_mul import (  # noqa: E402
     silu_mul_reference,
 )
 from src.serving.nano_vllm.kernels.w4a16 import (  # noqa: E402
+    W4A16_CONFIG,
     W4A16_GEMV_MAX_ROWS,
     W4A16_MMA_MAX_ROWS,
     W4A16Weight,
@@ -774,6 +775,8 @@ register(
 # 4-bit weight, its scales, x and y, so the cublas_bf16 row (F.linear on the
 # dequantized bf16 weight) reads as the bandwidth W4A16 would need to match it.
 def _w4a16_cuda(kernel: str, max_rows: int):
+    """kernel "tiled": the same codes in the tiled layout, gemm_w4a16_tiled."""
+
     def factory(i: dict):
         if not i["x"].is_cuda:
             raise Unavailable("needs a GPU")
@@ -781,6 +784,9 @@ def _w4a16_cuda(kernel: str, max_rows: int):
             raise NotApplicable(f"the {kernel} kernel takes up to {max_rows} rows")
         if load_cuda_extension("w4a16") is None:
             raise RuntimeError("building kernels/csrc/w4a16.cu failed (see the log)")
+        if kernel == "tiled":
+            weight = quantize_w4a16(i["w"], layout="tiled")
+            return lambda: w4a16_linear(i["x"], weight)
         weight = quantize_w4a16(i["w"])
         return lambda: w4a16_linear(i["x"], weight, config={"kernel": kernel})
 
@@ -845,12 +851,43 @@ register(
             "cuda_mma": _w4a16_cuda("mma", W4A16_MMA_MAX_ROWS),
             "cuda_wide": _w4a16_cuda("wide", W4A16_MMA_MAX_ROWS),
             "cuda_auto": _w4a16_cuda("auto", W4A16_MMA_MAX_ROWS),
+            "cuda_tiled": _w4a16_cuda("tiled", W4A16_CONFIG["tiled_max_rows"]),
             "cublas_bf16": _cublas_dequantized,
         },
         reference=lambda i: w4a16_linear_reference(i["x"], quantize_w4a16(i["w"])),
         bytes=lambda s: s["N"] * s["K"] // 2 + 2 * s["N"] * s["K"] // 128
         + 2 * s["M"] * (s["K"] + s["N"]),
         ncu="gemv_w4a16|gemm_w4a16|Marlin|marlin",
+    )
+)
+
+
+# Prefill batches (> tiled_max_rows rows) dequantize the whole weight before
+# F.linear, so the tiled layout's dequantization must keep up with the rows
+# one. Bytes: the 4-bit weight and scales read, the bf16 weight written.
+def _w4a16_dequant(layout: str):
+    def factory(i: dict):
+        if not i["w"].is_cuda:
+            raise Unavailable("needs a GPU")
+        weight = quantize_w4a16(i["w"], layout=layout)
+        return lambda: dequantize_w4a16(weight)
+
+    return factory
+
+
+register(
+    Kernel(
+        name="w4a16_dequant",
+        shapes=[
+            {"layer": layer, "N": n, "K": k}
+            for layer, (n, k) in LINEAR_SHAPES.items()
+            if layer != "lm_head"
+        ],
+        inputs=lambda s, dev: {"w": randn(s["N"], s["K"], device=dev, scale=s["K"] ** -0.5)},
+        impls={"rows": _w4a16_dequant("rows"), "tiled": _w4a16_dequant("tiled")},
+        reference=lambda i: dequantize_w4a16(quantize_w4a16(i["w"].cpu())).to(i["w"].device),
+        bytes=lambda s: s["N"] * s["K"] // 2 + 2 * s["N"] * s["K"] // 128 + 2 * s["N"] * s["K"],
+        ncu="dequantize_w4a16",
     )
 )
 

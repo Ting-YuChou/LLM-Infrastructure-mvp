@@ -8,7 +8,7 @@ GEMV_CONFIG, CUDA_GEMV_CONFIG, W4A16_CONFIG). Configs that fail to compile or ru
 too much shared memory) are recorded and skipped.
 
   python tune.py --out results/tune                  # all kernels
-  python tune.py --kernels gemv --out results/tune   # decode, decode_fp8, prefill, gemv, cuda_gemv, w4a16
+  python tune.py --kernels gemv --out results/tune   # decode, decode_fp8, prefill, gemv, cuda_gemv, w4a16, w4a16_tiled
 """
 
 from __future__ import annotations
@@ -219,6 +219,50 @@ def tune_w4a16():
     return sweep("w4a16", shapes, configs, make_call, input_bytes, w4a16.W4A16_CONFIG)
 
 
+def tune_w4a16_tiled():
+    """gemm_w4a16_tiled: tile shape and blocks per SM of the persistent grid,
+    and, above 64 rows, several 64-row launches vs dequantize + F.linear."""
+    w4a16 = importlib.import_module("src.serving.nano_vllm.kernels.w4a16")
+    if linear_mod.load_cuda_extension("w4a16") is None:
+        raise RuntimeError("the W4A16 kernels did not build")
+    shapes = [
+        {"layer": layer, "M": m, "N": n, "K": k}
+        for layer, (n, k) in {
+            "qkv": (6144, 4096), "o_proj": (4096, 4096), "gate_up": (28672, 4096),
+            "down": (4096, 14336),
+        }.items()
+        for m in (1, 4, 16, 32, 64, 128, 256)
+    ]
+    keys = ("tiled_tile", "tiled_blocks_per_sm", "tiled_max_rows")
+    configs = grid(tiled_tile=list(w4a16.W4A16_TILED_TILES), tiled_blocks_per_sm=[1, 2], tiled_max_rows=[256])
+    configs.append({"tiled_tile": "auto", "tiled_blocks_per_sm": 1, "tiled_max_rows": 64})
+
+    def make_call(shape, config):
+        mt = (min(shape["M"], w4a16.W4A16_TILED_MAX_LAUNCH_ROWS) + 15) // 16
+        if config["tiled_tile"] != "auto" and config["tiled_tile"] not in w4a16._TILED_TILES_BY_MT[mt]:
+            raise ValueError("tile not built for this many rows")
+        if config["tiled_max_rows"] < 256 and shape["M"] <= config["tiled_max_rows"]:
+            raise ValueError("the same launch as tiled_tile auto")
+        x = randn(shape["M"], shape["K"], device="cuda")
+        w = w4a16.quantize_w4a16(randn(shape["N"], shape["K"], device="cuda", scale=shape["K"] ** -0.5),
+                                 layout="tiled")
+        return lambda: w4a16.w4a16_linear(x, w, config=config)
+
+    def input_bytes(shape):
+        return shape["N"] * shape["K"] // 2
+
+    def default(shape):
+        """The launch W4A16_CONFIG gives this shape, as one of the configs."""
+        current = {k: w4a16.W4A16_CONFIG[k] for k in keys}
+        if shape["M"] > current["tiled_max_rows"]:
+            return current
+        tile_k, tile_n, _ = w4a16.tiled_launch_config(shape["M"], shape["N"], current, 1)
+        name = next(name for name, tile in w4a16.W4A16_TILED_TILES.items() if tile == (tile_k, tile_n))
+        return {**current, "tiled_tile": name, "tiled_max_rows": 256}
+
+    return sweep("w4a16_tiled", shapes, configs, make_call, input_bytes, default)
+
+
 def markdown(rows) -> str:
     lines = ["# Triton launch-setting sweep", "",
              "| kernel | shape | best config | best us | default us | speedup |",
@@ -252,6 +296,7 @@ def main() -> None:
             "gemv": tune_gemv,
             "cuda_gemv": tune_cuda_gemv,
             "w4a16": tune_w4a16,
+            "w4a16_tiled": tune_w4a16_tiled,
         }[name]()
         # Written after each kernel so a failure in a later one keeps these.
         (out / "tune.json").write_text(json.dumps(rows, indent=2))
