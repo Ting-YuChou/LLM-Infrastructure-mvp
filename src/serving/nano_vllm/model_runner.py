@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import functools
+import gc
 import logging
 import time
 from dataclasses import dataclass
@@ -22,6 +24,25 @@ logger = logging.getLogger(__name__)
 # Decode batch sizes that get a CUDA graph; a batch runs in the smallest one
 # that fits, with the extra rows padded.
 GRAPH_BATCH_SIZES = (1, 2, 4, 8, 16, 24, 32, 48, 64, 96, 128)
+
+
+@contextlib.contextmanager
+def _no_gc_while_capturing():
+    """Collect garbage, then keep the collector off while graphs are captured.
+
+    A collection during a capture can destroy unreachable CUDA graphs (an
+    earlier engine's, in the GPU tests) and free their memory pool with
+    cudaFree, which invalidates the capture in progress. vLLM freezes the
+    collector while capturing for the same reason.
+    """
+    gc.collect()
+    enabled = gc.isenabled()
+    gc.disable()
+    try:
+        yield
+    finally:
+        if enabled:
+            gc.enable()
 
 
 @dataclass
@@ -317,15 +338,16 @@ class ModelRunner:
 
         start = time.perf_counter()
         pool = torch.cuda.graph_pool_handle()
-        for size in sorted(sizes, reverse=True):  # largest first: the pool fits all
-            # Eager run first: Triton JIT and cuBLAS setup must not happen
-            # inside the capture.
-            self._graph_step(graphs, size)
-            torch.cuda.synchronize(device)
-            graph = torch.cuda.CUDAGraph()
-            with torch.cuda.graph(graph, pool=pool):
-                graphs.outputs[size] = self._graph_step(graphs, size)
-            graphs.graphs[size] = graph
+        with _no_gc_while_capturing():
+            for size in sorted(sizes, reverse=True):  # largest first: the pool fits all
+                # Eager run first: Triton JIT and cuBLAS setup must not happen
+                # inside the capture.
+                self._graph_step(graphs, size)
+                torch.cuda.synchronize(device)
+                graph = torch.cuda.CUDAGraph()
+                with torch.cuda.graph(graph, pool=pool):
+                    graphs.outputs[size] = self._graph_step(graphs, size)
+                graphs.graphs[size] = graph
         torch.cuda.synchronize(device)
         self._graphs = graphs
         logger.info(
@@ -440,22 +462,23 @@ class ModelRunner:
         start = time.perf_counter()
         pool = torch.cuda.graph_pool_handle() if cuda else None
         num_layers = len(model.layers)
-        for size in sorted(sizes, reverse=True):  # largest first: the pool fits all
-            replays = []
-            for index in range(num_layers + 1):
-                piece = functools.partial(self._piece, pieces, index, size)
-                if not cuda:
-                    replays.append(piece)
-                    continue
-                # Eager run first: Triton JIT and cuBLAS setup must not
-                # happen inside the capture.
-                piece()
-                torch.cuda.synchronize(device)
-                graph = torch.cuda.CUDAGraph()
-                with torch.cuda.graph(graph, pool=pool):
+        with _no_gc_while_capturing():
+            for size in sorted(sizes, reverse=True):  # largest first: the pool fits all
+                replays = []
+                for index in range(num_layers + 1):
+                    piece = functools.partial(self._piece, pieces, index, size)
+                    if not cuda:
+                        replays.append(piece)
+                        continue
+                    # Eager run first: Triton JIT and cuBLAS setup must not
+                    # happen inside the capture.
                     piece()
-                replays.append(graph.replay)
-            pieces.graphs[size] = replays
+                    torch.cuda.synchronize(device)
+                    graph = torch.cuda.CUDAGraph()
+                    with torch.cuda.graph(graph, pool=pool):
+                        piece()
+                    replays.append(graph.replay)
+                pieces.graphs[size] = replays
         if cuda:
             torch.cuda.synchronize(device)
         self._pieces = pieces

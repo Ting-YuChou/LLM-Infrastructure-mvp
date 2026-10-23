@@ -16,6 +16,8 @@
 #          random prompt i is the same in every run with seed 0, so w1's
 #          prompts are mostly prefix-cache hits after the warmup)
 #   w1c1   w1 at c=1, 10 requests 1024/128 (nsys)
+#   w1c1c  w1c1 twice: the second pass's prompts hit the prefix cache, so its
+#          prefill steps are small (nsys: eager vs piecewise host time)
 #   w2a    one shared 2048-token prefix + 128 random tokens, output 128, c=16
 #   w2b    prefix_repetition: 48 prefixes of 4096 tokens (more than the KV
 #          cache holds) + 256-token suffixes, output 128, c=16
@@ -131,6 +133,10 @@ w1() {  # name port
 
 w1c32() { bench_serve "$1" "$2" w1_c32 128 256 $(random_args 1024 256 32); }
 w1c1() { bench_serve "$1" "$2" w1_c1 10 128 $(random_args 1024 128 1); }  # short: nsys
+w1c1c() {
+  bench_serve "$1" "$2" w1_c1_first 10 8 $(random_args 1024 8 1) &&
+  bench_serve "$1" "$2" w1_c1 10 128 $(random_args 1024 128 1)
+}
 
 w1u() {  # seeds no other run uses: the prompts miss the prefix cache
   bench_serve "$1" "$2" w1u_c1 10 128 $(random_args 1024 128 1) --seed 101 &&
