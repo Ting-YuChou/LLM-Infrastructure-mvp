@@ -16,6 +16,9 @@
 #   kbench    kbench.py: correctness, then time / GB/s / % of peak per shape
 #   tune      tune.py: sweep the kernels' launch settings (not in the default)
 #   ncu       ncu on each kbench kernel (kbench.py --ncu-mode), analyze_ncu.py
+#   trace     tiled_trace.py: gemm_w4a16_tiled's trace build, where each block's time goes
+#   golden    golden.py: saves the tiled kernel's outputs to P1_GOLDEN the first time,
+#             then checks later runs against them bit for bit
 #   e2e       nano_bench.py per nano config and vllm_offline.py at the same
 #             points (also on P1_VLLM_W4_MODEL when a config is w4a16); nsys on
 #             the last nano config
@@ -38,7 +41,10 @@
 # P1_VLLM_FP8_BACKEND, default TRITON_ATTN: FLASH_ATTN refuses fp8 on sm80)), P1_QUALITY_CONFIGS
 # (quality.py --configs), P1_SAMPLING ("temperature top_p", default "0.7 0.9": the nano server's
 # default sampling), P1_NCU_LAUNCHES (cap per kbench kernel, default
-# 300), P1_CUDA_VERSION (cuda129 step, default: the venv's torch.version.cuda),
+# 300), P1_NCU_SHAPES (the ncu step's shape regex, default P1_KBENCH_SHAPES), P1_NCU_SECTIONS
+# (extra ncu sections, space-separated; SourceCounters also exports the per-instruction
+# source page), P1_TRACE_ARGS (extra tiled_trace.py arguments), P1_GOLDEN (default
+# ${P0_ROOT}/w4a16_golden.pt), P1_CUDA_VERSION (cuda129 step, default: the venv's torch.version.cuda),
 # P0_VLLM_VERSION (default 0.19.1).
 set -uo pipefail
 
@@ -60,6 +66,8 @@ REPO_DIR="${P0_REPO_DIR:-$(cd "${CODE_DIR}/../.." && pwd)}"
 STEPS="${P1_STEPS:-installs cuda129 tests kbench ncu e2e quality summarize}"
 KERNELS="${P1_KERNELS:-}"
 KBENCH_SHAPES="${P1_KBENCH_SHAPES:-}"
+NCU_SHAPES="${P1_NCU_SHAPES:-${KBENCH_SHAPES}}"
+GOLDEN="${P1_GOLDEN:-${ROOT}/w4a16_golden.pt}"
 E2E_RUNS="${P1_E2E_RUNS:-static:1:128:256,paged:1:128:256,paged:16:1024:256,paged:64:1024:256}"
 # torch_eager: the M1 refactor alone; triton_eager: Triton attention and fused
 # kernels (M2, M4, M5); triton_graph: + decode CUDA graphs (M3); gemv_graph:
@@ -72,7 +80,7 @@ CUDA_ENV="${ROOT}/cuda129.env"
 
 export HF_HOME="${ROOT}/hf_cache" UV_CACHE_DIR="${ROOT}/uv_cache" UV_PYTHON_INSTALL_DIR="${ROOT}/uv_python"
 export PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false MPLBACKEND=Agg
-mkdir -p "${OUT}"/{logs,tests,kbench,ncu,nsys,offline,quality}
+mkdir -p "${OUT}"/{logs,tests,kbench,ncu,nsys,offline,quality,trace}
 exec 3>&1  # console; step output goes to ${OUT}/logs/<step>.log
 
 log() { echo "[p1 $(date -u +%H:%M:%S)] $*" >&3; }
@@ -110,14 +118,34 @@ tune() {
 }
 
 ncu_kbench() {  # one ncu report per kbench kernel, limited to its --kernel-name regex
-  local rc=0 listing name regex
+  local rc=0 listing name regex section sections=()
+  for section in ${P1_NCU_SECTIONS:-}; do sections+=(--section "${section}"); done
   listing="$("${PY}" "${CODE_DIR}/kbench.py" --list ${KERNELS:+--kernels "${KERNELS}"})" || return 1
   while IFS=$'\t' read -r name regex <&4; do
     [[ -n "${name}" ]] || continue
-    ncu_run "kbench_${name}" "${P1_NCU_LAUNCHES:-300}" --kernel-name "regex:${regex}" --nvtx -- \
-      "${PY}" "${CODE_DIR}/kbench.py" --ncu-mode --kernels "${name}" ${KBENCH_SHAPES:+--shapes "${KBENCH_SHAPES}"} || rc=1
+    ncu_run "kbench_${name}" "${P1_NCU_LAUNCHES:-300}" --kernel-name "regex:${regex}" --nvtx \
+      ${sections[@]+"${sections[@]}"} -- \
+      "${PY}" "${CODE_DIR}/kbench.py" --ncu-mode --kernels "${name}" ${NCU_SHAPES:+--shapes "${NCU_SHAPES}"} || rc=1
+    if [[ " ${P1_NCU_SECTIONS:-} " == *" SourceCounters "* && -f "${OUT}/ncu/kbench_${name}.ncu-rep" ]]; then
+      # Per-instruction counters (sectors per request of each load) are not in the raw page.
+      "$(find_ncu)" --import "${OUT}/ncu/kbench_${name}.ncu-rep" --page source --csv --print-source sass \
+        > "${OUT}/ncu/kbench_${name}_source.csv" || echo "source page export failed for ${name}"
+    fi
   done 4<<< "${listing}"
   return "${rc}"
+}
+
+trace() {
+  # shellcheck disable=SC2086
+  "${PY}" "${CODE_DIR}/tiled_trace.py" --out "${OUT}/trace" ${P1_TRACE_ARGS:-} &&
+  cat "${OUT}/trace/trace.md" >&3
+}
+
+golden() {
+  if [[ -f "${GOLDEN}" ]]; then
+    "${PY}" "${CODE_DIR}/golden.py" --check "${GOLDEN}" | tail -20 >&3; return "${PIPESTATUS[0]}"
+  fi
+  "${PY}" "${CODE_DIR}/golden.py" --save "${GOLDEN}" >&3
 }
 
 # --- end to end --------------------------------------------------------------
@@ -180,6 +208,10 @@ e2e() {
   nsys_run "nano_${label}_b16" "${PY}" "${P0_DIR}/nano_bench.py" --model "${MODEL}" \
     --runs paged:16:1024:64 $(nano_config_args "${last}") \
     --out "${OUT}/offline/nano_${label}_b16_nsys.json" || rc=1
+  # shellcheck disable=SC2046
+  nsys_run "nano_${label}_b64" "${PY}" "${P0_DIR}/nano_bench.py" --model "${MODEL}" \
+    --runs paged:64:1024:64 $(nano_config_args "${last}") \
+    --out "${OUT}/offline/nano_${label}_b64_nsys.json" || rc=1
   return "${rc}"
 }
 
@@ -237,6 +269,8 @@ want tests && run_step tests gpu_tests
 want kbench && run_step kbench kbench
 want tune && run_step tune tune
 want ncu && run_step ncu ncu_kbench
+want trace && run_step trace trace
+want golden && run_step golden golden
 want e2e && run_step e2e e2e
 want quality && run_step quality quality
 run_step environment environment

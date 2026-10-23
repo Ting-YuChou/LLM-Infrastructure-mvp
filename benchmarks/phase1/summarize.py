@@ -4,7 +4,7 @@
   python summarize.py results/<run_id>
 
 Collects what run_phase1.sh wrote: status.tsv, the pytest summary, kbench.md,
-the ncu tables of the kbench kernels, nano_vllm against vLLM at the same decode
+the gemm_w4a16_tiled trace (trace.md), the ncu tables of the kbench kernels, nano_vllm against vLLM at the same decode
 points (offline/) and the nsys step breakdowns. Writes and prints summary.md.
 """
 
@@ -55,6 +55,10 @@ def main() -> None:
     if kbench.exists():  # its own title becomes this section's
         body = kbench.read_text().splitlines()[1:]
         lines += ["## Kernels (kbench)", *[f"#{line}" if line.startswith("## ") else line for line in body], ""]
+
+    trace = run / "trace" / "trace.md"
+    if trace.exists():  # tiled_trace.py; its title becomes this section's
+        lines += ["## gemm_w4a16_tiled trace", *trace.read_text().splitlines()[1:], ""]
 
     ncu = [load_json(p) for p in sorted((run / "ncu").glob("kbench_*.json"))]
     if any(ncu):
