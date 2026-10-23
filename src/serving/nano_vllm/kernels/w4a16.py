@@ -109,6 +109,13 @@ _TILED_TILES_BY_MT = {
 }
 W4A16_TILED_N_MULTIPLE = 128
 W4A16_TILED_MAX_LAUNCH_ROWS = 64
+# The trace build's row per block (csrc/w4a16.cu, kTrace*): stamps by index.
+TILED_TRACE_EVENTS = 24
+TILED_TRACE_FINISHES = 4  # slice ends recorded per block, 4 stamps each
+TILED_TRACE_GT_ENTRY, TILED_TRACE_CLK_ENTRY, TILED_TRACE_CLK_FIRST, TILED_TRACE_TILES = 0, 1, 2, 3
+TILED_TRACE_FINISH0 = 4  # start, warps summed, counter bumped or y written, done
+TILED_TRACE_FLAGS = 20  # bit f: last to arrive at finish f; bit 8 + f: sole owner of that slice
+TILED_TRACE_CLK_EXIT, TILED_TRACE_GT_EXIT, TILED_TRACE_TICKET = 21, 22, 23
 _WORKSPACE: dict[torch.device, tuple[torch.Tensor, torch.Tensor]] = {}
 _RETIRED: list[tuple[torch.Tensor, torch.Tensor]] = []
 
@@ -326,6 +333,33 @@ def _tiled_linear(
             out = out.view(*x.shape[:-1], n)
             return out if bias is None else out + bias
     return F.linear(x, dequantize_w4a16(weight, x.dtype), bias)
+
+
+def w4a16_tiled_trace(
+    x: torch.Tensor, weight: W4A16Weight, config: Optional[dict] = None
+) -> tuple[torch.Tensor, torch.Tensor]:  # pragma: no cover - depends on CUDA
+    """One gemm_w4a16_tiled launch (bf16, up to 64 rows) through the trace build.
+
+    Returns (y, trace): trace is int64 [blocks, TILED_TRACE_EVENTS], one row
+    per block in the layout of TILED_TRACE_*. y is bit-identical to w4a16_linear's.
+    """
+    config = {**W4A16_CONFIG, **(config or {})}
+    rows, k = x.shape
+    n = weight.shape[0]
+    if weight.layout != "tiled" or x.dtype != torch.bfloat16 or not 0 < rows <= W4A16_TILED_MAX_LAUNCH_ROWS:
+        raise ValueError("the trace build takes a tiled weight and 1 to 64 bf16 rows")
+    extension = load_cuda_extension("w4a16")
+    if extension is None:
+        raise RuntimeError("building kernels/csrc/w4a16.cu failed (see the log)")
+    tile_k, tile_n, grid = tiled_launch_config(rows, n, k, config, _sm_count(x.device))
+    blocks = len(tiled_schedule(n, k, tile_k, tile_n, grid)["ranges"])
+    _, counters = w4a16_workspace(x.device, n)
+    out = torch.empty(rows, n, dtype=x.dtype, device=x.device)
+    trace = torch.empty(blocks + 1, TILED_TRACE_EVENTS, dtype=torch.int64, device=x.device)
+    extension.gemm_w4a16_tiled(
+        x.contiguous(), weight.qweight, weight.scales, counters, out, tile_k, tile_n, grid, trace
+    )
+    return out, trace[:blocks]
 
 
 def tiled_launch_config(rows: int, n: int, k: int, config: dict, sm_count: int) -> tuple[int, int, int]:

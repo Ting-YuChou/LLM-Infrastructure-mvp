@@ -14,12 +14,26 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 from serving.nano_vllm.kernels import w4a16 as w4a16_mod  # noqa: E402
 from serving.nano_vllm.kernels.cuda_ext import load_cuda_extension  # noqa: E402
 from serving.nano_vllm.kernels.w4a16 import (  # noqa: E402
+    TILED_TRACE_CLK_ENTRY,
+    TILED_TRACE_CLK_EXIT,
+    TILED_TRACE_CLK_FIRST,
+    TILED_TRACE_FINISH0,
+    TILED_TRACE_FINISHES,
+    TILED_TRACE_FLAGS,
+    TILED_TRACE_GT_ENTRY,
+    TILED_TRACE_GT_EXIT,
+    TILED_TRACE_TICKET,
+    TILED_TRACE_TILES,
+    W4A16_CONFIG,
     W4A16_TILED_TILES,
     dequantize_w4a16,
     quantize_w4a16,
+    tiled_launch_config,
+    tiled_schedule,
     unpack_w4a16,
     w4a16_linear,
     w4a16_row_scales,
+    w4a16_tiled_trace,
 )
 
 # Llama 3.1 8B projections (out_features, in_features) plus a row count that
@@ -236,3 +250,46 @@ def test_tiled_kernel_is_captured_by_a_cuda_graph(rows):
     x.copy_(torch.randn_like(x))
     graph.replay()
     torch.testing.assert_close(out.float(), _reference(x, weight), rtol=1.6e-2, atol=1.6e-2)
+
+
+@pytest.mark.parametrize(
+    "shape,rows,tile,grid",
+    [((4096, 14336), 1, "256x128", 0), ((4096, 14336), 8, "128x128", 0), ((4096, 14336), 40, "64x128", 0),
+     ((28672, 4096), 64, "64x256", 0), ((1024, 2048), 5, "256x128", 3), ((1024, 2048), 5, "128x128", 8)],
+)
+def test_tiled_trace_build(shape, rows, tile, grid):
+    """The trace build gives the same y bit for bit, and its stamps follow the
+    schedule: tiles per block, ordered stamps, one last arrival per shared
+    slice, a sole-owner flag for unshared ones, exit tickets 0..blocks-1."""
+    n, k = shape
+    weight = _weight(n, k, torch.bfloat16, layout="tiled")
+    x = torch.randn(rows, k, device="cuda").to(torch.bfloat16)
+    config = {"tiled_tile": tile, "tiled_grid": grid}
+    out, trace = w4a16_tiled_trace(x, weight, config)
+    assert torch.equal(out, w4a16_linear(x, weight, config=config))
+    sms = torch.cuda.get_device_properties(0).multi_processor_count
+    tile_k, tile_n, grid = tiled_launch_config(rows, n, k, {**W4A16_CONFIG, **config}, sms)
+    schedule = tiled_schedule(n, k, tile_k, tile_n, grid)
+    k_tiles = k // tile_k
+    t = trace.cpu().tolist()
+    assert len(t) == len(schedule["ranges"])
+    assert sorted(row[TILED_TRACE_TICKET] for row in t) == list(range(len(t)))
+    finish_of = {}  # (block, slice) -> stamps index f
+    for b, ((begin, end), row) in enumerate(zip(schedule["ranges"], t)):
+        assert row[TILED_TRACE_TILES] == end - begin
+        assert row[TILED_TRACE_GT_ENTRY] <= row[TILED_TRACE_GT_EXIT]
+        stamps = [row[TILED_TRACE_CLK_ENTRY], row[TILED_TRACE_CLK_FIRST]]
+        first_slice, last_slice = begin // k_tiles, (end - 1) // k_tiles
+        for f in range(min(TILED_TRACE_FINISHES, last_slice - first_slice + 1)):
+            stamps += row[TILED_TRACE_FINISH0 + 4 * f : TILED_TRACE_FINISH0 + 4 * f + 4]
+            finish_of[(b, first_slice + f)] = f
+        stamps.append(row[TILED_TRACE_CLK_EXIT])
+        assert all(stamps) and stamps == sorted(stamps), (b, stamps)
+    for s, (lo, hi) in enumerate(schedule["owners"]):
+        if any((b, s) not in finish_of for b in range(lo, hi + 1)):
+            continue  # past the recorded slice ends of some block
+        flags = [(t[b][TILED_TRACE_FLAGS] >> finish_of[(b, s)]) & 0x101 for b in range(lo, hi + 1)]
+        if lo == hi:
+            assert flags == [0x100], (s, flags)
+        else:
+            assert sorted(flags) == [0] * (hi - lo) + [1], (s, flags)

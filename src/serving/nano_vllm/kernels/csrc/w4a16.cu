@@ -600,6 +600,26 @@ constexpr int kTiledThreads = 256;
 constexpr int kTiledWarps = kTiledThreads / 32;
 constexpr int kTiledStages = 4;
 
+// The trace build (kTrace) records, per block, where its time goes: thread 0
+// keeps clock64() stamps in shared memory and writes them out at the end, so
+// no global store waits on the slot release. A row of kTraceEvents int64:
+// globaltimer and clock at entry, the clock once the first tile has landed,
+// the tile count, four stamps for each of the first kTraceFinishes slice
+// ends (start, warps summed, counter bumped or y written, done), a flag word
+// (bit f: last to arrive at finish f, bit 8 + f: sole owner, y written
+// directly), the clock and globaltimer at exit, and the exit order. Row
+// `blocks` holds the exit ticket counter. w4a16.py's TILED_TRACE_* mirror this.
+constexpr int kTraceEvents = 24;
+constexpr int kTraceFinishes = 4;
+constexpr int kTraceGtEntry = 0, kTraceClkEntry = 1, kTraceClkFirst = 2, kTraceTiles = 3, kTraceFinish0 = 4;
+constexpr int kTraceFlags = 20, kTraceClkExit = 21, kTraceGtExit = 22, kTraceTicket = 23;
+
+__device__ __forceinline__ long long globaltimer() {
+  long long t;
+  asm volatile("mov.u64 %0, %%globaltimer;\n" : "=l"(t));
+  return t;
+}
+
 template <int MT, int TILE_K, int TILE_N>
 struct TiledShape {
   static constexpr int kCols = TILE_N / 64;           // n64 columns per slice
@@ -641,7 +661,7 @@ __device__ __forceinline__ void add8(float (&sum)[8], float4 lo, float4 hi) {
   sum[4] += hi.x; sum[5] += hi.y; sum[6] += hi.z; sum[7] += hi.w;
 }
 
-template <typename T, int MT, int TILE_K, int TILE_N>
+template <typename T, int MT, int TILE_K, int TILE_N, bool kTrace = false>
 __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
     const T* __restrict__ x,
     const uint4* __restrict__ qweight,
@@ -652,11 +672,13 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
     int m,
     int n,
     int k,
-    int iters) {
+    int iters,
+    long long* __restrict__ trace) {
   using Sh = TiledShape<MT, TILE_K, TILE_N>;
   constexpr int R = Sh::kRowsPerWarp;
   extern __shared__ __align__(16) unsigned char smem[];
   __shared__ int last_block;
+  __shared__ long long trace_sh[kTrace ? kTraceEvents : 1];
   const int tid = threadIdx.x;
   const int warp = tid / 32;
   const int lane = tid % 32;
@@ -670,6 +692,19 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
   const int begin = blockIdx.x * iters;
   const int end = min(begin + iters, total);
   if (begin >= end) return;
+  auto mark = [&](int event) {
+    if constexpr (kTrace) {
+      if (tid == 0) trace_sh[event] = clock64();
+    }
+  };
+  if constexpr (kTrace) {
+    if (tid == 0) {
+      trace_sh[kTraceGtEntry] = globaltimer();
+      for (int e = kTraceClkEntry; e < kTraceEvents; ++e) trace_sh[e] = 0;
+      trace_sh[kTraceClkEntry] = clock64();
+      trace_sh[kTraceTiles] = end - begin;
+    }
+  }
   float* tile = reinterpret_cast<float*>(smem + kTiledStages * Sh::kStageBytes);
   auto stage = [&](int s) { return smem + s * Sh::kStageBytes; };
 
@@ -767,6 +802,11 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
 
   // Every thread runs this (it has barriers).
   auto finish_slice = [&](int slice) {
+    const int f = slice - begin / k_tiles;  // this block's f-th slice end (trace only)
+    auto mark_finish = [&](int step) {
+      if (f < kTraceFinishes) mark(kTraceFinish0 + 4 * f + step);
+    };
+    mark_finish(0);
     // The column's warps add into the fp32 tile one after another; acc[mt][j]
     // holds rows g, g + 8 of m16 tile mt at columns 2c, 2c + 1 of n8 tile j.
     const int kw = warp / Sh::kCols;
@@ -791,6 +831,7 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
       }
       __syncthreads();
     }
+    mark_finish(1);
     zero_acc();
     const int first = slice * k_tiles;
     const int lo = first / iters;  // the blocks whose stripes meet this slice
@@ -806,7 +847,12 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
         add8(sum, src[0], src[1]);
         *reinterpret_cast<uint4*>(ys + static_cast<int64_t>(row) * n + 8 * v) = pack8<T>(sum);
       }
+      mark_finish(2);
       __syncthreads();  // the tile is rewritten at the next slice
+      if constexpr (kTrace) {
+        if (tid == 0 && f < kTraceFinishes) trace_sh[kTraceFlags] |= 1ll << (8 + f);
+      }
+      mark_finish(3);
       return;
     }
     const int64_t slot_floats = Sh::kRows * TILE_N;
@@ -829,6 +875,10 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
       if (last_block) __threadfence();
     }
     __syncthreads();
+    mark_finish(2);
+    if constexpr (kTrace) {
+      if (tid == 0 && last_block && f < kTraceFinishes) trace_sh[kTraceFlags] |= 1ll << f;
+    }
     if (last_block) {
       // Slots read before any is added, so their L2 latencies overlap; fewer
       // as MT grows, where the next tile's fragments already fill the
@@ -865,6 +915,7 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
       if (tid == 0) counters[slice] = 0;  // ready for the next call
     }
     __syncthreads();
+    mark_finish(3);
   };
 
   // Main loop. A warp holds the fragments of its next k16 row while it
@@ -876,6 +927,7 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
   for (int s = 0; s < kTiledStages - 1; ++s) load_next(s);
   cp_async_wait<kTiledStages - 2>();
   __syncthreads();
+  mark(kTraceClkFirst);
   uint32_t a_cur[MT][4], a_nxt[MT][4];
   uint4 b_cur, b_nxt;
   fetch(0, row0, a_cur, b_cur);
@@ -914,6 +966,15 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
     }
   }
   cp_async_wait<0>();
+  if constexpr (kTrace) {
+    if (tid == 0) {
+      trace_sh[kTraceClkExit] = clock64();
+      trace_sh[kTraceGtExit] = globaltimer();
+      trace_sh[kTraceTicket] =
+          static_cast<long long>(atomicAdd(reinterpret_cast<unsigned long long*>(trace + gridDim.x * kTraceEvents), 1ull));
+      for (int e = 0; e < kTraceEvents; ++e) trace[blockIdx.x * kTraceEvents + e] = trace_sh[e];
+    }
+  }
 }
 
 // The tiled weight back to [N, K] in the scales' dtype, for batches too big
@@ -1136,16 +1197,23 @@ void check_mma_args(const torch::Tensor& x, const torch::Tensor& qweight, const 
   TORCH_CHECK(x.size(0) >= 1 && x.size(0) <= 64, name, ": 1 to 64 rows supported");
 }
 
-template <typename T, int MT, int TILE_K, int TILE_N>
-void launch_tiled(const torch::Tensor& x, const torch::Tensor& qweight, const torch::Tensor& scales,
-                  const torch::Tensor& counters, torch::Tensor& out, int grid, cudaStream_t stream) {
+template <typename T, int MT, int TILE_K, int TILE_N, bool kTrace>
+auto tiled_kernel() {
   using Sh = TiledShape<MT, TILE_K, TILE_N>;
-  const auto kernel = gemm_w4a16_tiled_kernel<T, MT, TILE_K, TILE_N>;
+  const auto kernel = gemm_w4a16_tiled_kernel<T, MT, TILE_K, TILE_N, kTrace>;
   static bool configured = false;  // once per instantiation; the first call runs before any capture
   if (!configured) {
     C10_CUDA_CHECK(cudaFuncSetAttribute(kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, Sh::kSmemBytes));
     configured = true;
   }
+  return kernel;
+}
+
+template <typename T, int MT, int TILE_K, int TILE_N>
+void launch_tiled(const torch::Tensor& x, const torch::Tensor& qweight, const torch::Tensor& scales,
+                  const torch::Tensor& counters, torch::Tensor& out, int grid, const c10::optional<torch::Tensor>& trace,
+                  cudaStream_t stream) {
+  using Sh = TiledShape<MT, TILE_K, TILE_N>;
   const int m = static_cast<int>(x.size(0));
   const int k = static_cast<int>(x.size(1));
   const int n = static_cast<int>(out.size(1));
@@ -1156,10 +1224,25 @@ void launch_tiled(const torch::Tensor& x, const torch::Tensor& qweight, const to
   // Partial sums of slices shared by several blocks; slot (block + slice).
   torch::Tensor slots = torch::empty({static_cast<int64_t>(blocks + slices) * Sh::kRows * TILE_N},
                                      x.options().dtype(torch::kFloat32));
-  kernel<<<blocks, kTiledThreads, Sh::kSmemBytes, stream>>>(
-      static_cast<const T*>(x.data_ptr()), static_cast<const uint4*>(qweight.data_ptr()),
-      static_cast<const uint4*>(scales.data_ptr()), static_cast<T*>(out.data_ptr()), slots.data_ptr<float>(),
-      counters.data_ptr<int>(), m, n, k, iters);
+  const auto args = [&](auto kernel, long long* trace_ptr) {
+    kernel<<<blocks, kTiledThreads, Sh::kSmemBytes, stream>>>(
+        static_cast<const T*>(x.data_ptr()), static_cast<const uint4*>(qweight.data_ptr()),
+        static_cast<const uint4*>(scales.data_ptr()), static_cast<T*>(out.data_ptr()), slots.data_ptr<float>(),
+        counters.data_ptr<int>(), m, n, k, iters, trace_ptr);
+  };
+  if (!trace.has_value()) {
+    args(tiled_kernel<T, MT, TILE_K, TILE_N, false>(), nullptr);
+  } else if constexpr (std::is_same<T, __nv_bfloat16>::value) {  // the trace build is bf16 only
+    const torch::Tensor& t = *trace;
+    TORCH_CHECK(t.is_cuda() && t.scalar_type() == torch::kInt64 && t.is_contiguous() &&
+                    t.numel() >= static_cast<int64_t>(blocks + 1) * kTraceEvents,
+                "gemm_w4a16_tiled: trace must be a contiguous int64 CUDA tensor of (blocks + 1) x ", kTraceEvents,
+                " (blocks = ", blocks, ")");
+    C10_CUDA_CHECK(cudaMemsetAsync(t.data_ptr(), 0, t.numel() * sizeof(long long), stream));
+    args(tiled_kernel<T, MT, TILE_K, TILE_N, true>(), static_cast<long long*>(t.data_ptr()));
+  } else {
+    TORCH_CHECK(false, "gemm_w4a16_tiled: the trace build is bf16 only");
+  }
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
@@ -1167,18 +1250,18 @@ void launch_tiled(const torch::Tensor& x, const torch::Tensor& qweight, const to
 template <typename T>
 void launch_tiled_config(const torch::Tensor& x, const torch::Tensor& qweight, const torch::Tensor& scales,
                          const torch::Tensor& counters, torch::Tensor& out, int64_t tile_k, int64_t tile_n,
-                         int grid, cudaStream_t stream) {
+                         int grid, const c10::optional<torch::Tensor>& trace, cudaStream_t stream) {
   const int mt = static_cast<int>((x.size(0) + 15) / 16);
-  if (tile_k == 128 && tile_n == 128 && mt == 1) return launch_tiled<T, 1, 128, 128>(x, qweight, scales, counters, out, grid, stream);
-  if (tile_k == 128 && tile_n == 128 && mt == 2) return launch_tiled<T, 2, 128, 128>(x, qweight, scales, counters, out, grid, stream);
-  if (tile_k == 256 && tile_n == 128 && mt == 1) return launch_tiled<T, 1, 256, 128>(x, qweight, scales, counters, out, grid, stream);
-  if (tile_k == 256 && tile_n == 128 && mt == 2) return launch_tiled<T, 2, 256, 128>(x, qweight, scales, counters, out, grid, stream);
-  if (tile_k == 64 && tile_n == 256 && mt == 1) return launch_tiled<T, 1, 64, 256>(x, qweight, scales, counters, out, grid, stream);
-  if (tile_k == 64 && tile_n == 256 && mt == 2) return launch_tiled<T, 2, 64, 256>(x, qweight, scales, counters, out, grid, stream);
-  if (tile_k == 64 && tile_n == 256 && mt == 3) return launch_tiled<T, 3, 64, 256>(x, qweight, scales, counters, out, grid, stream);
-  if (tile_k == 64 && tile_n == 256 && mt == 4) return launch_tiled<T, 4, 64, 256>(x, qweight, scales, counters, out, grid, stream);
-  if (tile_k == 64 && tile_n == 128 && mt == 3) return launch_tiled<T, 3, 64, 128>(x, qweight, scales, counters, out, grid, stream);
-  if (tile_k == 64 && tile_n == 128 && mt == 4) return launch_tiled<T, 4, 64, 128>(x, qweight, scales, counters, out, grid, stream);
+  if (tile_k == 128 && tile_n == 128 && mt == 1) return launch_tiled<T, 1, 128, 128>(x, qweight, scales, counters, out, grid, trace, stream);
+  if (tile_k == 128 && tile_n == 128 && mt == 2) return launch_tiled<T, 2, 128, 128>(x, qweight, scales, counters, out, grid, trace, stream);
+  if (tile_k == 256 && tile_n == 128 && mt == 1) return launch_tiled<T, 1, 256, 128>(x, qweight, scales, counters, out, grid, trace, stream);
+  if (tile_k == 256 && tile_n == 128 && mt == 2) return launch_tiled<T, 2, 256, 128>(x, qweight, scales, counters, out, grid, trace, stream);
+  if (tile_k == 64 && tile_n == 256 && mt == 1) return launch_tiled<T, 1, 64, 256>(x, qweight, scales, counters, out, grid, trace, stream);
+  if (tile_k == 64 && tile_n == 256 && mt == 2) return launch_tiled<T, 2, 64, 256>(x, qweight, scales, counters, out, grid, trace, stream);
+  if (tile_k == 64 && tile_n == 256 && mt == 3) return launch_tiled<T, 3, 64, 256>(x, qweight, scales, counters, out, grid, trace, stream);
+  if (tile_k == 64 && tile_n == 256 && mt == 4) return launch_tiled<T, 4, 64, 256>(x, qweight, scales, counters, out, grid, trace, stream);
+  if (tile_k == 64 && tile_n == 128 && mt == 3) return launch_tiled<T, 3, 64, 128>(x, qweight, scales, counters, out, grid, trace, stream);
+  if (tile_k == 64 && tile_n == 128 && mt == 4) return launch_tiled<T, 4, 64, 128>(x, qweight, scales, counters, out, grid, trace, stream);
   TORCH_CHECK(false, "gemm_w4a16_tiled: no kernel built for ", tile_k, "x", tile_n, " tiles and ", x.size(0), " rows");
 }
 
@@ -1199,7 +1282,8 @@ bool aligned16(const torch::Tensor& t) { return reinterpret_cast<uintptr_t>(t.da
 }  // namespace
 
 void gemm_w4a16_tiled(torch::Tensor x, torch::Tensor qweight, torch::Tensor scales, torch::Tensor counters,
-                      torch::Tensor out, int64_t tile_k, int64_t tile_n, int64_t grid) {
+                      torch::Tensor out, int64_t tile_k, int64_t tile_n, int64_t grid,
+                      c10::optional<torch::Tensor> trace) {
   check_tiled_weight(qweight, scales);
   const int64_t k = qweight.size(0) * 16;
   const int64_t n = qweight.size(1) * 64;
@@ -1218,9 +1302,11 @@ void gemm_w4a16_tiled(torch::Tensor x, torch::Tensor qweight, torch::Tensor scal
   TORCH_CHECK(grid >= 1, "gemm_w4a16_tiled: grid must be positive");
   const auto stream = c10::cuda::getCurrentCUDAStream();
   if (x.scalar_type() == torch::kBFloat16) {
-    launch_tiled_config<__nv_bfloat16>(x, qweight, scales, counters, out, tile_k, tile_n, static_cast<int>(grid), stream);
+    launch_tiled_config<__nv_bfloat16>(x, qweight, scales, counters, out, tile_k, tile_n, static_cast<int>(grid),
+                                       trace, stream);
   } else {
-    launch_tiled_config<__half>(x, qweight, scales, counters, out, tile_k, tile_n, static_cast<int>(grid), stream);
+    launch_tiled_config<__half>(x, qweight, scales, counters, out, tile_k, tile_n, static_cast<int>(grid), trace,
+                                stream);
   }
 }
 
@@ -1331,7 +1417,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, module) {
              pybind11::arg("qweight"), pybind11::arg("scales"), pybind11::arg("group_size") = 128);
   module.def("gemm_w4a16_tiled", &gemm_w4a16_tiled, "Marlin-style W4A16 GEMM for 1-64 rows (tiled layout)",
              pybind11::arg("x"), pybind11::arg("qweight"), pybind11::arg("scales"), pybind11::arg("counters"),
-             pybind11::arg("out"), pybind11::arg("tile_k"), pybind11::arg("tile_n"), pybind11::arg("grid"));
+             pybind11::arg("out"), pybind11::arg("tile_k"), pybind11::arg("tile_n"), pybind11::arg("grid"),
+             pybind11::arg("trace") = pybind11::none());
   module.def("dequantize_w4a16_tiled", &dequantize_w4a16_tiled, "tiled int4 weight -> [N, K] in the scales dtype",
              pybind11::arg("qweight"), pybind11::arg("scales"));
 }
