@@ -773,7 +773,7 @@ register(
 # vLLM's Marlin gets those codes repacked into its layout. GB/s counts the
 # 4-bit weight, its scales, x and y, so the cublas_bf16 row (F.linear on the
 # dequantized bf16 weight) reads as the bandwidth W4A16 would need to match it.
-def _w4a16_cuda(kernel: str, max_rows: int, **config):
+def _w4a16_cuda(kernel: str, max_rows: int):
     def factory(i: dict):
         if not i["x"].is_cuda:
             raise Unavailable("needs a GPU")
@@ -782,7 +782,7 @@ def _w4a16_cuda(kernel: str, max_rows: int, **config):
         if load_cuda_extension("w4a16") is None:
             raise RuntimeError("building kernels/csrc/w4a16.cu failed (see the log)")
         weight = quantize_w4a16(i["w"])
-        return lambda: w4a16_linear(i["x"], weight, config={"kernel": kernel, **config})
+        return lambda: w4a16_linear(i["x"], weight, config={"kernel": kernel})
 
     return factory
 
@@ -842,8 +842,6 @@ register(
         impls={
             "vllm_marlin": _vllm_marlin,
             "cuda_gemv": _w4a16_cuda("gemv", W4A16_GEMV_MAX_ROWS),
-            "cuda_gemv_pf2": _w4a16_cuda("gemv", W4A16_GEMV_MAX_ROWS, gemv_prefetch=2),
-            "cuda_gemv_pf4": _w4a16_cuda("gemv", W4A16_GEMV_MAX_ROWS, gemv_prefetch=4),
             "cuda_mma": _w4a16_cuda("mma", W4A16_MMA_MAX_ROWS),
             "cuda_wide": _w4a16_cuda("wide", W4A16_MMA_MAX_ROWS),
             "cuda_auto": _w4a16_cuda("auto", W4A16_MMA_MAX_ROWS),

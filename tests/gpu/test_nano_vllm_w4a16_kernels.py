@@ -87,25 +87,12 @@ def test_kernels_match_dequantized_matmul(shape, kernel, rows):
     _check(x, weight, kernel=kernel)
 
 
-@pytest.mark.parametrize("prefetch", [0, 2])
 @pytest.mark.parametrize("rows_per_warp", [1, 2, 4])
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
-def test_gemv_launch_variants_and_dtypes(rows_per_warp, dtype, prefetch):
+def test_gemv_launch_variants_and_dtypes(rows_per_warp, dtype):
     weight = _weight(300, 1024, dtype, group_size=64)
     x = torch.randn(5, 1024, device="cuda").to(dtype)
-    _check(x, weight, kernel="gemv", rows_per_warp=rows_per_warp, gemv_prefetch=prefetch)
-
-
-@pytest.mark.parametrize("prefetch", [0, 1, 2, 4])
-@pytest.mark.parametrize("rows_per_warp", [1, 2, 4])
-@pytest.mark.parametrize("shape", [(300, 1152), (4096, 14336)], ids=["k1152", "down"])
-def test_gemv_prefetch_depths(shape, rows_per_warp, prefetch):
-    # K = 1152 gives lanes 0-3 two K steps and the other lanes one; down's 14
-    # steps end with the ring partly refilled for every depth but 1 and 2.
-    weight = _weight(*shape, torch.bfloat16)
-    for rows in (1, 3):
-        x = torch.randn(rows, shape[1], device="cuda").to(torch.bfloat16)
-        _check(x, weight, kernel="gemv", rows_per_warp=rows_per_warp, gemv_prefetch=prefetch)
+    _check(x, weight, kernel="gemv", rows_per_warp=rows_per_warp)
 
 
 @pytest.mark.parametrize("splits", [0, 1, 2, 3, 8])

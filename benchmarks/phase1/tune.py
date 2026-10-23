@@ -173,9 +173,7 @@ def tune_w4a16():
         }.items()
         for m in (1, 2, 4, 8, 16, 32, 64)
     ]
-    configs = [
-        {"kernel": "gemv", "rows_per_warp": r, "gemv_prefetch": p} for r in (1, 2, 4) for p in (0, 1, 2, 4)
-    ] + [
+    configs = [{"kernel": "gemv", "rows_per_warp": r} for r in (1, 2, 4)] + [
         {"kernel": kernel, "splits": s} for kernel in ("mma", "wide") for s in (0, 1, 2, 4, 8)
     ]
 

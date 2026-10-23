@@ -52,15 +52,13 @@ W4A16_MMA_MAX_ROWS = 64
 # Launch settings, from benchmarks/phase1/tune.py on an A100 (LOG.md, run 5).
 # kernel: "gemv", "mma", "wide", or "auto" (gemv up to auto_gemv_rows, mma
 # up to auto_mma_rows, then wide); splits: K splits of the tensor-core
-# kernels, 0 lets the op choose from the grid size; gemv_prefetch: K steps
-# of weight loads the GEMV keeps in flight while it computes (0, 1, 2, 4).
+# kernels, 0 lets the op choose from the grid size.
 W4A16_CONFIG = {
     "kernel": "auto",
     "auto_gemv_rows": 2,
     "auto_mma_rows": 16,
     "rows_per_warp": 2,
     "splits": 0,
-    "gemv_prefetch": 0,
 }
 _WORKSPACE: dict[torch.device, tuple[torch.Tensor, torch.Tensor]] = {}
 _RETIRED: list[tuple[torch.Tensor, torch.Tensor]] = []
@@ -180,8 +178,7 @@ def w4a16_linear(
                 )
             else:
                 out = extension.gemv_w4a16(
-                    flat, weight.qweight, weight.scales, weight.group_size, config["rows_per_warp"],
-                    config["gemv_prefetch"],
+                    flat, weight.qweight, weight.scales, weight.group_size, config["rows_per_warp"]
                 )
             out = out.view(*x.shape[:-1], weight.shape[0])
             return out if bias is None else out + bias
