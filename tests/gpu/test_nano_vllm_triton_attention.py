@@ -140,6 +140,13 @@ def test_prefill_kernel_matches_reference(page_size, heads, dtype):
     torch.testing.assert_close(out.float(), expected.float(), **tol)
 
 
+def _assert_close_to_scale(out, expected, rel):
+    """Within ``rel`` of the output's largest magnitude: the fp8 tests' K/V span
+    two decades, so the outputs do too and an absolute tolerance does not fit."""
+    error = float((out.float() - expected.float()).abs().max())
+    assert error <= rel * float(expected.float().abs().max()), (error, float(expected.abs().max()))
+
+
 def _fp8(keys, values):
     """Codes and per-vector scales of a cache (values spanning two decades)."""
     spread = torch.logspace(-1, 1, keys.shape[0], device="cuda").view(-1, 1, 1, 1)
@@ -161,8 +168,7 @@ def test_fp8_decode_kernel_matches_reference(batch, num_splits, heads, dtype):
     )
     expected = paged_decode_attention_reference(query, keys, values, tables, lens, scale, **scales)
     # bf16 queries: q and the probabilities go into tl.dot as bf16.
-    tol = dict(rtol=1e-4, atol=1e-4) if dtype == torch.float32 else dict(rtol=3e-2, atol=3e-2)
-    torch.testing.assert_close(out.float(), expected.float(), **tol)
+    _assert_close_to_scale(out, expected, 1e-4 if dtype == torch.float32 else 2e-2)
 
 
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float32], ids=["bf16", "fp32"])
@@ -186,8 +192,7 @@ def test_fp8_prefill_kernel_matches_reference(page_size, heads, dtype):
     expected = paged_prefill_attention_reference(
         query, keys, values, tables, query_lens, context_lens, scale, **scales
     )
-    tol = dict(rtol=1e-4, atol=1e-4) if dtype == torch.float32 else dict(rtol=3e-2, atol=3e-2)
-    torch.testing.assert_close(out.float(), expected.float(), **tol)
+    _assert_close_to_scale(out, expected, 1e-4 if dtype == torch.float32 else 2e-2)
 
 
 @pytest.mark.parametrize("heads", [LLAMA_8B, TINY], ids=["llama8b", "tiny"])
