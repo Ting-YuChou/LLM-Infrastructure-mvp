@@ -167,6 +167,27 @@ def nsys_table(out: Path) -> list[str]:
     return lines + [""]
 
 
+def offline_table(out: Path) -> list[str]:
+    rows = []
+    for path in sorted((out / "offline").glob("nano_*.json")):
+        if path.stem.endswith("_nsys"):
+            continue
+        rows += json.loads(path.read_text())
+    if not rows:
+        return []
+    lines = [
+        "## Offline decode (nano_bench, prefill-first, CUDA graphs)", "",
+        "| async | batch | in/out | decode ms/step | p50 | tok/s |",
+        "|---|---:|---|---:|---:|---:|",
+    ]
+    for r in rows:
+        lines.append(
+            f"| {'yes' if r.get('async_scheduling') else 'no'} | {r['batch']} | {r['input_len']}/{r['output_len']} "
+            f"| {r['decode_ms_per_step']:.2f} | {r['decode_ms_p50']:.2f} | {r['decode_tok_per_s']:.0f} |"
+        )
+    return lines + [""]
+
+
 def server_settings(out: Path) -> list[str]:
     lines = []
     for path in sorted((out / "logs").glob("*_server.log")):
@@ -196,7 +217,8 @@ def main() -> None:
     bench = out / "prefix_bench" / "prefix_bench.md"
     if bench.exists():
         lines += ["## " + bench.read_text().lstrip("# "), ""]
-    lines += w1_tables(rows) + w2_table(rows, out) + w3_table(rows) + nsys_table(out) + server_settings(out)
+    lines += w1_tables(rows) + w2_table(rows, out) + w3_table(rows) + offline_table(out)
+    lines += nsys_table(out) + server_settings(out)
     (out / "summary.md").write_text("\n".join(lines) + "\n")
     (out / "serve_rows.json").write_text(json.dumps(rows, indent=2))
 

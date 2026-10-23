@@ -26,7 +26,9 @@
 #             chain at serving scale (CPU only; prefix_bench.py)
 #   serve     each P2_RUNS entry: start its server, run its workloads, stop it
 #   nsys      the nano server under nsys for each P2_NSYS workload, with the
-#             engine's NVTX phase ranges (NANO_NVTX=1)
+#             engine's NVTX phase ranges (NANO_NVTX=1) and P2_NSYS_ENV settings
+#   offline   nano_bench.py (decode ms/step at b=1/16/64) synchronous and with
+#             async scheduling, plus nsys of both at b=16 (not in the default)
 #   summarize summary.md
 #
 # P2_RUNS entries are engine:label:workloads[:extra], workloads comma-separated,
@@ -35,7 +37,8 @@
 #
 # Env: P0_ROOT (default /workspace/p0), P0_RUN_ID (default: UTC timestamp),
 # P0_REPO_DIR (default: the checkout holding this script), P2_STEPS, P2_RUNS,
-# P2_NSYS (nano workloads to capture, default "w1c16 w1c64 w3"),
+# P2_NSYS (nano workloads to capture, default "w1c16 w1c64 w3"), P2_NSYS_ENV
+# (KEY=VALUE,... for those servers), P2_OFFLINE_RUNS (nano_bench --runs),
 # P2_CONCURRENCY (w1 levels, default "1 2 4 8 16 32 64"), P2_NANO_KV_BLOCKS
 # (default: vLLM's logged KV token count / 16 from this run, else 9000),
 # P2_MODEL (default unsloth/Meta-Llama-3.1-8B-Instruct), P0_VLLM_VERSION.
@@ -74,7 +77,7 @@ CUDA_ENV="${ROOT}/cuda129.env"
 export HF_HOME="${ROOT}/hf_cache" UV_CACHE_DIR="${ROOT}/uv_cache" UV_PYTHON_INSTALL_DIR="${ROOT}/uv_python"
 export PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false MPLBACKEND=Agg SERVE_TAG=P2_SERVE BENCH_TEMPERATURE=0
 export NANO_EXT_DIR="${ROOT}/nano_ext"  # the C++ radix tree's build (radix_cpp.py)
-mkdir -p "${OUT}"/{logs,tests,serve,nsys}
+mkdir -p "${OUT}"/{logs,tests,serve,nsys,offline}
 exec 3>&1  # console; step output goes to ${OUT}/logs/<step>.log
 
 log() { echo "[p2 $(date -u +%H:%M:%S)] $*" >&3; }
@@ -223,7 +226,7 @@ nano_nsys() {  # workload: capture between /start_profile and /stop_profile
   local workload=$1 label="nano_${1}" nsys cmd=() rc=0
   nsys="$(find_nsys)"
   [[ -n "${nsys}" ]] || { echo "nsys not installed"; return 1; }
-  read -r -a cmd <<< "$(nano_cmd NANO_NVTX=1)"
+  read -r -a cmd <<< "$(nano_cmd "NANO_NVTX=1${P2_NSYS_ENV:+,${P2_NSYS_ENV}}")"
   # stop-shutdown: cudaProfilerStop ends the capture and the server, then nsys writes the report.
   start_server "${label}" "${NANO_PORT}" /ready "${nsys}" profile -t cuda,nvtx --cuda-graph-trace=node \
     --capture-range=cudaProfilerApi --capture-range-end=stop-shutdown --sample=none --cpuctxsw=none \
@@ -242,6 +245,20 @@ nano_nsys() {  # workload: capture between /start_profile and /stop_profile
 nsys_step() {
   local w rc=0
   for w in ${NSYS_WORKLOADS}; do nano_nsys "${w}" || rc=1; done
+  return "${rc}"
+}
+
+offline() {
+  local rc=0 mode flag runs="${P2_OFFLINE_RUNS:-paged:1:128:256,paged:16:1024:256,paged:64:1024:256}"
+  export PYTHONPATH="${REPO_DIR}"
+  for mode in sync async; do
+    flag=""; [[ "${mode}" == async ]] && flag=--async-scheduling
+    "${PY}" "${P0_DIR}/nano_bench.py" --model "${MODEL}" --runs "${runs}" ${flag} \
+      --out "${OUT}/offline/nano_${mode}.json" || rc=1
+    NANO_NVTX=1 nsys_run "nano_offline_${mode}_b16" "${PY}" "${P0_DIR}/nano_bench.py" --model "${MODEL}" \
+      --runs paged:16:1024:64 ${flag} --out "${OUT}/offline/nano_${mode}_b16_nsys.json" || rc=1
+  done
+  grep -h NANO_BENCH "${OUT}/logs/offline.log" >&3
   return "${rc}"
 }
 
@@ -268,5 +285,6 @@ want prefix_bench && { "${PY}" -c "import nanobind" 2>/dev/null || uv pip instal
 want prefix_bench && run_step prefix_bench prefix_bench
 want serve && run_step serve serve
 want nsys && run_step nsys nsys_step
+want offline && run_step offline offline
 want summarize && run_step summarize summarize
 log "done; results in ${OUT}"
