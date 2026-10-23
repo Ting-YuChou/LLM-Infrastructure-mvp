@@ -232,16 +232,13 @@ class ModelRunner:
         start = time.perf_counter()
         pool = torch.cuda.graph_pool_handle()
         for size in sorted(sizes, reverse=True):  # largest first: the pool fits all
-            input_ids, positions, metadata = self._static_batch(graphs, size)
             # Eager run first: Triton JIT and cuBLAS setup must not happen
             # inside the capture.
-            self.model.forward_batch(input_ids, positions, self.cache, metadata)
+            self._graph_step(graphs, size)
             torch.cuda.synchronize(device)
             graph = torch.cuda.CUDAGraph()
             with torch.cuda.graph(graph, pool=pool):
-                graphs.outputs[size] = self.model.forward_batch(
-                    input_ids, positions, self.cache, metadata
-                )
+                graphs.outputs[size] = self._graph_step(graphs, size)
             graphs.graphs[size] = graph
         torch.cuda.synchronize(device)
         self._graphs = graphs
@@ -251,14 +248,17 @@ class ModelRunner:
             time.perf_counter() - start,
         )
 
-    def _static_batch(
-        self, graphs: _DecodeGraphs, size: int
-    ) -> tuple[torch.Tensor, torch.Tensor, BatchMetadata]:
+    def _graph_step(self, graphs: _DecodeGraphs, size: int) -> torch.Tensor:
+        """The decode step a graph records, from the static buffers only.
+
+        Everything, the gather of in-flight tokens included, must happen in
+        here: work done before the capture would be baked in as constants.
+        """
         max_batch = graphs.max_batch
         context_lens = graphs.ints[:max_batch]
         tables = graphs.ints[max_batch:].view(max_batch, graphs.width)
-        # Captured with the graph: rows naming a previous-step row (>= 0) take
-        # their input token from ``sampled`` on the device.
+        # Rows naming a previous-step row (>= 0) take their input token from
+        # ``sampled`` on the device.
         gather = graphs.longs[3, :size]
         input_ids = torch.where(gather >= 0, self.sampled[gather.clamp(min=0)], graphs.longs[0, :size])
         metadata = BatchMetadata(
@@ -271,7 +271,7 @@ class ModelRunner:
             is_prefill=False,
             logits_indices=graphs.logits_indices[:size],
         )
-        return input_ids, graphs.longs[1, :size], metadata
+        return self.model.forward_batch(input_ids, graphs.longs[1, :size], self.cache, metadata)
 
     def _fill_padding(self, graphs: _DecodeGraphs, start: int, slot: int) -> None:
         """Rows from ``start`` on: token 0, null slot, context 1, null blocks."""

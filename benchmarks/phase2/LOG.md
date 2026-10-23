@@ -52,3 +52,22 @@ results/<run_id>/.
   phase (filling the staging buffers) takes 0.67 ms at c=16 and 2.9 ms in
   W3, where 32 streams' detokenization and SSE run on the event loop thread
   at the same time: the model thread waits for the GIL.
+
+## M1-M6 validation
+
+### Run m1to6-20261023-015102-colab (stopped after the tests)
+
+- The GPU tests crashed pytest: `CUDA error: device-side assert triggered`
+  after "FF.FF" (the async tests, then the decode-graph tests). Cause: the
+  M4 rewrite computed the decode graphs' input ids (the gather of in-flight
+  tokens from `sampled`) in `_static_batch`, *before* `torch.cuda.graph`,
+  so each graph recorded a read of that one temporary tensor: replays fed
+  the capture-time tokens, and once the allocator reused the memory, garbage
+  ids reached the embedding lookup. CPU tests never capture graphs, so they
+  could not see it. Fix: `_graph_step` builds the inputs and runs the
+  forward pass, and the warm-up and the capture both call it, so the gather
+  is part of the graph.
+- The run had no `installs` step, so the new `cuda129` install never ran;
+  the rerun includes it (every install is skipped when already done).
+- Stopped the remote run by hand (pkill through `colab console`) before the
+  serving numbers, which would have decoded from wrong tokens.
