@@ -73,6 +73,7 @@ CUDA_ENV="${ROOT}/cuda129.env"
 
 export HF_HOME="${ROOT}/hf_cache" UV_CACHE_DIR="${ROOT}/uv_cache" UV_PYTHON_INSTALL_DIR="${ROOT}/uv_python"
 export PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false MPLBACKEND=Agg SERVE_TAG=P2_SERVE BENCH_TEMPERATURE=0
+export NANO_EXT_DIR="${ROOT}/nano_ext"  # the C++ radix tree's build (radix_cpp.py)
 mkdir -p "${OUT}"/{logs,tests,serve,nsys}
 exec 3>&1  # console; step output goes to ${OUT}/logs/<step>.log
 
@@ -89,7 +90,7 @@ install_venv() {  # reuse the VM's vLLM venv when an earlier phase made it
     rm -rf "${VENVS}/vllm"
     install_vllm || return 1
   fi
-  uv pip install -p "${PY}" pytest ninja &&
+  uv pip install -p "${PY}" pytest ninja nanobind &&
   "${PY}" -c "import torch, vllm; print('vllm', vllm.__version__, '| torch', torch.__version__)"
 }
 
@@ -260,7 +261,10 @@ want installs && installs
 export PATH="${VENVS}/vllm/bin:${PATH}"
 # shellcheck source=/dev/null
 if [[ -f "${CUDA_ENV}" ]]; then source "${CUDA_ENV}"; fi
+# nanobind builds the C++ radix tree; a rerun skips installs, so check here.
+want tests && { "${PY}" -c "import nanobind" 2>/dev/null || uv pip install -p "${PY}" nanobind > /dev/null; }
 want tests && run_step tests gpu_tests
+want prefix_bench && { "${PY}" -c "import nanobind" 2>/dev/null || uv pip install -p "${PY}" nanobind > /dev/null; }
 want prefix_bench && run_step prefix_bench prefix_bench
 want serve && run_step serve serve
 want nsys && run_step nsys nsys_step

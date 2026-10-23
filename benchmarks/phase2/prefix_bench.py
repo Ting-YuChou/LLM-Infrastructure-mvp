@@ -11,7 +11,8 @@ one step, then decoded for a few tokens with a commit per token, and freed.
           so the cache evicts (W2b)
 
 Reports microseconds per admission, per prefill commit and per decode-step
-commit, and the token hit rate, for both implementations.
+commit, and the token hit rate, for Phase 1's hash chain, the Python radix
+tree and the C++ one (when nanobind is installed).
 
   PYTHONPATH=. python benchmarks/phase2/prefix_bench.py --out results/prefix_bench
 """
@@ -37,6 +38,7 @@ from src.serving.nano_vllm.sequence import Sequence  # noqa: E402
 
 BLOCK_SIZE = 16
 DECODE_TOKENS = 32
+IMPLS = {HashBlockManager: "hash (Phase 1)", BlockManager: "radix (Python)"}
 
 
 def prompts(kind: str, n: int, rng: random.Random) -> list[list[int]]:
@@ -91,7 +93,7 @@ def run(manager_cls, kind: str, n: int, num_blocks: int, seed: int) -> dict:
         }
 
     return {
-        "impl": "radix" if manager_cls is BlockManager else "hash",
+        "impl": IMPLS[manager_cls],
         "workload": kind,
         "requests": n,
         "hit_rate": hits / queries,
@@ -109,10 +111,18 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
 
+    impls = [HashBlockManager, BlockManager]
+    try:
+        from src.serving.nano_vllm.radix_cpp import CppBlockManager
+
+        IMPLS[CppBlockManager] = "radix (C++)"
+        impls.append(CppBlockManager)
+    except ImportError as e:  # nanobind missing
+        print(f"skipping the C++ radix tree: {e}")
     rows = [
         run(cls, kind, args.requests, args.num_blocks, args.seed)
         for kind in ("shared", "many")
-        for cls in (HashBlockManager, BlockManager)
+        for cls in impls
     ]
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "prefix_bench.json").write_text(json.dumps(rows, indent=2))

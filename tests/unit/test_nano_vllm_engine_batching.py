@@ -633,3 +633,21 @@ def test_async_scheduling_aborts_and_stop_strings_free_every_block():
     assert "".join(o.text for o in outputs) == "hello "
     assert outputs[-1].finish_reason == "stop"
     _assert_all_blocks_free(engine)
+
+
+@pytest.mark.parametrize("async_scheduling", [False, True])
+def test_cpp_prefix_cache_backend_matches_python(async_scheduling):
+    pytest.importorskip("nanobind")
+    shared = [5, 17, 3, 88, 42, 9, 61, 8]  # two full 4-token blocks
+    prompts = {name: shared + [100 + i, 101 + i] for i, name in enumerate("abcdef")}
+    sampling = SamplingOptions(max_tokens=9, **GREEDY)
+    runs = []
+    for backend in ("python", "cpp"):
+        engine, results = _run_prompts(
+            successor_model, prompts, sampling, enable_prefix_cache=True,
+            num_kvcache_blocks=12, prefix_cache_backend=backend, async_scheduling=async_scheduling,
+        )
+        _assert_all_blocks_free(engine)
+        runs.append(([r.token_ids for r in results], engine.stats()["prefix_hit_tokens"]))
+    assert runs[0] == runs[1]
+    assert runs[1][1] > 0

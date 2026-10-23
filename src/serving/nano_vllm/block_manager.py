@@ -237,6 +237,26 @@ class BlockManager:
             "evicted_blocks": s.evicted_blocks,
         }
 
+    # Inspection, for tests (CppBlockManager has the same two).
+    def tree_dump(self) -> list[tuple]:
+        """(node, parent, key, blocks, lock_ref) for every node but the root."""
+        out = []
+        stack = [self.root]
+        while stack:
+            node = stack.pop()
+            for child in node.children.values():
+                parent = 0 if node is self.root else id(node)
+                out.append((id(child), parent, child.key, list(child.blocks), child.lock_ref))
+                stack.append(child)
+        return out
+
+    def path_blocks(self, node) -> list[int]:
+        blocks: list[int] = []
+        while node is not None and node is not self.root:
+            blocks = node.blocks + blocks
+            node = node.parent
+        return blocks
+
     # --- internals ------------------------------------------------------------
 
     def _match(

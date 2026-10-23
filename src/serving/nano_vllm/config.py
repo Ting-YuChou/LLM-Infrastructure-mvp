@@ -56,6 +56,9 @@ class NanoVLLMConfig:
     # steps and decode steps alternate, and a prefill stalls the decodes.
     scheduling: str = "mixed"
     enable_prefix_cache: bool = True
+    # "python": block_manager.BlockManager; "cpp": the same radix tree and
+    # allocator in C++ (csrc/radix_tree.cpp, built with nanobind on first use).
+    prefix_cache_backend: str = "python"
     # "triton": the paged decode/prefill attention and fused RoPE + KV write
     # kernels (benchmarks/phase1); off CUDA they fall back to the PyTorch
     # references, so it is a safe default.
@@ -94,6 +97,8 @@ class NanoVLLMConfig:
             raise ValueError("max_num_seqs must be positive")
         if self.max_num_batched_tokens <= 0:
             raise ValueError("max_num_batched_tokens must be positive")
+        if self.prefix_cache_backend not in {"python", "cpp"}:
+            raise ValueError("prefix_cache_backend must be one of: python, cpp")
         if self.scheduling not in {"mixed", "prefill_first"}:
             raise ValueError("scheduling must be one of: mixed, prefill_first")
         if self.cuda_graph_max_bs <= 0:
@@ -173,6 +178,12 @@ class NanoVLLMConfig:
             enable_prefix_cache=_bool_value(
                 _env("ENABLE_PREFIX_CACHE", engine.get("enable_prefix_cache")),
                 default=cls.enable_prefix_cache,
+            ),
+            prefix_cache_backend=str(
+                _env(
+                    "PREFIX_CACHE_BACKEND",
+                    engine.get("prefix_cache_backend", cls.prefix_cache_backend),
+                )
             ),
             attention_backend=str(
                 _env(

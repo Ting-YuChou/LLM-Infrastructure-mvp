@@ -1,9 +1,11 @@
-"""The radix-tree prefix cache in BlockManager: sharing, splits, eviction, locks.
+"""The radix-tree prefix cache: sharing, splits, eviction, locks.
 
-The property test drives random admissions, steps and finishes and checks,
-after every operation, that block ownership is a partition, that lock counts
-and the evictable count match the live sequences, and that every cache hit
-hands a sequence blocks whose KV was computed for exactly its prefix.
+Every test runs on both backends, BlockManager (Python) and CppBlockManager
+(csrc/radix_tree.cpp through nanobind), and they must also agree block for
+block. The property test drives random admissions, steps and finishes and
+checks, after every operation, that block ownership is a partition, that lock
+counts and the evictable count match the live sequences, and that every cache
+hit hands a sequence blocks whose KV was computed for exactly its prefix.
 """
 
 import random
@@ -19,6 +21,18 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 from serving.nano_vllm.block_manager import BlockManager  # noqa: E402
 from serving.nano_vllm.sampling import SamplingOptions  # noqa: E402
 from serving.nano_vllm.sequence import Sequence  # noqa: E402
+
+
+def _cpp_manager(*args, **kwargs):
+    pytest.importorskip("nanobind")
+    from serving.nano_vllm.radix_cpp import CppBlockManager
+
+    return CppBlockManager(*args, **kwargs)
+
+
+@pytest.fixture(params=["python", "cpp"])
+def make_manager(request):
+    return BlockManager if request.param == "python" else _cpp_manager
 
 
 def _seq(tokens, block_size=4):
@@ -43,12 +57,18 @@ def _compute(manager, seq, num_tokens=None):
     seq.num_scheduled_tokens = 0
 
 
-def _depth(node):
-    return 1 + max((_depth(child) for child in node.children.values()), default=0)
+def _depth(manager):
+    """Levels below the root (0: empty tree)."""
+    parents = {node: parent for node, parent, _, _, _ in manager.tree_dump()}
+
+    def level(node):
+        return 0 if node == 0 else 1 + level(parents[node])
+
+    return max((level(node) for node in parents), default=0)
 
 
-def test_concurrent_identical_prompts_share_blocks_after_commit():
-    manager = BlockManager(num_blocks=16, block_size=4)
+def test_concurrent_identical_prompts_share_blocks_after_commit(make_manager):
+    manager = make_manager(num_blocks=16, block_size=4)
     a, b = _seq(range(1, 11)), _seq(range(1, 11))  # 2 full blocks + 2 tokens
     assert _admit(manager, a) == 0 and _admit(manager, b) == 0  # nothing cached yet
     assert manager.num_free_blocks == 10
@@ -64,26 +84,26 @@ def test_concurrent_identical_prompts_share_blocks_after_commit():
     assert manager.num_free_blocks == 16 and manager.num_cached_blocks == 2
 
 
-def test_partial_match_splits_an_edge_and_keeps_both_branches():
-    manager = BlockManager(num_blocks=16, block_size=4)
+def test_partial_match_splits_an_edge_and_keeps_both_branches(make_manager):
+    manager = make_manager(num_blocks=16, block_size=4)
     first = _seq(range(1, 14))  # 3 full blocks + 1
     _admit(manager, first)
     _compute(manager, first)
     manager.deallocate(first)
-    assert _depth(manager.root) == 2  # root -> one 3-block node
+    assert _depth(manager) == 1  # one 3-block node under the root
 
     branch = _seq([1, 2, 3, 4, 9, 9, 9, 9, 7])
     assert _admit(manager, branch) == 1
     _compute(manager, branch)
     manager.deallocate(branch)
 
-    assert _depth(manager.root) == 3  # [1..4] -> {[5..12], [9 9 9 9]}
+    assert _depth(manager) == 2  # [1..4] -> {[5..12], [9 9 9 9]}
     again = _seq(range(1, 15))
     assert manager.can_allocate(again) == 3
 
 
-def test_decode_blocks_extend_the_sequence_leaf_in_place():
-    manager = BlockManager(num_blocks=16, block_size=4)
+def test_decode_blocks_extend_the_sequence_leaf_in_place(make_manager):
+    manager = make_manager(num_blocks=16, block_size=4)
     seq = _seq([1, 2, 3])
     _admit(manager, seq)
     _compute(manager, seq)
@@ -93,11 +113,11 @@ def test_decode_blocks_extend_the_sequence_leaf_in_place():
         _compute(manager, seq, num_tokens=1)
 
     assert seq.num_shared_blocks == 3
-    assert _depth(manager.root) == 2  # one node with 3 blocks, not a chain
+    assert _depth(manager) == 1  # one node with 3 blocks, not a chain
 
 
-def test_eviction_takes_least_recently_used_unlocked_leaf():
-    manager = BlockManager(num_blocks=6, block_size=4)
+def test_eviction_takes_least_recently_used_unlocked_leaf(make_manager):
+    manager = make_manager(num_blocks=6, block_size=4)
     prompts = {
         "a": [1, 1, 1, 1, 0],
         "b": [2, 2, 2, 2, 0],
@@ -123,8 +143,8 @@ def test_eviction_takes_least_recently_used_unlocked_leaf():
     assert manager.can_allocate(_seq(prompts["c"])) == 0
 
 
-def test_locked_prefix_is_never_evicted():
-    manager = BlockManager(num_blocks=4, block_size=4)
+def test_locked_prefix_is_never_evicted(make_manager):
+    manager = make_manager(num_blocks=4, block_size=4)
     holder = _seq([5, 5, 5, 5, 5, 5, 5, 5, 0])
     _admit(manager, holder)
     _compute(manager, holder)  # 2 tree blocks, locked by holder
@@ -135,8 +155,8 @@ def test_locked_prefix_is_never_evicted():
     assert manager.can_allocate(_seq(range(100, 106))) == 0
 
 
-def test_preempted_sequence_recomputes_from_its_own_cached_blocks():
-    manager = BlockManager(num_blocks=16, block_size=4)
+def test_preempted_sequence_recomputes_from_its_own_cached_blocks(make_manager):
+    manager = make_manager(num_blocks=16, block_size=4)
     seq = _seq(range(1, 10))
     _admit(manager, seq)
     _compute(manager, seq)
@@ -150,86 +170,78 @@ def test_preempted_sequence_recomputes_from_its_own_cached_blocks():
     assert manager.stats.recompute_hit_tokens == 16
 
 
-def test_reset_prefix_cache_frees_unlocked_blocks():
-    manager = BlockManager(num_blocks=8, block_size=4)
+def test_reset_prefix_cache_frees_unlocked_blocks(make_manager):
+    manager = make_manager(num_blocks=8, block_size=4)
     seq = _seq(range(1, 10))
     _admit(manager, seq)
     _compute(manager, seq)
     manager.deallocate(seq)
     assert manager.reset_prefix_cache() == 2
-    assert len(manager.free_block_ids) == 8 and not manager.root.children
+    assert len(manager.free_block_ids) == 8 and not manager.tree_dump()
 
 
 # --- property test --------------------------------------------------------------
 
 
+def _node_key(manager, node):
+    if isinstance(node, int) or node is None:
+        return node
+    return 0 if node is manager.root else id(node)
+
+
 def _check_invariants(manager, live, content):
     bs = manager.block_size
+    dump = manager.tree_dump()
+    nodes = {node: (parent, tuple(key), blocks, lock_ref) for node, parent, key, blocks, lock_ref in dump}
     owners = {}
 
-    def walk(node, prefix_blocks, prefix_tokens):
-        for first, child in node.children.items():
-            assert child.parent is node and child.key[:bs] == first
-            assert len(child.key) == len(child.blocks) * bs and child.blocks
-            blocks = prefix_blocks + child.blocks
-            tokens = prefix_tokens + child.key
-            for i, block in enumerate(child.blocks):
-                assert block not in owners, "block owned twice"
-                owners[block] = "tree"
-                index = len(prefix_blocks) + i
-                assert content.get(block) == tokens[: (index + 1) * bs], "tree block holds other KV"
-            locks = sum(
-                1 for seq in live if _on_path(seq.radix_node, child, manager.root)
-            )
-            assert child.lock_ref == locks
-            walk(child, blocks, tokens)
+    def prefix(node):
+        """(blocks, tokens) of the path from the root down to ``node``."""
+        if node == 0:
+            return [], ()
+        parent, key, blocks, _ = nodes[node]
+        up_blocks, up_tokens = prefix(parent)
+        return up_blocks + blocks, up_tokens + key
 
-    walk(manager.root, [], ())
+    for node, (parent, key, blocks, lock_ref) in nodes.items():
+        assert parent == 0 or parent in nodes
+        assert len(key) == len(blocks) * bs and blocks
+        up_blocks, up_tokens = prefix(parent)
+        tokens = up_tokens + key
+        for i, block in enumerate(blocks):
+            assert block not in owners, "block owned twice"
+            owners[block] = "tree"
+            index = len(up_blocks) + i
+            assert content.get(block) == tokens[: (index + 1) * bs], "tree block holds other KV"
+        locks = 0
+        for seq in live:
+            walk = _node_key(manager, seq.radix_node)
+            while walk:
+                if walk == node:
+                    locks += 1
+                    break
+                walk = nodes[walk][0]
+        assert lock_ref == locks
     for seq in live:
         for block in seq.block_table[seq.num_shared_blocks :]:
             assert block not in owners, "private block shared"
             owners[block] = seq.seq_id
-        path = _path_blocks(seq.radix_node, manager.root)
-        assert seq.block_table[: seq.num_shared_blocks] == path
+        assert seq.block_table[: seq.num_shared_blocks] == manager.path_blocks(seq.radix_node)
     for block in manager.free_block_ids:
         assert block not in owners, "free block in use"
         owners[block] = "free"
     assert sorted(owners) == list(range(manager.num_blocks))
-    evictable = _evictable(manager.root)
+    evictable = sum(len(blocks) for _, blocks, lock_ref in
+                    ((n[0], n[2], n[3]) for n in nodes.values()) if lock_ref == 0)
     assert manager.num_cached_blocks == evictable
     assert manager.num_free_blocks == len(manager.free_block_ids) + evictable
 
 
-def _on_path(node, target, root):
-    while node is not None and node is not root:
-        if node is target:
-            return True
-        node = node.parent
-    return False
-
-
-def _path_blocks(node, root):
-    blocks = []
-    while node is not None and node is not root:
-        blocks = node.blocks + blocks
-        node = node.parent
-    return blocks
-
-
-def _evictable(node):
-    total = 0
-    for child in node.children.values():
-        if child.lock_ref == 0:
-            total += len(child.blocks)
-        total += _evictable(child)
-    return total
-
-
 @pytest.mark.parametrize("seed", range(12))
-def test_random_workload_keeps_ownership_locks_and_kv_content_consistent(seed):
+def test_random_workload_keeps_ownership_locks_and_kv_content_consistent(make_manager, seed):
     rng = random.Random(seed)
     bs = rng.choice([1, 2, 4])
-    manager = BlockManager(num_blocks=rng.randint(6, 24), block_size=bs)
+    manager = make_manager(num_blocks=rng.randint(6, 24), block_size=bs)
     # A few shared stems so prompts overlap at various depths.
     stems = [[rng.randint(0, 3) for _ in range(rng.randint(0, 12))] for _ in range(4)]
     content: dict[int, tuple] = {}  # block -> the token prefix whose KV it holds
@@ -289,3 +301,48 @@ def test_random_workload_keeps_ownership_locks_and_kv_content_consistent(seed):
         manager.deallocate(seq)
     _check_invariants(manager, [], content)
     assert manager.num_free_blocks == manager.num_blocks
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_python_and_cpp_backends_hand_out_the_same_blocks(seed):
+    """Same operations, same block tables, hits and evictions on both backends."""
+    rng = random.Random(seed)
+    python, cpp = BlockManager(num_blocks=20, block_size=2), _cpp_manager(num_blocks=20, block_size=2)
+    stems = [[rng.randint(0, 3) for _ in range(rng.randint(0, 10))] for _ in range(3)]
+    live = []  # (python seq, cpp seq)
+    for _ in range(200):
+        op = rng.random()
+        if op < 0.4:
+            tokens = rng.choice(stems) + [rng.randint(0, 3) for _ in range(rng.randint(1, 5))]
+            pair = (_seq(tokens, 2), _seq(tokens, 2))
+            hits = python.can_allocate(pair[0])
+            assert cpp.can_allocate(pair[1]) == hits
+            if hits < 0:
+                continue
+            for manager, seq in zip((python, cpp), pair):
+                manager.allocate(seq, hits)
+                _compute(manager, seq)
+            live.append(pair)
+        elif op < 0.75 and live:
+            pair = rng.choice(live)
+            token = rng.randint(0, 3)
+            for manager, seq in zip((python, cpp), pair):
+                seq.append_token(token)
+            if not python.can_append(pair[0]):
+                assert not cpp.can_append(pair[1])
+                live.remove(pair)
+                python.deallocate(pair[0])
+                cpp.deallocate(pair[1])
+                continue
+            for manager, seq in zip((python, cpp), pair):
+                manager.may_append(seq)
+                _compute(manager, seq, num_tokens=1)
+        elif live:
+            pair = live.pop(rng.randrange(len(live)))
+            python.deallocate(pair[0])
+            cpp.deallocate(pair[1])
+        for p_seq, c_seq in live:
+            assert p_seq.block_table == c_seq.block_table
+            assert p_seq.num_shared_blocks == c_seq.num_shared_blocks
+        assert list(python.free_block_ids) == cpp.free_block_ids
+        assert python.stats_dict() == cpp.stats_dict()

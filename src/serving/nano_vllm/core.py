@@ -81,7 +81,10 @@ class EngineCore:
         if config.num_kvcache_blocks == 0:
             config.num_kvcache_blocks = size_kv_cache(config, model)
         Sequence.block_size = config.kvcache_block_size
-        self.block_manager = BlockManager(
+        manager_cls = BlockManager
+        if config.prefix_cache_backend == "cpp":
+            from .radix_cpp import CppBlockManager as manager_cls
+        self.block_manager = manager_cls(
             num_blocks=config.num_kvcache_blocks,
             block_size=config.kvcache_block_size,
             enable_prefix_cache=config.enable_prefix_cache,
