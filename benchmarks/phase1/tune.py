@@ -8,7 +8,7 @@ GEMV_CONFIG, CUDA_GEMV_CONFIG, W4A16_CONFIG). Configs that fail to compile or ru
 too much shared memory) are recorded and skipped.
 
   python tune.py --out results/tune                  # all kernels
-  python tune.py --kernels gemv --out results/tune   # decode, prefill, gemv, cuda_gemv, w4a16
+  python tune.py --kernels gemv --out results/tune   # decode, decode_fp8, prefill, gemv, cuda_gemv, w4a16
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from kbench import SCALE, _paged_inputs, copies_for, randn, time_us  # noqa: E40
 # the linear() function under the submodule's name.
 linear_mod = importlib.import_module("src.serving.nano_vllm.kernels.linear")
 attention = importlib.import_module("src.serving.nano_vllm.kernels.paged_attention")
+fp8 = importlib.import_module("src.serving.nano_vllm.kernels.fp8")
 
 L2_BYTES = 40 * 1024**2
 
@@ -95,6 +96,33 @@ def tune_decode():
 
     return sweep(
         "decode", shapes, configs, make_call, input_bytes, lambda s: attention.decode_config(s["B"])
+    )
+
+
+def tune_decode_fp8():
+    """The decode kernel on an fp8 cache: half the bytes per tile, plus the
+    integer decode, so the bf16 tiers need not be the best here."""
+    shapes = [
+        {"B": b, "ctx": c}
+        for b, c in ((1, 1024), (1, 4096), (16, 1024), (16, 4096), (64, 1024), (64, 4096), (128, 1024))
+    ]
+    configs = grid(block_n=[32, 64, 128, 256], num_warps=[4, 8], num_stages=[1, 2, 3, 4])
+
+    def make_call(shape, config):
+        i = _paged_inputs(shape["B"], shape["ctx"], [1] * shape["B"], "cuda")
+        k, k_scales = fp8.fp8_quantize_reference(i["k_cache"])
+        v, v_scales = fp8.fp8_quantize_reference(i["v_cache"])
+        del i["k_cache"], i["v_cache"]
+        return lambda: attention.paged_decode_attention(
+            i["q"], k, v, i["tables"], i["context_lens"], SCALE, use_triton=True, config=config,
+            key_scales=k_scales, value_scales=v_scales,
+        )
+
+    def input_bytes(shape):
+        return 2 * shape["B"] * shape["ctx"] * 8 * (128 + 4)
+
+    return sweep(
+        "decode_fp8", shapes, configs, make_call, input_bytes, lambda s: attention.decode_config(s["B"])
     )
 
 
@@ -218,6 +246,7 @@ def main() -> None:
     for name in args.kernels.split(","):
         rows += {
             "decode": tune_decode,
+            "decode_fp8": tune_decode_fp8,
             "prefill": tune_prefill,
             "gemv": tune_gemv,
             "cuda_gemv": tune_cuda_gemv,
