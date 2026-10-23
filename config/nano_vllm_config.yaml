@@ -22,6 +22,7 @@ engine:
   linear_backend: "triton"
   # "w4a16" quantizes the decoder-layer projections to 4-bit at load
   # (round-to-nearest, groups of 128); about 4x less weight memory and traffic.
+  # Decode runs them through the Marlin-style gemm_w4a16_tiled kernel.
   weight_quant: "none"
   # "fp8": the paged KV cache holds e4m3 codes plus one fp32 scale per
   # (token, kv head): about half the KV bytes, so about twice the tokens.

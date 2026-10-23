@@ -28,8 +28,10 @@ Marlin-style kernel, gemm_w4a16_tiled:
   so one 16-byte load gives lane (g, c) the scales of its eight columns.
 It needs group_size 128 and N a multiple of 128 (W4A16_TILED_N_MULTIPLE).
 
-Decode-sized batches of row-layout weights use csrc/w4a16.cu, which has
-three kernels over the same qweight:
+The model quantizes into the tiled layout (W4A16_CONFIG["layout"]); a
+weight that does not fit it stays in rows. Decode-sized batches of
+row-layout weights use csrc/w4a16.cu, which has three kernels over the same
+qweight:
 - gemv: CUDA cores, 8 rows of x per launch (looped up to
   W4A16_GEMV_MAX_ROWS); fp32 FMAs limit it to small batches;
 - mma: tensor cores (mma.m16n8k16), up to W4A16_MMA_MAX_ROWS rows in one
@@ -77,8 +79,9 @@ W4A16_CONFIG = {
     "rows_per_warp": 2,
     "splits": 0,
     # The layout the model quantizes into ("rows" or "tiled"); weights the
-    # tiled kernel cannot take stay in rows.
-    "layout": "rows",
+    # tiled kernel cannot take stay in rows. Tiled since run marlin-t2:
+    # decode 5.35 / 7.31 / 16.82 ms at b=1/16/64 vs 5.70 / 8.29 / 23.03.
+    "layout": "tiled",
     # gemm_w4a16_tiled: "auto" or one of W4A16_TILED_TILES; blocks per SM of
     # the persistent grid, or an explicit grid size (tests force schedules);
     # up to tiled_max_rows rows it beats dequantize + F.linear (run marlin-t1c:

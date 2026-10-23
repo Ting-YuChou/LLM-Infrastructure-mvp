@@ -300,9 +300,10 @@ def test_w4a16_model_matches_a_model_holding_the_dequantized_weights():
 
 def test_w4a16_model_quantizes_into_the_configured_layout(monkeypatch):
     weights = _weights(_config())
-    rows = _model(weights, weight_quant="w4a16")
-    monkeypatch.setitem(w4a16_mod.W4A16_CONFIG, "layout", "tiled")
+    assert w4a16_mod.W4A16_CONFIG["layout"] == "tiled"
     tiled = _model(weights, weight_quant="w4a16")
+    monkeypatch.setitem(w4a16_mod.W4A16_CONFIG, "layout", "rows")
+    rows = _model(weights, weight_quant="w4a16")
 
     layer = tiled.layers[0]
     assert all(w.layout == "tiled" for w in (layer.qkv, layer.o_proj, layer.gate_up, layer.down))
