@@ -74,6 +74,10 @@ class NanoVLLMConfig:
     # cuda_graph_max_bs) unless enforce_eager; CPU always runs eagerly.
     enforce_eager: bool = False
     cuda_graph_max_bs: int = 64
+    # Other steps of up to this many tokens (prefill and mixed steps, decode
+    # batches past cuda_graph_max_bs) replay piecewise graphs: everything but
+    # the attention, which runs eagerly in between. 0 turns them off.
+    cuda_graph_max_tokens: int = 512
     # Launch step N+1 before collecting step N, so scheduling and input
     # preparation overlap the GPU; finish checks then lag one step.
     async_scheduling: bool = False
@@ -103,6 +107,8 @@ class NanoVLLMConfig:
             raise ValueError("scheduling must be one of: mixed, prefill_first")
         if self.cuda_graph_max_bs <= 0:
             raise ValueError("cuda_graph_max_bs must be positive")
+        if self.cuda_graph_max_tokens < 0:
+            raise ValueError("cuda_graph_max_tokens must be 0 (off) or positive")
         if self.attention_backend not in {"torch", "triton", "flash_attn"}:
             raise ValueError("attention_backend must be one of: torch, triton, flash_attn")
         if self.linear_backend not in {"torch", "triton", "cuda"}:
@@ -209,6 +215,12 @@ class NanoVLLMConfig:
                 _env(
                     "CUDA_GRAPH_MAX_BS",
                     engine.get("cuda_graph_max_bs", cls.cuda_graph_max_bs),
+                )
+            ),
+            cuda_graph_max_tokens=int(
+                _env(
+                    "CUDA_GRAPH_MAX_TOKENS",
+                    engine.get("cuda_graph_max_tokens", cls.cuda_graph_max_tokens),
                 )
             ),
             async_scheduling=_bool_value(

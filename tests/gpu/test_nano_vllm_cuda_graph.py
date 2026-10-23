@@ -1,4 +1,5 @@
-"""Decode CUDA graphs in ModelRunner: replay must match the eager forward."""
+"""CUDA graphs in ModelRunner (decode graphs and piecewise graphs): replay must
+match the eager forward."""
 
 import sys
 from pathlib import Path
@@ -71,3 +72,57 @@ def test_graph_replay_matches_eager(attention_backend, batch, max_graph_batch, w
         logits = eager
         for seq in seqs:
             seq.num_cached_tokens += 1
+
+
+@pytest.mark.parametrize(
+    "attention_backend,weight_quant", [("triton", "none"), ("torch", "none"), ("triton", "w4a16")]
+)
+def test_piecewise_replay_matches_eager(attention_backend, weight_quant):
+    """Prefill, mixed, chunked-prefill and large decode steps in piecewise graphs.
+
+    The steps get smaller, so each one replays over buffers a bigger step
+    left stale (padded slots and logits rows must be reset).
+    """
+    runner, manager = _runner(attention_backend, max_graph_batch=2, weight_quant=weight_quant)
+    runner.capture_piecewise_graphs(max_tokens=96, max_rows=8)
+    buckets = []
+    replay = runner._replay_pieces
+
+    def counted(input_ids, positions, metadata, bucket):
+        buckets.append(bucket)
+        return replay(input_ids, positions, metadata, bucket)
+
+    runner._replay_pieces = counted
+    greedy = SamplingOptions(max_tokens=64, temperature=0.0)
+    seqs = [
+        Sequence(prompt_token_ids=[(7 * i + j) % 500 + 1 for j in range(length)], sampling=greedy)
+        for i, length in enumerate(PROMPT_LENS[:5])  # 17, 30, 5, 64, 33
+    ]
+    for seq in seqs:
+        manager.allocate(seq)
+
+    def step(decodes, prefills):
+        """One step: decode rows first, then (seq, tokens) prefill chunks."""
+        for seq, tokens in prefills:
+            seq.num_scheduled_tokens = tokens
+        batch = decodes + [seq for seq, _ in prefills]
+        piecewise = runner.forward(batch, is_prefill=bool(prefills)).float().cpu()
+        eager = runner.forward(batch, is_prefill=bool(prefills), use_graphs=False).float().cpu()
+        torch.testing.assert_close(piecewise, eager, rtol=2e-2, atol=2e-2)
+        for seq in decodes:
+            seq.num_cached_tokens += 1
+        for seq, tokens in prefills:
+            seq.num_cached_tokens += tokens
+            seq.num_scheduled_tokens = 0
+        finished = decodes + [seq for seq, _ in prefills if seq.num_cached_tokens == len(seq)]
+        for seq in finished:
+            seq.is_prefill = False
+            seq.append_token(int(eager[batch.index(seq)].argmax()))
+            manager.may_append(seq)
+
+    a, b, c, d, e = seqs
+    step([], [(a, 17), (b, 30), (c, 5)])  # 52 tokens: a prefill step, size 64
+    step([a, b, c], [(d, 40), (e, 33)])  # 76: mixed, d's first chunk, size 96
+    step([a, b, c, e], [(d, 24)])  # 28: d's last chunk after 40 cached tokens, size 32
+    step([a, b, c, d, e], [])  # 5 decode rows, past the decode graphs (2): size 8
+    assert buckets == [64, 96, 32, 8]

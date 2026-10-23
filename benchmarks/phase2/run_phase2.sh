@@ -11,6 +11,11 @@
 # Workloads (every run uses --ignore-eos, --temperature 0 and seed 0):
 #   w1     random 1024/256 at each P2_CONCURRENCY (throughput, TTFT, ITL)
 #   w1c32  w1 at c=32 only (the GIL diagnostic run)
+#   w1u    random 1024/128 at c=1 and c=16 with their own seeds: prompts no
+#          earlier run sent, so TTFT includes the whole prefill (vllm bench's
+#          random prompt i is the same in every run with seed 0, so w1's
+#          prompts are mostly prefix-cache hits after the warmup)
+#   w1c1   w1 at c=1, 10 requests 1024/128 (nsys)
 #   w2a    one shared 2048-token prefix + 128 random tokens, output 128, c=16
 #   w2b    prefix_repetition: 48 prefixes of 4096 tokens (more than the KV
 #          cache holds) + 256-token suffixes, output 128, c=16
@@ -125,6 +130,12 @@ w1() {  # name port
 }
 
 w1c32() { bench_serve "$1" "$2" w1_c32 128 256 $(random_args 1024 256 32); }
+w1c1() { bench_serve "$1" "$2" w1_c1 10 128 $(random_args 1024 128 1); }  # short: nsys
+
+w1u() {  # seeds no other run uses: the prompts miss the prefix cache
+  bench_serve "$1" "$2" w1u_c1 10 128 $(random_args 1024 128 1) --seed 101 &&
+  bench_serve "$1" "$2" w1u_c16 64 128 $(random_args 1024 128 16) --seed 116
+}
 w1c16() { bench_serve "$1" "$2" w1_c16 32 128 $(random_args 1024 128 16); }  # short: nsys
 w1c64() { bench_serve "$1" "$2" w1_c64 64 128 $(random_args 1024 128 64); }
 

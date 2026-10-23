@@ -4,6 +4,7 @@
 Reads the P2_SERVE lines from the run's console (one per `vllm bench serve` run),
 the nsys/*.json reports and status.tsv, and writes tables per workload:
   w1  throughput, TTFT and ITL by concurrency, per server config
+  w1u the same at c=1 and 16 with prompts no earlier run sent
   w2  shared-prefix runs
   w3  the background decodes' ITL tail and the long prompts' TTFT
 plus per-step GPU idle and the engine's host phases from nsys.
@@ -44,16 +45,16 @@ def fmt(value, digits=1) -> str:
     return f"{value:.{digits}f}" if isinstance(value, float) else str(value)
 
 
-def w1_tables(rows: list[dict]) -> list[str]:
+def w1_tables(rows: list[dict], workload: str = "w1", title: str = "W1: random 1024/256") -> list[str]:
     by_label: dict[str, dict[int, dict]] = defaultdict(dict)
     for r in rows:
-        m = re.fullmatch(r"w1_c(\d+)", r["run"])
+        m = re.fullmatch(rf"{workload}_c(\d+)", r["run"])
         if m:
             by_label[r["engine"]][int(m.group(1))] = r
     if not by_label:
         return []
     levels = sorted({c for runs in by_label.values() for c in runs})
-    lines = ["## W1: random 1024/256", ""]
+    lines = [f"## {title}", ""]
     for title, key, digits in (
         ("output tok/s", "out_tok_s", 0),
         ("TTFT p50 (ms)", "ttft_p50_ms", 1),
@@ -226,7 +227,9 @@ def main() -> None:
     bench = out / "prefix_bench" / "prefix_bench.md"
     if bench.exists():
         lines += ["## " + bench.read_text().lstrip("# "), ""]
-    lines += w1_tables(rows) + w2_table(rows, out) + w3_table(rows) + offline_table(out)
+    lines += w1_tables(rows)
+    lines += w1_tables(rows, "w1u", "W1u: random 1024/128, prompts no earlier run sent (uncached)")
+    lines += w2_table(rows, out) + w3_table(rows) + offline_table(out)
     lines += nsys_table(out) + server_settings(out)
     (out / "summary.md").write_text("\n".join(lines) + "\n")
     (out / "serve_rows.json").write_text(json.dumps(rows, indent=2))

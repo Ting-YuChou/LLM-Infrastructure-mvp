@@ -109,15 +109,20 @@ class EngineCore:
 
     def capture_graphs(self) -> None:
         """Before serving on CUDA: compile the eager step's kernel variants,
-        then capture the decode CUDA graphs (unless enforce_eager)."""
+        then capture the decode CUDA graphs and the piecewise graphs for the
+        other steps (unless enforce_eager)."""
         if self.model.device.type != "cuda":
             return
         self.model_runner.warm_up_eager(self.config.max_num_seqs)
-        if not self.config.enforce_eager:
-            self.model_runner.capture_decode_graphs(
-                max_batch=min(self.config.max_num_seqs, self.config.cuda_graph_max_bs),
-                max_model_len=self.config.max_model_len,
-            )
+        if self.config.enforce_eager:
+            return
+        self.model_runner.capture_decode_graphs(
+            max_batch=min(self.config.max_num_seqs, self.config.cuda_graph_max_bs),
+            max_model_len=self.config.max_model_len,
+        )
+        max_tokens = min(self.config.cuda_graph_max_tokens, self.config.max_num_batched_tokens)
+        if max_tokens > 0:
+            self.model_runner.capture_piecewise_graphs(max_tokens, max_rows=self.config.max_num_seqs)
 
     # --- frontend side (any thread) ------------------------------------------
 

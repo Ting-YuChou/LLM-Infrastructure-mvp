@@ -16,6 +16,7 @@ services:
       WEIGHT_QUANT: none
       ENFORCE_EAGER: "false"
       CUDA_GRAPH_MAX_BS: "64"
+      CUDA_GRAPH_MAX_TOKENS: "512"
       ENGINE_MULTIPROCESS: "false"
       ASYNC_SCHEDULING: "false"
       MAX_MODEL_LEN: "2048"

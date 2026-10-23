@@ -24,9 +24,12 @@ engine:
   # (round-to-nearest, groups of 128); about 4x less weight memory and traffic.
   weight_quant: "none"
   use_triton: true
-  # CUDA graphs for decode steps up to cuda_graph_max_bs sequences.
+  # CUDA graphs for decode steps up to cuda_graph_max_bs sequences, and
+  # piecewise graphs (attention eager in between) for other steps up to
+  # cuda_graph_max_tokens tokens (0: off).
   enforce_eager: false
   cuda_graph_max_bs: 64
+  cuda_graph_max_tokens: 512
   # Launch step N+1 before collecting step N: scheduling overlaps the GPU,
   # finish checks lag one step.
   async_scheduling: false

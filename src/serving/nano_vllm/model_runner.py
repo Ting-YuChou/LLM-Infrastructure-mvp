@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional
 
 import torch
 
@@ -50,6 +51,39 @@ class _DecodeGraphs:
         return next((size for size in sorted(self.graphs) if size >= batch), None)
 
 
+# Token counts that get piecewise graphs; a step runs in the smallest that
+# fits, its extra tokens padded (vLLM's sizes are similar: 8-wide up to 256,
+# then 16-wide).
+PIECEWISE_TOKEN_SIZES = (8, 16, 24, 32, 48, 64, 96, 128, 160, 192, 224, 256, 320, 384, 448, 512)
+
+
+@dataclass
+class _PiecewiseGraphs:
+    """CUDA graphs of everything but the attention, per padded token count.
+
+    Graph ``i`` of a size runs the model from attention ``i - 1``'s output
+    to attention ``i``'s query (``forward_head`` / ``forward_between`` /
+    ``forward_tail``); the attention, whose kernels depend on how the tokens
+    split into sequences, runs eagerly in between, reading ``query`` and
+    writing ``attn``. Every graph reads and writes these static buffers,
+    shared by all sizes, so a size's graphs hold no tensors of their own.
+    Padded tokens write their keys and values into the null block.
+    """
+
+    max_rows: int  # logits rows: at most one per sequence
+    tokens: torch.Tensor  # [3, max_tokens] long: input ids, positions, slots
+    logits_indices: torch.Tensor  # [max_rows] long
+    query: torch.Tensor  # [max_tokens, heads, head_dim]: a piece's output
+    attn: torch.Tensor  # same shape: the attention's output
+    residual: torch.Tensor  # [max_tokens, hidden]
+    rope: tuple[torch.Tensor, torch.Tensor]  # cos, sin: [max_tokens, head_dim]
+    logits: torch.Tensor  # [max_rows, vocab]
+    graphs: dict[int, list[Callable[[], None]]]  # per size: each piece's replay
+
+    def bucket(self, tokens: int) -> Optional[int]:
+        return next((size for size in sorted(self.graphs) if size >= tokens), None)
+
+
 @dataclass
 class StepHandle:
     """A launched step: its sampled tokens arrive in ``host_out[slot][:rows]``."""
@@ -64,7 +98,10 @@ class ModelRunner:
 
     The model only needs ``device`` and ``forward_batch(input_ids, positions,
     cache, metadata)`` returning one row of logits per sequence. Decode steps
-    replay a CUDA graph once :meth:`capture_decode_graphs` has run.
+    replay a CUDA graph once :meth:`capture_decode_graphs` has run, other
+    steps piecewise graphs once :meth:`capture_piecewise_graphs` has (the
+    model then also needs the ``forward_head`` / ``attention`` /
+    ``forward_between`` / ``forward_tail`` pieces of ``forward_batch``).
 
     A step is :meth:`launch` (inputs up, forward, sampling into the device
     buffer ``sampled``, an async copy down) then :meth:`collect` (wait, read
@@ -80,6 +117,7 @@ class ModelRunner:
         self.cache = cache
         self.block_manager = block_manager
         self._graphs: Optional[_DecodeGraphs] = None
+        self._pieces: Optional[_PiecewiseGraphs] = None
         device = model.device
         cuda = device.type == "cuda"
         self.max_rows = max_rows
@@ -139,6 +177,11 @@ class ModelRunner:
             input_ids, positions, metadata = self.prepare(seqs, is_prefill)
             if gather_rows is not None and any(row >= 0 for row in gather_rows):
                 input_ids = self._gather_inputs(input_ids, seqs, gather_rows)
+        if use_graphs and self._pieces is not None and len(seqs) <= self._pieces.max_rows:
+            bucket = self._pieces.bucket(input_ids.numel())
+            if bucket is not None:
+                with nvtx_range("pieces"):
+                    return self._replay_pieces(input_ids, positions, metadata, bucket)
         with nvtx_range("forward"):
             return self.model.forward_batch(input_ids, positions, self.cache, metadata)
 
@@ -357,3 +400,113 @@ class ModelRunner:
         graphs.ints.copy_(graphs.host_ints[slot], non_blocking=True)
         graphs.graphs[bucket].replay()
         return graphs.outputs[bucket][:batch]
+
+    # --- piecewise CUDA graphs for the other steps -------------------------
+
+    @torch.inference_mode()
+    def capture_piecewise_graphs(self, max_tokens: int, max_rows: int) -> None:
+        """Capture the pieces of the forward pass for each size in
+        PIECEWISE_TOKEN_SIZES up to ``max_tokens``.
+
+        A step of ``n`` tokens (prefill rows, mixed rows, or decode rows past
+        the decode graphs) replays its size's graphs with the attention run
+        eagerly between them: about one kernel per layer from the host
+        instead of the ~360 of an eager step. On the CPU (tests) the pieces
+        are kept as plain functions and "replay" runs them eagerly.
+        """
+        device = self.model.device
+        cuda = device.type == "cuda"
+        model, cache = self.model, self.cache
+        sizes = [size for size in PIECEWISE_TOKEN_SIZES if size < max_tokens] + [max_tokens]
+        tokens = torch.zeros(3, max_tokens, dtype=torch.long, device=device)
+        tokens[2].fill_(cache.null_block * cache.block_size)  # capture-time writes: null block
+        logits_indices = torch.zeros(max_rows, dtype=torch.long, device=device)
+        # Shapes and dtypes of the tensors the pieces hand over, from one eager run.
+        query, residual, rope = model.forward_head(tokens[0], tokens[1], cache, tokens[2])
+        logits = model.forward_tail(torch.zeros_like(query), residual, logits_indices)
+        pieces = _PiecewiseGraphs(
+            max_rows=max_rows,
+            tokens=tokens,
+            logits_indices=logits_indices,
+            query=torch.zeros_like(query),
+            attn=torch.zeros_like(query),
+            residual=torch.zeros_like(residual),
+            rope=(torch.zeros_like(rope[0]), torch.zeros_like(rope[1])),
+            logits=torch.zeros_like(logits),
+            graphs={},
+        )
+        del query, residual, rope, logits
+
+        start = time.perf_counter()
+        pool = torch.cuda.graph_pool_handle() if cuda else None
+        num_layers = len(model.layers)
+        for size in sorted(sizes, reverse=True):  # largest first: the pool fits all
+            replays = []
+            for index in range(num_layers + 1):
+                piece = functools.partial(self._piece, pieces, index, size)
+                if not cuda:
+                    replays.append(piece)
+                    continue
+                # Eager run first: Triton JIT and cuBLAS setup must not
+                # happen inside the capture.
+                piece()
+                torch.cuda.synchronize(device)
+                graph = torch.cuda.CUDAGraph()
+                with torch.cuda.graph(graph, pool=pool):
+                    piece()
+                replays.append(graph.replay)
+            pieces.graphs[size] = replays
+        if cuda:
+            torch.cuda.synchronize(device)
+        self._pieces = pieces
+        logger.info(
+            "nano-vLLM captured piecewise CUDA graphs (%d pieces) for token counts %s in %.1f s",
+            num_layers + 1,
+            sorted(sizes),
+            time.perf_counter() - start,
+        )
+
+    def _piece(self, pieces: _PiecewiseGraphs, index: int, size: int) -> None:
+        """Piece ``index`` of a ``size``-token step, on the static buffers only."""
+        model, n = self.model, size
+        ids, positions, slots = pieces.tokens[0, :n], pieces.tokens[1, :n], pieces.tokens[2, :n]
+        rope = (pieces.rope[0][:n], pieces.rope[1][:n])
+        if index == 0:
+            query, residual, (cos, sin) = model.forward_head(ids, positions, self.cache, slots)
+            rope[0].copy_(cos)
+            rope[1].copy_(sin)
+        elif index < len(model.layers):
+            query, residual = model.forward_between(
+                index - 1, pieces.attn[:n], pieces.residual[:n], rope, self.cache, slots
+            )
+        else:
+            rows = min(n, pieces.max_rows)
+            logits = model.forward_tail(pieces.attn[:n], pieces.residual[:n], pieces.logits_indices[:rows])
+            pieces.logits[:rows].copy_(logits)
+            return
+        pieces.query[:n].copy_(query)
+        pieces.residual[:n].copy_(residual)
+
+    @torch.inference_mode()
+    def _replay_pieces(
+        self, input_ids: torch.Tensor, positions: torch.Tensor, metadata: BatchMetadata, bucket: int
+    ) -> torch.Tensor:
+        pieces = self._pieces
+        n, rows = input_ids.numel(), metadata.num_seqs
+        tokens = pieces.tokens
+        tokens[0, :n].copy_(input_ids)
+        tokens[1, :n].copy_(positions)
+        tokens[2, :n].copy_(metadata.slot_mapping)
+        if n < bucket:  # padded tokens (stale ids and positions are harmless) write nothing real
+            tokens[2, n:bucket].fill_(self.cache.null_block * self.cache.block_size)
+        pieces.logits_indices[:rows].copy_(metadata.logits_indices)
+        padded_rows = min(bucket, pieces.max_rows)
+        if rows < padded_rows:  # stale indices could point past this size's rows
+            pieces.logits_indices[rows:padded_rows].zero_()
+        replays = pieces.graphs[bucket]
+        query, attn = pieces.query[:n], pieces.attn[:n]
+        replays[0]()
+        for layer_idx in range(len(replays) - 1):
+            self.model.attention(layer_idx, query, self.cache, metadata, out=attn)
+            replays[layer_idx + 1]()
+        return pieces.logits[:rows]

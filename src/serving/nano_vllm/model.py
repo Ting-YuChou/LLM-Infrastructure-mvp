@@ -413,64 +413,134 @@ class NanoLlamaForCausalLM:
 
         Returns logits for the rows in ``metadata.logits_indices`` (all rows
         when it is None). Nothing here reads a device value back to the host.
+
+        The pass is split at each attention: :meth:`forward_head` runs up to
+        layer 0's attention, :meth:`forward_between` from layer i's attention
+        output to layer i+1's query, :meth:`forward_tail` from the last
+        attention output to the logits. Everything but the attention depends
+        only on the token count, so the model runner captures these pieces in
+        CUDA graphs per token count and runs the attention eagerly between
+        them (piecewise graphs, for steps with prefill rows).
         """
+        query, residual, rope = self.forward_head(input_ids, positions, cache, metadata.slot_mapping)
+        last = len(self.layers) - 1
+        for layer_idx in range(last):
+            attn = self.attention(layer_idx, query, cache, metadata)
+            query, residual = self.forward_between(
+                layer_idx, attn, residual, rope, cache, metadata.slot_mapping
+            )
+        attn = self.attention(last, query, cache, metadata)
+        return self.forward_tail(attn, residual, metadata.logits_indices)
+
+    def forward_head(
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        cache: PagedKVCache,
+        slot_mapping: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+        """Embedding through layer 0's query: (query, residual, (cos, sin))."""
         if self.attention_backend not in {"torch", "triton"}:
             raise NotImplementedError(
                 "nano-vLLM's paged path supports the torch and triton attention "
                 "backends; flash_attn is not implemented."
             )
-        num_tokens = input_ids.numel()
-        eps = self.config.rms_norm_eps
-        triton_attention = self.attention_backend == "triton"
-        cos = self.rope_cos[positions]  # [tokens, head_dim]
-        sin = self.rope_sin[positions]
+        rope = (self.rope_cos[positions], self.rope_sin[positions])  # [tokens, head_dim]
         # x is each sublayer's output; fused_add_rms_norm folds it into the
         # residual stream and normalizes for the next sublayer in one pass.
         residual = self.weights["model.embed_tokens.weight"][input_ids]
         x_norm = rms_norm(
-            residual, self.layers[0].input_norm, eps=eps, use_triton=self.use_triton
+            residual, self.layers[0].input_norm, eps=self.config.rms_norm_eps, use_triton=self.use_triton
         )
+        return self._query(0, x_norm, rope, cache, slot_mapping), residual, rope
 
-        for layer_idx, layer in enumerate(self.layers):
-            qkv = self._linear(x_norm, layer.qkv, layer.qkv_bias)
-            query = rope_and_cache_write(
-                qkv,
-                cos,
-                sin,
-                cache.keys[layer_idx],
-                cache.values[layer_idx],
-                metadata.slot_mapping,
-                self.config.num_attention_heads,
-                self.config.num_key_value_heads,
-                use_triton=triton_attention,
-            )
-            attn = self._paged_attention(
-                query, cache.keys[layer_idx], cache.values[layer_idx], metadata
-            )
-            x = self._linear(attn.reshape(num_tokens, -1), layer.o_proj, layer.o_bias)
-            x_norm, residual = fused_add_rms_norm(
-                x, residual, layer.post_norm, eps=eps, use_triton=self.use_triton
-            )
-            gate_up = self._linear(x_norm, layer.gate_up, layer.gate_up_bias)
-            x = self._linear(
-                silu_and_mul(gate_up, use_triton=self.use_triton), layer.down, layer.down_bias
-            )
-            if layer_idx + 1 < len(self.layers):
-                x_norm, residual = fused_add_rms_norm(
-                    x,
-                    residual,
-                    self.layers[layer_idx + 1].input_norm,
-                    eps=eps,
-                    use_triton=self.use_triton,
-                )
+    def forward_between(
+        self,
+        layer_idx: int,
+        attn: torch.Tensor,
+        residual: torch.Tensor,
+        rope: tuple[torch.Tensor, torch.Tensor],
+        cache: PagedKVCache,
+        slot_mapping: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Layer ``layer_idx``'s attention output through layer + 1's query."""
+        x, residual = self._finish_layer(layer_idx, attn, residual)
+        x_norm, residual = fused_add_rms_norm(
+            x,
+            residual,
+            self.layers[layer_idx + 1].input_norm,
+            eps=self.config.rms_norm_eps,
+            use_triton=self.use_triton,
+        )
+        return self._query(layer_idx + 1, x_norm, rope, cache, slot_mapping), residual
 
-        if metadata.logits_indices is not None:
-            x = x[metadata.logits_indices]
-            residual = residual[metadata.logits_indices]
+    def forward_tail(
+        self, attn: torch.Tensor, residual: torch.Tensor, logits_indices: Optional[torch.Tensor]
+    ) -> torch.Tensor:
+        """The last attention output to logits, for ``logits_indices`` (all rows if None)."""
+        x, residual = self._finish_layer(len(self.layers) - 1, attn, residual)
+        if logits_indices is not None:
+            x = x[logits_indices]
+            residual = residual[logits_indices]
         x_norm, _ = fused_add_rms_norm(
-            x, residual, self._weight("model.norm.weight"), eps=eps, use_triton=self.use_triton
+            x,
+            residual,
+            self._weight("model.norm.weight"),
+            eps=self.config.rms_norm_eps,
+            use_triton=self.use_triton,
         )
         return self._linear(x_norm, self.lm_head_weight)
+
+    def attention(
+        self,
+        layer_idx: int,
+        query: torch.Tensor,
+        cache: PagedKVCache,
+        metadata: BatchMetadata,
+        out: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Paged attention of layer ``layer_idx`` (into ``out`` when given)."""
+        return self._paged_attention(
+            query, cache.keys[layer_idx], cache.values[layer_idx], metadata, out=out
+        )
+
+    def _query(
+        self,
+        layer_idx: int,
+        x_norm: torch.Tensor,
+        rope: tuple[torch.Tensor, torch.Tensor],
+        cache: PagedKVCache,
+        slot_mapping: torch.Tensor,
+    ) -> torch.Tensor:
+        """QKV projection, RoPE, and the new keys/values written to the cache."""
+        layer = self.layers[layer_idx]
+        qkv = self._linear(x_norm, layer.qkv, layer.qkv_bias)
+        return rope_and_cache_write(
+            qkv,
+            rope[0],
+            rope[1],
+            cache.keys[layer_idx],
+            cache.values[layer_idx],
+            slot_mapping,
+            self.config.num_attention_heads,
+            self.config.num_key_value_heads,
+            use_triton=self.attention_backend == "triton",
+        )
+
+    def _finish_layer(
+        self, layer_idx: int, attn: torch.Tensor, residual: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """o_proj, residual + post-attention norm and the MLP: (x, residual)."""
+        layer = self.layers[layer_idx]
+        x = self._linear(attn.reshape(attn.shape[0], -1), layer.o_proj, layer.o_bias)
+        x_norm, residual = fused_add_rms_norm(
+            x, residual, layer.post_norm, eps=self.config.rms_norm_eps, use_triton=self.use_triton
+        )
+        gate_up = self._linear(x_norm, layer.gate_up, layer.gate_up_bias)
+        x = self._linear(
+            silu_and_mul(gate_up, use_triton=self.use_triton), layer.down, layer.down_bias
+        )
+        return x, residual
 
     def _linear(
         self, x: torch.Tensor, weight: torch.Tensor, bias: Optional[torch.Tensor] = None
@@ -483,6 +553,7 @@ class NanoLlamaForCausalLM:
         key_cache: torch.Tensor,
         value_cache: torch.Tensor,
         metadata: BatchMetadata,
+        out: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         scale = 1.0 / math.sqrt(self.config.head_dim)
         use_triton = self.attention_backend == "triton"
@@ -495,6 +566,7 @@ class NanoLlamaForCausalLM:
                 metadata.context_lens,
                 scale,
                 use_triton=use_triton,
+                out=out,
             )
         decode_rows = metadata.num_decode_rows
         if decode_rows == 0:
@@ -509,12 +581,14 @@ class NanoLlamaForCausalLM:
                 metadata.context_lens_host,
                 scale,
                 use_triton=use_triton,
+                out=out,
             )
         # Mixed batch: the decode rows come first (one token each, so token i
         # is row i) and take the split-KV decode kernel; the prefill rows
         # after them take the varlen prefill kernel, with their own aligned
         # copies of the per-row fields (see build_batch).
-        out = torch.empty_like(query)
+        if out is None:
+            out = torch.empty_like(query)
         paged_decode_attention(
             query[:decode_rows],
             key_cache,
