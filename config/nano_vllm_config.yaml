@@ -32,7 +32,7 @@ engine:
   cuda_graph_max_tokens: 512
   # Launch step N+1 before collecting step N: scheduling overlaps the GPU,
   # finish checks lag one step.
-  async_scheduling: false
+  async_scheduling: true
   # Engine core (scheduler + model) in its own process; this one keeps
   # tokenization, detokenization and HTTP off the model steps' GIL.
   multiprocess: false

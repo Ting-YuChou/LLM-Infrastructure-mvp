@@ -80,7 +80,7 @@ class NanoVLLMConfig:
     cuda_graph_max_tokens: int = 512
     # Launch step N+1 before collecting step N, so scheduling and input
     # preparation overlap the GPU; finish checks then lag one step.
-    async_scheduling: bool = False
+    async_scheduling: bool = True
     # Run the engine core (scheduler + model) in its own process; the server
     # process keeps tokenization, detokenization, stop strings and HTTP.
     multiprocess: bool = False

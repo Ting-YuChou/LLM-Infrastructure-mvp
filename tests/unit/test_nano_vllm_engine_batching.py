@@ -367,12 +367,15 @@ def test_eos_ids_from_generation_config_list_and_stop_token_ids(tmp_path):
     assert (length.token_ids, length.finish_reason) == ([96], "length")
 
 
-def test_stop_string_halts_streaming_generation():
+@pytest.mark.parametrize("async_scheduling", [False, True])
+def test_stop_string_halts_streaming_generation(async_scheduling):
     prompt = "ab"
     script = b"hello STOP world, this would keep going for a long while"
 
     async def scenario():
-        engine = _engine(ByteTokenizer(), script_model(script, len(prompt)))
+        engine = _engine(
+            ByteTokenizer(), script_model(script, len(prompt)), async_scheduling=async_scheduling
+        )
         try:
             seq = engine.prepare_request(
                 prompt, SamplingOptions(max_tokens=32, stop=["STOP"], **GREEDY)
@@ -390,7 +393,8 @@ def test_stop_string_halts_streaming_generation():
     assert outputs[-1].completion_tokens == len("hello STOP")
     # Halted right after the stop string, not after max_tokens=32 steps.
     assert seq.num_completion_tokens <= len("hello STOP") + 1
-    assert len(engine.model.calls) <= len("hello STOP") + 1
+    # Async scheduling has launched one more step by the time the stop shows.
+    assert len(engine.model.calls) <= len("hello STOP") + 1 + async_scheduling
     _assert_all_blocks_free(engine)
 
 
