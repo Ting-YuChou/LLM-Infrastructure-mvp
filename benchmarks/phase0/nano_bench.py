@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import importlib
 import json
 import random
 import time
@@ -224,7 +225,14 @@ def main() -> None:
         "--temperature", type=float, default=0.0, help="paged path; 0 is greedy (argmax only)"
     )
     parser.add_argument("--top-p", type=float, default=1.0, help="paged path")
+    parser.add_argument(
+        "--w4a16-gemv-prefetch", type=int, default=None,
+        help="W4A16_CONFIG['gemv_prefetch'] (default: the code's)",
+    )
     args = parser.parse_args()
+    w4a16 = importlib.import_module("src.serving.nano_vllm.kernels.w4a16")
+    if args.w4a16_gemv_prefetch is not None:
+        w4a16.W4A16_CONFIG["gemv_prefetch"] = args.w4a16_gemv_prefetch
 
     runs = [tuple(r.split(":")) for r in args.runs.split(",")]
     max_batch = max(int(b) for _, b, _, _ in runs)
@@ -272,6 +280,7 @@ def main() -> None:
         result["attention_backend"] = args.attention_backend
         result["linear_backend"] = args.linear_backend
         result["weight_quant"] = args.weight_quant
+        result["w4a16_gemv_prefetch"] = w4a16.W4A16_CONFIG["gemv_prefetch"]
         result["async_scheduling"] = args.async_scheduling
         result["temperature"] = args.temperature if kind == "paged" else 0.0
         result["top_p"] = args.top_p if kind == "paged" else 1.0

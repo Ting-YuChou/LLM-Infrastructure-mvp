@@ -31,8 +31,8 @@
 # same two steps), P1_E2E_RUNS (nano_bench kind:batch:in:out list;
 # vLLM runs the paged ones), P1_NANO_CONFIGS (label:attention:linear:eager|graph[:weight_quant[:flags]]
 # per nano_bench run, default: the Phase 1 milestones in order; flags joined by +: async for async
-# scheduling, sampled for P1_SAMPLING instead of greedy, and with any sampled config vLLM runs its
-# points sampled too), P1_SAMPLING ("temperature top_p", default "0.7 0.9": the nano server's
+# scheduling, sampled for P1_SAMPLING instead of greedy (with any sampled config vLLM runs its
+# points sampled too), pf<N> for the W4A16 GEMV's prefetch depth N), P1_SAMPLING ("temperature top_p", default "0.7 0.9": the nano server's
 # default sampling), P1_NCU_LAUNCHES (cap per kbench kernel, default
 # 300), P1_CUDA_VERSION (cuda129 step, default: the venv's torch.version.cuda),
 # P0_VLLM_VERSION (default 0.19.1).
@@ -123,6 +123,7 @@ nano_config_args() {  # label:attention:linear:eager|graph[:weight_quant[:flags]
   [[ "${mode}" == eager ]] && args+=" --enforce-eager"
   [[ "+${flags}+" == *+async+* ]] && args+=" --async-scheduling"
   [[ "+${flags}+" == *+sampled+* ]] && args+=" $(sampled_args)"
+  [[ "+${flags}+" =~ \+pf([0-9]+)\+ ]] && args+=" --w4a16-gemv-prefetch ${BASH_REMATCH[1]}"
   echo "${args}"
 }
 
