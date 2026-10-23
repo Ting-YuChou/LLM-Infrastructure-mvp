@@ -31,6 +31,7 @@ import time
 import torch
 
 from src.serving.nano_vllm import NanoLlamaEngine, NanoVLLMConfig, SamplingOptions, Sequence
+from src.serving.nano_vllm import nvtx as engine_nvtx
 
 
 CUDA = torch.cuda.is_available()
@@ -94,7 +95,8 @@ async def _drive(engine: NanoLlamaEngine, seqs: list[Sequence], records: list, p
             profiling = True
         before = len(records)
         t0 = time.perf_counter()
-        with nvtx(f"engine_step_{step}"):
+        # With NANO_NVTX=1 the engine marks its own steps and phases.
+        with contextlib.nullcontext() if engine_nvtx.ENABLED else nvtx(f"engine_step_{step}"):
             await engine._step()
         if len(records) > before:  # a step that scheduled nothing ran no model
             records[-1]["step_s"] = time.perf_counter() - t0

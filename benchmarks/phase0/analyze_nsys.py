@@ -10,7 +10,9 @@ busy time (union of kernels, memcpys and memsets on the device, clipped to the
 step), the idle remainder, kernels and launch API calls, and kernel time by
 category. With NVTX step ranges (engine_step_*, decode_step_*) the per-step
 numbers are medians over the ranges (steps over 3x the median, i.e. prefill,
-dropped); without them they are window / --steps.
+dropped); without them they are window / --steps. Other NVTX ranges inside
+the window (the engine's host phases with NANO_NVTX=1: schedule, prepare,
+replay, sample, postprocess, publish, detokenize) are summarized by name.
 
 Writes <label>.json, <label>_timeline.csv (a few steps from the middle of the
 window) and, when matplotlib is installed, <label>_timeline.png.
@@ -236,7 +238,24 @@ def analyze(data: dict, label: str, steps: int | None, batch: int) -> dict:
         slice_lo = (step_lo + step_hi) // 2
         slice_hi = slice_lo + 5_000_000
     report["timeline_slice_ns"] = [slice_lo, slice_hi]
+    report["nvtx_phases"] = nvtx_phases(data["ranges"], lo, hi)
     return report
+
+
+def nvtx_phases(ranges: list, lo: int, hi: int) -> dict:
+    """Per-name count, median and total of the non-step NVTX ranges in [lo, hi)."""
+    durations: dict[str, list[int]] = defaultdict(list)
+    for s, e, text in ranges:
+        if lo <= s < hi and text != "measured" and not re.match(r"(decode|engine)_step_\d+$", text):
+            durations[text].append(e - s)
+    return {
+        name: {
+            "count": len(ds),
+            "median_us": statistics.median(ds) / 1e3,
+            "total_ms": sum(ds) / 1e6,
+        }
+        for name, ds in sorted(durations.items(), key=lambda kv: -sum(kv[1]))
+    }
 
 
 def write_timeline(data: dict, report: dict, out_dir: Path) -> None:
@@ -321,6 +340,9 @@ def main() -> None:
                 **{k: round(v, 3) for k, v in per.items()},
                 "categories": {
                     c: round(v["frac"], 3) for c, v in report["kernel_time_by_category"].items()
+                },
+                "phase_median_us": {
+                    name: round(v["median_us"], 1) for name, v in report["nvtx_phases"].items()
                 },
             }
         ),

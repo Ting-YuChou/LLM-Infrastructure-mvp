@@ -20,6 +20,9 @@ class SamplingOptions:
     # Extra token ids that end generation (vLLM extension); always honored,
     # unlike the model's EOS ids which ignore_eos can disable.
     stop_token_ids: Optional[list[int]] = None
+    # Keep generating past the model's EOS ids (vLLM extension; benchmarks use
+    # it to get exactly max_tokens per request).
+    ignore_eos: bool = False
 
 
 def filter_logits(

@@ -18,6 +18,7 @@ from .config import NanoVLLMConfig
 from .kv_cache import PagedKVCache
 from .model import NanoLlamaForCausalLM
 from .model_runner import ModelRunner
+from .nvtx import nvtx_range
 from .scheduler import Scheduler
 from .sampling import SamplingOptions, sample_next_token
 from .sequence import GenerationEvent, Sequence, SequenceStatus
@@ -177,6 +178,7 @@ class NanoLlamaEngine:
         # Sequences inside the running model step; aborting one of them only
         # marks it, and postprocess() frees its blocks once the step returns.
         self._inflight_seq_ids: set[int] = set()
+        self._step_count = 0
 
     def initialize(self) -> None:
         from transformers import AutoTokenizer
@@ -274,7 +276,9 @@ class NanoLlamaEngine:
         prompt_ids = self._encode(prompt)
         prompt_tokens = len(prompt_ids)
         max_tokens = self._resolve_max_tokens(prompt_tokens, sampling.max_tokens)
-        stop_token_ids = self.eos_token_ids | set(sampling.stop_token_ids or ())
+        stop_token_ids = set(sampling.stop_token_ids or ())
+        if not sampling.ignore_eos:
+            stop_token_ids |= self.eos_token_ids
         processor = _OutputProcessor(self.tokenizer, prompt_ids, sampling.stop or [])
         input_ids = torch.tensor([prompt_ids], dtype=torch.long, device=self.model.device)
         cache = self.model.new_cache(
@@ -339,6 +343,7 @@ class NanoLlamaEngine:
             prompt_token_ids=prompt_ids,
             sampling=replace(sampling, max_tokens=max_tokens),
             eos_token_id=self.eos_token_ids,
+            ignore_eos=sampling.ignore_eos,
         )
         seq.events = asyncio.Queue()
         return seq
@@ -360,11 +365,12 @@ class NanoLlamaEngine:
                 if event.error is not None:
                     raise event.error
                 new_token_ids = []
-                if event.token_id is not None:
-                    processor.add_token(event.token_id)
-                    new_token_ids.append(event.token_id)
-                if event.finished:
-                    processor.finish(event.finish_reason)
+                with nvtx_range("detokenize"):
+                    if event.token_id is not None:
+                        processor.add_token(event.token_id)
+                        new_token_ids.append(event.token_id)
+                    if event.finished:
+                        processor.finish(event.finish_reason)
                 yield StreamOutput(
                     text=processor.take_delta(),
                     token_ids=new_token_ids,
@@ -409,6 +415,16 @@ class NanoLlamaEngine:
         async with aclosing(self.stream_request(seq)) as outputs:
             async for output in outputs:
                 yield output
+
+    def start_profile(self) -> None:
+        """Open the cudaProfilerApi capture range (nsys/ncu); no-op off CUDA."""
+        if torch.cuda.is_available():
+            torch.cuda.cudart().cudaProfilerStart()
+
+    def stop_profile(self) -> None:
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+            torch.cuda.cudart().cudaProfilerStop()
 
     def abort(self, seq: Sequence, finish_reason: str = "abort") -> None:
         """Stop generating for ``seq`` and release its KV blocks."""
@@ -536,9 +552,15 @@ class NanoLlamaEngine:
         Exceptions fail the affected requests instead of escaping: a dead
         scheduler task would leave every current and future request hanging.
         """
+        self._step_count += 1
+        with nvtx_range(f"engine_step_{self._step_count}"):
+            await self._step_inner()
+
+    async def _step_inner(self) -> None:
         async with self._scheduler_lock:
             try:
-                seqs, is_prefill = self.scheduler.schedule()
+                with nvtx_range("schedule"):
+                    seqs, is_prefill = self.scheduler.schedule()
             except Exception as exc:
                 # Scheduler state for queued requests can't be trusted anymore.
                 logger.exception("nano-vLLM schedule() failed; failing queued requests")
@@ -569,13 +591,15 @@ class NanoLlamaEngine:
                 is_prefill,
             )
             async with self._scheduler_lock:
-                emitted = self.scheduler.postprocess(seqs, token_ids, is_prefill)
+                with nvtx_range("postprocess"):
+                    emitted = self.scheduler.postprocess(seqs, token_ids, is_prefill)
         except Exception as exc:
             self._fail_sequences(seqs, exc)
             return
         finally:
             self._inflight_seq_ids = set()
-        self._publish_events(emitted)
+        with nvtx_range("publish"):
+            self._publish_events(emitted)
 
     def _run_scheduled_batch(self, seqs: list[Sequence], is_prefill: bool) -> list[int]:
         if self.model_runner is None:

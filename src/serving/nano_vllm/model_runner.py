@@ -12,6 +12,7 @@ import torch
 from .block_manager import BlockManager
 from .kv_cache import PagedKVCache
 from .metadata import BatchMetadata, build_batch
+from .nvtx import nvtx_range
 from .sampling import sample_tokens
 from .sequence import Sequence
 
@@ -63,7 +64,8 @@ class ModelRunner:
 
     def run(self, seqs: list[Sequence], is_prefill: bool) -> list[int]:
         logits = self.forward(seqs, is_prefill)
-        return sample_tokens(logits, [seq.sampling for seq in seqs])
+        with nvtx_range("sample"):  # includes waiting for the forward pass
+            return sample_tokens(logits, [seq.sampling for seq in seqs])
 
     def forward(
         self, seqs: list[Sequence], is_prefill: bool, use_graphs: bool = True
@@ -72,9 +74,12 @@ class ModelRunner:
         if use_graphs and not is_prefill and self._graphs is not None:
             bucket = self._graphs.bucket(len(seqs))
             if bucket is not None:
-                return self._replay(seqs, bucket)
-        input_ids, positions, metadata = self.prepare(seqs, is_prefill)
-        return self.model.forward_batch(input_ids, positions, self.cache, metadata)
+                with nvtx_range("replay"):
+                    return self._replay(seqs, bucket)
+        with nvtx_range("prepare"):
+            input_ids, positions, metadata = self.prepare(seqs, is_prefill)
+        with nvtx_range("forward"):
+            return self.model.forward_batch(input_ids, positions, self.cache, metadata)
 
     def prepare(
         self, seqs: list[Sequence], is_prefill: bool

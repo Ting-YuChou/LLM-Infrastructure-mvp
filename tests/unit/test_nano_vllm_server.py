@@ -371,3 +371,50 @@ def test_stream_with_real_engine_reports_length_and_frees_blocks():
     assert content == " t12 t13 t14"
     assert payloads[-1]["choices"][0]["finish_reason"] == "length"
     assert engine.block_manager.num_free_blocks == engine.config.num_kvcache_blocks
+
+
+def test_ignore_eos_and_usage_chunk_for_benchmark_clients():
+    """vllm bench serve sends ignore_eos and stream_options.include_usage."""
+    from test_nano_vllm_engine_batching import ListTokenizer, _engine, successor_model
+
+    class EosTokenizer(ListTokenizer):
+        eos_token_id = 13  # the successor model reaches it after two tokens
+
+    engine = _engine(EosTokenizer({"go": [10, 11]}), successor_model())
+    server = _server_with_engine(engine, eager_load=False)
+    body = {"prompt": "go", "max_tokens": 4, "temperature": 0.0, "stream": True}
+    with TestClient(server.app) as client:
+        stopped = _sse_payloads(client.post("/v1/completions", json=body).text)
+        ignored = _sse_payloads(
+            client.post(
+                "/v1/completions",
+                json={**body, "ignore_eos": True, "stream_options": {"include_usage": True}},
+            ).text
+        )
+
+    # Without ignore_eos: no usage chunk, generation stops at EOS (13; this
+    # fake tokenizer does not skip it when decoding).
+    assert all("usage" not in p for p in stopped)
+    assert "".join(p["choices"][0]["text"] for p in stopped) == " t12 t13"
+    assert stopped[-1]["choices"][0]["finish_reason"] == "stop"
+    # With it: all four tokens, then a usage chunk with empty choices.
+    usage = ignored[-1]
+    assert usage["choices"] == []
+    assert usage["usage"] == {"prompt_tokens": 2, "completion_tokens": 4, "total_tokens": 6}
+    assert ignored[-2]["choices"][0]["finish_reason"] == "length"
+    text = "".join(p["choices"][0]["text"] for p in ignored[:-1])
+    assert text == " t12 t13 t14 t15"
+
+
+def test_models_and_profile_routes():
+    from test_nano_vllm_engine_batching import ListTokenizer, _engine, successor_model
+
+    with TestClient(_server().app) as client:
+        models = client.get("/v1/models").json()
+        assert [m["id"] for m in models["data"]] == ["nano-test"]
+        assert client.post("/start_profile").status_code == 501  # engine has none
+
+    engine = _engine(ListTokenizer({"go": [10, 11]}), successor_model())
+    with TestClient(_server_with_engine(engine, eager_load=False).app) as client:
+        assert client.post("/start_profile").status_code == 200  # no-op on CPU
+        assert client.post("/stop_profile").status_code == 200

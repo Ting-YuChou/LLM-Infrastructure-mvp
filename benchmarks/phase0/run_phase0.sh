@@ -43,7 +43,7 @@ mkdir -p "${OUT}"/{logs,serve,nsys,ncu,offline}
 exec 3>&1  # console (pod logs); step output goes to ${OUT}/logs/<step>.log
 
 log() { echo "[p0 $(date -u +%H:%M:%S)] $*" >&3; }
-# run_step, want, install_vllm/nsys, download_model, nsys_run, ncu_run
+# run_step, want, install_vllm/nsys, download_model, serving, nsys_run, ncu_run
 # shellcheck source-path=SCRIPTDIR source=lib.sh
 source "${CODE_DIR}/lib.sh"
 
@@ -60,72 +60,16 @@ api.upload_folder(
 EOF
 }
 
-# --- installs (run in parallel) --------------------------------------------
-install_sglang() {
-  # ninja: flashinfer JIT-compiles kernels when SGLang captures its CUDA graphs.
-  { [[ -x "${VENVS}/sglang/bin/python" ]] || uv venv --seed --python 3.12 "${VENVS}/sglang"; } &&
-  { uv pip install -p "${VENVS}/sglang/bin/python" "${SGLANG_SPEC}" ninja ||
-    uv pip install -p "${VENVS}/sglang/bin/python" sglang ninja; } &&
-  "${VENVS}/sglang/bin/python" -c "import sglang, torch; print('sglang', sglang.__version__, 'torch', torch.__version__)"
-}
-
+# --- installs (run in parallel; install_sglang: lib.sh) ----------------------
 clone_repo() {
   if [[ -n "${P0_REPO_DIR:-}" ]]; then ls "${REPO_DIR}/src/serving/nano_vllm"; return; fi
   rm -rf "${REPO_DIR}" && git clone --depth 1 "${REPO_URL}" "${REPO_DIR}" && git -C "${REPO_DIR}" log -1 --oneline
 }
 
-# --- serving benchmarks ----------------------------------------------------
-SERVER_PID=""
-
-wait_ready() {  # url timeout_s
-  local deadline=$(( $(date +%s) + $2 ))
-  until curl -sf -o /dev/null "$1"; do
-    if ! kill -0 "${SERVER_PID}" 2>/dev/null; then return 1; fi
-    if (( $(date +%s) > deadline )); then return 1; fi
-    sleep 5
-  done
-}
-
-stop_server() {
-  [[ -n "${SERVER_PID}" ]] || return 0
-  kill -TERM -- "-${SERVER_PID}" 2>/dev/null
-  local i
-  for i in $(seq 60); do kill -0 "${SERVER_PID}" 2>/dev/null || break; sleep 2; done
-  kill -KILL -- "-${SERVER_PID}" 2>/dev/null
-  SERVER_PID=""
-  for i in $(seq 30); do  # wait until the GPU memory is back
-    (( $(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits | head -1) < 2000 )) && break
-    sleep 2
-  done
-}
-
+# --- serving benchmarks (wait_ready, stop_server, start_server, bench_serve: lib.sh)
 bench() {  # engine port label input_len output_len num_prompts concurrency
-  timeout 1200 "${VENVS}/vllm/bin/vllm" bench serve \
-    --backend vllm --base-url "http://127.0.0.1:$2" --model "${MODEL}" \
-    --dataset-name random --random-input-len "$4" --random-output-len "$5" --random-range-ratio 0.0 \
-    --ignore-eos --num-prompts "$6" --max-concurrency "$7" --seed 0 \
-    --percentile-metrics ttft,tpot,itl,e2el --metric-percentiles 50,90,99 \
-    --save-result --result-dir "${OUT}/serve" --result-filename "$1_$3.json"
-  local rc=$?
-  "${PY}" - "${OUT}/serve/$1_$3.json" "$1" "$3" "$6" "$5" <<'EOF' >&3
-import json, sys
-path, engine, label, n, out_len = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4]), int(sys.argv[5])
-try:
-    r = json.load(open(path))
-except (OSError, ValueError) as e:
-    print(f"P0_SERVE {engine} {label} missing result: {e}"); sys.exit()
-slim = {k: v for k, v in r.items() if not isinstance(v, (list, dict))}  # drop per-request arrays
-json.dump(slim, open(path, "w"), indent=2)
-ok = slim.get("completed") == n and slim.get("total_output_tokens") == n * out_len
-print("P0_SERVE " + json.dumps({
-    "engine": engine, "run": label, "ok": ok, "completed": slim.get("completed"),
-    "out_tok_s": round(slim.get("output_throughput", 0), 1),
-    "ttft_p50_ms": round(slim.get("median_ttft_ms", 0), 1),
-    "tpot_p50_ms": round(slim.get("median_tpot_ms", 0), 2),
-    "itl_p50_ms": round(slim.get("median_itl_ms", 0), 2),
-    "itl_p99_ms": round(slim.get("p99_itl_ms", 0), 2)}))
-EOF
-  return "${rc}"
+  bench_serve "$1" "$2" "$3" "$6" "$5" --dataset-name random --random-input-len "$4" \
+    --random-output-len "$5" --random-range-ratio 0.0 --max-concurrency "$7"
 }
 
 sweep() {  # engine port
@@ -140,18 +84,8 @@ sweep() {  # engine port
 }
 
 serve_engine() {  # engine port health_path command...
-  local engine=$1 port=$2 health=$3; shift 3
-  local start=$(date +%s)
-  setsid "$@" > "${OUT}/logs/${engine}_server.log" 2>&1 &
-  SERVER_PID=$!
-  if ! wait_ready "http://127.0.0.1:${port}${health}" 1200; then
-    log "${engine} server did not become ready"; tail -40 "${OUT}/logs/${engine}_server.log" >&3
-    stop_server; return 1
-  fi
-  echo "{\"engine\": \"${engine}\", \"startup_s\": $(( $(date +%s) - start )), \"args\": \"${*//\"/}\"}" \
-    > "${OUT}/serve/${engine}_startup.json"
-  log "${engine} ready after $(( $(date +%s) - start ))s; $(nvidia-smi --query-gpu=memory.used --format=csv,noheader) in use"
-  sweep "${engine}" "${port}"
+  start_server "$@" || return 1
+  sweep "$1" "$2"
   stop_server
 }
 

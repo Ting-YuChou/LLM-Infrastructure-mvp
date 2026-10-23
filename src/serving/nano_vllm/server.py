@@ -8,6 +8,7 @@ import inspect
 import json
 import logging
 import os
+import sys
 import time
 from contextlib import aclosing, asynccontextmanager
 from dataclasses import dataclass
@@ -48,6 +49,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+class StreamOptions(BaseModel):
+    include_usage: bool = False
+
+
 class CompletionRequest(BaseModel):
     model: Optional[str] = None
     prompt: str | List[str]
@@ -57,8 +62,10 @@ class CompletionRequest(BaseModel):
     top_p: float = Field(default=0.9, ge=0.0, le=1.0)
     top_k: int = Field(default=-1, ge=-1)
     stream: bool = False
+    stream_options: Optional[StreamOptions] = None
     stop: Optional[str | List[str]] = None
     stop_token_ids: Optional[List[int]] = None
+    ignore_eos: bool = False
 
 
 class ChatMessage(BaseModel):
@@ -74,8 +81,10 @@ class ChatCompletionRequest(BaseModel):
     top_p: float = Field(default=0.9, ge=0.0, le=1.0)
     top_k: int = Field(default=-1, ge=-1)
     stream: bool = False
+    stream_options: Optional[StreamOptions] = None
     stop: Optional[str | List[str]] = None
     stop_token_ids: Optional[List[int]] = None
+    ignore_eos: bool = False
 
 
 @dataclass
@@ -156,6 +165,33 @@ class NanoVLLMServer:
                 "mode": "nano-vllm",
             }
 
+        @self.app.get("/v1/models")
+        async def list_models():
+            return {
+                "object": "list",
+                "data": [
+                    {
+                        "id": self.config.served_model_name,
+                        "object": "model",
+                        "created": int(time.time()),
+                        "owned_by": "nano-vllm",
+                        "max_model_len": self.config.max_model_len,
+                    }
+                ],
+            }
+
+        # nsys --capture-range=cudaProfilerApi records between these calls
+        # (vllm bench serve --profile hits the same paths).
+        @self.app.post("/start_profile")
+        async def start_profile():
+            self._profile("start_profile")
+            return {"status": "profiling"}
+
+        @self.app.post("/stop_profile")
+        async def stop_profile():
+            self._profile("stop_profile")
+            return {"status": "stopped"}
+
         @self.app.post("/v1/completions")
         async def create_completion(request: CompletionRequest):
             self._ensure_ready()
@@ -178,7 +214,8 @@ class NanoVLLMServer:
                 )
                 return StreamingResponse(
                     self._stream_completion(
-                        open_stream, model_name, arrival, prompts[0]
+                        open_stream, model_name, arrival, prompts[0],
+                        include_usage=_include_usage(request),
                     ),
                     media_type="text/event-stream",
                 )
@@ -252,7 +289,8 @@ class NanoVLLMServer:
                 )
                 return StreamingResponse(
                     self._stream_chat_completion(
-                        open_stream, model_name, arrival, prompt
+                        open_stream, model_name, arrival, prompt,
+                        include_usage=_include_usage(request),
                     ),
                     media_type="text/event-stream",
                 )
@@ -302,6 +340,12 @@ class NanoVLLMServer:
                     prompt_tokens=result.prompt_tokens if result else 0,
                     completion_tokens=result.completion_tokens if result else 0,
                 )
+
+    def _profile(self, method: str) -> None:
+        action = getattr(self.engine, method, None)
+        if action is None:
+            raise HTTPException(status_code=501, detail=f"engine has no {method}")
+        action()
 
     def _ensure_ready(self) -> None:
         if self.startup_error:
@@ -431,6 +475,7 @@ class NanoVLLMServer:
         prompt_text: str,
         format_chunk: Callable[[str], dict],
         format_final: Callable[[str], dict],
+        format_usage: Optional[Callable[[dict], dict]] = None,
     ) -> AsyncIterator[str]:
         """SSE body with request tracking that always balances.
 
@@ -450,6 +495,10 @@ class NanoVLLMServer:
                     async for text in chunks:
                         yield self._format_sse_payload(format_chunk(text))
             yield self._format_sse_payload(format_final(state.finish_reason))
+            if format_usage is not None:
+                yield self._format_sse_payload(
+                    format_usage(self._stream_usage(state, prompt_text))
+                )
             yield "data: [DONE]\n\n"
             status = "success"
         except (asyncio.CancelledError, GeneratorExit):
@@ -459,23 +508,33 @@ class NanoVLLMServer:
             error_type = type(exc).__name__
             raise
         finally:
+            usage = self._stream_usage(state, prompt_text)
             finish_request_tracking(
                 model_name=model_name,
                 endpoint=endpoint,
                 start_time=arrival,
                 status=status,
                 error_type=error_type,
-                prompt_tokens=(
-                    state.prompt_tokens
-                    if state.prompt_tokens is not None
-                    else self._estimate_prompt_tokens(prompt_text)
-                ),
-                completion_tokens=(
-                    state.completion_tokens
-                    if state.completion_tokens is not None
-                    else self._estimate_completion_tokens(state.text)
-                ),
+                prompt_tokens=usage["prompt_tokens"],
+                completion_tokens=usage["completion_tokens"],
             )
+
+    def _stream_usage(self, state: _StreamState, prompt_text: str) -> dict:
+        prompt_tokens = (
+            state.prompt_tokens
+            if state.prompt_tokens is not None
+            else self._estimate_prompt_tokens(prompt_text)
+        )
+        completion_tokens = (
+            state.completion_tokens
+            if state.completion_tokens is not None
+            else self._estimate_completion_tokens(state.text)
+        )
+        return {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+        }
 
     def _completion_sampling(self, request: CompletionRequest) -> SamplingOptions:
         return SamplingOptions(
@@ -485,6 +544,7 @@ class NanoVLLMServer:
             top_k=request.top_k,
             stop=_stop_list(request.stop),
             stop_token_ids=request.stop_token_ids,
+            ignore_eos=request.ignore_eos,
         )
 
     def _chat_sampling(self, request: ChatCompletionRequest) -> SamplingOptions:
@@ -495,6 +555,7 @@ class NanoVLLMServer:
             top_k=request.top_k,
             stop=_stop_list(request.stop),
             stop_token_ids=request.stop_token_ids,
+            ignore_eos=request.ignore_eos,
         )
 
     def _format_chat_prompt(self, messages: List[ChatMessage]) -> str:
@@ -512,6 +573,7 @@ class NanoVLLMServer:
         model_name: str,
         arrival: float,
         prompt_text: str = "",
+        include_usage: bool = False,
     ) -> AsyncIterator[str]:
         completion_id = f"nano-cmpl-{int(time.time() * 1000)}"
         created = int(time.time())
@@ -540,6 +602,11 @@ class NanoVLLMServer:
             prompt_text,
             format_chunk=chunk,
             format_final=lambda finish_reason: chunk("", finish_reason),
+            format_usage=(
+                (lambda usage: {**chunk(""), "choices": [], "usage": usage})
+                if include_usage
+                else None
+            ),
         )
 
     def _stream_chat_completion(
@@ -548,6 +615,7 @@ class NanoVLLMServer:
         model_name: str,
         arrival: float,
         prompt_text: str = "",
+        include_usage: bool = False,
     ) -> AsyncIterator[str]:
         completion_id = f"nano-chatcmpl-{int(time.time() * 1000)}"
         created = int(time.time())
@@ -580,6 +648,11 @@ class NanoVLLMServer:
             prompt_text,
             format_chunk=content_chunk,
             format_final=lambda finish_reason: chunk({}, finish_reason),
+            format_usage=(
+                (lambda usage: {**chunk({}), "choices": [], "usage": usage})
+                if include_usage
+                else None
+            ),
         )
 
     def _chunk_text(self, text: str) -> List[str]:
@@ -611,6 +684,10 @@ def _finish_reason(result: GenerationResult) -> str:
     return getattr(result, "finish_reason", None) or "stop"
 
 
+def _include_usage(request: CompletionRequest | ChatCompletionRequest) -> bool:
+    return bool(request.stream_options and request.stream_options.include_usage)
+
+
 def _stop_list(stop: Optional[str | List[str]]) -> Optional[List[str]]:
     if stop is None:
         return None
@@ -639,6 +716,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    # Diagnostic (benchmarks/phase2): a shorter GIL switch interval than the
+    # default 5 ms shows whether the event loop starves the model thread.
+    switch_interval = os.getenv("NANO_SWITCH_INTERVAL")
+    if switch_interval:
+        sys.setswitchinterval(float(switch_interval))
     server = NanoVLLMServer(NanoVLLMConfig.from_yaml(args.config))
     server.run()
 
