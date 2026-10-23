@@ -71,7 +71,8 @@ def _random_weights(config):
 
 
 def _model(
-    device, dtype, use_triton, attention_backend="torch", linear_backend="torch", weight_quant="none"
+    device, dtype, use_triton, attention_backend="torch", linear_backend="torch", weight_quant="none",
+    kv_cache_dtype="auto",
 ):
     return NanoLlamaForCausalLM(
         config=CONFIG,
@@ -83,6 +84,7 @@ def _model(
         max_model_len=128,
         linear_backend=linear_backend,
         weight_quant=weight_quant,
+        kv_cache_dtype=kv_cache_dtype,
     )
 
 
@@ -133,9 +135,14 @@ def _prefill_then_decode(model):
     return prefill.float().cpu(), decode.float().cpu()
 
 
-@pytest.mark.parametrize("attention_backend", ["torch", "triton"])
-def test_decode_step_never_syncs_with_the_host(attention_backend):
-    model = _model("cuda", torch.bfloat16, use_triton=True, attention_backend=attention_backend)
+@pytest.mark.parametrize(
+    "attention_backend,kv_cache_dtype", [("torch", "auto"), ("triton", "auto"), ("triton", "fp8")]
+)
+def test_decode_step_never_syncs_with_the_host(attention_backend, kv_cache_dtype):
+    model = _model(
+        "cuda", torch.bfloat16, use_triton=True, attention_backend=attention_backend,
+        kv_cache_dtype=kv_cache_dtype,
+    )
     cache = model.new_paged_cache(num_blocks=16, block_size=BLOCK_SIZE)
     ids, positions, metadata = _batch(model, cache, decode=False)
     model.forward_batch(ids, positions, cache, metadata)
@@ -247,6 +254,31 @@ def test_mixed_batch_triton_matches_the_reference():
 
     torch.testing.assert_close(triton_fp32, reference, rtol=1e-4, atol=1e-4)
     torch.testing.assert_close(triton_bf16, reference, rtol=0.05, atol=0.05)
+
+
+def test_fp8_kv_cache_triton_matches_the_reference():
+    """The fp8 cache through the Triton kernels vs the torch references on it."""
+    fp8 = dict(kv_cache_dtype="fp8")
+    reference = _model("cuda", torch.float32, use_triton=False, **fp8)
+    triton_fp32 = _model("cuda", torch.float32, use_triton=False, attention_backend="triton", **fp8)
+    triton_bf16 = _model("cuda", torch.bfloat16, use_triton=True, attention_backend="triton", **fp8)
+    for run in (_prefill_then_decode, lambda model: (_mixed_step(model),)):
+        expected = run(reference)
+        # The kernel's division can round a code differently from torch's.
+        for expected_logits, actual in zip(expected, run(triton_fp32)):
+            torch.testing.assert_close(actual, expected_logits, rtol=2e-3, atol=2e-3)
+        for expected_logits, actual in zip(expected, run(triton_bf16)):
+            torch.testing.assert_close(actual, expected_logits, rtol=0.05, atol=0.05)
+
+
+def test_fp8_kv_cache_tracks_the_full_precision_cache():
+    full = _prefill_then_decode(_model("cuda", torch.float32, use_triton=False))
+    fp8 = _prefill_then_decode(
+        _model("cuda", torch.bfloat16, use_triton=True, attention_backend="triton", kv_cache_dtype="fp8")
+    )
+    for expected, actual in zip(full, fp8):
+        cosine = torch.nn.functional.cosine_similarity(actual, expected, dim=-1)
+        assert cosine.min() > 0.999, cosine
 
 
 def test_w4a16_model_tracks_fp32_with_the_same_dequantized_weights():

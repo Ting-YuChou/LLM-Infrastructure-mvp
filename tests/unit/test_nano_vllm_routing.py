@@ -70,3 +70,15 @@ def test_cuda_graph_settings_come_from_yaml_and_env(tmp_path, monkeypatch):
     assert config.enforce_eager is False
     assert config.cuda_graph_max_bs == 32
     assert config.cuda_graph_max_tokens == 0
+
+
+def test_kv_cache_dtype_comes_from_yaml_and_env(tmp_path, monkeypatch):
+    path = tmp_path / "nano.yaml"
+    path.write_text("engine:\n  kv_cache_dtype: fp8\n")
+    assert NanoVLLMConfig.from_yaml(str(path)).kv_cache_dtype == "fp8"
+    monkeypatch.setenv("KV_CACHE_DTYPE", "auto")
+    assert NanoVLLMConfig.from_yaml(str(path)).kv_cache_dtype == "auto"
+    with pytest.raises(ValueError, match="kv_cache_dtype"):
+        NanoVLLMConfig(kv_cache_dtype="int8")
+    with pytest.raises(ValueError, match="fp8 needs"):
+        NanoVLLMConfig(kv_cache_dtype="fp8", attention_backend="flash_attn")

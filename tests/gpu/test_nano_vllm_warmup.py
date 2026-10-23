@@ -54,9 +54,17 @@ class _TritonCompiles:
         setattr(self._owner, self._name, self._old)
 
 
-@pytest.mark.parametrize("linear_backend", ["torch", "triton"])
-@pytest.mark.parametrize("async_scheduling", [False, True])
-def test_no_kernel_compiles_after_warm_up(linear_backend, async_scheduling):
+@pytest.mark.parametrize(
+    "linear_backend,async_scheduling,kv_cache_dtype",
+    [
+        ("torch", False, "auto"),
+        ("torch", True, "auto"),
+        ("triton", False, "auto"),
+        ("triton", True, "auto"),
+        ("triton", True, "fp8"),
+    ],
+)
+def test_no_kernel_compiles_after_warm_up(linear_backend, async_scheduling, kv_cache_dtype):
     config = NanoVLLMConfig(
         max_model_len=128,
         kvcache_block_size=16,
@@ -69,7 +77,7 @@ def test_no_kernel_compiles_after_warm_up(linear_backend, async_scheduling):
         cuda_graph_max_bs=8,  # 9-16 decode rows run eagerly
     )
     model = _model("cuda", torch.bfloat16, use_triton=True, attention_backend="triton",
-                   linear_backend=linear_backend)
+                   linear_backend=linear_backend, kv_cache_dtype=kv_cache_dtype)
     core = EngineCore(config, model)
     core.capture_graphs()
 

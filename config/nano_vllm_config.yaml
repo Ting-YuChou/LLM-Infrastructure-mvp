@@ -23,6 +23,9 @@ engine:
   # "w4a16" quantizes the decoder-layer projections to 4-bit at load
   # (round-to-nearest, groups of 128); about 4x less weight memory and traffic.
   weight_quant: "none"
+  # "fp8": the paged KV cache holds e4m3 codes plus one fp32 scale per
+  # (token, kv head): about half the KV bytes, so about twice the tokens.
+  kv_cache_dtype: "auto"
   use_triton: true
   # CUDA graphs for decode steps up to cuda_graph_max_bs sequences, and
   # piecewise graphs (attention eager in between) for other steps up to

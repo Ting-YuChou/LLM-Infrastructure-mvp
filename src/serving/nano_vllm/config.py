@@ -69,6 +69,10 @@ class NanoVLLMConfig:
     # "w4a16": quantize the decoder-layer projections to 4-bit integers at
     # load (RTN, groups of 128 along K); kernels/w4a16.py.
     weight_quant: str = "none"
+    # "fp8": the paged KV cache holds e4m3 codes plus an fp32 scale per
+    # (token, kv head), about half the bytes of bf16 (kernels/fp8.py);
+    # "auto": the model dtype.
+    kv_cache_dtype: str = "auto"
     use_triton: bool = True
     # Decode steps replay CUDA graphs (one per batch size up to
     # cuda_graph_max_bs) unless enforce_eager; CPU always runs eagerly.
@@ -115,6 +119,10 @@ class NanoVLLMConfig:
             raise ValueError("linear_backend must be one of: torch, triton, cuda")
         if self.weight_quant not in {"none", "w4a16"}:
             raise ValueError("weight_quant must be one of: none, w4a16")
+        if self.kv_cache_dtype not in {"auto", "fp8"}:
+            raise ValueError("kv_cache_dtype must be one of: auto, fp8")
+        if self.kv_cache_dtype == "fp8" and self.attention_backend == "flash_attn":
+            raise ValueError("kv_cache_dtype fp8 needs the triton or torch attention backend")
 
     @classmethod
     def from_yaml(cls, config_path: str | None) -> "NanoVLLMConfig":
@@ -202,6 +210,9 @@ class NanoVLLMConfig:
             ),
             weight_quant=str(
                 _env("WEIGHT_QUANT", engine.get("weight_quant", cls.weight_quant))
+            ),
+            kv_cache_dtype=str(
+                _env("KV_CACHE_DTYPE", engine.get("kv_cache_dtype", cls.kv_cache_dtype))
             ),
             use_triton=_bool_value(
                 _env("USE_TRITON", engine.get("use_triton")),

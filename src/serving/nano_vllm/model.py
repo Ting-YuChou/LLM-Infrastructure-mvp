@@ -26,6 +26,7 @@ from .kernels import (
     rope_cos_sin,
     silu_and_mul,
 )
+from .kernels.fp8 import KV_CACHE_DTYPES
 from .kernels.rotary import compute_inv_freq, validate_rope_scaling
 from .kernels.w4a16 import w4a16_workspace
 from .kv_cache import PagedKVCache, StaticKVCache
@@ -228,9 +229,12 @@ class NanoLlamaForCausalLM:
         max_model_len: Optional[int] = None,
         linear_backend: str = "torch",
         weight_quant: str = "none",
+        kv_cache_dtype: str = "auto",
     ) -> None:
         if weight_quant not in WEIGHT_QUANT_MODES:
             raise ValueError(f"weight_quant must be one of: {', '.join(WEIGHT_QUANT_MODES)}")
+        if kv_cache_dtype not in KV_CACHE_DTYPES:
+            raise ValueError(f"kv_cache_dtype must be one of: {', '.join(KV_CACHE_DTYPES)}")
         self.config = config
         self.device = device
         self.dtype = dtype if device.type == "cuda" else torch.float32
@@ -238,6 +242,9 @@ class NanoLlamaForCausalLM:
         self.attention_backend = attention_backend
         self.linear_backend = linear_backend
         self.weight_quant = weight_quant
+        # The paged caches this model makes (new_paged_cache): "fp8" stores
+        # e4m3 codes with a scale per vector (kernels/fp8.py).
+        self.kv_cache_dtype = kv_cache_dtype
         if device.type == "cuda":
             # Build the extensions now, never inside a CUDA-graph capture.
             if linear_backend == "cuda":
@@ -286,6 +293,7 @@ class NanoLlamaForCausalLM:
         max_model_len: Optional[int] = None,
         linear_backend: str = "torch",
         weight_quant: str = "none",
+        kv_cache_dtype: str = "auto",
     ) -> "NanoLlamaForCausalLM":
         path = Path(model_path)
         if not path.is_dir():
@@ -305,6 +313,7 @@ class NanoLlamaForCausalLM:
             max_model_len=max_model_len,
             linear_backend=linear_backend,
             weight_quant=weight_quant,
+            kv_cache_dtype=kv_cache_dtype,
         )
 
     def new_cache(self, batch_size: int, max_seq_len: int) -> StaticKVCache:
@@ -331,6 +340,7 @@ class NanoLlamaForCausalLM:
             head_dim=self.config.head_dim,
             dtype=self.dtype,
             device=self.device,
+            kv_cache_dtype=self.kv_cache_dtype,
         )
 
     @torch.inference_mode()
@@ -501,7 +511,8 @@ class NanoLlamaForCausalLM:
     ) -> torch.Tensor:
         """Paged attention of layer ``layer_idx`` (into ``out`` when given)."""
         return self._paged_attention(
-            query, cache.keys[layer_idx], cache.values[layer_idx], metadata, out=out
+            query, cache.keys[layer_idx], cache.values[layer_idx], metadata, out=out,
+            key_scales=cache.key_scales[layer_idx], value_scales=cache.value_scales[layer_idx],
         )
 
     def _query(
@@ -525,6 +536,8 @@ class NanoLlamaForCausalLM:
             self.config.num_attention_heads,
             self.config.num_key_value_heads,
             use_triton=self.attention_backend == "triton",
+            key_scales=cache.key_scales[layer_idx],
+            value_scales=cache.value_scales[layer_idx],
         )
 
     def _finish_layer(
@@ -554,9 +567,12 @@ class NanoLlamaForCausalLM:
         value_cache: torch.Tensor,
         metadata: BatchMetadata,
         out: Optional[torch.Tensor] = None,
+        key_scales: Optional[torch.Tensor] = None,
+        value_scales: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         scale = 1.0 / math.sqrt(self.config.head_dim)
         use_triton = self.attention_backend == "triton"
+        scales = dict(key_scales=key_scales, value_scales=value_scales)
         if metadata.decode_only:
             return paged_decode_attention(
                 query,
@@ -567,6 +583,7 @@ class NanoLlamaForCausalLM:
                 scale,
                 use_triton=use_triton,
                 out=out,
+                **scales,
             )
         decode_rows = metadata.num_decode_rows
         if decode_rows == 0:
@@ -582,6 +599,7 @@ class NanoLlamaForCausalLM:
                 scale,
                 use_triton=use_triton,
                 out=out,
+                **scales,
             )
         # Mixed batch: the decode rows come first (one token each, so token i
         # is row i) and take the split-KV decode kernel; the prefill rows
@@ -598,6 +616,7 @@ class NanoLlamaForCausalLM:
             scale,
             use_triton=use_triton,
             out=out[:decode_rows],
+            **scales,
         )
         paged_prefill_attention(
             query[decode_rows:],
@@ -611,6 +630,7 @@ class NanoLlamaForCausalLM:
             scale,
             use_triton=use_triton,
             out=out[decode_rows:],
+            **scales,
         )
         return out
 

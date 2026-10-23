@@ -25,7 +25,9 @@ K = importlib.util.module_from_spec(spec)
 sys.modules["kernels"] = K
 spec.loader.exec_module(K)
 # By module: kernels/__init__ re-exports functions named like linear and silu_mul.
-L, PA, RN, RC, SM = (sys.modules[f"kernels.{m}"] for m in ("linear", "paged_attention", "rmsnorm", "rope_cache", "silu_mul"))
+L, PA, RN, RC, SM, F8 = (
+    sys.modules[f"kernels.{m}"] for m in ("linear", "paged_attention", "rmsnorm", "rope_cache", "silu_mul", "fp8")
+)
 
 assert PA.TRITON_AVAILABLE, "triton not importable"
 torch.manual_seed(0)
@@ -56,6 +58,17 @@ def run(name, fn):
 def cache(num_blocks, page, kvh, d, dtype):
     shape = (num_blocks + 1, page, kvh, d)
     return torch.randn(shape).to(dtype), torch.randn(shape).to(dtype)
+
+
+def fp8_cache(num_blocks, page, kvh, d):
+    """K/V codes (float8_e4m3fn) and their per-vector scales; values span two decades
+    (wider makes the scores so large that fp32 rounding alone exceeds the tolerance)."""
+    shape = (num_blocks + 1, page, kvh, d)
+    out = []
+    for _ in range(2):
+        x = torch.randn(shape) * torch.logspace(-1, 1, num_blocks + 1).view(-1, 1, 1, 1)
+        out += list(F8.fp8_quantize_reference(x))
+    return out  # k, k_scale, v, v_scale
 
 
 def tables(ctxs, page, num_blocks):
@@ -124,6 +137,71 @@ def mixed_case(heads, page, decode_ctxs, prefill_shapes, dtype):
     ref = PA.paged_prefill_attention_reference(q, k, v, t, qlens, ctxs, scale)
     tol = 1e-4 if dtype == torch.float32 else 2e-2
     check(f"mixed heads={heads} page={page} decode={decode_ctxs} prefill={prefill_shapes} {dtype}", out, ref, tol, tol)
+
+
+def fp8_attention_case(heads, page, decode_ctxs, prefill_shapes):
+    """fp32 queries over an fp8 cache (fp32 decode: the interpreter's bf16 dot is broken)."""
+    qh, kvh, d = heads
+    qlens = [1] * len(decode_ctxs) + [q for q, _ in prefill_shapes]
+    ctxs = list(decode_ctxs) + [c for _, c in prefill_shapes]
+    nb = sum((c + page - 1) // page for c in ctxs) + 2
+    k, ks, v, vs = fp8_cache(nb, page, kvh, d)
+    t = tables(ctxs, page, nb)
+    q = torch.randn(sum(qlens), qh, d)
+    lens = torch.tensor(ctxs, dtype=torch.int32)
+    b = len(decode_ctxs)
+    scale = 1 / math.sqrt(d)
+    scales = dict(key_scales=ks, value_scales=vs)
+    out = torch.full_like(q, float("nan"))
+    for splits in (1, 4):
+        PA._paged_decode_attention_triton(
+            q[:b], k, v, t[:b], lens[:b], scale, splits, PA.decode_config(b), out[:b], ks, vs
+        )
+        ref = PA.paged_decode_attention_reference(q[:b], k, v, t[:b], lens[:b], scale, **scales)
+        check(f"fp8 decode heads={heads} page={page} ctx={decode_ctxs} S={splits}", out[:b], ref, 1e-4, 1e-4)
+    cu = torch.tensor([0] + qlens[b:]).cumsum(0).to(torch.int32)
+    PA._paged_prefill_attention_triton(
+        q[b:], k, v, t[b:], cu, lens[b:], max(qlens[b:]), scale, PA.PREFILL_CONFIG, out[b:], ks, vs
+    )
+    ref = PA.paged_prefill_attention_reference(q[b:], k, v, t[b:], qlens[b:], ctxs[b:], scale, **scales)
+    check(f"fp8 prefill heads={heads} page={page} shapes={prefill_shapes}", out[b:], ref, 1e-4, 1e-4)
+
+
+def fp8_rope_case(heads, n, dtype):
+    qh, kvh, d = heads
+    inv = K.rotary.compute_inv_freq(d, 500000.0)
+    cos_t, sin_t = K.rotary.rope_cos_sin(inv, 256, dtype)
+    pos = torch.randint(0, 256, (n,))
+    cos, sin = cos_t[pos], sin_t[pos]
+    qkv = torch.randn(n, (qh + 2 * kvh) * d).to(dtype)
+    nb, page = 8, 4
+    slots = torch.randperm(nb * page)[:n]
+    k = torch.zeros(nb + 1, page, kvh, d, dtype=torch.float8_e4m3fn)
+    v = torch.zeros_like(k)
+    ks, vs = torch.zeros(nb + 1, page, kvh), torch.zeros(nb + 1, page, kvh)
+    q = RC._rope_and_cache_write_triton(qkv, cos, sin, k, v, slots, qh, kvh, ks, vs)
+    # Expected: RoPE in fp32 rounded once to the model dtype (what the kernel
+    # quantizes), then quantized. The bf16 reference function rotates op by
+    # op in bf16, whose cancellation errors are ~1% of a head's largest value.
+    kf, vf = torch.zeros(nb + 1, page, kvh, d), torch.zeros(nb + 1, page, kvh, d)
+    qf = RC.rope_and_cache_write_reference(qkv.float(), cos.float(), sin.float(), kf, vf, slots, qh, kvh)
+    want_k, want_ks = F8.fp8_quantize_reference(kf.view(-1, kvh, d)[slots].to(dtype))
+    want_v, want_vs = F8.fp8_quantize_reference(vf.view(-1, kvh, d)[slots].to(dtype))
+    rtol = 1e-6 if dtype == torch.float32 else 2.0**-7  # q rounded to dtype: within an ulp
+    check(f"fp8 rope_cache q and scales heads={heads} n={n} {dtype}",
+          (q, ks.view(-1, kvh)[slots], vs.view(-1, kvh)[slots]), (qf, want_ks, want_vs), 1e-6, rtol)
+    # An fp32 ulp of difference (FMA contraction) can move a code by one:
+    # same sign and magnitude codes at most 1 apart (codes order by magnitude).
+    worst = 0
+    for got, want in ((k, want_k), (v, want_v)):
+        a = got.view(torch.uint8).view(-1, kvh, d)[slots].int()
+        b = want.view(torch.uint8).int()
+        distance = ((a & 0x7F) - (b & 0x7F)).abs()
+        sign_flip = ((a ^ b) & 0x80).bool() & (((a & 0x7F) > 1) | ((b & 0x7F) > 1))
+        worst = max(worst, int(distance.max()), 99 * int(sign_flip.any()))
+    results.append((f"fp8 rope_cache codes heads={heads} n={n} {dtype}", worst <= 1, worst))
+    print(f"{'OK  ' if worst <= 1 else 'FAIL'} fp8 rope_cache codes heads={heads} n={n} {dtype}: "
+          f"max code distance {worst}", flush=True)
 
 
 def rope_case(heads, n, dtype):
@@ -195,6 +273,10 @@ for heads in (TINY, LLAMA):
     for n in (1, 5):
         run("rope", lambda: rope_case(heads, n, torch.float32))
     run("rope bf16", lambda: rope_case(heads, 3, torch.bfloat16))
+    for page in (4, 16):
+        run("fp8 attention", lambda: fp8_attention_case(heads, page, [1, 15, 70, 0], [(5, 12), (20, 20), (70, 70)]))
+    run("fp8 rope", lambda: fp8_rope_case(heads, 5, torch.float32))
+    run("fp8 rope bf16", lambda: fp8_rope_case(heads, 5, torch.bfloat16))
 for dtype in (torch.float32, torch.bfloat16):
     run("norm", lambda: norm_case(3, 256, dtype))
     run("silu", lambda: silu_case(3, 200, dtype))

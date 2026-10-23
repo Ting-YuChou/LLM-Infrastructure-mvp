@@ -343,6 +343,7 @@ def size_kv_cache(config: NanoVLLMConfig, model) -> int:
         model.config.num_key_value_heads,
         model.config.head_dim,
         model.dtype,
+        model.kv_cache_dtype,
     )
     num_blocks = int(budget // per_block)
     needed = -(-config.max_model_len // block_size)
@@ -379,6 +380,7 @@ def load_model(config: NanoVLLMConfig):
         max_model_len=config.max_model_len,
         linear_backend=config.linear_backend,
         weight_quant=config.weight_quant,
+        kv_cache_dtype=config.kv_cache_dtype,
     )
 
 

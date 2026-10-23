@@ -23,10 +23,10 @@ BLOCK_SIZE = 16
 PROMPT_LENS = [17, 30, 5, 64, 33, 1, 47, 16]
 
 
-def _runner(attention_backend, max_graph_batch, weight_quant="none"):
+def _runner(attention_backend, max_graph_batch, weight_quant="none", kv_cache_dtype="auto"):
     model = _model(
         "cuda", torch.bfloat16, use_triton=True, attention_backend=attention_backend,
-        weight_quant=weight_quant,
+        weight_quant=weight_quant, kv_cache_dtype=kv_cache_dtype,
     )
     Sequence.block_size = BLOCK_SIZE
     cache = model.new_paged_cache(num_blocks=96, block_size=BLOCK_SIZE)
@@ -37,18 +37,19 @@ def _runner(attention_backend, max_graph_batch, weight_quant="none"):
 
 
 @pytest.mark.parametrize(
-    "attention_backend,batch,max_graph_batch,weight_quant",
+    "attention_backend,batch,max_graph_batch,weight_quant,kv_cache_dtype",
     [
-        ("triton", 1, 8, "none"),
-        ("triton", 3, 8, "none"),
-        ("triton", 8, 8, "none"),
-        ("triton", 3, 2, "none"),
-        ("torch", 3, 8, "none"),
-        ("triton", 3, 8, "w4a16"),
+        ("triton", 1, 8, "none", "auto"),
+        ("triton", 3, 8, "none", "auto"),
+        ("triton", 8, 8, "none", "auto"),
+        ("triton", 3, 2, "none", "auto"),
+        ("torch", 3, 8, "none", "auto"),
+        ("triton", 3, 8, "w4a16", "auto"),
+        ("triton", 3, 8, "none", "fp8"),
     ],
 )
-def test_graph_replay_matches_eager(attention_backend, batch, max_graph_batch, weight_quant):
-    runner, manager = _runner(attention_backend, max_graph_batch, weight_quant)
+def test_graph_replay_matches_eager(attention_backend, batch, max_graph_batch, weight_quant, kv_cache_dtype):
+    runner, manager = _runner(attention_backend, max_graph_batch, weight_quant, kv_cache_dtype)
     greedy = SamplingOptions(max_tokens=64, temperature=0.0)
     seqs = [
         Sequence(prompt_token_ids=[(7 * i + j) % 500 + 1 for j in range(length)], sampling=greedy)
@@ -75,15 +76,18 @@ def test_graph_replay_matches_eager(attention_backend, batch, max_graph_batch, w
 
 
 @pytest.mark.parametrize(
-    "attention_backend,weight_quant", [("triton", "none"), ("torch", "none"), ("triton", "w4a16")]
+    "attention_backend,weight_quant,kv_cache_dtype",
+    [("triton", "none", "auto"), ("torch", "none", "auto"), ("triton", "w4a16", "auto"), ("triton", "none", "fp8")],
 )
-def test_piecewise_replay_matches_eager(attention_backend, weight_quant):
+def test_piecewise_replay_matches_eager(attention_backend, weight_quant, kv_cache_dtype):
     """Prefill, mixed, chunked-prefill and large decode steps in piecewise graphs.
 
     The steps get smaller, so each one replays over buffers a bigger step
     left stale (padded slots and logits rows must be reset).
     """
-    runner, manager = _runner(attention_backend, max_graph_batch=2, weight_quant=weight_quant)
+    runner, manager = _runner(
+        attention_backend, max_graph_batch=2, weight_quant=weight_quant, kv_cache_dtype=kv_cache_dtype
+    )
     runner.capture_piecewise_graphs(max_tokens=96, max_rows=8)
     buckets = []
     replay = runner._replay_pieces

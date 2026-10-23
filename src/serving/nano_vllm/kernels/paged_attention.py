@@ -11,6 +11,10 @@ heads of that kv head, keeping a running softmax; a second kernel merges the
 splits by their log-sum-exp. Lengths and block ids come from device tensors,
 and the split count depends only on the batch size, so a captured CUDA graph
 stays valid as contexts grow.
+
+With ``key_scales``/``value_scales`` the cache holds e4m3 codes with one scale
+per (slot, kv head) (kernels/fp8.py). The kernels decode the codes into bf16
+for tl.dot and fold the scales into the scores (K) and the probabilities (V).
 """
 
 from __future__ import annotations
@@ -20,6 +24,8 @@ import math
 from typing import Optional
 
 import torch
+
+from .fp8 import FP8_HALF_SCALE, fp8_dequantize_reference
 
 try:  # pragma: no cover - exercised only in CUDA/Triton environments
     import triton
@@ -49,6 +55,9 @@ DECODE_CONFIGS = (  # (smallest batch, config)
 PREFILL_CONFIG = {"block_m": 128, "block_n": 32, "num_warps": 4, "num_stages": 2}
 
 if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
+    from .fp8 import fp8_decode_scaled, fp8_prescale_query
+
+    _FP8_HALF = tl.constexpr(FP8_HALF_SCALE)
 
     @triton.jit
     def _paged_decode_split_kernel(
@@ -60,6 +69,8 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
         out_ptr,
         part_out_ptr,
         part_lse_ptr,
+        k_scale_ptr,
+        v_scale_ptr,
         scale_log2e,
         stride_qb,
         stride_qh,
@@ -69,6 +80,8 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
         stride_vb,
         stride_vt,
         stride_vh,
+        stride_sb,
+        stride_st,
         stride_bt,
         stride_ob,
         stride_oh,
@@ -84,6 +97,7 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
         BLOCK_N: tl.constexpr,
         NUM_SPLITS: tl.constexpr,
         INPUT_PRECISION: tl.constexpr,
+        KV_FP8: tl.constexpr,
     ):
         seq = tl.program_id(0)
         kv_head = tl.program_id(1)
@@ -109,6 +123,8 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
             mask=head_mask[:, None],
             other=0.0,
         )
+        if KV_FP8:  # decoded keys are their values times 2**-120
+            q = fp8_prescale_query(q)
 
         m_i = tl.full([BLOCK_H], float("-inf"), dtype=tl.float32)
         l_i = tl.zeros([BLOCK_H], dtype=tl.float32)
@@ -126,8 +142,15 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
                 mask=n_mask[:, None],
                 other=0.0,
             )
-            scores = tl.dot(q, tl.trans(k), input_precision=INPUT_PRECISION)
-            scores = scores * scale_log2e
+            if KV_FP8:
+                s_rows = blocks.to(tl.int64) * stride_sb + within * stride_st + kv_head
+                k_scale = tl.load(k_scale_ptr + s_rows, mask=n_mask, other=0.0)
+                v_scale = tl.load(v_scale_ptr + s_rows, mask=n_mask, other=0.0)
+                scores = tl.dot(q, tl.trans(fp8_decode_scaled(k, q)), input_precision=INPUT_PRECISION)
+                scores = scores * (k_scale * (scale_log2e * _FP8_HALF))[None, :]
+            else:
+                scores = tl.dot(q, tl.trans(k), input_precision=INPUT_PRECISION)
+                scores = scores * scale_log2e
             scores = tl.where(n_mask[None, :], scores, float("-inf"))
             m_new = tl.maximum(m_i, tl.max(scores, axis=1))
             alpha = tl.exp2(m_i - m_new)
@@ -138,11 +161,19 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
                 mask=n_mask[:, None],
                 other=0.0,
             )
-            acc = acc * alpha[:, None] + tl.dot(
-                p.to(v.dtype), v, input_precision=INPUT_PRECISION
-            )
+            if KV_FP8:
+                pv = (p * (v_scale * _FP8_HALF)[None, :]).to(q.dtype)
+                acc = acc * alpha[:, None] + tl.dot(
+                    pv, fp8_decode_scaled(v, q), input_precision=INPUT_PRECISION
+                )
+            else:
+                acc = acc * alpha[:, None] + tl.dot(
+                    p.to(v.dtype), v, input_precision=INPUT_PRECISION
+                )
             m_i = m_new
 
+        if KV_FP8:
+            acc = acc * _FP8_HALF
         # An empty split (or context) has l_i == 0: write 0, not 0/0.
         inv_l = tl.where(l_i > 0, 1.0 / l_i, 0.0)
         result = acc * inv_l[:, None]
@@ -217,6 +248,8 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
         table,
         k_cache_ptr,
         v_cache_ptr,
+        k_scale_ptr,
+        v_scale_ptr,
         tile_start,
         kv_end,
         kv_head,
@@ -227,11 +260,14 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
         stride_vb,
         stride_vt,
         stride_vh,
+        stride_sb,
+        stride_st,
         HEAD_DIM: tl.constexpr,
         PAGE_SIZE: tl.constexpr,
         BLOCK_N: tl.constexpr,
         MASKED: tl.constexpr,
         INPUT_PRECISION: tl.constexpr,
+        KV_FP8: tl.constexpr,
     ):
         """One BLOCK_N context tile of the online softmax. MASKED tiles (the
         diagonal and the context end) apply the causal and bounds masks."""
@@ -249,7 +285,18 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
             k = tl.load(k_cache_ptr + k_rows[:, None] + offs_d[None, :], mask=n_mask[:, None], other=0.0)
         else:
             k = tl.load(k_cache_ptr + k_rows[:, None] + offs_d[None, :])
-        scores = tl.dot(q, tl.trans(k), input_precision=INPUT_PRECISION) * scale_log2e
+        if KV_FP8:
+            s_rows = blocks.to(tl.int64) * stride_sb + within * stride_st + kv_head
+            if MASKED:
+                k_scale = tl.load(k_scale_ptr + s_rows, mask=n_mask, other=0.0)
+                v_scale = tl.load(v_scale_ptr + s_rows, mask=n_mask, other=0.0)
+            else:
+                k_scale = tl.load(k_scale_ptr + s_rows)
+                v_scale = tl.load(v_scale_ptr + s_rows)
+            scores = tl.dot(q, tl.trans(fp8_decode_scaled(k, q)), input_precision=INPUT_PRECISION)
+            scores = scores * (k_scale * (scale_log2e * _FP8_HALF))[None, :]
+        else:
+            scores = tl.dot(q, tl.trans(k), input_precision=INPUT_PRECISION) * scale_log2e
         if MASKED:
             visible = n_mask[None, :] & (offs_n[None, :] <= q_pos[:, None])
             scores = tl.where(visible, scores, float("-inf"))
@@ -261,7 +308,11 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
             v = tl.load(v_cache_ptr + v_rows[:, None] + offs_d[None, :], mask=n_mask[:, None], other=0.0)
         else:
             v = tl.load(v_cache_ptr + v_rows[:, None] + offs_d[None, :])
-        acc = acc * alpha[:, None] + tl.dot(p.to(v.dtype), v, input_precision=INPUT_PRECISION)
+        if KV_FP8:
+            pv = (p * (v_scale * _FP8_HALF)[None, :]).to(q.dtype)
+            acc = acc * alpha[:, None] + tl.dot(pv, fp8_decode_scaled(v, q), input_precision=INPUT_PRECISION)
+        else:
+            acc = acc * alpha[:, None] + tl.dot(p.to(v.dtype), v, input_precision=INPUT_PRECISION)
         return acc, m_new, l_i
 
     @triton.jit
@@ -273,6 +324,8 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
         cu_seqlens_ptr,
         context_lens_ptr,
         out_ptr,
+        k_scale_ptr,
+        v_scale_ptr,
         scale_log2e,
         stride_qt,
         stride_qh,
@@ -282,6 +335,8 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
         stride_vb,
         stride_vt,
         stride_vh,
+        stride_sb,
+        stride_st,
         stride_bt,
         stride_ot,
         stride_oh,
@@ -291,6 +346,7 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
         BLOCK_M: tl.constexpr,
         BLOCK_N: tl.constexpr,
         INPUT_PRECISION: tl.constexpr,
+        KV_FP8: tl.constexpr,
     ):
         seq = tl.program_id(0)
         tile = tl.program_id(1)
@@ -314,6 +370,8 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
             mask=m_mask[:, None],
             other=0.0,
         )
+        if KV_FP8:  # decoded keys are their values times 2**-120
+            q = fp8_prescale_query(q)
 
         # Causal: the last row of this tile sees keys up to prefix + row0 +
         # BLOCK_M - 1. Programs past the end of a short sequence do no work.
@@ -328,17 +386,21 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
         table = block_tables_ptr + seq.to(tl.int64) * stride_bt
         for tile_start in range(0, full_end, BLOCK_N):
             acc, m_i, l_i = _prefill_tile(
-                acc, m_i, l_i, q, q_pos, table, k_cache_ptr, v_cache_ptr, tile_start, kv_end,
-                kv_head, scale_log2e, stride_kb, stride_kt, stride_kh, stride_vb, stride_vt,
-                stride_vh, HEAD_DIM, PAGE_SIZE, BLOCK_N, False, INPUT_PRECISION,
+                acc, m_i, l_i, q, q_pos, table, k_cache_ptr, v_cache_ptr, k_scale_ptr, v_scale_ptr,
+                tile_start, kv_end, kv_head, scale_log2e, stride_kb, stride_kt, stride_kh,
+                stride_vb, stride_vt, stride_vh, stride_sb, stride_st, HEAD_DIM, PAGE_SIZE,
+                BLOCK_N, False, INPUT_PRECISION, KV_FP8,
             )
         for tile_start in range(full_end, kv_end, BLOCK_N):
             acc, m_i, l_i = _prefill_tile(
-                acc, m_i, l_i, q, q_pos, table, k_cache_ptr, v_cache_ptr, tile_start, kv_end,
-                kv_head, scale_log2e, stride_kb, stride_kt, stride_kh, stride_vb, stride_vt,
-                stride_vh, HEAD_DIM, PAGE_SIZE, BLOCK_N, True, INPUT_PRECISION,
+                acc, m_i, l_i, q, q_pos, table, k_cache_ptr, v_cache_ptr, k_scale_ptr, v_scale_ptr,
+                tile_start, kv_end, kv_head, scale_log2e, stride_kb, stride_kt, stride_kh,
+                stride_vb, stride_vt, stride_vh, stride_sb, stride_st, HEAD_DIM, PAGE_SIZE,
+                BLOCK_N, True, INPUT_PRECISION, KV_FP8,
             )
 
+        if KV_FP8:
+            acc = acc * _FP8_HALF
         inv_l = tl.where(l_i > 0, 1.0 / l_i, 0.0)
         tl.store(
             out_ptr + q_rows[:, None] * stride_ot + head * stride_oh + offs_d[None, :],
@@ -369,9 +431,18 @@ def decode_config(batch_size: int) -> dict:
 
 
 def _gather_blocks(cache: torch.Tensor, block_table: torch.Tensor) -> torch.Tensor:
-    """[..., width] block ids -> [..., width * block_size, kv_heads, head_dim]."""
+    """[..., width] block ids -> [..., width * block_size, *cache.shape[2:]]."""
     blocks = cache[block_table.long()]
-    return blocks.flatten(-4, -3)
+    return blocks.flatten(block_table.ndim - 1, block_table.ndim)
+
+
+def _gather_kv(cache: torch.Tensor, scales: Optional[torch.Tensor], block_table: torch.Tensor) -> torch.Tensor:
+    """The block table's K or V in fp32, dequantized when ``scales`` is given."""
+    if scales is None:
+        return _gather_blocks(cache, block_table).float()
+    # Through uint8: not every device implements index ops for float8.
+    codes = _gather_blocks(cache.view(torch.uint8), block_table).view(torch.float8_e4m3fn)
+    return fp8_dequantize_reference(codes, _gather_blocks(scales, block_table))
 
 
 def paged_decode_attention_reference(
@@ -381,6 +452,8 @@ def paged_decode_attention_reference(
     block_tables: torch.Tensor,
     context_lens: torch.Tensor,
     scale: float,
+    key_scales: Optional[torch.Tensor] = None,
+    value_scales: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     """One query token per sequence: [batch, q_heads, head_dim] -> same shape.
 
@@ -390,8 +463,8 @@ def paged_decode_attention_reference(
     batch, q_heads, head_dim = query.shape
     kv_heads = key_cache.shape[2]
     group = q_heads // kv_heads
-    keys = _gather_blocks(key_cache, block_tables).float()  # [B, T, Hkv, D]
-    values = _gather_blocks(value_cache, block_tables).float()
+    keys = _gather_kv(key_cache, key_scales, block_tables)  # [B, T, Hkv, D]
+    values = _gather_kv(value_cache, value_scales, block_tables)
     positions = torch.arange(keys.shape[1], device=query.device)
     valid = positions.view(1, -1) < context_lens.view(-1, 1).to(positions.dtype)
 
@@ -414,6 +487,8 @@ def paged_prefill_attention_reference(
     query_lens: list[int],
     context_lens: list[int],
     scale: float,
+    key_scales: Optional[torch.Tensor] = None,
+    value_scales: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     """Causal attention for packed queries: [num_tokens, q_heads, head_dim].
 
@@ -430,8 +505,8 @@ def paged_prefill_attention_reference(
     for seq_index, (query_len, context_len) in enumerate(zip(query_lens, context_lens)):
         num_blocks = (context_len + block_size - 1) // block_size
         table = block_tables[seq_index, :num_blocks]
-        keys = _gather_blocks(key_cache, table)[:context_len].float()  # [T, Hkv, D]
-        values = _gather_blocks(value_cache, table)[:context_len].float()
+        keys = _gather_kv(key_cache, key_scales, table)[:context_len]  # [T, Hkv, D]
+        values = _gather_kv(value_cache, value_scales, table)[:context_len]
 
         q = query[start : start + query_len].float()
         q = q.view(query_len, kv_heads, group, head_dim)
@@ -463,18 +538,34 @@ def paged_decode_attention(
     num_splits: Optional[int] = None,
     config: Optional[dict] = None,
     out: Optional[torch.Tensor] = None,
+    key_scales: Optional[torch.Tensor] = None,
+    value_scales: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     """[batch, q_heads, head_dim] decode queries -> attention output, same shape
-    (written into ``out`` when given, e.g. a row slice of a mixed batch's output)."""
+    (written into ``out`` when given, e.g. a row slice of a mixed batch's output).
+    ``key_scales``/``value_scales``: the cache holds e4m3 codes (kernels/fp8.py)."""
     if use_triton and TRITON_AVAILABLE and query.is_cuda:  # pragma: no cover
         return _paged_decode_attention_triton(
             query, key_cache, value_cache, block_tables, context_lens, scale, num_splits,
-            config or decode_config(query.shape[0]), out,
+            config or decode_config(query.shape[0]), out, key_scales, value_scales,
         )
     result = paged_decode_attention_reference(
-        query, key_cache, value_cache, block_tables, context_lens, scale
+        query, key_cache, value_cache, block_tables, context_lens, scale, key_scales, value_scales
     )
     return result if out is None else out.copy_(result)
+
+
+def _fp8_operands(key_cache, value_cache, key_scales, value_scales):
+    """The kernels' cache and scale arguments: uint8 codes (Triton takes
+    float8e4nv only from sm_89 on) and the scale strides, or dummies."""
+    if key_scales is None:
+        return key_cache, value_cache, key_cache, value_cache, (0, 0)
+    if not (key_scales.is_contiguous() and value_scales.is_contiguous()):
+        raise ValueError("the KV scales must be contiguous")
+    return (
+        key_cache.view(torch.uint8), value_cache.view(torch.uint8), key_scales, value_scales,
+        key_scales.stride()[:2],
+    )
 
 
 def _paged_decode_attention_triton(  # pragma: no cover - depends on CUDA/Triton
@@ -487,6 +578,8 @@ def _paged_decode_attention_triton(  # pragma: no cover - depends on CUDA/Triton
     num_splits: Optional[int],
     config: dict,
     out: Optional[torch.Tensor] = None,
+    key_scales: Optional[torch.Tensor] = None,
+    value_scales: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     batch, q_heads, head_dim = query.shape
     _, page_size, kv_heads, cache_head_dim = key_cache.shape
@@ -520,6 +613,9 @@ def _paged_decode_attention_triton(  # pragma: no cover - depends on CUDA/Triton
         part_strides = part_out.stride()[:3]
         lse_strides = part_lse.stride()[:2]
 
+    key_cache, value_cache, k_scales, v_scales, scale_strides = _fp8_operands(
+        key_cache, value_cache, key_scales, value_scales
+    )
     _paged_decode_split_kernel[(batch, kv_heads, num_splits)](
         query,
         key_cache,
@@ -529,6 +625,8 @@ def _paged_decode_attention_triton(  # pragma: no cover - depends on CUDA/Triton
         out,
         part_out,
         part_lse,
+        k_scales,
+        v_scales,
         scale * 1.4426950408889634,  # log2(e): the kernel uses exp2
         query.stride(0),
         query.stride(1),
@@ -538,6 +636,7 @@ def _paged_decode_attention_triton(  # pragma: no cover - depends on CUDA/Triton
         value_cache.stride(0),
         value_cache.stride(1),
         value_cache.stride(2),
+        *scale_strides,
         block_tables.stride(0),
         out.stride(0),
         out.stride(1),
@@ -550,6 +649,7 @@ def _paged_decode_attention_triton(  # pragma: no cover - depends on CUDA/Triton
         BLOCK_N=config["block_n"],
         NUM_SPLITS=num_splits,
         INPUT_PRECISION="ieee" if query.dtype == torch.float32 else "tf32",
+        KV_FP8=key_scales is not None,
         num_warps=config["num_warps"],
         num_stages=config["num_stages"],
     )
@@ -582,11 +682,14 @@ def paged_prefill_attention(
     use_triton: bool = False,
     config: Optional[dict] = None,
     out: Optional[torch.Tensor] = None,
+    key_scales: Optional[torch.Tensor] = None,
+    value_scales: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     """Causal attention for packed queries [num_tokens, q_heads, head_dim].
 
     The kernel reads lengths from the device tensors; the reference (and the
     kernel's grid size) use the host copies. Written into ``out`` when given.
+    ``key_scales``/``value_scales``: the cache holds e4m3 codes (kernels/fp8.py).
     """
     if use_triton and TRITON_AVAILABLE and query.is_cuda:  # pragma: no cover
         return _paged_prefill_attention_triton(
@@ -600,9 +703,12 @@ def paged_prefill_attention(
             scale,
             config or PREFILL_CONFIG,
             out,
+            key_scales,
+            value_scales,
         )
     result = paged_prefill_attention_reference(
-        query, key_cache, value_cache, block_tables, query_lens_host, context_lens_host, scale
+        query, key_cache, value_cache, block_tables, query_lens_host, context_lens_host, scale,
+        key_scales, value_scales,
     )
     return result if out is None else out.copy_(result)
 
@@ -618,6 +724,8 @@ def _paged_prefill_attention_triton(  # pragma: no cover - depends on CUDA/Trito
     scale: float,
     config: dict,
     out: Optional[torch.Tensor] = None,
+    key_scales: Optional[torch.Tensor] = None,
+    value_scales: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     num_tokens, q_heads, head_dim = query.shape
     _, page_size, kv_heads, cache_head_dim = key_cache.shape
@@ -633,6 +741,9 @@ def _paged_prefill_attention_triton(  # pragma: no cover - depends on CUDA/Trito
     if num_tokens == 0 or num_seqs == 0:
         return out
     grid = (num_seqs, triton.cdiv(max_query_len, config["block_m"]), q_heads)
+    key_cache, value_cache, k_scales, v_scales, scale_strides = _fp8_operands(
+        key_cache, value_cache, key_scales, value_scales
+    )
     _paged_prefill_kernel[grid](
         query,
         key_cache,
@@ -641,6 +752,8 @@ def _paged_prefill_attention_triton(  # pragma: no cover - depends on CUDA/Trito
         cu_seqlens_q,
         context_lens,
         out,
+        k_scales,
+        v_scales,
         scale * 1.4426950408889634,
         query.stride(0),
         query.stride(1),
@@ -650,6 +763,7 @@ def _paged_prefill_attention_triton(  # pragma: no cover - depends on CUDA/Trito
         value_cache.stride(0),
         value_cache.stride(1),
         value_cache.stride(2),
+        *scale_strides,
         block_tables.stride(0),
         out.stride(0),
         out.stride(1),
@@ -659,6 +773,7 @@ def _paged_prefill_attention_triton(  # pragma: no cover - depends on CUDA/Trito
         BLOCK_M=config["block_m"],
         BLOCK_N=config["block_n"],
         INPUT_PRECISION="ieee" if query.dtype == torch.float32 else "tf32",
+        KV_FP8=key_scales is not None,
         num_warps=config["num_warps"],
         num_stages=config["num_stages"],
     )

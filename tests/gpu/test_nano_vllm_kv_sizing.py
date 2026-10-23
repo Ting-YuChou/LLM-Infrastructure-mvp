@@ -53,6 +53,18 @@ def test_kv_cache_takes_the_budget_left_after_weights_and_activations():
     assert torch.cuda.memory_allocated() <= utilization * total
 
 
+def test_fp8_kv_cache_fits_more_blocks_in_the_same_budget():
+    torch.cuda.empty_cache()
+    free, total = torch.cuda.mem_get_info()
+    engine = _engine(min(1.0, (total - free + KV_RESERVE_BYTES + 1024**3) / total))
+    full = size_kv_cache(engine.config, engine.model)
+    engine.model.kv_cache_dtype = "fp8"
+    fp8 = size_kv_cache(engine.config, engine.model)
+    dims = (CONFIG.num_hidden_layers, 16, CONFIG.num_key_value_heads, CONFIG.head_dim, torch.bfloat16)
+    expected = PagedKVCache.bytes_per_block(*dims) / PagedKVCache.bytes_per_block(*dims, "fp8")
+    assert fp8 / full == pytest.approx(expected, rel=0.05)
+
+
 def test_kv_sizing_refuses_a_budget_below_one_sequence():
     torch.cuda.empty_cache()
     free, total = torch.cuda.mem_get_info()
