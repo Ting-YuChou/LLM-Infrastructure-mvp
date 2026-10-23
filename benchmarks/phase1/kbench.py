@@ -9,7 +9,9 @@ Kernel and the registrations at the bottom. For every shape:
   2. it is timed by replaying a CUDA graph of many calls, so CPU launch
      overhead stays out of the number. Inputs under 2x the L2 (40 MB on an
      A100) are rotated through copies adding up to ~512 MiB, as
-     phase0/bandwidth.py does, so the kernel reads HBM rather than L2;
+     phase0/bandwidth.py does, so the kernel reads HBM rather than L2. "Inputs"
+     means what a call reads: Kernel.rotate_bytes where that differs from the
+     input tensors (W4A16 reads a 4-bit weight built from a bf16 one);
   3. us/call becomes GB/s (or TFLOPs), % of peak (1,555 GB/s and 312 TFLOPs on
      an A100 40GB) and % of the copy bandwidth measured on this GPU.
 Writes <out>/kbench.json and <out>/kbench.md; exits 1 if any check failed or,
@@ -115,6 +117,9 @@ class Kernel:
     reference  inputs -> expected output, compared in fp32.
     bytes      shape -> bytes one call must move (memory-bound kernels), or
     flops      shape -> FLOPs of one call (compute-bound kernels).
+    rotate_bytes  shape -> bytes of the inputs one call reads, when that is not the
+               size of `inputs` (W4A16: the 4-bit weight, not the bf16 one it is
+               quantized from). Sets how many copies the timing rotates through.
     ncu        regex for ncu --kernel-name: the kernels the ncu step profiles.
     """
 
@@ -125,6 +130,7 @@ class Kernel:
     reference: Callable[[dict], object]
     bytes: Callable[[dict], float] | None = None
     flops: Callable[[dict], float] | None = None
+    rotate_bytes: Callable[[dict], float] | None = None
     ncu: str = "."
     atol: float = 2e-2
     rtol: float = 2e-2
@@ -232,6 +238,13 @@ def copies_for(input_bytes: int, l2_bytes: int) -> int:
     return min(MAX_COPIES, math.ceil(ROTATE_BYTES / max(input_bytes, 1)))
 
 
+def timing_copies(kernel: Kernel, shape: dict, input_bytes: int, l2_bytes: int) -> int:
+    """Copies to rotate through so every call reads HBM: by the bytes a call
+    reads (rotate_bytes) where the inputs hold more than that."""
+    read = kernel.rotate_bytes(shape) if kernel.rotate_bytes else input_bytes
+    return copies_for(int(read), l2_bytes)
+
+
 def bench_kernel(kernel: Kernel, device: str, env: dict) -> list[dict]:
     rows = []
     baseline = next(iter(kernel.impls))
@@ -253,7 +266,7 @@ def bench_kernel(kernel: Kernel, device: str, env: dict) -> list[dict]:
                 input_bytes = sum(t.nbytes for t in tensors(inputs))
                 inputs = None
                 if device == "cuda" and row["ok"]:
-                    copies = copies_for(input_bytes, env["l2_bytes"])
+                    copies = timing_copies(kernel, shape, input_bytes, env["l2_bytes"])
                     fns = [factory(make_inputs(kernel, shape, device)) for _ in range(copies)]
                     us, mode, calls = time_us(fns)
                     row.update(us=us, timing=mode, copies=copies, calls=calls)
@@ -784,11 +797,12 @@ def _w4a16_cuda(kernel: str, max_rows: int):
             raise NotApplicable(f"the {kernel} kernel takes up to {max_rows} rows")
         if load_cuda_extension("w4a16") is None:
             raise RuntimeError("building kernels/csrc/w4a16.cu failed (see the log)")
+        x = i["x"]
         if kernel == "tiled":
             weight = quantize_w4a16(i["w"], layout="tiled")
-            return lambda: w4a16_linear(i["x"], weight)
+            return lambda: w4a16_linear(x, weight)
         weight = quantize_w4a16(i["w"])
-        return lambda: w4a16_linear(i["x"], weight, config={"kernel": kernel})
+        return lambda: w4a16_linear(x, weight, config={"kernel": kernel})
 
     return factory
 
@@ -819,17 +833,25 @@ def _vllm_marlin(i: dict):
     weight = quantize_w4a16(i["w"])
     n, k = weight.shape
     packed, scales = _marlin_weight(weight, i["x"].device)
-    workspace = marlin_utils.marlin_make_workspace_new(i["x"].device)
-    empty = marlin_utils.marlin_make_empty_g_idx(i["x"].device)  # no zero points, no act order
+    x = i["x"]
+    workspace = marlin_utils.marlin_make_workspace_new(x.device)
+    empty = marlin_utils.marlin_make_empty_g_idx(x.device)  # no zero points, no act order
     return lambda: marlin_utils.apply_gptq_marlin_linear(
-        i["x"], packed, scales, empty, empty, empty, workspace, scalar_types.uint4b8,
+        x, packed, scales, empty, empty, empty, workspace, scalar_types.uint4b8,
         n, k, is_k_full=True,
     )
 
 
+def _w4a16_weight_bytes(shape: dict) -> int:
+    """The 4-bit weight and its scales: what a W4A16 call reads. The inputs hold
+    the bf16 weight (4x that), which alone would keep down_proj's 29 MB weight
+    to one copy, L2-resident across the timed calls."""
+    return shape["N"] * shape["K"] // 2 + 2 * shape["N"] * shape["K"] // 128
+
+
 def _cublas_dequantized(i: dict):
-    weight = dequantize_w4a16(quantize_w4a16(i["w"]))
-    return lambda: F.linear(i["x"], weight)
+    x, weight = i["x"], dequantize_w4a16(quantize_w4a16(i["w"]))
+    return lambda: F.linear(x, weight)
 
 
 register(
@@ -857,6 +879,7 @@ register(
         reference=lambda i: w4a16_linear_reference(i["x"], quantize_w4a16(i["w"])),
         bytes=lambda s: s["N"] * s["K"] // 2 + 2 * s["N"] * s["K"] // 128
         + 2 * s["M"] * (s["K"] + s["N"]),
+        rotate_bytes=_w4a16_weight_bytes,
         ncu="gemv_w4a16|gemm_w4a16|Marlin|marlin",
     )
 )
@@ -887,6 +910,7 @@ register(
         impls={"rows": _w4a16_dequant("rows"), "tiled": _w4a16_dequant("tiled")},
         reference=lambda i: dequantize_w4a16(quantize_w4a16(i["w"].cpu())).to(i["w"].device),
         bytes=lambda s: s["N"] * s["K"] // 2 + 2 * s["N"] * s["K"] // 128 + 2 * s["N"] * s["K"],
+        rotate_bytes=_w4a16_weight_bytes,
         ncu="dequantize_w4a16",
     )
 )
