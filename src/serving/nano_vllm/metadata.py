@@ -30,8 +30,11 @@ class BatchMetadata:
     # means every row (the per-position checks against transformers use it).
     logits_indices: Optional[torch.Tensor] = None
     # A mixed batch puts its decode rows (one query token each) first; the
-    # prefill rows after them get query offsets of their own, starting at 0.
+    # prefill rows after them get query offsets of their own, starting at 0,
+    # and their own copies of the context lengths and block tables.
     prefill_cu_seqlens_q: Optional[torch.Tensor] = None
+    prefill_context_lens: Optional[torch.Tensor] = None
+    prefill_block_tables: Optional[torch.Tensor] = None
     # Every sequence has exactly one query token, so the batched decode
     # attention applies (also true for a prefill chunk of one token).
     decode_only: bool = field(init=False)
@@ -67,6 +70,13 @@ def build_batch(
 
     All int64 fields go in one buffer and all int32 fields in another, staged
     in pinned memory on CUDA, so a batch costs two asynchronous H2D copies.
+
+    Every field starts on a 16-byte boundary. Triton specializes a kernel on
+    whether each pointer argument is 16-byte aligned, so a field at an offset
+    that depends on the batch shape compiles a new kernel variant (seconds,
+    mid-serving) the first time its alignment changes. For the same reason a
+    mixed batch's prefill rows get fields of their own instead of slices
+    starting at row num_decode_rows.
     """
     num_tokens = len(input_ids)
     num_seqs = len(query_lens)
@@ -84,35 +94,27 @@ def build_batch(
         cu_seqlens.append(cu_seqlens[-1] + query_len)
     logits_indices = [] if all_logits else [end - 1 for end in cu_seqlens[1:]]
     num_decode_rows = next((i for i, n in enumerate(query_lens) if n != 1), num_seqs)
-    # Prefill rows' own offsets when decode rows come first (a mixed batch).
-    prefill_cu = (
-        [c - cu_seqlens[num_decode_rows] for c in cu_seqlens[num_decode_rows:]]
-        if 0 < num_decode_rows < num_seqs
-        else []
-    )
     width = max([len(table) for table in block_tables] + [1])
     flat_tables: list[int] = []
     for table in block_tables:
         flat_tables.extend(table)
         flat_tables.extend([null_block] * (width - len(table)))
+    # The prefill rows' own fields when decode rows come first (a mixed batch).
+    mixed = 0 < num_decode_rows < num_seqs
+    num_prefill_rows = num_seqs - num_decode_rows if mixed else 0
+    prefill_cu = [c - cu_seqlens[num_decode_rows] for c in cu_seqlens[num_decode_rows:]] if mixed else []
+    prefill_ctx = context_lens[num_decode_rows:] if mixed else []
+    prefill_tables = flat_tables[num_decode_rows * width :] if mixed else []
 
     pin = device.type == "cuda"
-    longs = torch.tensor(
-        input_ids + positions + slots + logits_indices,
-        dtype=torch.long,
-        pin_memory=pin,
-    ).to(device, non_blocking=True)
-    ints = torch.tensor(
-        cu_seqlens + context_lens + flat_tables + prefill_cu,
-        dtype=torch.int32,
-        pin_memory=pin,
-    ).to(device, non_blocking=True)
-
-    input_ids_t, positions_t, slots_t, logits_t = longs.split(
-        [num_tokens, num_tokens, num_tokens, len(logits_indices)]
+    input_ids_t, positions_t, slots_t, logits_t = _pack(
+        [input_ids, positions, slots, logits_indices], torch.long, pin, device
     )
-    cu_seqlens_t, context_lens_t, tables_t, prefill_cu_t = ints.split(
-        [num_seqs + 1, num_seqs, num_seqs * width, len(prefill_cu)]
+    cu_seqlens_t, context_lens_t, tables_t, prefill_cu_t, prefill_ctx_t, prefill_tables_t = _pack(
+        [cu_seqlens, context_lens, flat_tables, prefill_cu, prefill_ctx, prefill_tables],
+        torch.int32,
+        pin,
+        device,
     )
     metadata = BatchMetadata(
         slot_mapping=slots_t,
@@ -123,6 +125,22 @@ def build_batch(
         context_lens_host=list(context_lens),
         is_prefill=is_prefill,
         logits_indices=None if all_logits else logits_t,
-        prefill_cu_seqlens_q=prefill_cu_t if prefill_cu else None,
+        prefill_cu_seqlens_q=prefill_cu_t if mixed else None,
+        prefill_context_lens=prefill_ctx_t if mixed else None,
+        prefill_block_tables=prefill_tables_t.view(num_prefill_rows, width) if mixed else None,
     )
     return input_ids_t, positions_t, metadata
+
+
+def _pack(parts: list[list[int]], dtype: torch.dtype, pin: bool, device: torch.device) -> list[torch.Tensor]:
+    """One H2D copy for all parts; each part starts 16 bytes after the last."""
+    per_16_bytes = 16 // torch.empty((), dtype=dtype).element_size()
+    flat: list[int] = []
+    sizes: list[int] = []
+    for part in parts:
+        pad = -len(part) % per_16_bytes
+        flat.extend(part)
+        flat.extend([0] * pad)
+        sizes += [len(part), pad]
+    buffer = torch.tensor(flat, dtype=dtype, pin_memory=pin).to(device, non_blocking=True)
+    return list(buffer.split(sizes)[::2])

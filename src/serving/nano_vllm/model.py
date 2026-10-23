@@ -512,7 +512,8 @@ class NanoLlamaForCausalLM:
             )
         # Mixed batch: the decode rows come first (one token each, so token i
         # is row i) and take the split-KV decode kernel; the prefill rows
-        # after them take the varlen prefill kernel.
+        # after them take the varlen prefill kernel, with their own aligned
+        # copies of the per-row fields (see build_batch).
         out = torch.empty_like(query)
         paged_decode_attention(
             query[:decode_rows],
@@ -528,9 +529,9 @@ class NanoLlamaForCausalLM:
             query[decode_rows:],
             key_cache,
             value_cache,
-            metadata.block_tables[decode_rows:],
+            metadata.prefill_block_tables,
             metadata.prefill_cu_seqlens_q,
-            metadata.context_lens[decode_rows:],
+            metadata.prefill_context_lens,
             metadata.query_lens[decode_rows:],
             metadata.context_lens_host[decode_rows:],
             scale,
