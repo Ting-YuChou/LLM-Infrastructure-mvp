@@ -35,17 +35,21 @@ from vllm.sampling_params import RequestOutputKind  # noqa: E402
 _request_ids = itertools.count()
 
 
-def sampling(max_tokens: int) -> SamplingParams:
+def sampling(max_tokens: int, temperature: float = 0.0, top_p: float = 1.0) -> SamplingParams:
     # A fresh object every time: LLM.generate() switches the params it gets to
     # FINAL_ONLY in place, and then engine.step() reports tokens only at the end.
     return SamplingParams(
-        max_tokens=max_tokens, ignore_eos=True, temperature=0.0, output_kind=RequestOutputKind.DELTA
+        max_tokens=max_tokens, ignore_eos=True, temperature=temperature, top_p=top_p,
+        output_kind=RequestOutputKind.DELTA,
     )
 
 
-def run_steps(llm: LLM, prompts: list, max_tokens: int, profile_steps: int = 0) -> list[dict]:
+def run_steps(
+    llm: LLM, prompts: list, max_tokens: int, profile_steps: int = 0, temperature: float = 0.0,
+    top_p: float = 1.0,
+) -> list[dict]:
     engine = llm.llm_engine
-    params = sampling(max_tokens)
+    params = sampling(max_tokens, temperature, top_p)
     ids = []
     for prompt in prompts:
         request_id = f"req-{next(_request_ids)}"
@@ -101,6 +105,8 @@ def main() -> None:
         default=0.85,
         help="lower it under ncu, so its per-pass memory backup fits on the GPU",
     )
+    parser.add_argument("--temperature", type=float, default=0.0, help="0: greedy")
+    parser.add_argument("--top-p", type=float, default=1.0)
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
 
@@ -116,9 +122,10 @@ def main() -> None:
         {"prompt_token_ids": [rng.randrange(1000, 100000) for _ in range(args.input_len)]}
         for _ in range(args.batch)
     ]
-    llm.generate(prompts, sampling(args.output_len), use_tqdm=False)  # warm-up
-    timing = run_steps(llm, prompts, args.output_len)
-    profiled = run_steps(llm, prompts, args.output_len, profile_steps=args.profile_steps)
+    settings = dict(temperature=args.temperature, top_p=args.top_p)
+    llm.generate(prompts, sampling(args.output_len, **settings), use_tqdm=False)  # warm-up
+    timing = run_steps(llm, prompts, args.output_len, **settings)
+    profiled = run_steps(llm, prompts, args.output_len, profile_steps=args.profile_steps, **settings)
 
     # Pure decode steps: after every request has its first token, excluding the
     # final step (requests finishing, outputs flushed).
@@ -129,6 +136,8 @@ def main() -> None:
         "engine": "vllm",
         "quantization": llm.llm_engine.model_config.quantization,
         "cuda_graphs": not args.eager,
+        "temperature": args.temperature,
+        "top_p": args.top_p,
         "batch": args.batch,
         "input_len": args.input_len,
         "output_len": args.output_len,

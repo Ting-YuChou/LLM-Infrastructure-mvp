@@ -166,14 +166,15 @@ start_server() {  # name port ready_path command...: own process group, wait unt
   log "${name} ready after $(( $(date +%s) - start ))s; $(nvidia-smi --query-gpu=memory.used --format=csv,noheader) in use"
 }
 
-# BENCH_TEMPERATURE: sent with every request when set. vllm bench serve 0.19
-# sends none by default, so each server applies its own default (vLLM: the
-# model's generation_config).
+# BENCH_TEMPERATURE, BENCH_TOP_P: sent with every request when set. vllm bench
+# serve 0.19 sends none by default, so each server applies its own default
+# (vLLM: the model's generation_config).
 bench_serve() {  # name port label num_prompts output_len [vllm bench serve args...]
   local name=$1 port=$2 label=$3 n=$4 out_len=$5; shift 5
   timeout "${BENCH_TIMEOUT:-1200}" "${VENVS}/vllm/bin/vllm" bench serve \
     --backend vllm --base-url "http://127.0.0.1:${port}" --model "${MODEL}" \
     --ignore-eos --num-prompts "${n}" --seed 0 ${BENCH_TEMPERATURE:+--temperature "${BENCH_TEMPERATURE}"} \
+    ${BENCH_TOP_P:+--top-p "${BENCH_TOP_P}"} \
     --percentile-metrics ttft,tpot,itl,e2el --metric-percentiles 50,90,99 \
     --save-result --result-dir "${OUT}/serve" --result-filename "${name}_${label}.json" "$@"
   local rc=$?

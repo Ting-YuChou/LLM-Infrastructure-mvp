@@ -29,8 +29,11 @@
 # kernels: decode,prefill,gemv,cuda_gemv,w4a16), P1_KERNELS (kbench and
 # ncu filter, comma-separated), P1_KBENCH_SHAPES (regex on the shape label,
 # same two steps), P1_E2E_RUNS (nano_bench kind:batch:in:out list;
-# vLLM runs the paged ones), P1_NANO_CONFIGS (label:attention:linear:eager|graph[:weight_quant]
-# per nano_bench run, default: the Phase 1 milestones in order), P1_NCU_LAUNCHES (cap per kbench kernel, default
+# vLLM runs the paged ones), P1_NANO_CONFIGS (label:attention:linear:eager|graph[:weight_quant[:flags]]
+# per nano_bench run, default: the Phase 1 milestones in order; flags joined by +: async for async
+# scheduling, sampled for P1_SAMPLING instead of greedy, and with any sampled config vLLM runs its
+# points sampled too), P1_SAMPLING ("temperature top_p", default "0.7 0.9": the nano server's
+# default sampling), P1_NCU_LAUNCHES (cap per kbench kernel, default
 # 300), P1_CUDA_VERSION (cuda129 step, default: the venv's torch.version.cuda),
 # P0_VLLM_VERSION (default 0.19.1).
 set -uo pipefail
@@ -59,6 +62,7 @@ E2E_RUNS="${P1_E2E_RUNS:-static:1:128:256,paged:1:128:256,paged:16:1024:256,page
 # + the Triton GEMV (M6); cuda_gemv_graph: the CUDA GEMV instead (M6);
 # w4a16_graph: 4-bit decoder weights (M7).
 NANO_CONFIGS="${P1_NANO_CONFIGS:-torch_eager:torch:torch:eager triton_eager:triton:torch:eager triton_graph:triton:torch:graph gemv_graph:triton:triton:graph cuda_gemv_graph:triton:cuda:graph w4a16_graph:triton:triton:graph:w4a16}"
+read -r SAMPLED_TEMPERATURE SAMPLED_TOP_P <<< "${P1_SAMPLING:-0.7 0.9}"
 CUDA_ENV="${ROOT}/cuda129.env"
 
 export HF_HOME="${ROOT}/hf_cache" UV_CACHE_DIR="${ROOT}/uv_cache" UV_PYTHON_INSTALL_DIR="${ROOT}/uv_python"
@@ -112,14 +116,20 @@ ncu_kbench() {  # one ncu report per kbench kernel, limited to its --kernel-name
 }
 
 # --- end to end --------------------------------------------------------------
-nano_config_args() {  # label:attention:linear:eager|graph[:weight_quant] -> nano_bench flags
-  local label attention linear mode quant
-  IFS=: read -r label attention linear mode quant <<< "$1"
-  echo "--attention-backend ${attention} --linear-backend ${linear} --weight-quant ${quant:-none}$([[ "${mode}" == eager ]] && echo " --enforce-eager")"
+nano_config_args() {  # label:attention:linear:eager|graph[:weight_quant[:flags]] -> nano_bench flags
+  local label attention linear mode quant flags args
+  IFS=: read -r label attention linear mode quant flags <<< "$1"
+  args="--attention-backend ${attention} --linear-backend ${linear} --weight-quant ${quant:-none}"
+  [[ "${mode}" == eager ]] && args+=" --enforce-eager"
+  [[ "+${flags}+" == *+async+* ]] && args+=" --async-scheduling"
+  [[ "+${flags}+" == *+sampled+* ]] && args+=" $(sampled_args)"
+  echo "${args}"
 }
 
+sampled_args() { echo "--temperature ${SAMPLED_TEMPERATURE} --top-p ${SAMPLED_TOP_P}"; }
+
 e2e() {
-  local rc=0 run kind batch input output config label last
+  local rc=0 run kind batch input output config label last modes=greedy sampling tag args
   export PYTHONPATH="${REPO_DIR}"
   for config in ${NANO_CONFIGS}; do
     label="${config%%:*}"
@@ -128,18 +138,25 @@ e2e() {
       $(nano_config_args "${config}") --out "${OUT}/offline/nano_${label}.json" || rc=1
     last="${config}"
   done
+  [[ "${NANO_CONFIGS}" == *sampled* ]] && modes+=" sampled"
   for run in ${E2E_RUNS//,/ }; do
     IFS=: read -r kind batch input output <<< "${run}"
     [[ "${kind}" == paged ]] || continue
-    "${PY}" "${P0_DIR}/vllm_offline.py" --model "${MODEL}" --batch "${batch}" \
-      --input-len "${input}" --output-len "${output}" \
-      --out "${OUT}/offline/vllm_b${batch}_in${input}_out${output}.json" || rc=1
-    if [[ "${NANO_CONFIGS}" == *:w4a16* ]]; then
-      { [[ -d "${W4_MODEL}" ]] || download_w4_model; } &&
-      "${PY}" "${P0_DIR}/vllm_offline.py" --model "${W4_MODEL}" --batch "${batch}" \
-        --input-len "${input}" --output-len "${output}" \
-        --out "${OUT}/offline/vllmw4_b${batch}_in${input}_out${output}.json" || rc=1
-    fi
+    for sampling in ${modes}; do
+      tag="" args=""
+      [[ "${sampling}" == sampled ]] && tag="sampled_" args="$(sampled_args)"
+      # shellcheck disable=SC2086  # the flags are meant to split
+      "${PY}" "${P0_DIR}/vllm_offline.py" --model "${MODEL}" --batch "${batch}" \
+        --input-len "${input}" --output-len "${output}" ${args} \
+        --out "${OUT}/offline/vllm_${tag}b${batch}_in${input}_out${output}.json" || rc=1
+      if [[ "${NANO_CONFIGS}" == *:w4a16* ]]; then
+        # shellcheck disable=SC2086
+        { [[ -d "${W4_MODEL}" ]] || download_w4_model; } &&
+        "${PY}" "${P0_DIR}/vllm_offline.py" --model "${W4_MODEL}" --batch "${batch}" \
+          --input-len "${input}" --output-len "${output}" ${args} \
+          --out "${OUT}/offline/vllmw4_${tag}b${batch}_in${input}_out${output}.json" || rc=1
+      fi
+    done
   done
   grep -h 'NANO_BENCH\|VLLM_OFFLINE' "${OUT}/logs/e2e.log" >&3
   label="${last%%:*}"

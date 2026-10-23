@@ -8,8 +8,10 @@
 # On Colab: BENCH_PHASE=phase2 bash benchmarks/phase0/colab_phase0.sh [rerun]
 # (colab_launcher.py sets P0_ROOT=/content/p0, P0_REPO_DIR and P0_RUN_ID).
 #
-# Workloads (every run uses --ignore-eos, --temperature 0 and seed 0):
+# Workloads (every run uses --ignore-eos and seed 0, and --temperature 0 but w1s):
 #   w1     random 1024/256 at each P2_CONCURRENCY (throughput, TTFT, ITL)
+#   w1s    w1 at c=1, 16 and 64 with temperature 0.7 and top-p 0.9 (the nano
+#          server's default sampling), after w1 on the same server
 #   w1c32  w1 at c=32 only (the GIL diagnostic run)
 #   w1u    random 1024/128 at c=1 and c=16 with their own seeds: prompts no
 #          earlier run sent, so TTFT includes the whole prefill (vllm bench's
@@ -128,6 +130,15 @@ w1() {  # name port
   for c in "${CONCURRENCY[@]}"; do
     n=$(( c * 4 > 16 ? c * 4 : 16 )); (( c == 1 )) && n=10
     bench_serve "$1" "$2" "w1_c${c}" "${n}" 256 $(random_args 1024 256 "${c}")
+  done
+}
+
+w1s() {
+  local c n
+  for c in 1 16 64; do
+    n=$(( c * 4 > 16 ? c * 4 : 16 )); (( c == 1 )) && n=10
+    BENCH_TEMPERATURE=0.7 BENCH_TOP_P=0.9 \
+      bench_serve "$1" "$2" "w1s_c${c}" "${n}" 256 $(random_args 1024 256 "${c}")
   done
 }
 

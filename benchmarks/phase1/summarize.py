@@ -69,9 +69,12 @@ def main() -> None:
         if not path.stem.endswith("_nsys")
         for d in (load_json(path) or [])
     ]
+    def point(d: dict) -> tuple:  # sampled runs are compared with sampled runs
+        return d["batch"], d["input_len"], d["output_len"], d.get("temperature", 0.0) > 0
+
     def vllm_runs(pattern: str) -> dict:
         return {
-            (d["batch"], d["input_len"], d["output_len"]): d
+            point(d): d
             for d in filter(None, (load_json(p) for p in sorted((run / "offline").glob(pattern))))
         }
 
@@ -88,7 +91,7 @@ def main() -> None:
         ]
         for config, d in nano:
             quantized = d.get("weight_quant", "none") != "none"
-            v = (vllm_w4 if quantized else vllm).get((d["batch"], d["input_len"], d["output_len"]), {})
+            v = (vllm_w4 if quantized else vllm).get(point(d), {})
             baseline = f"{v.get('quantization') or 'bf16'}" if v else "-"
             ratio = d["decode_ms_per_step"] / v["decode_ms_per_step"] if v else None
             lines.append(

@@ -117,7 +117,14 @@ def _drive(core, num_requests: int, collected: list, profile: bool) -> dict:
     return produced
 
 
-def run_paged(engine: NanoLlamaEngine, prompts: list[list[int]], output_len: int, profile: bool) -> dict:
+def run_paged(
+    engine: NanoLlamaEngine,
+    prompts: list[list[int]],
+    output_len: int,
+    profile: bool,
+    temperature: float = 0.0,
+    top_p: float = 1.0,
+) -> dict:
     core = engine.core
     runner = core.model_runner
     records: list[dict] = []
@@ -144,7 +151,9 @@ def run_paged(engine: NanoLlamaEngine, prompts: list[list[int]], output_len: int
         return token_ids
 
     runner.launch, runner.collect = timed_launch, timed_collect
-    sampling = SamplingOptions(max_tokens=output_len, temperature=0.0, ignore_eos=True)
+    sampling = SamplingOptions(
+        max_tokens=output_len, temperature=temperature, top_p=top_p, ignore_eos=True
+    )
     for prompt in prompts:
         core.add_request(
             EngineRequest(req_id=next(Sequence._counter), prompt_token_ids=prompt, sampling=sampling)
@@ -211,6 +220,10 @@ def main() -> None:
         "--async-scheduling", action="store_true",
         help="launch step N+1 before collecting step N (paged path)",
     )
+    parser.add_argument(
+        "--temperature", type=float, default=0.0, help="paged path; 0 is greedy (argmax only)"
+    )
+    parser.add_argument("--top-p", type=float, default=1.0, help="paged path")
     args = parser.parse_args()
 
     runs = [tuple(r.split(":")) for r in args.runs.split(",")]
@@ -242,7 +255,8 @@ def main() -> None:
 
     # Warm-up: Triton JIT and cuBLAS heuristics, outside any measured run.
     run_static(engine, random_prompt(rng, 32, vocab), 8, profile=False)
-    run_paged(engine, [random_prompt(rng, 32, vocab)], 8, profile=False)
+    sampling = dict(temperature=args.temperature, top_p=args.top_p)
+    run_paged(engine, [random_prompt(rng, 32, vocab)], 8, profile=False, **sampling)
 
     results = []
     for kind, batch, input_len, output_len in runs:
@@ -252,13 +266,15 @@ def main() -> None:
             assert batch == 1, "the static path is single-request"
             raw = run_static(engine, prompts[0], output_len, profile=True)
         else:
-            raw = run_paged(engine, prompts, output_len, profile=True)
+            raw = run_paged(engine, prompts, output_len, profile=True, **sampling)
         result = summarize(kind, batch, input_len, output_len, raw)
         result["load_s"] = load_s
         result["attention_backend"] = args.attention_backend
         result["linear_backend"] = args.linear_backend
         result["weight_quant"] = args.weight_quant
         result["async_scheduling"] = args.async_scheduling
+        result["temperature"] = args.temperature if kind == "paged" else 0.0
+        result["top_p"] = args.top_p if kind == "paged" else 1.0
         result["cuda_graphs"] = (
             kind == "paged" and not args.enforce_eager and args.device == "cuda"
         )

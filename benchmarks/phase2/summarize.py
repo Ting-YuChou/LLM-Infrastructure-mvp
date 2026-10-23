@@ -5,6 +5,7 @@ Reads the P2_SERVE lines from the run's console (one per `vllm bench serve` run)
 the nsys/*.json reports and status.tsv, and writes tables per workload:
   w1  throughput, TTFT and ITL by concurrency, per server config
   w1u the same at c=1 and 16 with prompts no earlier run sent
+  w1s the same at c=1, 16 and 64, sampled (temperature 0.7, top-p 0.9)
   w2  shared-prefix runs
   w3  the background decodes' ITL tail and the long prompts' TTFT
 plus per-step GPU idle and the engine's host phases from nsys.
@@ -229,6 +230,7 @@ def main() -> None:
         lines += ["## " + bench.read_text().lstrip("# "), ""]
     lines += w1_tables(rows)
     lines += w1_tables(rows, "w1u", "W1u: random 1024/128, prompts no earlier run sent (uncached)")
+    lines += w1_tables(rows, "w1s", "W1s: random 1024/256, temperature 0.7, top-p 0.9")
     lines += w2_table(rows, out) + w3_table(rows) + offline_table(out)
     lines += nsys_table(out) + server_settings(out)
     (out / "summary.md").write_text("\n".join(lines) + "\n")
