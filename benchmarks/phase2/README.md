@@ -210,13 +210,13 @@ step is hidden, GIL waits included. The separate process still halves TTFT
 at c=64 (330 vs 666 ms p50), since admissions no longer queue behind
 detokenization.
 
-#### M5: CUDA graphs for mixed steps (not done)
+#### M5: CUDA graphs for mixed steps (deferred, then done as piecewise graphs)
 
 The condition was nsys showing mixed steps CPU-bound. With M3 and M4 the
 c=64 median step, an eager mixed step (362 kernels), leaves the GPU idle
-0.84 ms of 30.9 ms: 2.7% is the most mixed-step graphs could recover, for
-about 45 more graphs, 5-10 s of startup and a prefill kernel that finds its
-sequence on the device.
+0.84 ms of 30.9 ms: 2.7% is the most mixed-step graphs could recover there,
+so M5 was deferred. Small steps turned out to be the case that matters
+(TTFT at low concurrency, below); they now replay piecewise graphs.
 
 #### M6: the radix tree in C++
 
@@ -292,10 +292,9 @@ and TTFT, and on W3's ITL tail within a few percent (p99 29.4 vs 28.3 ms at
 2048-token chunks, lower at 512). Its w2b hit rate is 2 points lower (48.5
 vs 50.6%), not investigated: vLLM evicts single blocks from the front of
 its free queue, nano evicts whole leaf tails by LRU, which can keep a
-different set of prefixes under w2b's shuffled reuse. Two gaps remain. TTFT at c=1 is 33 against 26 ms: a 1024-token prefill is slower
-in nano's kernels (Phase 1 tuned decode, not prefill). And at c=64 with
-2048-token chunks, TTFT p50 is 463 against 408 ms; with 512-token chunks
-nano is at 342 ms. The mid-serving compile fix was verified with an empty
+different set of prefixes under w2b's shuffled reuse. Two gaps remained here: TTFT at c=1 (33 against 26 ms) and at c=64 with 2048-token
+chunks (463 against 408 ms; 342 with 512-token chunks). The c=1 gap was not
+the prefill kernels; it is closed in the next section. The mid-serving compile fix was verified with an empty
 Triton cache (LOG.md): the first M2 server's c=16 / 32 W1 went from 719 /
 1,073 to 852 / 1,234 tok/s.
 
@@ -307,5 +306,53 @@ Triton cache (LOG.md): the first M2 server's c=16 / 32 W1 went from 719 /
 | M2 | p99 ITL from a full 4k prefill to one step; TTFT +10-20% at 256-token chunks; W1 c=64 +10-20% | max ITL 902 to 55 ms at 512 chunks; TTFT +45% at 256 (678 vs 467 ms); W1 flat until M3/M4 |
 | M3 | ITL a few ms lower at c>=32; c=1 50-100 µs worse | c=64 ITL p50 28.9 to 23.9 ms, TPOT 33.3 to 25.3; c=1 slightly better (12.54 to 12.36) |
 | M4 | offline about 11.5 / 13.8 / 22.9 ms; no per-step idle in nsys | 12.04 / 14.13 / 22.57 ms; idle 0.03-0.04 ms per step |
-| M5 | only if mixed steps are CPU-bound | not CPU-bound (2.7% idle), not done |
+| M5 | only if mixed steps are CPU-bound | not at c=64 (2.7% idle); small steps were (29 ms of host time for 12 ms of GPU): piecewise graphs, below |
 | M6 | 10-50x in the microbenchmark; e2e in the noise | 10x; e2e in the noise |
+
+### TTFT at low concurrency: piecewise CUDA graphs (runs `ttft-20261023-041614-colab`, `ttft2-20261023-050451-colab`)
+
+**What c=1's TTFT measured.** `vllm bench serve`'s random prompt i is the
+same in every run with seed 0, so W1's prompts were already in the prefix
+cache from the warmup (50% of W1's prompt tokens hit, for nano and vLLM
+alike). A c=1 request's prefill was its last 16 tokens, not 1024: vLLM's
+26 ms could not be a full prefill (16.4 TFLOP needs at least 52 ms at the
+A100's 312 TFLOP/s), and on uncached 4096-token prompts (W3) nano's TTFT
+already matched vLLM's (356 vs 359 ms). The kernels were not the gap.
+
+**What the gap was.** An eager step costs ~29 ms of host time (nsys NVTX
+`forward`, ~360 kernel launches), whatever its size. A 16-token prefill
+needs ~12 ms of GPU, so it waited on the host. vLLM captures piecewise CUDA
+graphs for mixed and prefill batches up to 512 tokens (its log: 51 sizes,
+`FULL_AND_PIECEWISE`). nano now does the same: `forward_batch` is split at
+each attention, everything else is captured per padded token count (16
+sizes, 8-512, `cuda_graph_max_tokens`), and the attention runs eagerly
+between the pieces, so a small step is 33 replays and ~32 attention
+launches. nsys of the same c=1 prompts uncached then cached: host time per
+step 22.4 ms eager (1024-token prefills, past the largest size) against
+4.0 ms with pieces, for ~12 ms of GPU work.
+
+Same run, same settings except the graphs (core process, async scheduling,
+2048-token chunks):
+
+| TTFT p50 (ms) | vLLM | nano, eager steps | nano, piecewise graphs |
+|---|---:|---:|---:|
+| W1 c=1 (cached prefix) | 26.6 | 33.0 | **22.4** |
+| W1 c=2 | 40.7 | 57.9 | **39.9** |
+| W1 c=4 | 57.1 | 51.7 | **44.8** |
+| W1 c=8 | 73.2 | 75.8 | **53.2** |
+| W1 c=16 | 140.7 | 117.2 | 131.6 |
+| W1 c=32 | 235.6 | 232.8 | **211.2** |
+| W1u c=1 (uncached 1024 tokens) | 81.8 | 76.5 | 76.1 |
+| W1u c=16 (uncached) | 395.4 | 227.4 | 227.3 |
+
+Throughput, TPOT and ITL do not change (c=64: 1,985 vs 1,998 tok/s
+without; vLLM 1,891 in this run). Uncached prompts do not change either: a
+1024-token prefill is past the largest size and GPU-bound, and nano was
+already ahead there. TTFT p50 at c=64 moves by ±150 ms between runs for
+every server (vLLM: 408 ms in the final round, 668 here), since it depends
+on how request waves line up. Startup takes 30 s instead of 20 s.
+
+The GPU suite caught one more capture hazard: a garbage collection during
+a capture can destroy an earlier engine's graphs and free their pool with
+`cudaFree`, which invalidates the capture (LOG.md). Captures now collect
+first and keep the collector off, as vLLM does.

@@ -1,0 +1,270 @@
+{
+  "label": "nano_w1c1c",
+  "window_ms": 29055.490789,
+  "gpu_busy_frac": 0.5895432125856561,
+  "per_step_source": "median of 1370 NVTX step ranges",
+  "steps": 1380,
+  "batch": 1,
+  "per_step": {
+    "wall_ms": 12.1106455,
+    "gpu_busy_ms": 12.073389,
+    "gpu_idle_ms": 0.0372565,
+    "kernels": 421.0,
+    "launch_calls": 2.0,
+    "launch_api_ms": 0.5779705
+  },
+  "kernel_time_by_category": {
+    "gemm": {
+      "ms": 15826.322507,
+      "frac": 0.9230508202594533
+    },
+    "attention": {
+      "ms": 681.491773,
+      "frac": 0.039747170562806924
+    },
+    "norm": {
+      "ms": 262.708233,
+      "frac": 0.015322134997078862
+    },
+    "rope": {
+      "ms": 135.718292,
+      "frac": 0.007915602673925213
+    },
+    "activation": {
+      "ms": 117.192534,
+      "frac": 0.006835110594336624
+    },
+    "sampling": {
+      "ms": 73.454005,
+      "frac": 0.004284114615799291
+    },
+    "elementwise/copy": {
+      "ms": 48.780218,
+      "frac": 0.0028450462965998336
+    }
+  },
+  "top_kernels": [
+    {
+      "name": "_gemv_kernel",
+      "category": "gemm",
+      "count": 174160,
+      "total_ms": 14979.557602,
+      "avg_us": 86.01032155489206,
+      "frac": 0.873664297282845
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn",
+      "category": "gemm",
+      "count": 1280,
+      "total_ms": 610.442487,
+      "avg_us": 476.90819296875003,
+      "frac": 0.035603308228891926
+    },
+    {
+      "name": "_paged_decode_split_kernel",
+      "category": "attention",
+      "count": 42880,
+      "total_ms": 500.798662,
+      "avg_us": 11.679073274253732,
+      "frac": 0.029208466814667617
+    },
+    {
+      "name": "_fused_add_rms_norm_kernel",
+      "category": "norm",
+      "count": 87040,
+      "total_ms": 259.202438,
+      "avg_us": 2.977969186580882,
+      "frac": 0.015117663809980267
+    },
+    {
+      "name": "_gemv_reduce_kernel",
+      "category": "gemm",
+      "count": 129600,
+      "total_ms": 236.322418,
+      "avg_us": 1.823475447530864,
+      "frac": 0.013783214747716337
+    },
+    {
+      "name": "_rope_cache_write_kernel",
+      "category": "rope",
+      "count": 43520,
+      "total_ms": 135.718292,
+      "avg_us": 3.118526930147059,
+      "frac": 0.007915602673925213
+    },
+    {
+      "name": "_paged_decode_reduce_kernel",
+      "category": "attention",
+      "count": 42880,
+      "total_ms": 124.342458,
+      "avg_us": 2.8997774720149256,
+      "frac": 0.007252121129163883
+    },
+    {
+      "name": "_silu_and_mul_kernel",
+      "category": "activation",
+      "count": 43520,
+      "total_ms": 117.192534,
+      "avg_us": 2.6928431525735297,
+      "frac": 0.006835110594336624
+    },
+    {
+      "name": "reduce_kernel",
+      "category": "sampling",
+      "count": 1360,
+      "total_ms": 73.454005,
+      "avg_us": 54.01029779411765,
+      "frac": 0.004284114615799291
+    },
+    {
+      "name": "_paged_prefill_kernel",
+      "category": "attention",
+      "count": 640,
+      "total_ms": 56.350653,
+      "avg_us": 88.0478953125,
+      "frac": 0.003286582618975428
+    },
+    {
+      "name": "index_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 8060,
+      "total_ms": 38.877825,
+      "avg_us": 4.823551488833747,
+      "frac": 0.0022675013882903603
+    },
+    {
+      "name": "vectorized_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 4020,
+      "total_ms": 9.598745,
+      "avg_us": 2.387747512437811,
+      "frac": 0.0005598350116897011
+    },
+    {
+      "name": "_rms_norm_kernel",
+      "category": "norm",
+      "count": 1360,
+      "total_ms": 3.505795,
+      "avg_us": 2.5777904411764707,
+      "frac": 0.00020447118709859423
+    },
+    {
+      "name": "vectorized_gather_kernel",
+      "category": "elementwise/copy",
+      "count": 80,
+      "total_ms": 0.2864,
+      "avg_us": 3.58,
+      "frac": 1.6703928206023852e-05
+    },
+    {
+      "name": "unrolled_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 10,
+      "total_ms": 0.017248,
+      "avg_us": 1.7247999999999999,
+      "frac": 1.005968413748252e-06
+    }
+  ],
+  "cuda_api": {
+    "cudaEventSynchronize": {
+      "calls": 1360,
+      "total_ms": 15233.060759
+    },
+    "cudaGraphLaunch": {
+      "calls": 1670,
+      "total_ms": 791.002244
+    },
+    "cudaLaunchKernel": {
+      "calls": 2699,
+      "total_ms": 105.477713
+    },
+    "cudaMemcpyAsync": {
+      "calls": 5478,
+      "total_ms": 72.617749
+    },
+    "cuLaunchKernelEx": {
+      "calls": 1940,
+      "total_ms": 18.09803
+    },
+    "cudaEventRecordWithFlags": {
+      "calls": 1398,
+      "total_ms": 5.365289
+    },
+    "cudaStreamIsCapturing": {
+      "calls": 3074,
+      "total_ms": 4.264447
+    },
+    "cudaMemsetAsync": {
+      "calls": 320,
+      "total_ms": 2.800955
+    },
+    "cudaMalloc": {
+      "calls": 6,
+      "total_ms": 1.225907
+    },
+    "cudaEventQuery": {
+      "calls": 38,
+      "total_ms": 0.382016
+    },
+    "cudaEventCreateWithFlags": {
+      "calls": 2,
+      "total_ms": 0.008143
+    }
+  },
+  "timeline_slice_ns": [
+    31815881899,
+    31852213835
+  ],
+  "nvtx_phases": {
+    "collect": {
+      "count": 1360,
+      "median_us": 11061.361,
+      "total_ms": 15280.445223
+    },
+    "replay": {
+      "count": 1340,
+      "median_us": 799.742,
+      "total_ms": 1109.949138
+    },
+    "sample": {
+      "count": 1360,
+      "median_us": 183.4545,
+      "total_ms": 320.826101
+    },
+    "forward": {
+      "count": 9,
+      "median_us": 22438.449,
+      "total_ms": 201.598087
+    },
+    "detokenize": {
+      "count": 1359,
+      "median_us": 35.824,
+      "total_ms": 55.40909
+    },
+    "pieces": {
+      "count": 10,
+      "median_us": 3966.3315,
+      "total_ms": 40.499159
+    },
+    "publish": {
+      "count": 1361,
+      "median_us": 15.641,
+      "total_ms": 23.570271
+    },
+    "postprocess": {
+      "count": 1359,
+      "median_us": 10.468,
+      "total_ms": 21.589598
+    },
+    "schedule": {
+      "count": 1379,
+      "median_us": 13.272,
+      "total_ms": 20.813284
+    },
+    "prepare": {
+      "count": 19,
+      "median_us": 476.574,
+      "total_ms": 13.170995
+    }
+  }
+}

@@ -189,3 +189,47 @@ the full output length). nano got 9,942 KV blocks (M0's vLLM capacity).
   local Redis is running and keeps `/usage` counters across test runs
   (`total_requests` 41 where the test expects 1). Unrelated to Phase 2; the
   branch does not touch the gateway.
+
+## TTFT follow-up: piecewise CUDA graphs
+
+- W1's c=1 TTFT (nano 33 ms, vLLM 26) measured cached prompts: vllm bench's
+  random prompt i is the same in every seed-0 run, and 50% of W1's prompt
+  tokens hit the prefix cache in both servers' counters. nsys's NVTX
+  `forward` phase put an eager step at ~29 ms of host time regardless of
+  size, against ~12 ms of GPU work for a 16-token prefill. Fix: piecewise
+  CUDA graphs (e4c8fe6), as vLLM's FULL_AND_PIECEWISE mode does.
+
+### Run ttft-20261023-041614-colab (new VM: installs, tests, serve, nsys)
+
+- GPU tests: 237 failed, 204 passed. The first failure was
+  `test_piecewise_replay_matches_eager[triton-w4a16]`: "operation failed due
+  to a previous error during capture" (cudaErrorStreamCaptureInvalidated);
+  every later failure was "Offset increment outside graph capture
+  encountered unexpectedly": the failed capture left the CUDA RNG in
+  capture state for the rest of the process. On the kept VM: every W4A16
+  kernel (mma, wide, dequantize + F.linear, 8-96 rows) captures fine on its
+  own; the test passes alone and with the other graph tests; it fails only
+  after test_nano_vllm_async.py; with `gc.collect()` before each test the
+  same order passes. Cause: the async tests' engines (now with dozens of
+  piecewise graphs each) became garbage in reference cycles, and the cyclic
+  collector ran during the next capture, destroying those graphs and freeing
+  their memory pool with cudaFree, which invalidates a capture. Fix: both
+  captures run `gc.collect()` first and keep the collector disabled while
+  capturing (vLLM freezes the GC there too). A server captures once at
+  startup, so serving was not affected.
+- Serve: all `ok`. W1 c=1 TTFT 22.4 ms with piecewise graphs, 33.0 without
+  (same run), vLLM 26.6. New workload w1u (seeds 101 / 116, prompts no other
+  run sends): uncached c=1 TTFT 76.1 / 76.5 / 81.8 ms (pieces / eager /
+  vLLM). vLLM's own c=1 TTFT goes from 26.6 to 81.8 ms without the cache,
+  which confirms what W1 measured.
+- nsys of w1c1 showed no `pieces` phase: with no warmup before it, all ten
+  prompts were uncached 1024-token prefills, past the largest piecewise size
+  (512), so eager. Added w1c1c (the same prompts twice).
+
+### Run ttft2-20261023-050451-colab (kept VM: tests, nsys)
+
+- 441 GPU and unit tests passed, none skipped, including the piecewise W4A16
+  test after the async tests.
+- nsys of w1c1c: host time per step 22.4 ms for eager steps (the first
+  pass's 1024-token prefills) and 4.0 ms for piecewise steps (the second
+  pass's cached prefills), decode steps 12.1 ms with 0.04 ms idle.
