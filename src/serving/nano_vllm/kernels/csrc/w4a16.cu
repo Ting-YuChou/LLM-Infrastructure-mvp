@@ -648,14 +648,21 @@ struct TiledShape {
   static constexpr int kStageBytes = kABytes + 16 * (kBWords + kSWords);
   static constexpr int kTileStride = TILE_N + 8;  // fp32 slice tile row; the pad spreads banks
   static constexpr int kTileOffset = kTiledStages * kStageBytes;
-  // Then the last-arrival flag and the trace build's stamps.
-  static constexpr int kFlagOffset = kTileOffset + kRows * kTileStride * 4;
+  // The fp32 slice tile, and when they fit (kParallel) one per warp of a
+  // column but the last: those warps store their sums at once and the last
+  // adds them and its own into the first. Then the last-arrival flag and the
+  // trace build's stamps.
+  static constexpr int kPartFloats = kRows * kTileStride;
+  static constexpr int kMaxSmem = 163 * 1024;  // A100's opt-in limit per block
+  static constexpr bool kParallel =
+      kWarpsPerCol >= 3 && kTileOffset + (kWarpsPerCol - 1) * kPartFloats * 4 + 16 + kTraceEvents * 8 <= kMaxSmem;
+  static constexpr int kFlagOffset = kTileOffset + (kParallel ? kWarpsPerCol - 1 : 1) * kPartFloats * 4;
   static constexpr int kTraceOffset = kFlagOffset + 16;
   static constexpr int kSmemBytes = kTraceOffset + kTraceEvents * 8;
-  // One fp32 tile per warp of a column, laid over the stages at the last slice end.
-  static constexpr int kPartFloats = kRows * kTileStride;
-  static constexpr bool kSpreadFits = kWarpsPerCol * kPartFloats * 4 <= kTileOffset;
+  // Otherwise, at the last slice end, one fp32 tile per warp laid over the drained stages.
+  static constexpr bool kSpreadFits = !kParallel && kWarpsPerCol * kPartFloats * 4 <= kTileOffset;
   static_assert(kStageBytes % 128 == 0, "stages start on 128-byte lines");
+  static_assert(kSmemBytes <= kMaxSmem, "shared memory per block");
   static_assert(kKRows % kWarpsPerCol == 0 && kRowsPerWarp >= 1, "the warps of a column split the k16 rows");
   static_assert(kAChunks >= 8, "the x swizzle spans 8 chunks");
   static_assert(kBWords % kTiledThreads == 0 && kSWords <= kTiledThreads, "whole cp.async rounds");
@@ -843,10 +850,11 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
     int seen = -1;
     if (lo != hi && tid == 0) seen = ld_acquire(counters + slice);
     // acc[mt][j] holds rows g, g + 8 of m16 tile mt at columns 2c, 2c + 1 of
-    // n8 tile j. At the block's last slice end the pipeline stages are free:
-    // each warp writes its own copy there at once (spread), then readers add
-    // the copies in warp order. Otherwise the column's warps add into the
-    // fp32 tile one after another.
+    // n8 tile j. With room for a tile per warp but the last (kParallel), all
+    // warps of a column but the last store theirs at once, and the last adds
+    // them in order and its own into the first. Else, at the block's last slice end,
+    // the drained stages hold one copy per warp (spread) and readers add them
+    // in warp order. Else the column's warps add into one tile in turn.
     const bool spread = Sh::kSpreadFits && final_end;
     float* parts = reinterpret_cast<float*>(smem);
     const int kw = warp / Sh::kCols;
@@ -869,7 +877,30 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
     auto decide = [&]() {  // before the barrier that ends the sums
       if (tid == 0) last_block = seen == hi - lo ? 2 : 0;  // 2: last already, skip the slot
     };
-    if (spread) {
+    if constexpr (Sh::kParallel) {
+      if (kw < Sh::kWarpsPerCol - 1) store_acc(tile + kw * Sh::kPartFloats, false);
+      __syncthreads();
+      if (kw == Sh::kWarpsPerCol - 1) {
+#pragma unroll
+        for (int mt = 0; mt < MT; ++mt)
+#pragma unroll
+          for (int j = 0; j < 8; ++j)
+#pragma unroll
+            for (int h = 0; h < 2; ++h) {
+              const int at = (16 * mt + g + 8 * h) * Sh::kTileStride + col * 64 + 8 * j + 2 * c;
+              float2 v = *reinterpret_cast<const float2*>(tile + at);
+#pragma unroll
+              for (int w = 1; w < Sh::kWarpsPerCol - 1; ++w) {
+                const float2 o = *reinterpret_cast<const float2*>(tile + w * Sh::kPartFloats + at);
+                v = make_float2(v.x + o.x, v.y + o.y);
+              }
+              v = make_float2(v.x + acc[mt][j][2 * h], v.y + acc[mt][j][2 * h + 1]);
+              *reinterpret_cast<float2*>(tile + at) = v;
+            }
+      }
+      decide();
+      __syncthreads();
+    } else if (spread) {
       __syncthreads();  // every warp is done with the last stage
       store_acc(parts + kw * Sh::kPartFloats, false);
       decide();
@@ -935,35 +966,42 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
       if (tid == 0 && last_block && f < kTraceFinishes) trace_sh[kTraceFlags] |= (1ll << f) | (early ? 1ll << (16 + f) : 0);
     }
     if (last_block) {
-      // Slots read before any is added, so their L2 latencies overlap; fewer
-      // as MT grows, where the next tile's fragments already fill the
-      // registers (MT 4 would spill).
-      constexpr int kBatch = MT >= 4 ? 1 : (MT == 3 ? 2 : 4);
-      for (int i = tid; i < m * kVecs; i += kTiledThreads) {
-        const int row = i / kVecs;
-        const int v = i % kVecs;
-        float sum[8] = {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f};
-        for (int blk0 = lo; blk0 <= hi; blk0 += kBatch) {  // block order, whoever arrived last
-          float4 part[kBatch][2];
+      // Slots read before any is added, so their L2 latencies overlap: a few
+      // at a time while the next tile's fragments fill the registers (fewer
+      // as MT grows; MT 4 would spill), more at the block's last slice end.
+      auto sum_slots = [&](auto batch) {
+        constexpr int kBatch = decltype(batch)::value;
+        for (int i = tid; i < m * kVecs; i += kTiledThreads) {
+          const int row = i / kVecs;
+          const int v = i % kVecs;
+          float sum[8] = {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+          for (int blk0 = lo; blk0 <= hi; blk0 += kBatch) {  // block order, whoever arrived last
+            float4 part[kBatch][2];
 #pragma unroll
-          for (int q = 0; q < kBatch; ++q) {
-            const int blk = blk0 + q;
-            if (blk > hi) break;
-            if (blk == static_cast<int>(blockIdx.x)) {
-              part[q][0] = block_sum4(row, 2 * v);
-              part[q][1] = block_sum4(row, 2 * v + 1);
-            } else {
-              const float4* src =
-                  reinterpret_cast<const float4*>(slots + (blk + slice) * slot_floats + row * TILE_N + 8 * v);
-              part[q][0] = __ldcg(src);
-              part[q][1] = __ldcg(src + 1);
+            for (int q = 0; q < kBatch; ++q) {
+              const int blk = blk0 + q;
+              if (blk > hi) break;
+              if (blk == static_cast<int>(blockIdx.x)) {
+                part[q][0] = block_sum4(row, 2 * v);
+                part[q][1] = block_sum4(row, 2 * v + 1);
+              } else {
+                const float4* src =
+                    reinterpret_cast<const float4*>(slots + (blk + slice) * slot_floats + row * TILE_N + 8 * v);
+                part[q][0] = __ldcg(src);
+                part[q][1] = __ldcg(src + 1);
+              }
             }
-          }
 #pragma unroll
-          for (int q = 0; q < kBatch; ++q)
-            if (blk0 + q <= hi) add8(sum, part[q][0], part[q][1]);
+            for (int q = 0; q < kBatch; ++q)
+              if (blk0 + q <= hi) add8(sum, part[q][0], part[q][1]);
+          }
+          *reinterpret_cast<uint4*>(ys + static_cast<int64_t>(row) * n + 8 * v) = pack8<T>(sum);
         }
-        *reinterpret_cast<uint4*>(ys + static_cast<int64_t>(row) * n + 8 * v) = pack8<T>(sum);
+      };
+      if (final_end) {
+        sum_slots(std::integral_constant<int, MT < 4 ? 4 : (TILE_N < 256 ? 2 : 1)>{});
+      } else {
+        sum_slots(std::integral_constant<int, MT >= 4 ? 1 : (MT == 3 ? 2 : 4)>{});
       }
       if (tid == 0) counters[slice] = 0;  // ready for the next call
     }
