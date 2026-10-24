@@ -37,6 +37,12 @@ def main() -> None:
     CODE_DIR.mkdir(parents=True)
     with tarfile.open(TARBALL) as tar:
         tar.extractall(CODE_DIR, filter="data")
+    # The tarball keeps this checkout's mtimes, which can be older than the
+    # VM's last JIT build of a kernel (an older commit built after the edit):
+    # ninja would then keep the stale extension. Fresh mtimes force a rebuild.
+    now = time.time()
+    for path in CODE_DIR.rglob("*"):
+        os.utime(path, (now, now))
     ROOT.mkdir(parents=True, exist_ok=True)
     run_id = os.environ["P0_RUN_ID"]
     phase = os.environ.get("BENCH_PHASE", "phase0")
