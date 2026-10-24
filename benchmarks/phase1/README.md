@@ -434,6 +434,60 @@ W4A16 在 b=1、16、64 分別比 vLLM AWQ 快 6.5%、9.5%、1.5%；第二輪 b=
 2. **權重 tile 在一個 block 裡用給 128 列**：B fragment 解一次、用兩次。MT=4 已經用滿 255 個暫存器，要把 warp 分成 M 和 K 兩組。
 3. **暫時的做法**：超過 128 列時依投影選路徑，gate_up 和 down 用 tiled，qkv 和 o_proj 用反量化。依 `down-d2e` 的 tune，b=256 每層約省 160 µs、每步約 5 ms，但仍比 vLLM 慢。
 
+第 1 項在下一節做了（第 3 項因此不需要）；第 2 項沒做，因為每個 tile 的指令數才是主因。
+
+## Kernel 改進清單第四輪：大 batch（runs `chunk-g0` 到 `chunk-c7`）
+
+目標是上一節的 b=128、256。三個改動之後，W4A16 的 decode 在 b=1 到 256 都比 vLLM 的 AWQ 快 6–9%：b=256 從 1.28 倍變成 0.93 倍，b=64 也從 15.94 降到 15.03 ms。分支同樣是 `claude/inference-kernels`，只在本機。
+
+### 做了什麼
+
+| 改動 | commit | 結果 |
+|---|---|---|
+| 一次 launch 處理多個列區塊 | d43d122、c655d29 | 超過 64 列時，列分成 16 MT 列一組的 chunk（Marlin 的 `par`）：chunk c 拿 grid / chunks 個 block，各自把整份權重分 stripe，有自己的 slot 和 counter。每個 chunk 的第 b 個 block 同時走同樣的 tile，權重從 DRAM 讀一次，其他 chunk 從 L2 讀。列數平均分（96 列是兩個 48 列）。`tiled_max_rows` 從 128 改成 256，65–256 列不再反量化；3 個以上 chunk 用 64x256 tile。b=256 的 GEMM 每層 1008 → 723 µs（`chunk-c3`） |
+| 較便宜的 load stream | 421dcda | ncu 的 SourceCounters 顯示我們執行的指令裡 HMMA 只佔 14%（Marlin 24%）。SASS 裡 x tile 每次 cp.async 前有約 20 個指令的索引運算：runtime 上限的迴圈、有號除法、swizzle、64-bit 位址。改成每個 thread 固定複製同一個 chunk、相隔固定列數的幾列，位址只算一次；x 和權重指標每個 stage 前進一個 k tile；下一個 stage 的 fragment 無條件讀取，省掉 barrier 前約 20 個暫存器複製。MT 4、128x128 的主迴圈從 497 個指令（64 個 HMMA）降到 335 個。kbench 四層加總：M=64 −11.5%、M=128 −17.1%、M=256 −21.0% |
+| 最後一次 slice 結尾移到主迴圈之後 | 8bcb99f | block 的最後一次 slice 結尾在主迴圈之後執行，slot 每次讀 4 個也不會擠到主迴圈的暫存器。在迴圈裡這樣做會讓 MT 3–4 慢 2–4%（`chunk-c5`）。kbench：M=64 −2.2%、M=128 −1.7% |
+
+三項都不改加總順序：64 列以內的輸出和改動前 bitwise 相同（golden 16/16，`chunk-g0` 存、`chunk-c2` 到 `chunk-c7` 檢查）。
+
+### 端到端 decode（run `chunk-c7`，ms/step）
+
+| b / prompt | nano W4A16 tiled | vLLM AWQ | nano / vLLM | tok/s：nano / vLLM | 第四輪之前的 nano |
+|---|---:|---:|---:|---:|---:|
+| 1 / 128 | **5.24** | 5.55 | 0.94 | 191 / 180 | 5.19（`down-d3`） |
+| 16 / 1024 | **7.11** | 7.85 | 0.91 | 2,249 / 2,039 | 7.10（`down-d3`） |
+| 64 / 1024 | **15.03** | 16.18 | 0.93 | 4,257 / 3,956 | 15.94（`down-d3`） |
+| 128 / 1024 | **25.83** | 27.48 | 0.94 | 4,955 / 4,658 | 30.20（`concur-c1`） |
+| 128 / 512 | **19.86** | 21.43 | 0.93 | 6,447 / 5,973 | 24.21（`concur-c1`） |
+| 256 / 512 | **36.14** | 39.05 | 0.93 | 7,083 / 6,555 | 49.99（`concur-c1`） |
+
+- nano 用 `fullgraph`（decode CUDA graph 到 256 列），和 vLLM 一樣；預設的 piecewise graph 約慢 1%（`concur-c1`）。
+- vLLM bf16 在 b=128/1k、256/512 會 preempt，不列（上一節）。
+
+### decode 裡每個投影的 GEMM（nsys，run `chunk-c7`，µs，nano / vLLM AWQ）
+
+| b | qkv | o_proj | gate_up | down | 每層 |
+|---|---:|---:|---:|---:|---:|
+| 1 | 16.1 / 16.4 | 14.8 / 14.6 | 51.5 / 55.6 | 30.0 / 31.0 | **112.4** / 117.6 |
+| 16 | 16.3 / 17.8 | 15.3 / 16.3 | 55.0 / 58.7 | 32.0 / 33.2 | **118.5** / 126.0 |
+| 64 | 31.7 / 34.9 | 27.5 / 30.3 | 85.2 / 89.4 | 53.7 / 65.9 | **198.2** / 220.5 |
+| 128 | 45.2 / 49.5 | 35.9 / 41.5 | 155.1 / 165.9 | 84.2 / 94.1 | **320.4** / 351.0 |
+| 256 | 74.3 / 80.1 | 56.6 / 58.4 | 291.4 / 322.8 | 149.0 / 164.3 | **571.4** / 625.5 |
+
+- 第三輪剩下的 gate_up M=64（102.0 對 89.6）現在是 85.2 對 89.4。
+- 第四輪之前 b=128、256 每層是 454.2、1008.0 µs（`concur-c1`）。
+
+### 量測上的教訓
+
+- **Colab 的 rerun 可能載入舊的 kernel**：tarball 保留本機的 mtime，比 VM 上前一次 build 早的話 ninja 不會重 build（`chunk-c2` 第一次，68 個測試失敗才發現）。`colab_launcher.py` 現在解開後把 mtime 設成現在。
+- **trace 的 SM clock 每次不同**（1.08–1.41 GHz），每個 tile 的時間要換成 cycle 才能比。換算後，128x128 tile 在 MT 4 從約 1,900 降到約 1,600 cycle，64x256 在 M=256 約 1,430 cycle（tensor core 下限 1,024）。
+
+### 還沒做
+
+- slice 結尾仍佔 M=64 關鍵路徑的約 25%：128x128 在 MT 3–4 是 4 個 warp 依序相加（約 2.3–4.6 µs）。成對相加要多一份 fp32 tile，shared memory 只剩 29 KB，得少一個 stage。
+- 每個 tile 仍比 tensor core 下限多 40–55%：dequant 和 HMMA 沒有交錯（ptxas 把一列的 dequant 全排在 HMMA 前），每兩個 k16 列就一次 barrier。
+- nano 的預設 `cuda_graph_max_bs` 是 64；大 batch 時改成全 graph 約快 1%。
+
 ## 檔案
 
 | 檔案 | 內容 |
@@ -441,9 +495,9 @@ W4A16 在 b=1、16、64 分別比 vLLM AWQ 快 6.5%、9.5%、1.5%；第二輪 b=
 | `run_phase1.sh` | 主流程。step runner、安裝、nsys、ncu 函式來自 `../phase0/lib.sh` |
 | `kbench.py` | kernel micro-benchmark：登記、正確性檢查、CUDA graph 計時、JSON 和 markdown |
 | `tune.py` | launch 設定的 sweep，計時沿用 kbench |
-| `tiled_trace.py` | `gemm_w4a16_tiled` 的 trace build：每個 block 的時間拆解、最後結束的 block、`--prefetch-tiles` 量 L2 預取的上限 |
+| `tiled_trace.py` | `gemm_w4a16_tiled` 的 trace build：每個 block 的時間拆解、最後結束的 block、`--prefetch-tiles` 量 L2 預取的上限；超過 64 列時逐 chunk 套同一個排程 |
 | `golden.py` | tiled kernel 輸出的逐 bit 比對（存一次，之後檢查） |
-| `gemm_breakdown.py` | 從 nsys 的 SQLite 讀出 decode 裡每個投影的 GEMM 時間，nano 和 vLLM 都適用 |
+| `gemm_breakdown.py` | 從 nsys 的 SQLite 讀出 decode 裡每個投影的 GEMM 時間，nano 和 vLLM 都適用；同一投影連續的 launch 合成一次，`:prelude` regex（例如反量化）算進下一次 GEMM |
 | `quality.py` | 8B 上的 perplexity 和 top-1 一致率 |
 | `interp/` | 本機用 Docker（linux/arm64）跑 `TRITON_INTERPRET=1` 檢查 Triton kernel 的邏輯：`interp_check.py`，以及證明 interpreter 的 bf16 `tl.dot` 有錯的 `dot_check.py` |
 | `summarize.py` | 把一次 run 整理成 `summary.md` |

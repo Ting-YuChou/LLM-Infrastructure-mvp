@@ -772,3 +772,62 @@ ncu（base clock，每次 launch 前清 cache）：（更正：`ncu_run` 用 `--
 - **b=256 的 nano**：反量化 kernel 每次平均 104 µs（每步 13.4 ms），cuBLAS 每層約 590 µs。
 - **attention**：每層約 404–416 µs，和 vLLM 的 419 µs 相同。
 - **VM**：跑完把 Colab VM（`concur`）關掉了。
+
+## 2026-10-24 03:51 — run `chunk-g0-20261024-035150-colab`：舊 kernel 的 golden（新 VM `chunk`）
+
+在 09e2a72（改動之前）的 worktree 上跑 `P1_STEPS="installs cuda129 golden"`，把四層 × M=1/8/16/64 的輸出存到 VM 上的 `w4a16_golden.pt`，之後的 run 用它檢查 64 列以內 bitwise 不變。
+
+## 2026-10-24 03:56 — run `chunk-c2-20261024-035612-colab`：作廢
+
+68 個測試失敗，訊息是舊 kernel 的「1 to 64 rows per launch」。tarball 保留本機檔案的 mtime，而我改程式的時間比 VM 上剛 build 的舊 kernel 早，ninja 認為 extension 是新的，載入了舊版。手動停掉，`colab_launcher.py` 解開 tarball 後把所有檔案的 mtime 設成現在（834a510），之後每次 rerun 都會重新 build 改過的 kernel。
+
+## 2026-10-24 04:02 — run `chunk-c2-20261024-040251-colab`：一次 launch 處理多個列區塊（d43d122）
+
+`P1_STEPS="tests golden kbench tune trace ncu summarize"`，trace 在 down、gate_up、qkv 的 M=64/128/256，ncu 錄 down M=64/128 的 WarpStateStats、SchedulerStats、SourceCounters。
+
+- **tests**：711 passed，沒有 skip（多了 65–512 列的 chunk 案例）。**golden**：16/16 bitwise 相同。
+- **kbench**（冷，µs，tiled / Marlin / 已反量化的 cuBLAS bf16）：
+  - M=128：qkv 55.2 / 62.1 / 56.1，o_proj 41.4 / 52.7 / 41.3，gate_up 193.7 / 170.4 / 271.0，down 110.3 / 109.7 / 111.7；
+  - M=256：qkv 96.4 / 82.5 / 61.1，o_proj 69.0 / 59.4 / 54.2，gate_up 370.2 / 322.3 / 320.1，down 202.3 / 166.7 / 144.4。
+- **tune**：chunk ≥ 3（192、256 列）時 64x256 比 128x128 快 2–5%（qkv、o_proj、down）；反量化 + cuBLAS 在 65 列以上都比較慢。
+- **trace**：128x128 每個 tile 在 1.40 GHz 約 1,900 cycle（down M=64 和 M=256 一樣），tensor core 下限是 1,024。
+- **ncu**：我們的 top stall 是 wait、selected，Marlin 是 wait、math_pipe_throttle；執行的指令裡 HMMA 佔 14%（Marlin 24%），每個 HMMA 多了約 3 個 IMAD、LEA、SHF。SASS 顯示 x tile 每次 cp.async 前有約 20 個指令的索引運算（runtime 上限的迴圈、有號除法、swizzle、64-bit 位址），stage 交界還有約 20 個暫存器複製。
+
+## 2026-10-24 04:16 — run `chunk-c3-20261024-041652-colab`：e2e（d43d122 + 64x256 規則）
+
+nano 只跑 `w4a16_tiled_full`（fullgraph），其他和 `concur-c1` 相同。
+
+- **e2e**（ms/step，nano / vLLM AWQ）：b=64/1k 16.15 / 16.18，b=128/1k 28.37 / 27.47，b=128/512 22.40 / 21.48，b=256/512 40.96 / 39.09。
+- **decode 裡的 GEMM**（每層 µs）：b=64 231.8 / 220.6，b=128 399.7 / 351.2，b=256 722.7 / 624.9。
+
+## 2026-10-24 04:36 — run `chunk-c4-20261024-043613-colab`：較便宜的 load stream（421dcda）
+
+`P1_STEPS="tests golden kbench ncu trace e2e summarize"`。
+
+- **tests**：711 passed。**golden**：16/16 bitwise 相同。
+- **kbench**（四層加總，µs，相對 `chunk-c2`）：M=1 −0.9%，M=32 −6.3%，M=64 231.5 → 204.9（−11.5%），M=128 400.6 → 332.0（−17.1%），M=256 737.9 → 582.8（−21.0%）；gate_up M=64 103.7 → 86.5。
+- **ncu**：top stall 變成 wait、math_pipe_throttle，SM throughput 48%（Marlin 50%）。
+- **trace**：64x256 每個 tile 在 1.40 GHz 約 1,430 cycle（down、qkv M=256）；slice 結尾佔關鍵路徑 27–42%（M=64），128x128 時 4 個 warp 依序相加要 4.6 µs，最後到的 block 逐一讀 slot 5–10 µs。
+- **e2e**（ms/step，nano / vLLM AWQ）：b=64 15.20 / 16.17，b=128/1k 26.05 / 27.48，b=128/512 20.08 / 21.43，b=256/512 36.16 / 39.07。
+- **decode 裡的 GEMM**（每層 µs）：b=64 202.4 / 220.5，b=128 327.8 / 352.2，b=256 573.4 / 630.8。
+
+## 2026-10-24 05:03 — run `chunk-c5-20261024-050307-colab`：MT 3–4 的 slot 一次讀 4 個（沒保留）
+
+`P1_STEPS="tests golden kbench tune trace summarize"`，只跑 w4a16 的 kernel 測試。
+
+- **kbench**：M=64 +3.6%，M=128 +2.0%，M=256 −0.8%。主迴圈的暫存器多了（MT 4、128x128：245 → 252），和第三輪 `down-d2c` 一樣變慢，revert。
+- **tune**：現在的 tile 規則在每個 shape 都是最快或差 2% 以內（qkv M=64 的 64x128、M=128 的 64x256 快 2%）。
+
+## 2026-10-24 05:13 — run `chunk-c6-20261024-051347-colab`：最後一次 slice 結尾移到主迴圈之後（8bcb99f）
+
+- **tests**：276 passed（w4a16 kernel 測試）。**golden**：16/16 bitwise 相同。
+- **kbench**（四層加總，相對 `chunk-c4`）：M=1–16 +0.3–0.5%，M=32 −0.7%，M=64 204.9 → 200.3（−2.2%），M=128 332.0 → 326.2（−1.7%），M=256 −0.3%；gate_up 慢約 1%，其他三層快。保留。
+
+## 2026-10-24 05:22 — run `chunk-c7-20261024-052230-colab`：全套測試、e2e 在 b=1 到 256（8bcb99f）
+
+`P1_STEPS="tests golden e2e summarize"`，nano 只跑 `w4a16_tiled_full`，`P1_E2E_RUNS` 加上 static b=1、paged b=1/16，`P1_NSYS_RUNS="1:128 16:1024 64:1024 128:1024 256:512"`。
+
+- **tests**：711 passed，沒有 skip。**golden**：16/16 bitwise 相同。
+- **e2e**（ms/step，nano / vLLM AWQ）：b=1 5.24 / 5.55，b=16 7.11 / 7.85，b=64 15.03 / 16.18，b=128/1k 25.83 / 27.48，b=128/512 19.86 / 21.43，b=256/512 36.14 / 39.05。
+- **decode 裡的 GEMM**（每層 µs）：b=1 112.4 / 117.6，b=16 118.5 / 126.0，b=64 198.2 / 220.5，b=128 320.4 / 351.0，b=256 571.4 / 625.5。
+- **VM**：跑完把 Colab VM（`chunk`）關掉了。

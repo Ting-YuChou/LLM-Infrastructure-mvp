@@ -384,7 +384,7 @@ def tiled_launch_config(rows: int, n: int, k: int, config: dict, sm_count: int) 
         if mt <= 2:
             name = "256x128" if k % 256 == 0 else "128x128"
         else:  # wide slices pay off when there are many of them, or from three chunks of rows
-            # (tune.py, runs marlin-t1c, down-d2e, chunk-c2b)
+            # (tune.py, runs marlin-t1c, down-d2e, chunk-c2, chunk-c5)
             name = "64x256" if n % 256 == 0 and (n >= 16384 or chunks >= 3) else "128x128"
     if name not in _TILED_TILES_BY_MT[mt]:
         raise ValueError(f"tile {name} is not built for {rows} rows (m16 tiles: {mt})")

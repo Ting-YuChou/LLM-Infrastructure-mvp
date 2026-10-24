@@ -1,0 +1,4002 @@
+[
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "qkv",
+      "M": 1,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 15.971224437388338
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 15.971224437388338
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 17.57469842600268
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 20.031503004621165
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 15.971224437388338
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 21.289673886557882
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 17.015069954155027
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 19.745737083198488
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "qkv",
+      "M": 4,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 16.110140223835792
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 16.110140223835792
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 16.876154167707575
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 20.075162251790363
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 16.110140223835792
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 21.384930425836135
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 17.217488251915274
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 20.01165974047757
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "qkv",
+      "M": 16,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 16.034728796907174
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 16.034728796907174
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 17.20558118450549
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 20.241861195527306
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 16.034728796907174
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 21.341271178666936
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 19.888620043909825
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 23.88539609982986
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "qkv",
+      "M": 32,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 19.765582195548124
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 19.765582195548124
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 22.154915240383886
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 27.338417925575907
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 19.765582195548124
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 26.957395464874978
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 26.298543279485184
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 32.97835727070653
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "qkv",
+      "M": 48,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 27.326510858166124
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 27.326510858166124
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 27.326510858166124
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 34.66914790545323
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 33.1847445909367
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 42.02368832373804
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 28.568805650223133
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 41.12669663835865
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "qkv",
+      "M": 64,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "64x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 34.184930860534195
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 34.83981494755708
+    },
+    "speedup_vs_default": 1.0191570984798726,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 34.83981494755708
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 43.75417103139005
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 39.44781399512476
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 49.5727117671523
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 34.184930860534195
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 48.89004729514898
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "qkv",
+      "M": 96,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 37.80068168344424
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 37.80068168344424
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 37.80068168344424
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 51.08489916306134
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 39.85661868901216
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 59.99925524689431
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 43.889115947161535
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 53.81556629210479
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "us": 100.8362141690513
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "qkv",
+      "M": 128,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 48.516961031181864
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 49.71559657606968
+    },
+    "speedup_vs_default": 1.0247054951384413,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 49.71559657606968
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 65.81382603608361
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 48.516961031181864
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 73.32713104957759
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 51.19206184564635
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 63.53563116502392
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "us": 102.4674703908521
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "qkv",
+      "M": 192,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 61.63845136184101
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 61.63845136184101
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 68.84217077447462
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 81.05079148166863
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 61.63845136184101
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 79.28458664768426
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 71.33866835010144
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 81.45165997882222
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "us": 106.41265100286913
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "qkv",
+      "M": 256,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 74.48211196781129
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 74.48211196781129
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 84.90468550098035
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 96.59733143887779
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 74.48211196781129
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 91.58449394758358
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 89.9810236553813
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 99.18114566063696
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "us": 106.64681870807973
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "o_proj",
+      "M": 1,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 13.911999762058258
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 14.83600027859211
+    },
+    "speedup_vs_default": 1.0664175195757153,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 14.472000300884247
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 19.23999935388565
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 14.83600027859211
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 19.128000363707542
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 13.911999762058258
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 18.251999281346798
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "o_proj",
+      "M": 4,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 14.324000105261803
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 14.891999773681164
+    },
+    "speedup_vs_default": 1.0396537045689291,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 14.440000057220459
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 19.21599917113781
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 14.891999773681164
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 19.247999414801598
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 14.324000105261803
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 18.80399975925684
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "o_proj",
+      "M": 16,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 14.832000248134136
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 15.056000091135502
+    },
+    "speedup_vs_default": 1.0151024702841105,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 14.832000248134136
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 20.02799976617098
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 15.056000091135502
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 19.543999806046486
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 17.436000518500805
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 24.788000620901585
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "o_proj",
+      "M": 32,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 18.70000082999468
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 18.70000082999468
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 19.192000851035118
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 27.672000229358673
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 18.70000082999468
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 24.572000838816166
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 24.984000250697136
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 36.852000281214714
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "o_proj",
+      "M": 48,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 24.24400020390749
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 24.24400020390749
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 24.24400020390749
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 36.51599958539009
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 32.22000040113926
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 48.88800159096718
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 25.13599954545498
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 35.11600010097027
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "o_proj",
+      "M": 64,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 29.952000826597214
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 29.952000826597214
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 29.952000826597214
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 44.51199993491173
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 37.04799897968769
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 57.444000616669655
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 30.104000121355057
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 42.27200150489807
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "o_proj",
+      "M": 96,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 30.10800015181303
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 30.10800015181303
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 30.10800015181303
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 44.13999989628792
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 37.10000030696392
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 52.37999930977821
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 33.07599946856499
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 45.716000720858574
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "us": 62.300000339746475
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "o_proj",
+      "M": 128,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "64x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 38.816001266241074
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 38.96399959921837
+    },
+    "speedup_vs_default": 1.0038128176048369,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 38.96399959921837
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 55.743999779224396
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 45.01999914646149
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 62.803998589515686
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 38.816001266241074
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 54.75600063800812
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "us": 64.51600044965744
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "o_proj",
+      "M": 192,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 48.872001469135284
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 48.872001469135284
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 49.800001084804535
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 66.211998462677
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 48.872001469135284
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 72.53199815750122
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 51.05600133538246
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 63.79999965429306
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "us": 77.2159993648529
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "o_proj",
+      "M": 256,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 55.80800026655197
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 55.80800026655197
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 62.98399716615677
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 74.97599720954895
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 55.80800026655197
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 81.23200014233589
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 64.44399803876877
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 74.64399933815002
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "us": 77.7600035071373
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "gate_up",
+      "M": 1,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 51.97312116622925
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 51.97312116622925
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 52.597758769989014
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 56.65791988372803
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 51.97312116622925
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 55.20383834838867
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 53.35040092468262
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 56.28928184509277
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "gate_up",
+      "M": 4,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 52.746241092681885
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 52.746241092681885
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 53.35040092468262
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 57.34911918640137
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 52.746241092681885
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 56.23296022415161
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 54.29248094558716
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 57.74335861206055
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "gate_up",
+      "M": 16,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 54.7379207611084
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 54.7379207611084
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 55.43423891067505
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 59.458560943603516
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 54.7379207611084
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 58.14784049987793
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 57.60512113571167
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 63.052799701690674
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "gate_up",
+      "M": 32,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 60.738561153411865
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 60.738561153411865
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 64.8857593536377
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 69.98528003692627
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 60.738561153411865
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 67.96799898147583
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 65.20319938659668
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 73.9635181427002
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "gate_up",
+      "M": 48,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 73.66656064987183
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 73.66656064987183
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 77.95199871063232
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 83.57376098632812
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 73.66656064987183
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 85.38112163543701
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 90.54719924926758
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 97.07007884979248
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "gate_up",
+      "M": 64,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 88.31999778747559
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 88.31999778747559
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 101.82144165039062
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 108.04736137390137
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 88.31999778747559
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 102.1951961517334
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 105.95328330993652
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 113.15199851989746
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "gate_up",
+      "M": 96,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 129.74592208862305
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 129.74592208862305
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 138.6905574798584
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 153.26208114624023
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 129.74592208862305
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 144.08703804016113
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 168.89856338500977
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 179.91680145263672
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "us": 509.61408615112305
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "gate_up",
+      "M": 128,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 159.77472305297852
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 159.77472305297852
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 184.76032257080078
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 199.78751182556152
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 159.77472305297852
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 174.66879844665527
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 196.5670394897461
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 209.60256576538086
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "us": 511.1296081542969
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "gate_up",
+      "M": 192,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 228.8742446899414
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 228.8742446899414
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 264.90367889404297
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 281.41568183898926
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 228.8742446899414
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 248.18175315856934
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 287.8515148162842
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 298.22975158691406
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "us": 553.8969612121582
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "gate_up",
+      "M": 256,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 303.2422351837158
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 303.2422351837158
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 352.2457695007324
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 371.59423828125
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 303.2422351837158
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 318.81216049194336
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 378.7161445617676
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 394.8543930053711
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "us": 555.2435302734375
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "down",
+      "M": 1,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 30.02386030397917
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 30.44154351217705
+    },
+    "speedup_vs_default": 1.0139117090197267,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 30.140631031571772
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 35.18427882278175
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 30.44154351217705
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 33.84589521508468
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 30.02386030397917
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 34.860912122224505
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "down",
+      "M": 4,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 30.36968331587942
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 30.72898220597652
+    },
+    "speedup_vs_default": 1.0118308408540182,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 30.36968331587942
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 35.61543790917648
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 30.72898220597652
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 34.44772017629523
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 30.751438517319528
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 36.33403568937067
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "down",
+      "M": 16,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 31.717053630895784
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 31.887719505711605
+    },
+    "speedup_vs_default": 1.0053808867873393,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 31.717053630895784
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 38.42245695883767
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 31.887719505711605
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 36.181332772238214
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 35.718735895658796
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 47.29263196911728
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "down",
+      "M": 32,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 36.495719039649295
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "256x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 36.495719039649295
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 38.332631713465645
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 50.620631167763165
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 36.495719039649295
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 43.82540468584027
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 45.45122698733681
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 66.11536887654087
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "down",
+      "M": 48,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 45.707227890951586
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 45.707227890951586
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 45.707227890951586
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 63.443087694937724
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 54.963647273548865
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 81.34063084920248
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 52.53838656241434
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 67.15733335729232
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "down",
+      "M": 64,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 59.45487607989395
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 59.45487607989395
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 59.45487607989395
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 79.99775702493233
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 64.00000003346226
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 96.93866863585355
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 62.35620850010922
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 79.98877240900407
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "error": "ValueError: the same launch as tiled_tile auto"
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "down",
+      "M": 96,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 71.48238232261257
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 71.48238232261257
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 71.48238232261257
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 87.56996455945466
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 75.98708805285003
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 101.40743590237801
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 86.41122516832854
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 100.28911891736482
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "us": 230.26526601690995
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "down",
+      "M": 128,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 93.35017622562877
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "128x128",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 94.08673905489738
+    },
+    "speedup_vs_default": 1.0078903207154994,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 94.08673905489738
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 113.4663883008455
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 93.35017622562877
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 120.33796310424805
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 100.29810353329307
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 117.98905489737527
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "us": 230.889546243768
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "down",
+      "M": 192,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 123.16294720298364
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 123.16294720298364
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 132.8954362032706
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 148.36772282918292
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 123.16294720298364
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 149.07284786826688
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 143.74174988060668
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 156.70793098315858
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "us": 254.6795794838353
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16_tiled",
+    "shape": {
+      "layer": "down",
+      "M": 256,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 155.81867151093064
+    },
+    "default": {
+      "config": {
+        "tiled_tile": "64x256",
+        "tiled_blocks_per_sm": 1,
+        "tiled_max_rows": 512
+      },
+      "us": 155.81867151093064
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 172.66975369369774
+      },
+      {
+        "config": {
+          "tiled_tile": "128x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 186.79018187941168
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "256x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "error": "ValueError: tile not built for this many rows"
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 155.81867151093064
+      },
+      {
+        "config": {
+          "tiled_tile": "64x256",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 183.4352309243721
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 512
+        },
+        "us": 187.36055441070022
+      },
+      {
+        "config": {
+          "tiled_tile": "64x128",
+          "tiled_blocks_per_sm": 2,
+          "tiled_max_rows": 512
+        },
+        "us": 200.06175626788223
+      },
+      {
+        "config": {
+          "tiled_tile": "auto",
+          "tiled_blocks_per_sm": 1,
+          "tiled_max_rows": 64
+        },
+        "us": 257.3473746316475
+      }
+    ]
+  }
+]
