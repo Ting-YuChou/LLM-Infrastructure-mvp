@@ -36,3 +36,29 @@ def test_vllm_kernel_names():
     names, durations = zip(*kernels)
     layers = gemm_breakdown.label_layers(list(names), list(durations), "Marlin")
     assert [v[0] for v in layers.values()] == [18.0, 16.0, 60.0, 33.0] and len(layers["down"]) == 2
+
+
+def test_back_to_back_launches_are_one_call():
+    # 128 rows: two 64-row launches of the tiled kernel per projection.
+    gemm = "gemm_w4a16_tiled_kernel"
+    kernels = []
+    for _ in range(2):
+        for name, duration in _layer(gemm, "_silu_and_mul_kernel", 17.0, 15.0, 53.0, 31.0):
+            kernels += [(name, duration), (name, duration)] if name == gemm else [(name, duration)]
+    names, durations = zip(*kernels)
+    layers = gemm_breakdown.label_layers(list(names), list(durations), "gemm_w4a16")
+    assert layers == {"qkv": [34.0] * 2, "o_proj": [30.0] * 2, "gate_up": [106.0] * 2, "down": [62.0] * 2}
+
+
+def test_prelude_kernels_join_the_next_gemm():
+    # Past 128 rows: dequantize the weight, then cuBLAS; the final norm and lm_head end the step.
+    kernels = []
+    for _ in range(2):
+        for name, duration in _layer("ampere_bf16_s16816gemm", "_silu_and_mul_kernel", 70.0, 50.0, 200.0, 100.0):
+            if name.startswith("ampere"):
+                kernels.append(("dequantize_w4a16_tiled_kernel", 10.0))
+            kernels.append((name, duration))
+        kernels += [("rms_norm", 2), ("ampere_bf16_s16816gemm_lm_head", 300.0)]
+    names, durations = zip(*kernels)
+    layers = gemm_breakdown.label_layers(list(names), list(durations), "gemm", prelude="dequantize")
+    assert layers == {"qkv": [80.0] * 2, "o_proj": [60.0] * 2, "gate_up": [210.0] * 2, "down": [110.0] * 2}

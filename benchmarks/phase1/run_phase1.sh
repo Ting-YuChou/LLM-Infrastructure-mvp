@@ -21,7 +21,7 @@
 #             then checks later runs against them bit for bit
 #   e2e       nano_bench.py per nano config and vllm_offline.py at the same
 #             points (also on P1_VLLM_W4_MODEL when a config is w4a16); nsys on
-#             the last nano config at b=1/16/64 and, when it is w4a16, on vLLM's AWQ, then
+#             the last nano config at P1_NSYS_RUNS and, when it is w4a16, on vLLM's AWQ, then
 #             gemm_breakdown.py: each projection's GEMM time inside decode, both engines
 #   quality   quality.py: wikitext-2 perplexity and top-1 agreement of the torch,
 #             Triton and W4A16 paths on the real model
@@ -37,9 +37,11 @@
 # vLLM runs the paged ones), P1_NANO_CONFIGS (label:attention:linear:eager|graph[:weight_quant[:flags]]
 # per nano_bench run, default: the Phase 1 milestones in order; flags joined by +: async for async
 # scheduling, sampled for P1_SAMPLING instead of greedy (with any sampled config vLLM runs its
-# points sampled too), tiled / rows for the W4A16 weight layout, fp8kv for an fp8 KV cache
+# points sampled too), tiled / rows for the W4A16 weight layout, fullgraph for decode CUDA graphs
+# up to the largest batch (default: piecewise graphs past 64 rows), fp8kv for an fp8 KV cache
 # (with any fp8kv config vLLM runs its points with --kv-cache-dtype fp8 and
-# P1_VLLM_FP8_BACKEND, default TRITON_ATTN: FLASH_ATTN refuses fp8 on sm80)), P1_QUALITY_CONFIGS
+# P1_VLLM_FP8_BACKEND, default TRITON_ATTN: FLASH_ATTN refuses fp8 on sm80)), P1_NSYS_RUNS (the e2e
+# step's nsys points, batch:input_len, 64 output tokens; default "1:128 16:1024 64:1024"), P1_QUALITY_CONFIGS
 # (quality.py --configs), P1_SAMPLING ("temperature top_p", default "0.7 0.9": the nano server's
 # default sampling), P1_NCU_LAUNCHES (cap per kbench kernel, default
 # 300), P1_NCU_SHAPES (the ncu step's shape regex, default P1_KBENCH_SHAPES), P1_NCU_SECTIONS
@@ -160,6 +162,7 @@ nano_config_args() {  # label:attention:linear:eager|graph[:weight_quant[:flags]
   [[ "+${flags}+" == *+fp8kv+* ]] && args+=" --kv-cache-dtype fp8"
   [[ "+${flags}+" == *+tiled+* ]] && args+=" --w4a16-layout tiled"
   [[ "+${flags}+" == *+rows+* ]] && args+=" --w4a16-layout rows"
+  [[ "+${flags}+" == *+fullgraph+* ]] && args+=" --full-graphs"
   echo "${args}"
 }
 
@@ -201,28 +204,23 @@ e2e() {
   done
   grep -h 'NANO_BENCH\|VLLM_OFFLINE' "${OUT}/logs/e2e.log" >&3
   label="${last%%:*}"
-  # shellcheck disable=SC2046
-  nsys_run "nano_${label}_b1" "${PY}" "${P0_DIR}/nano_bench.py" --model "${MODEL}" \
-    --runs paged:1:128:64 $(nano_config_args "${last}") \
-    --out "${OUT}/offline/nano_${label}_b1_nsys.json" || rc=1
-  # shellcheck disable=SC2046
-  nsys_run "nano_${label}_b16" "${PY}" "${P0_DIR}/nano_bench.py" --model "${MODEL}" \
-    --runs paged:16:1024:64 $(nano_config_args "${last}") \
-    --out "${OUT}/offline/nano_${label}_b16_nsys.json" || rc=1
-  # shellcheck disable=SC2046
-  nsys_run "nano_${label}_b64" "${PY}" "${P0_DIR}/nano_bench.py" --model "${MODEL}" \
-    --runs paged:64:1024:64 $(nano_config_args "${last}") \
-    --out "${OUT}/offline/nano_${label}_b64_nsys.json" || rc=1
-  if [[ "${last}" == *:w4a16* && -d "${W4_MODEL}" ]]; then
+  local b input specs=()
+  for run in ${P1_NSYS_RUNS:-1:128 16:1024 64:1024}; do
+    IFS=: read -r b input <<< "${run}"
+    # shellcheck disable=SC2046
+    nsys_run "nano_${label}_b${b}" "${PY}" "${P0_DIR}/nano_bench.py" --model "${MODEL}" \
+      --runs "paged:${b}:${input}:64" $(nano_config_args "${last}") \
+      --out "${OUT}/offline/nano_${label}_b${b}_nsys.json" || rc=1
+    [[ "${last}" == *:w4a16* && -d "${W4_MODEL}" ]] || continue
     # vLLM's AWQ (Marlin) under nsys too, then each projection's GEMM time inside decode, both sides.
-    local b specs=()
-    for b in 1 16 64; do
-      nsys_run "vllmw4_b${b}" "${PY}" "${P0_DIR}/vllm_offline.py" --model "${W4_MODEL}" --batch "${b}" \
-        --input-len "$([[ ${b} == 1 ]] && echo 128 || echo 1024)" --output-len 64 --profile-steps 32 \
-        --out "${OUT}/offline/vllmw4_b${b}_nsys.json" || rc=1
-      specs+=("nano_b${b}=${OUT}/nsys/nano_${label}_b${b}.sqlite:gemm_w4a16"
-        "vllm_awq_b${b}=${OUT}/nsys/vllmw4_b${b}.sqlite:Marlin")
-    done
+    nsys_run "vllmw4_b${b}" "${PY}" "${P0_DIR}/vllm_offline.py" --model "${W4_MODEL}" --batch "${b}" \
+      --input-len "${input}" --output-len 64 --profile-steps 32 \
+      --out "${OUT}/offline/vllmw4_b${b}_nsys.json" || rc=1
+    # Past tiled_max_rows (128) nano dequantizes each weight and calls cuBLAS.
+    specs+=("nano_b${b}=${OUT}/nsys/nano_${label}_b${b}.sqlite:$( ((b > 128)) && echo gemm || echo gemm_w4a16):dequantize"
+      "vllm_awq_b${b}=${OUT}/nsys/vllmw4_b${b}.sqlite:Marlin")
+  done
+  if ((${#specs[@]})); then
     "${PY}" "${CODE_DIR}/gemm_breakdown.py" --out "${OUT}/offline/gemm_breakdown.md" "${specs[@]}" >&3 || rc=1
   fi
   return "${rc}"

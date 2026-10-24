@@ -222,6 +222,11 @@ def main() -> None:
         "--enforce-eager", action="store_true", help="no decode CUDA graphs (paged path)"
     )
     parser.add_argument(
+        "--full-graphs", action="store_true",
+        help="decode CUDA graphs up to the largest batch (default: up to cuda_graph_max_bs, "
+        "piecewise graphs past it)",
+    )
+    parser.add_argument(
         "--async-scheduling", action="store_true",
         help="launch step N+1 before collecting step N (paged path)",
     )
@@ -256,6 +261,7 @@ def main() -> None:
         weight_quant=args.weight_quant,
         kv_cache_dtype=args.kv_cache_dtype,
         enforce_eager=args.enforce_eager,
+        **({"cuda_graph_max_bs": max(max_batch, NanoVLLMConfig.cuda_graph_max_bs)} if args.full_graphs else {}),
     )
     engine = NanoLlamaEngine(config)
     t0 = time.perf_counter()
@@ -286,6 +292,7 @@ def main() -> None:
         result["kv_cache_dtype"] = args.kv_cache_dtype
         result["w4a16_layout"] = W4A16_CONFIG["layout"] if args.weight_quant == "w4a16" else None
         result["async_scheduling"] = args.async_scheduling
+        result["cuda_graph_max_bs"] = config.cuda_graph_max_bs
         result["temperature"] = args.temperature if kind == "paged" else 0.0
         result["top_p"] = args.top_p if kind == "paged" else 1.0
         result["cuda_graphs"] = (
