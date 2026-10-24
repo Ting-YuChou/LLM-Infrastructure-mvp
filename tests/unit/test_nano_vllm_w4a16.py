@@ -176,6 +176,8 @@ def test_tiled_launch_config_picks_a_tile_built_for_the_rows():
         tiled_launch_config(8, 4096, 384, {**config, "tiled_tile": "256x128"}, 108)
     # Past 64 rows the tile is the one built for a chunk's rows.
     assert tiled_launch_config(96, 4096, 14336, config, 108) == (128, 128, 108)  # two chunks of 48
+    assert tiled_launch_config(128, 4096, 14336, config, 108) == (128, 128, 108)
+    assert tiled_launch_config(192, 4096, 14336, config, 108) == (64, 256, 108)  # from three chunks
     assert tiled_launch_config(256, 28672, 4096, config, 108) == (64, 256, 108)
     with pytest.raises(ValueError, match="not built"):
         tiled_launch_config(128, 4096, 4096, {**config, "tiled_tile": "256x128"}, 108)
