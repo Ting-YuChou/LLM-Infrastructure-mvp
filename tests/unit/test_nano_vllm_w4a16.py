@@ -20,6 +20,7 @@ from serving.nano_vllm.kernels import w4a16 as w4a16_mod  # noqa: E402
 from serving.nano_vllm.kernels.w4a16 import (  # noqa: E402
     W4A16_PACK_ORDER,
     W4A16_TILED_TILES,
+    tiled_chunk_rows,
     tiled_launch_config,
     tiled_schedule,
     unpack_w4a16,
@@ -173,6 +174,21 @@ def test_tiled_launch_config_picks_a_tile_built_for_the_rows():
         tiled_launch_config(8, 384, 4096, {**config, "tiled_tile": "64x256"}, 108)
     with pytest.raises(ValueError, match="divisible"):
         tiled_launch_config(8, 4096, 384, {**config, "tiled_tile": "256x128"}, 108)
+    # Past 64 rows the tile is the one built for a chunk's rows.
+    assert tiled_launch_config(96, 4096, 14336, config, 108) == (128, 128, 108)  # two chunks of 48
+    assert tiled_launch_config(256, 28672, 4096, config, 108) == (64, 256, 108)
+    with pytest.raises(ValueError, match="not built"):
+        tiled_launch_config(128, 4096, 4096, {**config, "tiled_tile": "256x128"}, 108)
+
+
+@pytest.mark.parametrize(
+    "rows, chunks, chunk_rows",
+    [(1, 1, 16), (17, 1, 32), (64, 1, 64), (65, 2, 48), (96, 2, 48), (100, 2, 64), (128, 2, 64),
+     (130, 3, 48), (160, 3, 64), (192, 3, 64), (256, 4, 64), (512, 8, 64)],
+)
+def test_tiled_chunk_rows(rows, chunks, chunk_rows):
+    assert tiled_chunk_rows(rows) == (chunks, chunk_rows)
+    assert (chunks - 1) * chunk_rows < rows <= chunks * chunk_rows and chunk_rows % 16 == 0
 
 
 @pytest.mark.parametrize("n, k", [(6144, 4096), (4096, 4096), (28672, 4096), (4096, 14336), (384, 256)])
@@ -200,6 +216,16 @@ def test_tiled_schedule_gives_every_tile_to_one_block(n, k):
                     assert b + s not in slots
                     slots.add(b + s)
             assert max(slots) < plan["slots"]
+
+
+def test_tiled_schedule_splits_the_grid_between_chunks():
+    """Each chunk of rows stripes the whole weight over grid // chunks blocks."""
+    n, k, tile_k, tile_n = 4096, 14336, 128, 128
+    one = tiled_schedule(n, k, tile_k, tile_n, 54)
+    two = tiled_schedule(n, k, tile_k, tile_n, 108, chunks=2)
+    assert {key: two[key] for key in one if key != "blocks"} == {key: v for key, v in one.items() if key != "blocks"}
+    assert one["blocks"] == len(one["ranges"]) and two["blocks"] == 2 * one["blocks"]
+    assert tiled_schedule(n, k, tile_k, tile_n, 3, chunks=4)["iters"] == (k // tile_k) * (n // tile_n)
 
 
 def _config() -> NanoLlamaConfig:

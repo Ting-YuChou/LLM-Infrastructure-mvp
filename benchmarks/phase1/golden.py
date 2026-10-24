@@ -2,7 +2,7 @@
 """Bit-for-bit guard for gemm_w4a16_tiled changes that keep the summation order.
 
 Computes the tiled kernel's output for fixed-seed weights and inputs (the
-Llama shapes at 1, 8, 16 and 64 rows) and either saves them or compares them
+Llama shapes at 1, 8, 16, 64, 128 and 256 rows) and either saves them or compares them
 with a saved file. Run --save once before a kernel change and --check after
 it, on the same GPU and software (a later run on the same Colab VM).
 
@@ -25,7 +25,7 @@ sys.path.insert(0, str(REPO / "benchmarks" / "phase0"))
 from bandwidth import SHAPES  # noqa: E402
 from src.serving.nano_vllm.kernels.w4a16 import quantize_w4a16, w4a16_linear  # noqa: E402
 
-ROWS = (1, 8, 16, 64)
+ROWS = (1, 8, 16, 64, 128, 256)
 
 
 def outputs() -> dict[str, torch.Tensor]:

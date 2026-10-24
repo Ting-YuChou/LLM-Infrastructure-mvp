@@ -221,7 +221,7 @@ def tune_w4a16():
 
 def tune_w4a16_tiled():
     """gemm_w4a16_tiled: tile shape and blocks per SM of the persistent grid,
-    and, above 64 rows, several 64-row launches vs dequantize + F.linear."""
+    and, above 64 rows, one launch over chunks of rows vs dequantize + F.linear."""
     w4a16 = importlib.import_module("src.serving.nano_vllm.kernels.w4a16")
     if linear_mod.load_cuda_extension("w4a16") is None:
         raise RuntimeError("the W4A16 kernels did not build")
@@ -231,17 +231,18 @@ def tune_w4a16_tiled():
             "qkv": (6144, 4096), "o_proj": (4096, 4096), "gate_up": (28672, 4096),
             "down": (4096, 14336),
         }.items()
-        for m in (1, 4, 16, 32, 48, 64, 128, 256)
+        for m in (1, 4, 16, 32, 48, 64, 96, 128, 192, 256)
     ]
     keys = ("tiled_tile", "tiled_blocks_per_sm", "tiled_max_rows")
-    configs = grid(tiled_tile=list(w4a16.W4A16_TILED_TILES), tiled_blocks_per_sm=[1, 2], tiled_max_rows=[256])
-    configs.append({"tiled_tile": "auto", "tiled_blocks_per_sm": 1, "tiled_max_rows": 64})
+    most = w4a16.W4A16_TILED_MAX_ROWS
+    configs = grid(tiled_tile=list(w4a16.W4A16_TILED_TILES), tiled_blocks_per_sm=[1, 2], tiled_max_rows=[most])
+    configs.append({"tiled_tile": "auto", "tiled_blocks_per_sm": 1, "tiled_max_rows": 64})  # dequantize past 64
 
     def make_call(shape, config):
-        mt = (min(shape["M"], w4a16.W4A16_TILED_MAX_LAUNCH_ROWS) + 15) // 16
+        mt = w4a16.tiled_chunk_rows(shape["M"])[1] // 16
         if config["tiled_tile"] != "auto" and config["tiled_tile"] not in w4a16._TILED_TILES_BY_MT[mt]:
             raise ValueError("tile not built for this many rows")
-        if config["tiled_max_rows"] < 256 and shape["M"] <= config["tiled_max_rows"]:
+        if config["tiled_max_rows"] < most and shape["M"] <= config["tiled_max_rows"]:
             raise ValueError("the same launch as tiled_tile auto")
         x = randn(shape["M"], shape["K"], device="cuda")
         w = w4a16.quantize_w4a16(randn(shape["N"], shape["K"], device="cuda", scale=shape["K"] ** -0.5),
@@ -256,12 +257,11 @@ def tune_w4a16_tiled():
         current = {k: w4a16.W4A16_CONFIG[k] for k in keys}
         if shape["M"] > current["tiled_max_rows"]:
             return current
-        tile_k, tile_n, _ = w4a16.tiled_launch_config(  # each launch takes up to 64 rows
-            min(shape["M"], w4a16.W4A16_TILED_MAX_LAUNCH_ROWS), shape["N"], shape["K"],
-            {**w4a16.W4A16_CONFIG, **current}, 1,
+        tile_k, tile_n, _ = w4a16.tiled_launch_config(
+            shape["M"], shape["N"], shape["K"], {**w4a16.W4A16_CONFIG, **current}, 1
         )
         name = next(name for name, tile in w4a16.W4A16_TILED_TILES.items() if tile == (tile_k, tile_n))
-        return {**current, "tiled_tile": name, "tiled_max_rows": 256}
+        return {**current, "tiled_tile": name, "tiled_max_rows": most}
 
     return sweep("w4a16_tiled", shapes, configs, make_call, input_bytes, default)
 

@@ -28,6 +28,7 @@ from serving.nano_vllm.kernels.w4a16 import (  # noqa: E402
     W4A16_TILED_TILES,
     dequantize_w4a16,
     quantize_w4a16,
+    tiled_chunk_rows,
     tiled_launch_config,
     tiled_schedule,
     unpack_w4a16,
@@ -182,30 +183,32 @@ def test_tiled_dequantize_kernel_matches_the_row_kernel_bit_for_bit(dtype):
     assert torch.equal(dequantize_w4a16(tiled), dequantize_w4a16_torch(rows).to(dtype))
 
 
-@pytest.mark.parametrize("rows", [1, 2, 7, 16, 17, 33, 48, 64, 65, 130])
+@pytest.mark.parametrize("rows", [1, 2, 7, 16, 17, 33, 48, 64, 65, 96, 100, 130, 192, 256, 512])
 @pytest.mark.parametrize("shape", TILED_SHAPES.values(), ids=TILED_SHAPES)
 def test_tiled_kernel_matches_dequantized_matmul(shape, rows):
     weight = _weight(*shape, torch.bfloat16, layout="tiled")
     x = torch.randn(rows, shape[1], device="cuda").to(torch.bfloat16)
-    _check(x, weight, tiled_max_rows=256)  # 65 and 130 rows: several 64-row launches
+    _check(x, weight, tiled_max_rows=512)  # past 64 rows: one launch over chunks of rows
 
 
 @pytest.mark.parametrize("grid", ["one_block_per_slice", 1, 3, 7, 0])
 @pytest.mark.parametrize(
     "rows,tile",
     [(5, "128x128"), (5, "256x128"), (5, "64x256"), (20, "128x128"), (20, "256x128"), (40, "64x256"),
-     (40, "64x128"), (40, "128x128"), (64, "64x256"), (64, "128x128")],
+     (40, "64x128"), (40, "128x128"), (64, "64x256"), (64, "128x128"), (96, "64x256"), (100, "128x128"),
+     (128, "64x128"), (200, "64x256"), (256, "128x128")],
 )
 def test_tiled_kernel_schedules_and_tiles(rows, tile, grid):
     """grid = slices gives each block one slice (no cross-block sum, the
     layout alone); 1, 3, 7 and the default make stripes that cross slices
-    and slices shared by several blocks."""
+    and slices shared by several blocks. Past 64 rows each chunk of rows
+    gets grid // chunks blocks (at least one)."""
     n, k = 1024, 2048
     if grid == "one_block_per_slice":
-        grid = n // W4A16_TILED_TILES[tile][1]
+        grid = n // W4A16_TILED_TILES[tile][1] * tiled_chunk_rows(rows)[0]
     weight = _weight(n, k, torch.bfloat16, layout="tiled")
     x = torch.randn(rows, k, device="cuda").to(torch.bfloat16)
-    _check(x, weight, tiled_tile=tile, tiled_grid=grid)
+    _check(x, weight, tiled_tile=tile, tiled_grid=grid, tiled_max_rows=512)
 
 
 @pytest.mark.parametrize("rows", [3, 40])
@@ -221,9 +224,9 @@ def test_tiled_kernel_is_deterministic_and_leaves_the_buffers_zeroed():
     bit; the counters return to zero and the row kernels' workspace is never
     touched."""
     weight = _weight(4096, 14336, torch.bfloat16, layout="tiled")
-    for rows in (1, 16, 64):
+    for rows in (1, 16, 64, 128, 256):
         x = torch.randn(rows, 14336, device="cuda").to(torch.bfloat16)
-        outs = [w4a16_linear(x, weight) for _ in range(3)]
+        outs = [w4a16_linear(x, weight, config={"tiled_max_rows": 512}) for _ in range(3)]
         assert all(torch.equal(outs[0], out) for out in outs[1:])
     workspace, counters = w4a16_mod.w4a16_workspace(x.device, 4096)
     torch.cuda.synchronize()
@@ -238,11 +241,11 @@ def test_tiled_large_batches_dequantize_and_call_f_linear():
     assert torch.equal(w4a16_linear(x, weight), expected)
 
 
-@pytest.mark.parametrize("rows", [4, 40, 100])
+@pytest.mark.parametrize("rows", [4, 40, 100, 256])
 def test_tiled_kernel_is_captured_by_a_cuda_graph(rows):
     weight = _weight(4096, 4096, torch.bfloat16, layout="tiled")
     x = torch.randn(rows, 4096, device="cuda").to(torch.bfloat16)
-    config = {"tiled_max_rows": 128}
+    config = {"tiled_max_rows": 512}
     w4a16_linear(x, weight, config=config)  # warm-up outside the capture
     graph = torch.cuda.CUDAGraph()
     with torch.cuda.graph(graph):
@@ -255,25 +258,34 @@ def test_tiled_kernel_is_captured_by_a_cuda_graph(rows):
 @pytest.mark.parametrize(
     "shape,rows,tile,grid",
     [((4096, 14336), 1, "256x128", 0), ((4096, 14336), 8, "128x128", 0), ((4096, 14336), 40, "64x128", 0),
-     ((28672, 4096), 64, "64x256", 0), ((1024, 2048), 5, "256x128", 3), ((1024, 2048), 5, "128x128", 8)],
+     ((28672, 4096), 64, "64x256", 0), ((1024, 2048), 5, "256x128", 3), ((1024, 2048), 5, "128x128", 8),
+     ((4096, 14336), 128, "128x128", 0), ((1024, 2048), 100, "64x256", 7)],
 )
 def test_tiled_trace_build(shape, rows, tile, grid):
     """The trace build gives the same y bit for bit, and its stamps follow the
     schedule: tiles per block, ordered stamps, one last arrival per shared
-    slice, a sole-owner flag for unshared ones, exit tickets 0..blocks-1."""
+    slice, a sole-owner flag for unshared ones, exit tickets 0..blocks-1.
+    Past 64 rows the rows of the trace go chunk by chunk, each chunk on the
+    same schedule."""
     n, k = shape
     weight = _weight(n, k, torch.bfloat16, layout="tiled")
     x = torch.randn(rows, k, device="cuda").to(torch.bfloat16)
-    config = {"tiled_tile": tile, "tiled_grid": grid}
+    config = {"tiled_tile": tile, "tiled_grid": grid, "tiled_max_rows": 512}
     out, trace = w4a16_tiled_trace(x, weight, config)
     assert torch.equal(out, w4a16_linear(x, weight, config=config))
     sms = torch.cuda.get_device_properties(0).multi_processor_count
     tile_k, tile_n, grid = tiled_launch_config(rows, n, k, {**W4A16_CONFIG, **config}, sms)
-    schedule = tiled_schedule(n, k, tile_k, tile_n, grid)
+    chunks = tiled_chunk_rows(rows)[0]
+    schedule = tiled_schedule(n, k, tile_k, tile_n, grid, chunks)
     k_tiles = k // tile_k
     t = trace.cpu().tolist()
-    assert len(t) == len(schedule["ranges"])
+    assert len(t) == schedule["blocks"] == chunks * len(schedule["ranges"])
     assert sorted(row[TILED_TRACE_TICKET] for row in t) == list(range(len(t)))
+    for c in range(chunks):
+        _check_trace_chunk(t[c * len(schedule["ranges"]) : (c + 1) * len(schedule["ranges"])], schedule, k_tiles)
+
+
+def _check_trace_chunk(t, schedule, k_tiles):
     finish_of = {}  # (block, slice) -> stamps index f
     for b, ((begin, end), row) in enumerate(zip(schedule["ranges"], t)):
         assert row[TILED_TRACE_TILES] == end - begin

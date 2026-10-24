@@ -571,7 +571,7 @@ __global__ void __launch_bounds__(kThreads) gemm_w4a16_wide_kernel(
 }
 
 // ---------------------------------------------------------------------------
-// gemm_w4a16_tiled: y[M, N] = x[M, K] @ dequant(W)^T for up to 64 rows, W in
+// gemm_w4a16_tiled: y[M, N] = x[M, K] @ dequant(W)^T, W in
 // the tiled layout: int32 [K/16, N/64, 32, 4], each 512-byte unit the B
 // operand of a 16 x 64 (k x n) tile with lane 4g + c's fragments in one
 // 16-byte word, and scales [K/128, N/64, 8, 8] ([.., g, j] = column 8j + g).
@@ -596,9 +596,18 @@ __global__ void __launch_bounds__(kThreads) gemm_w4a16_wide_kernel(
 // and bumps the slice's counter, and the last to arrive adds the slots in
 // block order and writes y. No block waits for another and the sum does not
 // depend on timing. w4a16.py's tiled_schedule mirrors this arithmetic.
+//
+// Past 16 MT rows, one launch takes the rows in chunks of 16 MT (Marlin's
+// `par`): chunk c gets blocks [c * chunk_blocks, (c + 1) * chunk_blocks),
+// striped over all of the weight as above, with its own slots and counters.
+// Block b of every chunk walks the same tiles at the same pace, so the
+// weight comes from DRAM once and the other chunks read it from L2, where
+// separate launches would each read all of it from DRAM.
 constexpr int kTiledThreads = 256;
 constexpr int kTiledWarps = kTiledThreads / 32;
 constexpr int kTiledStages = 4;
+constexpr int kTiledMaxChunkRows = 64;  // 16 MT for the largest MT built
+constexpr int kTiledMaxRows = 512;      // rows per launch: up to 8 chunks
 
 // The trace build (kTrace) records, per block, where its time goes: thread 0
 // keeps clock64() stamps in shared memory and writes them out at the end, so
@@ -699,13 +708,22 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
     T* __restrict__ y,
     float* __restrict__ slots,
     int* __restrict__ counters,
-    int m,
+    int rows,
     int n,
     int k,
     int iters,
+    int chunk_blocks,
     long long* __restrict__ trace) {
   using Sh = TiledShape<MT, TILE_K, TILE_N>;
   constexpr int R = Sh::kRowsPerWarp;
+  // This block's chunk of rows and its place among the chunk's blocks.
+  const int chunk = blockIdx.x / chunk_blocks;
+  const int block = blockIdx.x - chunk * chunk_blocks;
+  const int m = min(Sh::kRows, rows - chunk * Sh::kRows);
+  x += static_cast<int64_t>(chunk) * Sh::kRows * k;
+  y += static_cast<int64_t>(chunk) * Sh::kRows * n;
+  slots += static_cast<int64_t>(chunk) * (chunk_blocks + n / TILE_N) * Sh::kRows * TILE_N;
+  counters += chunk * (n / TILE_N);
   // Everything lives in the dynamic allocation, which then starts at shared
   // address 0: a static __shared__ variable would shift it by 16 bytes, and
   // with the stages off 128-byte lines every cp.async of a warp moved each
@@ -723,7 +741,7 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
   const int k_tiles = k / TILE_K;
   const int units = n / 64;  // weight units per k16 row
   const int total = k_tiles * (n / TILE_N);
-  const int begin = blockIdx.x * iters;
+  const int begin = block * iters;
   const int end = min(begin + iters, total);
   if (begin >= end) return;
   auto mark = [&](int event) {
@@ -949,7 +967,7 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
     const int64_t slot_floats = Sh::kRows * TILE_N;
     const bool early = last_block == 2;
     if (!early) {
-      float* mine = slots + (blockIdx.x + slice) * slot_floats;
+      float* mine = slots + (block + slice) * slot_floats;
       for (int i = tid; i < m * TILE_N / 4; i += kTiledThreads) {
         const int row = i / (TILE_N / 4);
         const int v = i % (TILE_N / 4);
@@ -984,7 +1002,7 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
             for (int q = 0; q < kBatch; ++q) {
               const int blk = blk0 + q;
               if (blk > hi) break;
-              if (blk == static_cast<int>(blockIdx.x)) {
+              if (blk == block) {
                 part[q][0] = block_sum4(row, 2 * v);
                 part[q][1] = block_sum4(row, 2 * v + 1);
               } else {
@@ -1314,16 +1332,22 @@ void launch_tiled(const torch::Tensor& x, const torch::Tensor& qweight, const to
   const int n = static_cast<int>(out.size(1));
   const int slices = n / TILE_N;
   const int total = (k / TILE_K) * slices;
-  const int iters = (total + grid - 1) / grid;
-  const int blocks = (total + iters - 1) / iters;
-  // Partial sums of slices shared by several blocks; slot (block + slice).
-  torch::Tensor slots = torch::empty({static_cast<int64_t>(blocks + slices) * Sh::kRows * TILE_N},
+  // Chunks of 16 MT rows share the grid; each stripes the whole weight.
+  const int chunks = (m + Sh::kRows - 1) / Sh::kRows;
+  const int chunk_grid = std::max(1, grid / chunks);
+  const int iters = (total + chunk_grid - 1) / chunk_grid;
+  const int chunk_blocks = (total + iters - 1) / iters;
+  const int blocks = chunks * chunk_blocks;
+  TORCH_CHECK(counters.numel() >= static_cast<int64_t>(chunks) * slices,
+              "gemm_w4a16_tiled: counters must have one entry per slice and chunk of rows");
+  // Partial sums of slices shared by several blocks; slot (block + slice) of the chunk's.
+  torch::Tensor slots = torch::empty({static_cast<int64_t>(chunks) * (chunk_blocks + slices) * Sh::kRows * TILE_N},
                                      x.options().dtype(torch::kFloat32));
   const auto args = [&](auto kernel, long long* trace_ptr) {
     kernel<<<blocks, kTiledThreads, Sh::kSmemBytes, stream>>>(
         static_cast<const T*>(x.data_ptr()), static_cast<const uint4*>(qweight.data_ptr()),
         static_cast<const uint4*>(scales.data_ptr()), static_cast<T*>(out.data_ptr()), slots.data_ptr<float>(),
-        counters.data_ptr<int>(), m, n, k, iters, trace_ptr);
+        counters.data_ptr<int>(), m, n, k, iters, chunk_blocks, trace_ptr);
   };
   if (!trace.has_value()) {
     args(tiled_kernel<T, MT, TILE_K, TILE_N, false>(), nullptr);
@@ -1341,12 +1365,20 @@ void launch_tiled(const torch::Tensor& x, const torch::Tensor& qweight, const to
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
+// m16 tiles per chunk of rows: up to 64 rows one chunk, past that the
+// fewest 64-row chunks, evened out (96 rows: two of 48). w4a16.py's
+// tiled_chunk_rows computes the same.
+int tiled_mt(int64_t rows) {
+  const int64_t chunks = (rows + kTiledMaxChunkRows - 1) / kTiledMaxChunkRows;
+  return static_cast<int>((rows + 16 * chunks - 1) / (16 * chunks));
+}
+
 // The (MT, TILE_K, TILE_N) built; w4a16.py's _TILED_TILES_BY_MT lists the same.
 template <typename T>
 void launch_tiled_config(const torch::Tensor& x, const torch::Tensor& qweight, const torch::Tensor& scales,
                          const torch::Tensor& counters, torch::Tensor& out, int64_t tile_k, int64_t tile_n,
                          int grid, const c10::optional<torch::Tensor>& trace, cudaStream_t stream) {
-  const int mt = static_cast<int>((x.size(0) + 15) / 16);
+  const int mt = tiled_mt(x.size(0));
   if (tile_k == 128 && tile_n == 128 && mt == 1) return launch_tiled<T, 1, 128, 128>(x, qweight, scales, counters, out, grid, trace, stream);
   if (tile_k == 128 && tile_n == 128 && mt == 2) return launch_tiled<T, 2, 128, 128>(x, qweight, scales, counters, out, grid, trace, stream);
   if (tile_k == 128 && tile_n == 128 && mt == 3) return launch_tiled<T, 3, 128, 128>(x, qweight, scales, counters, out, grid, trace, stream);
@@ -1386,16 +1418,16 @@ void gemm_w4a16_tiled(torch::Tensor x, torch::Tensor qweight, torch::Tensor scal
   const int64_t n = qweight.size(1) * 64;
   TORCH_CHECK(x.is_cuda() && x.dim() == 2 && x.is_contiguous() && x.size(1) == k && aligned16(x),
               "gemm_w4a16_tiled: x must be a contiguous, 16-byte aligned [M, K] CUDA tensor");
-  TORCH_CHECK(x.size(0) >= 1 && x.size(0) <= 64, "gemm_w4a16_tiled: 1 to 64 rows per launch");
+  TORCH_CHECK(x.size(0) >= 1 && x.size(0) <= kTiledMaxRows, "gemm_w4a16_tiled: 1 to ", kTiledMaxRows,
+              " rows per launch");
   TORCH_CHECK(x.scalar_type() == scales.scalar_type(), "gemm_w4a16_tiled: x and scales must share a dtype");
   TORCH_CHECK(out.is_cuda() && out.is_contiguous() && out.scalar_type() == x.scalar_type() && out.dim() == 2 &&
                   out.size(0) == x.size(0) && out.size(1) == n && aligned16(out),
               "gemm_w4a16_tiled: out must be a contiguous, 16-byte aligned [M, N] tensor of x's dtype");
   TORCH_CHECK(tile_n > 0 && n % tile_n == 0 && tile_k > 0 && k % tile_k == 0,
               "gemm_w4a16_tiled: TILE_N must divide N and TILE_K must divide K");
-  TORCH_CHECK(counters.is_cuda() && counters.scalar_type() == torch::kInt32 && counters.is_contiguous() &&
-                  counters.numel() >= n / tile_n,
-              "gemm_w4a16_tiled: counters must be a zeroed int32 CUDA tensor with one entry per slice");
+  TORCH_CHECK(counters.is_cuda() && counters.scalar_type() == torch::kInt32 && counters.is_contiguous(),
+              "gemm_w4a16_tiled: counters must be a zeroed int32 CUDA tensor");
   TORCH_CHECK(grid >= 1, "gemm_w4a16_tiled: grid must be positive");
   const auto stream = c10::cuda::getCurrentCUDAStream();
   if (x.scalar_type() == torch::kBFloat16) {

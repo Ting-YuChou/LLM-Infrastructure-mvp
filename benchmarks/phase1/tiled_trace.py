@@ -214,6 +214,7 @@ def trace_shape(
         W4A16_CONFIG,
         _sm_count,
         quantize_w4a16,
+        tiled_chunk_rows,
         tiled_launch_config,
         tiled_schedule,
         w4a16_linear,
@@ -229,7 +230,10 @@ def trace_shape(
     ]
     x = torch.randn(rows, k, device="cuda", dtype=torch.bfloat16)
     tile_k, tile_n, grid = tiled_launch_config(rows, n, k, W4A16_CONFIG, _sm_count(x.device))
-    schedule = tiled_schedule(n, k, tile_k, tile_n, grid)
+    chunks, chunk_rows = tiled_chunk_rows(rows)
+    schedule = tiled_schedule(n, k, tile_k, tile_n, grid, chunks)
+    # Past 64 rows the launch's blocks are the chunk's schedule once per chunk of rows.
+    launch = {**schedule, "ranges": schedule["ranges"] * chunks}
     for _ in range(20):  # warm-up at full load, so the SM clock is up
         for weight in weights:
             w4a16_linear(x, weight)
@@ -252,19 +256,20 @@ def trace_shape(
         )
         for t in traces
     )
-    analyzed = [analyze_run(t, schedule, k_tiles, rate) for t in traces]
+    analyzed = [analyze_run(t, launch, k_tiles, rate) for t in traces]
     result = {
         "layer": layer, "N": n, "K": k, "M": rows, "prefetch": prefetch, "tile": f"{tile_k}x{tile_n}",
-        "blocks": len(schedule["ranges"]), "iters": schedule["iters"], "copies": copies, "runs": runs,
+        "chunks": chunks, "blocks": schedule["blocks"], "iters": schedule["iters"], "copies": copies, "runs": runs,
         "cycles_per_ns": rate,
         "cycles_per_ns_runs": [rates[0], rates[-1]],  # slowest and fastest run
         "globaltimer_tick_ns": globaltimer_tick(traces),
-        "tile_dram_ns": tile_dram_ns(rows, tile_k, tile_n, len(schedule["ranges"]), copy_gbps),
+        # The chunks read each tile's weight from DRAM once between them.
+        "tile_dram_ns": tile_dram_ns(chunk_rows, tile_k, tile_n, len(schedule["ranges"]), copy_gbps),
         "median": summarize(analyzed),
     }
     median_run = sorted(range(runs), key=lambda r: analyzed[r]["kernel"])[runs // 2]
     tag = f"_prefetch{prefetch}" if prefetch else ""
-    gantt(traces[median_run], schedule, k_tiles, rate, f"{layer} M={rows} ({result['tile']}){tag}",
+    gantt(traces[median_run], launch, k_tiles, rate, f"{layer} M={rows} ({result['tile']}){tag}",
           out / f"gantt_{layer}_M{rows}{tag}.png")
     return result
 

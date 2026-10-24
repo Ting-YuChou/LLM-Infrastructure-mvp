@@ -861,7 +861,7 @@ register(
             {"layer": layer, "M": m, "N": n, "K": k}
             for layer, (n, k) in LINEAR_SHAPES.items()
             if layer != "lm_head"  # stays bf16 under weight_quant="w4a16"
-            for m in (1, 4, 8, 16, 32, 64)
+            for m in (1, 4, 8, 16, 32, 64, 128, 256)
         ],
         inputs=lambda s, dev: {
             "x": randn(s["M"], s["K"], device=dev),
