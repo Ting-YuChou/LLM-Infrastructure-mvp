@@ -1,0 +1,1231 @@
+track,start_us,dur_us,name,category
+CPU (CUDA API),-111.777,5657.406,cudaEventSynchronize,api
+CPU (CUDA API),93.667,12.832,cudaEventSynchronize,api
+CPU (CUDA API),187.524,16.733,cudaMemcpyAsync,api
+CPU (CUDA API),297.346,10.957,cudaMemcpyAsync,api
+CPU (CUDA API),382.978,8.655,cudaMemcpyAsync,api
+CPU (CUDA API),405.401,17.996,cudaLaunchKernel,api
+CPU (CUDA API),440.031,6.953,cudaMemcpyAsync,api
+CPU (CUDA API),487.629,6.228,cudaMemcpyAsync,api
+CPU (CUDA API),512.273,4.781,cudaMemcpyAsync,api
+CPU (CUDA API),533.317,5.128,cudaMemcpyAsync,api
+CPU (CUDA API),573.761,13.731,cudaLaunchKernel,api
+CPU (CUDA API),617.83,8.205,cudaLaunchKernel,api
+CPU (CUDA API),648.585,7.578,cudaLaunchKernel,api
+CPU (CUDA API),669.244,14.283,cudaMemcpyAsync,api
+CPU (CUDA API),703.456,7.409,cudaLaunchKernel,api
+CPU (CUDA API),721.243,10.63,cudaMemcpyAsync,api
+CPU (CUDA API),762.506,8.357,cudaLaunchKernel,api
+CPU (CUDA API),843.317,9.124,cuLaunchKernelEx,api
+CPU (CUDA API),913.491,15.36,cudaMemcpyAsync,api
+CPU (CUDA API),964.31,9.508,cudaLaunchKernel,api
+CPU (CUDA API),1205.424,5.705,cudaEventRecord,api
+CPU (CUDA API),1254.395,1.217,cudaStreamIsCapturing,api
+CPU (CUDA API),1256.805,495.71,cudaGraphLaunch,api
+CPU (CUDA API),1815.806,18.315,cudaLaunchKernel,api
+CPU (CUDA API),1857.205,7.592,cudaLaunchKernel,api
+CPU (CUDA API),1944.402,11.037,cudaLaunchKernel,api
+CPU (CUDA API),2083.142,14.98,cudaLaunchKernel,api
+CPU (CUDA API),2128.798,7.829,cudaLaunchKernel,api
+CPU (CUDA API),2163.453,7.154,cudaLaunchKernel,api
+CPU (CUDA API),2307.096,2.99,cudaEventCreateWithFlags,api
+CPU (CUDA API),2313.295,1.242,cudaStreamIsCapturing,api
+CPU (CUDA API),2315.013,4.027,cudaEventRecordWithFlags,api
+CPU (CUDA API),2322.439,0.548,cudaStreamIsCapturing,api
+CPU (CUDA API),2323.439,2.938,cudaStreamWaitEvent,api
+CPU (CUDA API),2328.637,1.28,cudaEventDestroy,api
+CPU (CUDA API),2342.212,8.471,cudaEventQuery,api
+CPU (CUDA API),2351.583,1.582,cudaEventQuery,api
+CPU (CUDA API),2362.63,13.824,cudaMemcpyAsync,api
+CPU (CUDA API),2384.598,1.25,cudaEventCreateWithFlags,api
+CPU (CUDA API),2386.278,2.251,cudaEventRecord,api
+CPU (CUDA API),5561.435,1.225,cudaEventDestroy,api
+CPU (CUDA API),5565.702,0.787,cudaStreamIsCapturing,api
+CPU (CUDA API),5566.894,1.588,cudaEventRecordWithFlags,api
+CPU (CUDA API),5573.763,5651.857,cudaEventSynchronize,api
+CPU (CUDA API),5784.117,12.84,cudaEventSynchronize,api
+CPU (CUDA API),5881.844,16.994,cudaMemcpyAsync,api
+CPU (CUDA API),5990.718,11.177,cudaMemcpyAsync,api
+CPU (CUDA API),6077.198,9.269,cudaMemcpyAsync,api
+CPU (CUDA API),6100.478,17.92,cudaLaunchKernel,api
+CPU (CUDA API),6134.335,6.912,cudaMemcpyAsync,api
+CPU (CUDA API),6159.245,5.262,cudaMemcpyAsync,api
+CPU (CUDA API),6182.321,4.814,cudaMemcpyAsync,api
+CPU (CUDA API),6203.057,5.391,cudaMemcpyAsync,api
+CPU (CUDA API),6242.621,11.737,cudaLaunchKernel,api
+CPU (CUDA API),6283.084,8.209,cudaLaunchKernel,api
+CPU (CUDA API),6313.771,7.367,cudaLaunchKernel,api
+CPU (CUDA API),6334.018,14.55,cudaMemcpyAsync,api
+CPU (CUDA API),6368.176,8.141,cudaLaunchKernel,api
+CPU (CUDA API),6386.593,10.14,cudaMemcpyAsync,api
+CPU (CUDA API),6413.522,7.515,cudaLaunchKernel,api
+CPU (CUDA API),6515.037,12.559,cuLaunchKernelEx,api
+CPU (CUDA API),6612.121,20.357,cudaMemcpyAsync,api
+CPU (CUDA API),6670.908,11.217,cudaLaunchKernel,api
+CPU (CUDA API),6958.986,6.134,cudaEventRecord,api
+CPU (CUDA API),7009.28,1.281,cudaStreamIsCapturing,api
+CPU (CUDA API),7011.83,414.81,cudaGraphLaunch,api
+CPU (CUDA API),7496.79,19.144,cudaLaunchKernel,api
+CPU (CUDA API),7539.221,7.825,cudaLaunchKernel,api
+CPU (CUDA API),7627.738,10.518,cudaLaunchKernel,api
+CPU (CUDA API),7779.421,15.374,cudaLaunchKernel,api
+CPU (CUDA API),7827.028,8.64,cudaLaunchKernel,api
+CPU (CUDA API),7862.393,14.357,cudaLaunchKernel,api
+CPU (CUDA API),8011.627,2.809,cudaEventCreateWithFlags,api
+CPU (CUDA API),8017.53,1.183,cudaStreamIsCapturing,api
+CPU (CUDA API),8019.215,3.876,cudaEventRecordWithFlags,api
+CPU (CUDA API),8026.508,0.533,cudaStreamIsCapturing,api
+CPU (CUDA API),8027.473,2.917,cudaStreamWaitEvent,api
+CPU (CUDA API),8032.557,1.327,cudaEventDestroy,api
+CPU (CUDA API),8046.059,9.052,cudaEventQuery,api
+CPU (CUDA API),8055.836,1.82,cudaEventQuery,api
+CPU (CUDA API),8067.284,13.833,cudaMemcpyAsync,api
+CPU (CUDA API),8089.415,1.48,cudaEventCreateWithFlags,api
+CPU (CUDA API),8091.313,2.002,cudaEventRecord,api
+CPU (CUDA API),11241.88,1.427,cudaEventDestroy,api
+CPU (CUDA API),11246.079,0.843,cudaStreamIsCapturing,api
+CPU (CUDA API),11247.29,1.749,cudaEventRecordWithFlags,api
+CPU (CUDA API),11255.601,5655.831,cudaEventSynchronize,api
+CPU (CUDA API),11449.536,30.012,cudaEventSynchronize,api
+CPU (CUDA API),11560.697,16.87,cudaMemcpyAsync,api
+CPU (CUDA API),11669.374,10.472,cudaMemcpyAsync,api
+CPU (CUDA API),11767.357,9.837,cudaMemcpyAsync,api
+CPU (CUDA API),11791.849,18.311,cudaLaunchKernel,api
+CPU (CUDA API),11826.383,6.883,cudaMemcpyAsync,api
+CPU (CUDA API),11851.174,5.187,cudaMemcpyAsync,api
+CPU (CUDA API),11873.93,4.756,cudaMemcpyAsync,api
+CPU (CUDA API),11894.048,5.163,cudaMemcpyAsync,api
+CPU (CUDA API),11933.673,11.493,cudaLaunchKernel,api
+CPU (CUDA API),11974.119,8.123,cudaLaunchKernel,api
+CPU (CUDA API),12005.321,7.579,cudaLaunchKernel,api
+CPU (CUDA API),12025.658,14.418,cudaMemcpyAsync,api
+CPU (CUDA API),12059.893,8.098,cudaLaunchKernel,api
+CPU (CUDA API),12078.392,10.544,cudaMemcpyAsync,api
+CPU (CUDA API),12105.734,7.345,cudaLaunchKernel,api
+CPU (CUDA API),12185.424,8.536,cuLaunchKernelEx,api
+CPU (CUDA API),12253.569,15.761,cudaMemcpyAsync,api
+CPU (CUDA API),12303.852,13.747,cudaLaunchKernel,api
+CPU (CUDA API),12567.316,5.828,cudaEventRecord,api
+CPU (CUDA API),12616.451,1.282,cudaStreamIsCapturing,api
+CPU (CUDA API),12618.976,435.038,cudaGraphLaunch,api
+CPU (CUDA API),13112.035,17.975,cudaLaunchKernel,api
+CPU (CUDA API),13153.406,7.537,cudaLaunchKernel,api
+CPU (CUDA API),13237.923,10.737,cudaLaunchKernel,api
+CPU (CUDA API),13378.983,19.949,cudaLaunchKernel,api
+CPU (CUDA API),13443.652,11.151,cudaLaunchKernel,api
+CPU (CUDA API),13502.842,9.585,cudaLaunchKernel,api
+CPU (CUDA API),13650.443,2.932,cudaEventCreateWithFlags,api
+CPU (CUDA API),13656.353,1.265,cudaStreamIsCapturing,api
+CPU (CUDA API),13658.146,4.301,cudaEventRecordWithFlags,api
+CPU (CUDA API),13665.714,0.536,cudaStreamIsCapturing,api
+CPU (CUDA API),13666.683,2.904,cudaStreamWaitEvent,api
+CPU (CUDA API),13671.804,1.262,cudaEventDestroy,api
+CPU (CUDA API),13685.175,8.459,cudaEventQuery,api
+CPU (CUDA API),13695.1,1.704,cudaEventQuery,api
+CPU (CUDA API),13706.74,13.972,cudaMemcpyAsync,api
+CPU (CUDA API),13728.507,1.352,cudaEventCreateWithFlags,api
+CPU (CUDA API),13730.27,2.147,cudaEventRecord,api
+CPU (CUDA API),16926.234,1.127,cudaEventDestroy,api
+CPU (CUDA API),16930.113,0.815,cudaStreamIsCapturing,api
+CPU (CUDA API),16931.314,1.607,cudaEventRecordWithFlags,api
+CPU (CUDA API),16938.356,5655.124,cudaEventSynchronize,api
+GPU,-2.244,16.736,Marlin,other
+GPU,14.556,2.88,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,17.5,57.057,Marlin,other
+GPU,74.461,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,76.541,30.08,Marlin,other
+GPU,106.685,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,110.141,16.288,Marlin,other
+GPU,126.493,2.4,triton_poi_fused_3,elementwise/copy
+GPU,128.957,3.168,reshape_and_cache_flash_kernel,attention
+GPU,132.157,8.48,flash_fwd_splitkv_kernel,attention
+GPU,140.701,7.968,flash_fwd_splitkv_combine_kernel,attention
+GPU,150.237,16.064,Marlin,other
+GPU,166.365,2.88,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,169.309,54.88,Marlin,other
+GPU,224.061,2.528,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,226.269,30.368,Marlin,other
+GPU,256.477,3.456,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,259.773,16.096,Marlin,other
+GPU,275.901,2.4,triton_poi_fused_3,elementwise/copy
+GPU,278.333,3.201,reshape_and_cache_flash_kernel,attention
+GPU,281.566,8.191,flash_fwd_splitkv_kernel,attention
+GPU,289.758,8.064,flash_fwd_splitkv_combine_kernel,attention
+GPU,299.326,15.968,Marlin,other
+GPU,315.358,2.976,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,318.366,55.52,Marlin,other
+GPU,373.726,2.208,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,375.774,30.88,Marlin,other
+GPU,406.494,3.52,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,409.758,16.416,Marlin,other
+GPU,426.238,2.4,triton_poi_fused_3,elementwise/copy
+GPU,428.67,3.168,reshape_and_cache_flash_kernel,attention
+GPU,431.87,8.256,flash_fwd_splitkv_kernel,attention
+GPU,440.158,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,449.726,14.816,Marlin,other
+GPU,464.574,2.912,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,467.518,56.193,Marlin,other
+GPU,523.551,2.368,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,525.599,30.848,Marlin,other
+GPU,556.287,3.488,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,559.647,16.256,Marlin,other
+GPU,575.935,2.432,triton_poi_fused_3,elementwise/copy
+GPU,578.399,3.136,reshape_and_cache_flash_kernel,attention
+GPU,581.567,8.448,flash_fwd_splitkv_kernel,attention
+GPU,590.047,8.096,flash_fwd_splitkv_combine_kernel,attention
+GPU,599.711,14.272,Marlin,other
+GPU,614.047,2.56,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,616.671,57.088,Marlin,other
+GPU,673.663,2.112,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,675.647,30.432,Marlin,other
+GPU,705.823,3.36,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,709.055,16.161,Marlin,other
+GPU,725.28,2.4,triton_poi_fused_3,elementwise/copy
+GPU,727.744,3.136,reshape_and_cache_flash_kernel,attention
+GPU,730.944,8.128,flash_fwd_splitkv_kernel,attention
+GPU,739.136,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,748.704,14.592,Marlin,other
+GPU,763.392,2.816,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,766.272,55.584,Marlin,other
+GPU,821.696,2.24,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,823.808,30.272,Marlin,other
+GPU,853.984,3.232,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,857.088,16.672,Marlin,other
+GPU,873.824,2.368,triton_poi_fused_3,elementwise/copy
+GPU,876.288,3.072,reshape_and_cache_flash_kernel,attention
+GPU,879.456,8.256,flash_fwd_splitkv_kernel,attention
+GPU,887.776,8.096,flash_fwd_splitkv_combine_kernel,attention
+GPU,897.536,14.432,Marlin,other
+GPU,912.032,2.752,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,914.88,57.089,Marlin,other
+GPU,971.873,2.144,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,973.889,30.88,Marlin,other
+GPU,1004.641,3.36,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,1007.873,17.024,Marlin,other
+GPU,1024.929,2.431,triton_poi_fused_3,elementwise/copy
+GPU,1027.361,3.168,reshape_and_cache_flash_kernel,attention
+GPU,1030.561,8.224,flash_fwd_splitkv_kernel,attention
+GPU,1038.817,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,1048.481,14.656,Marlin,other
+GPU,1063.169,2.784,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,1065.985,55.488,Marlin,other
+GPU,1121.345,2.336,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,1123.521,31.68,Marlin,other
+GPU,1155.041,3.393,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,1158.274,16.672,Marlin,other
+GPU,1175.01,2.4,triton_poi_fused_3,elementwise/copy
+GPU,1177.442,3.168,reshape_and_cache_flash_kernel,attention
+GPU,1180.642,8.352,flash_fwd_splitkv_kernel,attention
+GPU,1189.026,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,1198.818,14.528,Marlin,other
+GPU,1213.41,2.688,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,1216.13,56.48,Marlin,other
+GPU,1272.482,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,1274.498,31.424,Marlin,other
+GPU,1305.794,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,1309.058,17.824,Marlin,other
+GPU,1326.914,2.432,triton_poi_fused_3,elementwise/copy
+GPU,1329.378,3.232,reshape_and_cache_flash_kernel,attention
+GPU,1332.642,8.128,flash_fwd_splitkv_kernel,attention
+GPU,1340.802,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,1350.466,15.136,Marlin,other
+GPU,1365.634,2.72,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,1368.386,56.289,Marlin,other
+GPU,1424.579,2.144,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,1426.627,31.264,Marlin,other
+GPU,1457.795,3.36,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,1461.059,16.608,Marlin,other
+GPU,1477.731,2.4,triton_poi_fused_3,elementwise/copy
+GPU,1480.195,3.136,reshape_and_cache_flash_kernel,attention
+GPU,1483.395,8.192,flash_fwd_splitkv_kernel,attention
+GPU,1491.651,8.096,flash_fwd_splitkv_combine_kernel,attention
+GPU,1501.411,14.72,Marlin,other
+GPU,1516.195,2.752,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,1519.011,55.168,Marlin,other
+GPU,1574.083,2.304,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,1576.259,31.713,Marlin,other
+GPU,1607.844,3.36,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,1611.076,16.128,Marlin,other
+GPU,1627.268,2.4,triton_poi_fused_3,elementwise/copy
+GPU,1629.732,3.264,reshape_and_cache_flash_kernel,attention
+GPU,1633.06,8.192,flash_fwd_splitkv_kernel,attention
+GPU,1641.348,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,1651.012,14.72,Marlin,other
+GPU,1665.796,2.816,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,1668.676,56.8,Marlin,other
+GPU,1725.348,2.272,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,1727.396,31.136,Marlin,other
+GPU,1758.596,3.168,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,1761.828,16.576,Marlin,other
+GPU,1778.468,2.4,triton_poi_fused_3,elementwise/copy
+GPU,1780.9,3.136,reshape_and_cache_flash_kernel,attention
+GPU,1784.1,8.128,flash_fwd_splitkv_kernel,attention
+GPU,1792.292,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,1802.052,14.497,Marlin,other
+GPU,1816.581,2.72,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,1819.333,55.104,Marlin,other
+GPU,1874.309,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,1876.325,32.128,Marlin,other
+GPU,1908.293,3.296,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,1911.429,16.448,Marlin,other
+GPU,1927.909,2.4,triton_poi_fused_3,elementwise/copy
+GPU,1930.341,3.168,reshape_and_cache_flash_kernel,attention
+GPU,1933.541,8.128,flash_fwd_splitkv_kernel,attention
+GPU,1941.701,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,1951.365,14.336,Marlin,other
+GPU,1965.765,2.848,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,1968.645,55.648,Marlin,other
+GPU,2024.101,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,2026.117,31.745,Marlin,other
+GPU,2057.702,3.36,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,2060.902,16.224,Marlin,other
+GPU,2077.158,2.431,triton_poi_fused_3,elementwise/copy
+GPU,2079.59,3.2,reshape_and_cache_flash_kernel,attention
+GPU,2082.822,8.16,flash_fwd_splitkv_kernel,attention
+GPU,2091.014,8.16,flash_fwd_splitkv_combine_kernel,attention
+GPU,2100.806,14.911,Marlin,other
+GPU,2115.718,2.943,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,2118.662,56.512,Marlin,other
+GPU,2175.014,2.272,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,2177.126,30.592,Marlin,other
+GPU,2207.558,3.424,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,2210.822,16.288,Marlin,other
+GPU,2227.206,2.368,triton_poi_fused_3,elementwise/copy
+GPU,2229.638,3.136,reshape_and_cache_flash_kernel,attention
+GPU,2232.838,8.16,flash_fwd_splitkv_kernel,attention
+GPU,2241.062,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,2250.726,14.433,Marlin,other
+GPU,2265.223,2.784,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,2268.071,54.944,Marlin,other
+GPU,2322.919,2.336,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,2325.127,31.136,Marlin,other
+GPU,2356.135,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,2359.431,15.936,Marlin,other
+GPU,2375.431,2.4,triton_poi_fused_3,elementwise/copy
+GPU,2377.863,3.136,reshape_and_cache_flash_kernel,attention
+GPU,2381.063,8.128,flash_fwd_splitkv_kernel,attention
+GPU,2389.255,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,2399.047,14.08,Marlin,other
+GPU,2413.191,2.528,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,2415.783,55.04,Marlin,other
+GPU,2470.727,2.144,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,2472.743,31.041,Marlin,other
+GPU,2503.656,3.488,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,2507.016,16.32,Marlin,other
+GPU,2523.4,2.4,triton_poi_fused_3,elementwise/copy
+GPU,2525.864,3.136,reshape_and_cache_flash_kernel,attention
+GPU,2529.064,8.16,flash_fwd_splitkv_kernel,attention
+GPU,2537.288,7.968,flash_fwd_splitkv_combine_kernel,attention
+GPU,2546.952,14.848,Marlin,other
+GPU,2561.864,2.752,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,2564.68,53.824,Marlin,other
+GPU,2618.28,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,2620.328,30.336,Marlin,other
+GPU,2650.504,3.264,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,2653.608,16.768,Marlin,other
+GPU,2670.408,2.4,triton_poi_fused_3,elementwise/copy
+GPU,2672.84,3.168,reshape_and_cache_flash_kernel,attention
+GPU,2676.04,8.352,flash_fwd_splitkv_kernel,attention
+GPU,2684.424,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,2694.184,15.297,Marlin,other
+GPU,2709.513,2.784,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,2712.329,56.384,Marlin,other
+GPU,2768.585,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,2770.601,30.24,Marlin,other
+GPU,2800.649,3.424,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,2803.913,16.192,Marlin,other
+GPU,2820.137,2.432,triton_poi_fused_3,elementwise/copy
+GPU,2822.601,3.168,reshape_and_cache_flash_kernel,attention
+GPU,2825.801,8.352,flash_fwd_splitkv_kernel,attention
+GPU,2834.185,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,2843.849,15.104,Marlin,other
+GPU,2859.017,2.816,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,2861.897,54.145,Marlin,other
+GPU,2915.914,2.208,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,2917.962,30.528,Marlin,other
+GPU,2948.362,3.296,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,2951.498,16.864,Marlin,other
+GPU,2968.394,2.432,triton_poi_fused_3,elementwise/copy
+GPU,2970.858,3.168,reshape_and_cache_flash_kernel,attention
+GPU,2974.058,8.128,flash_fwd_splitkv_kernel,attention
+GPU,2982.218,8.096,flash_fwd_splitkv_combine_kernel,attention
+GPU,2991.978,14.688,Marlin,other
+GPU,3006.73,2.752,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,3009.546,54.368,Marlin,other
+GPU,3063.786,2.112,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,3065.802,30.368,Marlin,other
+GPU,3096.074,3.328,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,3099.306,15.968,Marlin,other
+GPU,3115.338,2.368,triton_poi_fused_3,elementwise/copy
+GPU,3117.77,3.136,reshape_and_cache_flash_kernel,attention
+GPU,3120.97,8.224,flash_fwd_splitkv_kernel,attention
+GPU,3129.258,8.001,flash_fwd_splitkv_combine_kernel,attention
+GPU,3138.923,14.272,Marlin,other
+GPU,3153.259,2.784,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,3156.107,55.84,Marlin,other
+GPU,3211.851,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,3213.899,31.584,Marlin,other
+GPU,3245.387,3.264,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,3248.523,16.64,Marlin,other
+GPU,3265.227,2.4,triton_poi_fused_3,elementwise/copy
+GPU,3267.691,3.136,reshape_and_cache_flash_kernel,attention
+GPU,3270.891,8.16,flash_fwd_splitkv_kernel,attention
+GPU,3279.115,8.096,flash_fwd_splitkv_combine_kernel,attention
+GPU,3288.875,14.656,Marlin,other
+GPU,3303.595,2.624,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,3306.283,55.201,Marlin,other
+GPU,3361.388,2.272,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,3363.564,31.52,Marlin,other
+GPU,3394.956,3.36,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,3398.22,16.192,Marlin,other
+GPU,3414.444,2.4,triton_poi_fused_3,elementwise/copy
+GPU,3416.908,3.168,reshape_and_cache_flash_kernel,attention
+GPU,3420.108,8.224,flash_fwd_splitkv_kernel,attention
+GPU,3428.364,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,3438.06,14.08,Marlin,other
+GPU,3452.172,2.944,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,3455.148,55.712,Marlin,other
+GPU,3510.7,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,3512.748,31.616,Marlin,other
+GPU,3544.204,3.328,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,3547.34,16.672,Marlin,other
+GPU,3564.044,2.431,triton_poi_fused_3,elementwise/copy
+GPU,3566.476,3.168,reshape_and_cache_flash_kernel,attention
+GPU,3569.676,8.193,flash_fwd_splitkv_kernel,attention
+GPU,3577.901,8.16,flash_fwd_splitkv_combine_kernel,attention
+GPU,3587.693,14.56,Marlin,other
+GPU,3602.285,2.911,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,3605.197,54.784,Marlin,other
+GPU,3659.853,2.368,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,3662.093,32.064,Marlin,other
+GPU,3694.029,3.232,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,3697.133,16.512,Marlin,other
+GPU,3713.709,2.4,triton_poi_fused_3,elementwise/copy
+GPU,3716.141,3.168,reshape_and_cache_flash_kernel,attention
+GPU,3719.341,8.416,flash_fwd_splitkv_kernel,attention
+GPU,3727.789,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,3737.453,14.464,Marlin,other
+GPU,3751.949,2.848,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,3754.829,56.289,Marlin,other
+GPU,3811.022,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,3813.07,32.48,Marlin,other
+GPU,3845.454,3.232,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,3848.558,16.224,Marlin,other
+GPU,3864.846,2.4,triton_poi_fused_3,elementwise/copy
+GPU,3867.31,3.136,reshape_and_cache_flash_kernel,attention
+GPU,3870.51,8.224,flash_fwd_splitkv_kernel,attention
+GPU,3878.798,8.096,flash_fwd_splitkv_combine_kernel,attention
+GPU,3888.558,14.272,Marlin,other
+GPU,3902.894,2.848,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,3905.774,55.744,Marlin,other
+GPU,3961.39,2.144,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,3963.438,30.912,Marlin,other
+GPU,3994.446,3.2,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,3997.71,16.065,Marlin,other
+GPU,4013.871,2.368,triton_poi_fused_3,elementwise/copy
+GPU,4016.303,3.136,reshape_and_cache_flash_kernel,attention
+GPU,4019.503,8.128,flash_fwd_splitkv_kernel,attention
+GPU,4027.727,7.968,flash_fwd_splitkv_combine_kernel,attention
+GPU,4037.359,14.24,Marlin,other
+GPU,4051.663,2.656,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,4054.415,55.68,Marlin,other
+GPU,4109.967,2.144,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,4112.015,30.176,Marlin,other
+GPU,4142.063,3.36,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,4145.295,16.48,Marlin,other
+GPU,4161.839,2.368,triton_poi_fused_3,elementwise/copy
+GPU,4164.303,3.232,reshape_and_cache_flash_kernel,attention
+GPU,4167.599,8.096,flash_fwd_splitkv_kernel,attention
+GPU,4175.727,8.16,flash_fwd_splitkv_combine_kernel,attention
+GPU,4185.519,14.592,Marlin,other
+GPU,4200.143,2.687,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,4202.831,56.929,Marlin,other
+GPU,4259.6,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,4261.616,30.688,Marlin,other
+GPU,4292.144,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,4295.376,16.544,Marlin,other
+GPU,4311.952,2.432,triton_poi_fused_3,elementwise/copy
+GPU,4314.416,3.168,reshape_and_cache_flash_kernel,attention
+GPU,4317.616,8.224,flash_fwd_splitkv_kernel,attention
+GPU,4325.872,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,4335.536,14.848,Marlin,other
+GPU,4350.416,2.752,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,4353.2,55.104,Marlin,other
+GPU,4408.176,2.208,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,4410.224,30.208,Marlin,other
+GPU,4440.304,3.36,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,4443.536,16.577,Marlin,other
+GPU,4460.145,2.432,triton_poi_fused_3,elementwise/copy
+GPU,4462.609,3.168,reshape_and_cache_flash_kernel,attention
+GPU,4465.809,8.288,flash_fwd_splitkv_kernel,attention
+GPU,4474.129,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,4483.889,16.224,Marlin,other
+GPU,4500.145,2.784,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,4502.961,55.104,Marlin,other
+GPU,4557.937,2.272,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,4560.049,31.584,Marlin,other
+GPU,4591.473,3.424,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,4594.737,16.64,Marlin,other
+GPU,4611.473,2.368,triton_poi_fused_3,elementwise/copy
+GPU,4613.905,3.136,reshape_and_cache_flash_kernel,attention
+GPU,4617.105,8.192,flash_fwd_splitkv_kernel,attention
+GPU,4625.393,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,4635.057,16.384,Marlin,other
+GPU,4651.537,2.752,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,4654.353,55.617,Marlin,other
+GPU,4709.874,2.272,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,4712.018,31.072,Marlin,other
+GPU,4742.898,3.232,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,4747.538,3.264,unrolled_elementwise_kernel,elementwise/copy
+GPU,4752.21,6.048,index_elementwise_kernel,elementwise/copy
+GPU,4759.922,717.923,ampere_fp16_s16816gemm_fp16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,5479.317,5.76,unrolled_elementwise_kernel,elementwise/copy
+GPU,5486.165,40.32,reduce_kernel,sampling
+GPU,5527.765,2.432,unrolled_elementwise_kernel,elementwise/copy
+GPU,5554.198,1.824,vectorized_elementwise_kernel,elementwise/copy
+GPU,5587.958,4.576,index_elementwise_kernel,elementwise/copy
+GPU,5593.558,2.688,unrolled_elementwise_kernel,elementwise/copy
+GPU,5597.366,2.4,vectorized_elementwise_kernel,elementwise/copy
+GPU,5603.99,2.144,vectorized_elementwise_kernel,elementwise/copy
+GPU,5610.23,1.76,unrolled_elementwise_kernel,elementwise/copy
+GPU,5613.014,3.936,_compute_slot_mapping_kernel,other
+GPU,5621.014,1.888,unrolled_elementwise_kernel,elementwise/copy
+GPU,5627.67,4.992,triton_red_fused__to_copy_add_embedding_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,5632.726,18.72,Marlin,other
+GPU,5651.542,2.656,triton_poi_fused_1,elementwise/copy
+GPU,5654.678,3.584,reshape_and_cache_flash_kernel,attention
+GPU,5658.774,9.632,flash_fwd_splitkv_kernel,attention
+GPU,5668.79,8.512,flash_fwd_splitkv_combine_kernel,attention
+GPU,5678.998,14.368,Marlin,other
+GPU,5693.43,2.88,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,5696.374,56.288,Marlin,other
+GPU,5752.534,2.208,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,5754.614,30.305,Marlin,other
+GPU,5784.983,3.232,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,5788.311,16.288,Marlin,other
+GPU,5804.663,2.368,triton_poi_fused_3,elementwise/copy
+GPU,5807.095,3.264,reshape_and_cache_flash_kernel,attention
+GPU,5810.423,8.352,flash_fwd_splitkv_kernel,attention
+GPU,5818.839,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,5828.503,14.752,Marlin,other
+GPU,5843.351,2.752,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,5846.167,54.624,Marlin,other
+GPU,5900.631,2.272,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,5902.743,30.496,Marlin,other
+GPU,5932.983,3.552,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,5936.407,16.319,Marlin,other
+GPU,5952.727,2.432,triton_poi_fused_3,elementwise/copy
+GPU,5955.191,3.2,reshape_and_cache_flash_kernel,attention
+GPU,5958.423,8.224,flash_fwd_splitkv_kernel,attention
+GPU,5966.679,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,5976.343,14.529,Marlin,other
+GPU,5990.904,2.976,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,5993.912,56.576,Marlin,other
+GPU,6050.328,2.208,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,6052.376,31.008,Marlin,other
+GPU,6083.224,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,6086.456,16.576,Marlin,other
+GPU,6103.064,2.4,triton_poi_fused_3,elementwise/copy
+GPU,6105.496,3.2,reshape_and_cache_flash_kernel,attention
+GPU,6108.728,8.16,flash_fwd_splitkv_kernel,attention
+GPU,6116.92,8.064,flash_fwd_splitkv_combine_kernel,attention
+GPU,6126.616,15.168,Marlin,other
+GPU,6141.816,2.912,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,6144.76,55.936,Marlin,other
+GPU,6200.536,2.208,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,6202.584,30.913,Marlin,other
+GPU,6233.337,3.488,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,6236.665,16.416,Marlin,other
+GPU,6253.113,2.4,triton_poi_fused_3,elementwise/copy
+GPU,6255.545,3.168,reshape_and_cache_flash_kernel,attention
+GPU,6258.745,8.256,flash_fwd_splitkv_kernel,attention
+GPU,6267.033,8.096,flash_fwd_splitkv_combine_kernel,attention
+GPU,6276.825,15.904,Marlin,other
+GPU,6292.793,2.688,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,6295.545,57.632,Marlin,other
+GPU,6353.081,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,6355.161,31.232,Marlin,other
+GPU,6386.265,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,6389.529,16.224,Marlin,other
+GPU,6405.817,2.4,triton_poi_fused_3,elementwise/copy
+GPU,6408.281,3.104,reshape_and_cache_flash_kernel,attention
+GPU,6411.449,8.224,flash_fwd_splitkv_kernel,attention
+GPU,6419.737,7.968,flash_fwd_splitkv_combine_kernel,attention
+GPU,6429.402,15.968,Marlin,other
+GPU,6445.434,2.848,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,6448.346,54.688,Marlin,other
+GPU,6502.906,2.208,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,6504.954,31.136,Marlin,other
+GPU,6535.962,3.296,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,6539.13,16.64,Marlin,other
+GPU,6555.834,2.368,triton_poi_fused_3,elementwise/copy
+GPU,6558.298,3.136,reshape_and_cache_flash_kernel,attention
+GPU,6561.53,8.192,flash_fwd_splitkv_kernel,attention
+GPU,6569.786,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,6579.45,17.056,Marlin,other
+GPU,6596.602,2.72,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,6599.386,57.249,Marlin,other
+GPU,6656.539,2.144,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,6658.555,31.328,Marlin,other
+GPU,6689.787,3.264,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,6692.923,16.384,Marlin,other
+GPU,6709.339,2.4,triton_poi_fused_3,elementwise/copy
+GPU,6711.771,3.168,reshape_and_cache_flash_kernel,attention
+GPU,6714.971,8.224,flash_fwd_splitkv_kernel,attention
+GPU,6723.227,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,6732.795,16.256,Marlin,other
+GPU,6749.083,2.784,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,6751.899,55.744,Marlin,other
+GPU,6807.355,2.208,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,6809.371,31.008,Marlin,other
+GPU,6840.219,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,6843.451,16.288,Marlin,other
+GPU,6859.803,2.4,triton_poi_fused_3,elementwise/copy
+GPU,6862.235,3.136,reshape_and_cache_flash_kernel,attention
+GPU,6865.435,8.161,flash_fwd_splitkv_kernel,attention
+GPU,6873.66,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,6883.324,14.624,Marlin,other
+GPU,6897.98,2.72,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,6900.732,54.848,Marlin,other
+GPU,6955.42,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,6957.468,30.784,Marlin,other
+GPU,6988.124,3.36,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,6991.356,16.384,Marlin,other
+GPU,7007.772,2.4,triton_poi_fused_3,elementwise/copy
+GPU,7010.204,3.168,reshape_and_cache_flash_kernel,attention
+GPU,7013.404,8.16,flash_fwd_splitkv_kernel,attention
+GPU,7021.596,8.031,flash_fwd_splitkv_combine_kernel,attention
+GPU,7031.164,14.944,Marlin,other
+GPU,7046.14,2.688,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,7048.86,54.881,Marlin,other
+GPU,7103.645,2.304,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,7105.853,30.592,Marlin,other
+GPU,7136.317,3.296,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,7139.485,16.288,Marlin,other
+GPU,7155.837,2.368,triton_poi_fused_3,elementwise/copy
+GPU,7158.269,3.136,reshape_and_cache_flash_kernel,attention
+GPU,7161.469,8.096,flash_fwd_splitkv_kernel,attention
+GPU,7169.629,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,7179.293,14.72,Marlin,other
+GPU,7194.077,2.784,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,7196.893,56.032,Marlin,other
+GPU,7252.829,2.112,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,7254.845,30.976,Marlin,other
+GPU,7285.693,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,7288.829,16.672,Marlin,other
+GPU,7305.597,2.369,triton_poi_fused_3,elementwise/copy
+GPU,7308.03,3.136,reshape_and_cache_flash_kernel,attention
+GPU,7311.23,8.096,flash_fwd_splitkv_kernel,attention
+GPU,7319.422,7.968,flash_fwd_splitkv_combine_kernel,attention
+GPU,7329.086,14.528,Marlin,other
+GPU,7343.678,2.816,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,7346.558,56.672,Marlin,other
+GPU,7403.07,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,7405.118,30.72,Marlin,other
+GPU,7435.902,3.136,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,7439.102,16.672,Marlin,other
+GPU,7455.838,2.4,triton_poi_fused_3,elementwise/copy
+GPU,7458.302,3.136,reshape_and_cache_flash_kernel,attention
+GPU,7461.502,8.064,flash_fwd_splitkv_kernel,attention
+GPU,7469.63,8.16,flash_fwd_splitkv_combine_kernel,attention
+GPU,7479.422,14.272,Marlin,other
+GPU,7493.726,2.752,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,7496.51,56.513,Marlin,other
+GPU,7552.863,2.144,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,7554.879,30.752,Marlin,other
+GPU,7585.503,3.264,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,7588.639,16.544,Marlin,other
+GPU,7605.215,2.4,triton_poi_fused_3,elementwise/copy
+GPU,7607.647,3.168,reshape_and_cache_flash_kernel,attention
+GPU,7610.847,8.192,flash_fwd_splitkv_kernel,attention
+GPU,7619.071,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,7628.735,14.592,Marlin,other
+GPU,7643.359,2.816,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,7646.207,56.384,Marlin,other
+GPU,7702.463,2.304,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,7704.607,30.368,Marlin,other
+GPU,7734.815,3.328,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,7738.015,17.313,Marlin,other
+GPU,7755.36,2.432,triton_poi_fused_3,elementwise/copy
+GPU,7757.824,3.168,reshape_and_cache_flash_kernel,attention
+GPU,7761.024,8.352,flash_fwd_splitkv_kernel,attention
+GPU,7769.408,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,7779.2,14.592,Marlin,other
+GPU,7793.824,2.816,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,7796.672,56.288,Marlin,other
+GPU,7852.8,2.272,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,7854.912,32.64,Marlin,other
+GPU,7887.392,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,7890.624,16.416,Marlin,other
+GPU,7907.104,2.368,triton_poi_fused_3,elementwise/copy
+GPU,7909.536,3.104,reshape_and_cache_flash_kernel,attention
+GPU,7912.736,8.16,flash_fwd_splitkv_kernel,attention
+GPU,7920.992,7.968,flash_fwd_splitkv_combine_kernel,attention
+GPU,7930.624,14.592,Marlin,other
+GPU,7945.28,2.848,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,7948.192,54.849,Marlin,other
+GPU,8002.945,2.368,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,8005.025,32.192,Marlin,other
+GPU,8037.089,3.456,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,8040.417,16.192,Marlin,other
+GPU,8056.673,2.368,triton_poi_fused_3,elementwise/copy
+GPU,8059.105,3.136,reshape_and_cache_flash_kernel,attention
+GPU,8062.305,8.096,flash_fwd_splitkv_kernel,attention
+GPU,8070.465,8.096,flash_fwd_splitkv_combine_kernel,attention
+GPU,8080.225,14.208,Marlin,other
+GPU,8094.529,2.496,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,8097.089,56.512,Marlin,other
+GPU,8153.505,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,8155.521,32.161,Marlin,other
+GPU,8187.554,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,8190.818,16.384,Marlin,other
+GPU,8207.266,2.368,triton_poi_fused_3,elementwise/copy
+GPU,8209.698,3.104,reshape_and_cache_flash_kernel,attention
+GPU,8212.866,8.224,flash_fwd_splitkv_kernel,attention
+GPU,8221.154,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,8230.818,14.912,Marlin,other
+GPU,8245.794,2.72,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,8248.578,54.56,Marlin,other
+GPU,8303.01,2.24,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,8305.09,31.232,Marlin,other
+GPU,8336.194,3.264,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,8339.33,16.224,Marlin,other
+GPU,8355.618,2.4,triton_poi_fused_3,elementwise/copy
+GPU,8358.05,3.168,reshape_and_cache_flash_kernel,attention
+GPU,8361.25,8.128,flash_fwd_splitkv_kernel,attention
+GPU,8369.41,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,8379.202,14.592,Marlin,other
+GPU,8393.858,2.816,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,8396.738,57.281,Marlin,other
+GPU,8453.859,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,8455.875,31.232,Marlin,other
+GPU,8486.947,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,8490.211,16.0,Marlin,other
+GPU,8506.243,2.4,triton_poi_fused_3,elementwise/copy
+GPU,8508.675,3.168,reshape_and_cache_flash_kernel,attention
+GPU,8511.875,8.224,flash_fwd_splitkv_kernel,attention
+GPU,8520.163,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,8529.827,14.72,Marlin,other
+GPU,8544.579,2.848,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,8547.459,56.032,Marlin,other
+GPU,8603.331,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,8605.379,30.465,Marlin,other
+GPU,8635.524,3.264,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,8638.628,16.64,Marlin,other
+GPU,8655.332,2.4,triton_poi_fused_3,elementwise/copy
+GPU,8657.764,3.168,reshape_and_cache_flash_kernel,attention
+GPU,8660.964,8.128,flash_fwd_splitkv_kernel,attention
+GPU,8669.156,8.064,flash_fwd_splitkv_combine_kernel,attention
+GPU,8678.916,14.432,Marlin,other
+GPU,8693.412,2.752,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,8696.228,55.552,Marlin,other
+GPU,8751.684,2.272,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,8753.828,30.656,Marlin,other
+GPU,8784.388,3.552,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,8787.812,15.936,Marlin,other
+GPU,8803.812,2.368,triton_poi_fused_3,elementwise/copy
+GPU,8806.244,3.104,reshape_and_cache_flash_kernel,attention
+GPU,8809.412,8.256,flash_fwd_splitkv_kernel,attention
+GPU,8817.732,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,8827.396,14.4,Marlin,other
+GPU,8841.828,2.753,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,8844.677,55.648,Marlin,other
+GPU,8900.197,2.272,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,8902.341,30.624,Marlin,other
+GPU,8932.837,3.232,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,8935.941,16.0,Marlin,other
+GPU,8952.005,2.368,triton_poi_fused_3,elementwise/copy
+GPU,8954.437,3.136,reshape_and_cache_flash_kernel,attention
+GPU,8957.637,8.096,flash_fwd_splitkv_kernel,attention
+GPU,8965.797,8.096,flash_fwd_splitkv_combine_kernel,attention
+GPU,8975.557,14.304,Marlin,other
+GPU,8989.925,2.592,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,8992.581,54.976,Marlin,other
+GPU,9047.461,2.24,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,9049.573,31.105,Marlin,other
+GPU,9080.518,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,9083.782,16.352,Marlin,other
+GPU,9100.166,2.4,triton_poi_fused_3,elementwise/copy
+GPU,9102.598,3.168,reshape_and_cache_flash_kernel,attention
+GPU,9105.798,8.224,flash_fwd_splitkv_kernel,attention
+GPU,9114.054,8.064,flash_fwd_splitkv_combine_kernel,attention
+GPU,9123.75,14.784,Marlin,other
+GPU,9138.566,2.816,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,9141.414,56.32,Marlin,other
+GPU,9197.606,2.272,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,9199.622,31.232,Marlin,other
+GPU,9230.694,3.296,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,9233.862,16.928,Marlin,other
+GPU,9250.854,2.4,triton_poi_fused_3,elementwise/copy
+GPU,9253.286,3.168,reshape_and_cache_flash_kernel,attention
+GPU,9256.486,8.128,flash_fwd_splitkv_kernel,attention
+GPU,9264.678,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,9274.438,14.432,Marlin,other
+GPU,9288.871,2.816,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,9291.719,55.296,Marlin,other
+GPU,9346.887,2.208,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,9348.935,31.456,Marlin,other
+GPU,9380.231,3.488,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,9383.559,16.32,Marlin,other
+GPU,9399.911,2.4,triton_poi_fused_3,elementwise/copy
+GPU,9402.343,3.168,reshape_and_cache_flash_kernel,attention
+GPU,9405.543,8.256,flash_fwd_splitkv_kernel,attention
+GPU,9413.831,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,9423.495,14.496,Marlin,other
+GPU,9438.023,2.848,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,9440.903,56.128,Marlin,other
+GPU,9496.903,2.144,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,9498.951,31.425,Marlin,other
+GPU,9530.248,3.328,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,9533.48,16.416,Marlin,other
+GPU,9549.96,2.368,triton_poi_fused_3,elementwise/copy
+GPU,9552.392,3.136,reshape_and_cache_flash_kernel,attention
+GPU,9555.592,8.256,flash_fwd_splitkv_kernel,attention
+GPU,9563.912,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,9573.672,14.624,Marlin,other
+GPU,9588.36,2.752,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,9591.176,55.328,Marlin,other
+GPU,9646.408,2.208,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,9648.456,30.144,Marlin,other
+GPU,9678.664,3.2,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,9681.928,16.672,Marlin,other
+GPU,9698.696,2.368,triton_poi_fused_3,elementwise/copy
+GPU,9701.128,3.104,reshape_and_cache_flash_kernel,attention
+GPU,9704.328,8.096,flash_fwd_splitkv_kernel,attention
+GPU,9712.52,7.968,flash_fwd_splitkv_combine_kernel,attention
+GPU,9722.185,14.304,Marlin,other
+GPU,9736.553,2.656,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,9739.273,54.72,Marlin,other
+GPU,9793.865,2.304,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,9796.041,30.4,Marlin,other
+GPU,9826.313,3.36,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,9829.545,16.416,Marlin,other
+GPU,9846.025,2.4,triton_poi_fused_3,elementwise/copy
+GPU,9848.457,3.136,reshape_and_cache_flash_kernel,attention
+GPU,9851.657,8.192,flash_fwd_splitkv_kernel,attention
+GPU,9859.913,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,9869.673,14.464,Marlin,other
+GPU,9884.169,2.688,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,9886.889,56.161,Marlin,other
+GPU,9942.922,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,9944.938,32.16,Marlin,other
+GPU,9976.938,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,9980.202,16.544,Marlin,other
+GPU,9996.778,2.432,triton_poi_fused_3,elementwise/copy
+GPU,9999.242,3.168,reshape_and_cache_flash_kernel,attention
+GPU,10002.442,8.16,flash_fwd_splitkv_kernel,attention
+GPU,10010.634,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,10020.298,14.752,Marlin,other
+GPU,10035.082,2.72,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,10037.866,55.872,Marlin,other
+GPU,10093.45,2.208,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,10095.498,30.624,Marlin,other
+GPU,10125.994,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,10129.226,16.351,Marlin,other
+GPU,10145.578,2.432,triton_poi_fused_3,elementwise/copy
+GPU,10148.042,3.168,reshape_and_cache_flash_kernel,attention
+GPU,10151.242,8.256,flash_fwd_splitkv_kernel,attention
+GPU,10159.53,8.161,flash_fwd_splitkv_combine_kernel,attention
+GPU,10169.323,14.432,Marlin,other
+GPU,10183.787,2.816,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,10186.635,55.616,Marlin,other
+GPU,10242.091,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,10244.107,30.848,Marlin,other
+GPU,10274.763,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,10277.995,16.704,Marlin,other
+GPU,10294.763,2.368,triton_poi_fused_3,elementwise/copy
+GPU,10297.227,3.104,reshape_and_cache_flash_kernel,attention
+GPU,10300.395,8.16,flash_fwd_splitkv_kernel,attention
+GPU,10308.651,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,10318.315,14.368,Marlin,other
+GPU,10332.747,2.72,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,10335.531,56.033,Marlin,other
+GPU,10391.468,2.336,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,10393.516,31.136,Marlin,other
+GPU,10424.556,3.232,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,10429.228,3.296,unrolled_elementwise_kernel,elementwise/copy
+GPU,10433.868,6.016,index_elementwise_kernel,elementwise/copy
+GPU,10441.196,717.923,ampere_fp16_s16816gemm_fp16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,11160.463,5.824,unrolled_elementwise_kernel,elementwise/copy
+GPU,11167.567,39.552,reduce_kernel,sampling
+GPU,11208.303,2.368,unrolled_elementwise_kernel,elementwise/copy
+GPU,11234.607,1.824,vectorized_elementwise_kernel,elementwise/copy
+GPU,11268.144,4.896,index_elementwise_kernel,elementwise/copy
+GPU,11274.352,2.656,unrolled_elementwise_kernel,elementwise/copy
+GPU,11278.128,2.432,vectorized_elementwise_kernel,elementwise/copy
+GPU,11284.72,2.176,vectorized_elementwise_kernel,elementwise/copy
+GPU,11290.928,1.76,unrolled_elementwise_kernel,elementwise/copy
+GPU,11293.712,3.936,_compute_slot_mapping_kernel,other
+GPU,11301.712,1.856,unrolled_elementwise_kernel,elementwise/copy
+GPU,11308.336,4.768,triton_red_fused__to_copy_add_embedding_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,11313.168,18.016,Marlin,other
+GPU,11331.344,2.912,triton_poi_fused_1,elementwise/copy
+GPU,11334.32,3.616,reshape_and_cache_flash_kernel,attention
+GPU,11338.0,9.44,flash_fwd_splitkv_kernel,attention
+GPU,11347.952,8.608,flash_fwd_splitkv_combine_kernel,attention
+GPU,11358.224,14.496,Marlin,other
+GPU,11372.784,3.04,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,11375.888,57.504,Marlin,other
+GPU,11433.296,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,11435.376,30.624,Marlin,other
+GPU,11466.096,3.328,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,11469.488,16.289,Marlin,other
+GPU,11485.841,2.368,triton_poi_fused_3,elementwise/copy
+GPU,11488.273,3.136,reshape_and_cache_flash_kernel,attention
+GPU,11491.473,8.544,flash_fwd_splitkv_kernel,attention
+GPU,11500.081,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,11509.745,14.912,Marlin,other
+GPU,11524.721,2.752,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,11527.537,54.464,Marlin,other
+GPU,11581.841,2.272,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,11583.953,30.56,Marlin,other
+GPU,11614.353,3.584,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,11617.777,16.384,Marlin,other
+GPU,11634.193,2.4,triton_poi_fused_3,elementwise/copy
+GPU,11636.657,3.167,reshape_and_cache_flash_kernel,attention
+GPU,11639.825,8.256,flash_fwd_splitkv_kernel,attention
+GPU,11648.113,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,11657.777,14.4,Marlin,other
+GPU,11672.209,3.008,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,11675.249,56.385,Marlin,other
+GPU,11731.506,2.304,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,11733.65,31.104,Marlin,other
+GPU,11764.594,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,11767.826,16.224,Marlin,other
+GPU,11784.082,2.432,triton_poi_fused_3,elementwise/copy
+GPU,11786.546,3.136,reshape_and_cache_flash_kernel,attention
+GPU,11789.714,8.32,flash_fwd_splitkv_kernel,attention
+GPU,11798.066,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,11807.73,14.592,Marlin,other
+GPU,11822.354,3.008,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,11825.394,55.424,Marlin,other
+GPU,11880.69,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,11882.706,31.072,Marlin,other
+GPU,11913.618,3.456,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,11916.914,16.289,Marlin,other
+GPU,11933.235,2.432,triton_poi_fused_3,elementwise/copy
+GPU,11935.699,3.136,reshape_and_cache_flash_kernel,attention
+GPU,11938.867,8.448,flash_fwd_splitkv_kernel,attention
+GPU,11947.347,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,11957.139,14.528,Marlin,other
+GPU,11971.731,2.656,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,11974.451,57.376,Marlin,other
+GPU,12031.731,2.144,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,12033.747,30.944,Marlin,other
+GPU,12064.563,3.36,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,12067.795,16.48,Marlin,other
+GPU,12084.339,2.368,triton_poi_fused_3,elementwise/copy
+GPU,12086.771,3.168,reshape_and_cache_flash_kernel,attention
+GPU,12089.971,8.192,flash_fwd_splitkv_kernel,attention
+GPU,12098.227,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,12107.923,14.496,Marlin,other
+GPU,12122.515,2.816,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,12125.395,55.489,Marlin,other
+GPU,12180.596,2.144,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,12182.612,31.36,Marlin,other
+GPU,12213.876,3.52,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,12217.14,16.576,Marlin,other
+GPU,12233.812,2.368,triton_poi_fused_3,elementwise/copy
+GPU,12236.244,3.136,reshape_and_cache_flash_kernel,attention
+GPU,12239.444,8.288,flash_fwd_splitkv_kernel,attention
+GPU,12247.828,8.096,flash_fwd_splitkv_combine_kernel,attention
+GPU,12257.588,15.104,Marlin,other
+GPU,12272.756,2.752,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,12275.572,56.416,Marlin,other
+GPU,12331.892,2.144,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,12333.94,31.585,Marlin,other
+GPU,12365.397,3.296,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,12368.565,16.384,Marlin,other
+GPU,12385.013,2.4,triton_poi_fused_3,elementwise/copy
+GPU,12387.445,3.199,reshape_and_cache_flash_kernel,attention
+GPU,12390.645,8.288,flash_fwd_splitkv_kernel,attention
+GPU,12398.965,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,12408.629,14.912,Marlin,other
+GPU,12423.573,2.944,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,12426.549,55.136,Marlin,other
+GPU,12481.557,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,12483.573,31.488,Marlin,other
+GPU,12514.901,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,12518.165,16.032,Marlin,other
+GPU,12534.229,2.432,triton_poi_fused_3,elementwise/copy
+GPU,12536.693,3.136,reshape_and_cache_flash_kernel,attention
+GPU,12539.861,8.416,flash_fwd_splitkv_kernel,attention
+GPU,12548.309,8.16,flash_fwd_splitkv_combine_kernel,attention
+GPU,12558.101,16.672,Marlin,other
+GPU,12574.805,2.721,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,12577.558,56.192,Marlin,other
+GPU,12633.59,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,12635.638,31.264,Marlin,other
+GPU,12666.678,3.424,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,12669.942,16.192,Marlin,other
+GPU,12686.166,2.4,triton_poi_fused_3,elementwise/copy
+GPU,12688.598,3.168,reshape_and_cache_flash_kernel,attention
+GPU,12691.798,8.192,flash_fwd_splitkv_kernel,attention
+GPU,12700.022,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,12709.686,16.607,Marlin,other
+GPU,12726.294,2.784,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,12729.11,56.192,Marlin,other
+GPU,12785.174,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,12787.222,31.009,Marlin,other
+GPU,12818.103,3.296,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,12821.271,16.8,Marlin,other
+GPU,12838.135,2.4,triton_poi_fused_3,elementwise/copy
+GPU,12840.599,3.264,reshape_and_cache_flash_kernel,attention
+GPU,12843.927,8.288,flash_fwd_splitkv_kernel,attention
+GPU,12852.279,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,12861.943,15.008,Marlin,other
+GPU,12877.015,2.752,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,12879.831,54.88,Marlin,other
+GPU,12934.615,2.144,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,12936.663,30.464,Marlin,other
+GPU,12966.999,3.232,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,12970.135,16.64,Marlin,other
+GPU,12986.871,2.368,triton_poi_fused_3,elementwise/copy
+GPU,12989.303,3.136,reshape_and_cache_flash_kernel,attention
+GPU,12992.503,8.256,flash_fwd_splitkv_kernel,attention
+GPU,13000.823,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,13010.423,15.393,Marlin,other
+GPU,13025.88,2.816,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,13028.76,56.64,Marlin,other
+GPU,13085.304,2.24,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,13087.416,31.104,Marlin,other
+GPU,13118.584,3.296,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,13121.944,16.64,Marlin,other
+GPU,13138.648,2.4,triton_poi_fused_3,elementwise/copy
+GPU,13141.112,3.2,reshape_and_cache_flash_kernel,attention
+GPU,13144.376,8.192,flash_fwd_splitkv_kernel,attention
+GPU,13152.632,8.16,flash_fwd_splitkv_combine_kernel,attention
+GPU,13162.296,14.752,Marlin,other
+GPU,13177.08,2.848,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,13179.96,55.104,Marlin,other
+GPU,13234.936,2.113,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,13236.889,31.552,Marlin,other
+GPU,13268.281,3.36,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,13271.513,16.096,Marlin,other
+GPU,13287.641,2.432,triton_poi_fused_3,elementwise/copy
+GPU,13290.105,3.168,reshape_and_cache_flash_kernel,attention
+GPU,13293.305,8.224,flash_fwd_splitkv_kernel,attention
+GPU,13301.593,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,13311.161,14.848,Marlin,other
+GPU,13326.041,2.848,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,13328.953,54.912,Marlin,other
+GPU,13383.737,2.272,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,13385.881,30.624,Marlin,other
+GPU,13416.345,3.36,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,13419.577,17.248,Marlin,other
+GPU,13436.857,2.432,triton_poi_fused_3,elementwise/copy
+GPU,13439.321,3.136,reshape_and_cache_flash_kernel,attention
+GPU,13442.489,8.48,flash_fwd_splitkv_kernel,attention
+GPU,13451.001,8.129,flash_fwd_splitkv_combine_kernel,attention
+GPU,13460.666,14.656,Marlin,other
+GPU,13475.354,2.752,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,13478.138,56.672,Marlin,other
+GPU,13534.65,2.304,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,13536.794,30.208,Marlin,other
+GPU,13566.842,3.424,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,13570.074,17.216,Marlin,other
+GPU,13587.354,2.4,triton_poi_fused_3,elementwise/copy
+GPU,13589.818,3.232,reshape_and_cache_flash_kernel,attention
+GPU,13593.114,8.224,flash_fwd_splitkv_kernel,attention
+GPU,13601.402,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,13611.066,15.168,Marlin,other
+GPU,13626.298,2.784,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,13629.146,55.809,Marlin,other
+GPU,13684.827,2.208,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,13686.875,31.232,Marlin,other
+GPU,13718.011,3.456,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,13721.243,16.544,Marlin,other
+GPU,13737.851,2.4,triton_poi_fused_3,elementwise/copy
+GPU,13740.315,3.104,reshape_and_cache_flash_kernel,attention
+GPU,13743.483,8.16,flash_fwd_splitkv_kernel,attention
+GPU,13751.707,8.096,flash_fwd_splitkv_combine_kernel,attention
+GPU,13761.467,14.368,Marlin,other
+GPU,13775.899,2.56,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,13778.523,55.424,Marlin,other
+GPU,13833.819,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,13835.867,31.264,Marlin,other
+GPU,13867.035,3.36,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,13870.299,17.152,Marlin,other
+GPU,13887.515,2.4,triton_poi_fused_3,elementwise/copy
+GPU,13889.979,3.136,reshape_and_cache_flash_kernel,attention
+GPU,13893.179,8.289,flash_fwd_splitkv_kernel,attention
+GPU,13901.532,7.968,flash_fwd_splitkv_combine_kernel,attention
+GPU,13911.196,14.496,Marlin,other
+GPU,13925.788,2.688,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,13928.54,54.816,Marlin,other
+GPU,13983.196,2.112,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,13985.18,30.784,Marlin,other
+GPU,14015.804,3.264,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,14018.94,16.896,Marlin,other
+GPU,14035.868,2.432,triton_poi_fused_3,elementwise/copy
+GPU,14038.332,3.136,reshape_and_cache_flash_kernel,attention
+GPU,14041.532,8.224,flash_fwd_splitkv_kernel,attention
+GPU,14049.788,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,14059.548,14.688,Marlin,other
+GPU,14074.268,2.784,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,14077.084,56.417,Marlin,other
+GPU,14133.341,2.208,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,14135.389,31.872,Marlin,other
+GPU,14167.101,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,14170.333,17.152,Marlin,other
+GPU,14187.517,2.432,triton_poi_fused_3,elementwise/copy
+GPU,14189.981,3.168,reshape_and_cache_flash_kernel,attention
+GPU,14193.181,8.192,flash_fwd_splitkv_kernel,attention
+GPU,14201.405,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,14211.069,14.88,Marlin,other
+GPU,14225.981,2.88,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,14228.893,55.104,Marlin,other
+GPU,14283.837,2.336,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,14286.013,31.136,Marlin,other
+GPU,14316.989,3.296,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,14320.125,16.385,Marlin,other
+GPU,14336.542,2.432,triton_poi_fused_3,elementwise/copy
+GPU,14339.006,3.296,reshape_and_cache_flash_kernel,attention
+GPU,14342.334,8.16,flash_fwd_splitkv_kernel,attention
+GPU,14350.526,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,14360.318,15.008,Marlin,other
+GPU,14375.422,2.752,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,14378.27,55.424,Marlin,other
+GPU,14433.598,2.272,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,14435.774,32.704,Marlin,other
+GPU,14468.382,3.328,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,14471.614,16.384,Marlin,other
+GPU,14488.062,2.368,triton_poi_fused_3,elementwise/copy
+GPU,14490.526,3.136,reshape_and_cache_flash_kernel,attention
+GPU,14493.726,8.16,flash_fwd_splitkv_kernel,attention
+GPU,14501.982,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,14511.646,14.432,Marlin,other
+GPU,14526.142,2.912,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,14529.118,56.193,Marlin,other
+GPU,14585.119,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,14587.167,32.832,Marlin,other
+GPU,14619.903,3.232,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,14623.007,16.064,Marlin,other
+GPU,14639.167,2.368,triton_poi_fused_3,elementwise/copy
+GPU,14641.599,3.104,reshape_and_cache_flash_kernel,attention
+GPU,14644.799,8.096,flash_fwd_splitkv_kernel,attention
+GPU,14652.959,8.096,flash_fwd_splitkv_combine_kernel,attention
+GPU,14662.719,14.272,Marlin,other
+GPU,14677.055,2.656,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,14679.775,54.848,Marlin,other
+GPU,14734.527,2.272,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,14736.671,32.0,Marlin,other
+GPU,14768.543,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,14771.839,16.257,Marlin,other
+GPU,14788.128,2.432,triton_poi_fused_3,elementwise/copy
+GPU,14790.592,3.136,reshape_and_cache_flash_kernel,attention
+GPU,14793.76,8.128,flash_fwd_splitkv_kernel,attention
+GPU,14801.92,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,14811.584,14.272,Marlin,other
+GPU,14825.888,2.816,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,14828.736,55.936,Marlin,other
+GPU,14884.512,2.24,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,14886.624,31.136,Marlin,other
+GPU,14917.632,3.488,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,14920.96,16.576,Marlin,other
+GPU,14937.568,2.432,triton_poi_fused_3,elementwise/copy
+GPU,14940.032,3.136,reshape_and_cache_flash_kernel,attention
+GPU,14943.232,8.128,flash_fwd_splitkv_kernel,attention
+GPU,14951.424,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,14961.184,14.208,Marlin,other
+GPU,14975.424,2.816,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,14978.272,54.593,Marlin,other
+GPU,15032.737,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,15034.753,31.552,Marlin,other
+GPU,15066.177,3.296,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,15069.313,16.672,Marlin,other
+GPU,15086.017,2.432,triton_poi_fused_3,elementwise/copy
+GPU,15088.481,3.136,reshape_and_cache_flash_kernel,attention
+GPU,15091.649,8.256,flash_fwd_splitkv_kernel,attention
+GPU,15099.937,8.032,flash_fwd_splitkv_combine_kernel,attention
+GPU,15109.601,14.112,Marlin,other
+GPU,15123.745,2.816,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,15126.593,55.84,Marlin,other
+GPU,15182.305,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,15184.353,30.177,Marlin,other
+GPU,15214.402,3.264,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,15217.538,16.608,Marlin,other
+GPU,15234.21,2.4,triton_poi_fused_3,elementwise/copy
+GPU,15236.674,3.136,reshape_and_cache_flash_kernel,attention
+GPU,15239.874,8.16,flash_fwd_splitkv_kernel,attention
+GPU,15248.098,8.096,flash_fwd_splitkv_combine_kernel,attention
+GPU,15257.858,14.272,Marlin,other
+GPU,15272.194,2.784,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,15275.01,55.552,Marlin,other
+GPU,15330.434,2.144,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,15332.482,30.784,Marlin,other
+GPU,15363.33,3.2,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,15366.594,16.576,Marlin,other
+GPU,15383.234,2.4,triton_poi_fused_3,elementwise/copy
+GPU,15385.698,3.136,reshape_and_cache_flash_kernel,attention
+GPU,15388.898,8.096,flash_fwd_splitkv_kernel,attention
+GPU,15397.09,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,15406.754,13.856,Marlin,other
+GPU,15420.706,2.848,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,15423.618,55.553,Marlin,other
+GPU,15479.043,2.208,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,15481.123,31.104,Marlin,other
+GPU,15512.099,3.328,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,15515.299,16.128,Marlin,other
+GPU,15531.491,2.368,triton_poi_fused_3,elementwise/copy
+GPU,15533.923,3.136,reshape_and_cache_flash_kernel,attention
+GPU,15537.123,8.16,flash_fwd_splitkv_kernel,attention
+GPU,15545.347,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,15555.107,14.592,Marlin,other
+GPU,15569.731,2.687,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,15572.419,57.056,Marlin,other
+GPU,15629.347,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,15631.363,30.561,Marlin,other
+GPU,15661.764,3.552,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,15665.156,16.416,Marlin,other
+GPU,15681.604,2.432,triton_poi_fused_3,elementwise/copy
+GPU,15684.068,3.168,reshape_and_cache_flash_kernel,attention
+GPU,15687.268,8.16,flash_fwd_splitkv_kernel,attention
+GPU,15695.492,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,15705.156,14.56,Marlin,other
+GPU,15719.748,2.72,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,15722.5,54.304,Marlin,other
+GPU,15776.676,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,15778.692,30.272,Marlin,other
+GPU,15808.836,3.36,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,15812.068,16.672,Marlin,other
+GPU,15828.772,2.4,triton_poi_fused_3,elementwise/copy
+GPU,15831.204,3.168,reshape_and_cache_flash_kernel,attention
+GPU,15834.404,8.32,flash_fwd_splitkv_kernel,attention
+GPU,15842.756,8.128,flash_fwd_splitkv_combine_kernel,attention
+GPU,15852.548,14.336,Marlin,other
+GPU,15866.916,2.784,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,15869.732,56.033,Marlin,other
+GPU,15925.637,2.176,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,15927.653,30.72,Marlin,other
+GPU,15958.213,3.392,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2,norm
+GPU,15961.445,16.544,Marlin,other
+GPU,15978.053,2.4,triton_poi_fused_3,elementwise/copy
+GPU,15980.517,3.136,reshape_and_cache_flash_kernel,attention
+GPU,15983.717,8.128,flash_fwd_splitkv_kernel,attention
+GPU,15991.909,8.0,flash_fwd_splitkv_combine_kernel,attention
+GPU,16001.573,14.688,Marlin,other
+GPU,16016.325,2.72,triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,16019.109,55.936,Marlin,other
+GPU,16074.949,2.144,triton_poi_fused_marlin_gemm_mul_silu_slice_1,activation
+GPU,16076.965,31.425,Marlin,other
+GPU,16108.262,3.232,triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2,norm
+GPU,16112.902,3.136,unrolled_elementwise_kernel,elementwise/copy
+GPU,16117.574,6.048,index_elementwise_kernel,elementwise/copy
+GPU,16125.478,720.547,ampere_fp16_s16816gemm_fp16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn,gemm
+GPU,16847.081,5.76,unrolled_elementwise_kernel,elementwise/copy
+GPU,16853.929,39.872,reduce_kernel,sampling
+GPU,16894.921,2.368,unrolled_elementwise_kernel,elementwise/copy
+GPU,16921.673,1.824,vectorized_elementwise_kernel,elementwise/copy
+GPU,16955.497,4.832,index_elementwise_kernel,elementwise/copy
+GPU,16961.609,2.56,unrolled_elementwise_kernel,elementwise/copy
+GPU,16965.417,2.4,vectorized_elementwise_kernel,elementwise/copy
+GPU,16971.818,2.176,vectorized_elementwise_kernel,elementwise/copy
+GPU,16978.026,1.76,unrolled_elementwise_kernel,elementwise/copy
+GPU,16980.842,3.936,_compute_slot_mapping_kernel,other
+GPU,16988.746,1.856,unrolled_elementwise_kernel,elementwise/copy
+GPU,16995.37,4.896,triton_red_fused__to_copy_add_embedding_marlin_gemm_mean_mul_pow_rsqrt_0,norm
+GPU,17000.33,18.24,Marlin,other
+NVTX,0.0,5671.134,engine_step_22,nvtx
+NVTX,5682.027,5665.992,engine_step_23,nvtx
+NVTX,11358.305,5672.062,engine_step_24,nvtx

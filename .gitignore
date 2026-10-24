@@ -120,3 +120,4 @@ workspace/
 benchmarks/*/results/**/*.nsys-rep
 benchmarks/*/results/**/*.ncu-rep
 benchmarks/*/results/**/*.sqlite
+benchmarks/*/results/**/*_source.csv

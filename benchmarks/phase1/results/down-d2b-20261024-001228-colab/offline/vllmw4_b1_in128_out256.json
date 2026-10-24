@@ -1,0 +1,19 @@
+{
+  "engine": "vllm",
+  "quantization": "awq_marlin",
+  "cuda_graphs": true,
+  "temperature": 0.0,
+  "top_p": 1.0,
+  "kv_cache_dtype": "auto",
+  "attention_backend": null,
+  "batch": 1,
+  "input_len": 128,
+  "output_len": 256,
+  "prefill_steps": 2,
+  "prefill_s": 0.011277617999439826,
+  "decode_steps": 254,
+  "decode_ms_per_step": 5.54206944490413,
+  "decode_ms_p50": 5.54354850009986,
+  "decode_tok_per_s": 180.4380132622641,
+  "profiled_decode_ms_per_step": 5.543379392164592
+}

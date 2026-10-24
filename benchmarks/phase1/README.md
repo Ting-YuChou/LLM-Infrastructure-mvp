@@ -48,9 +48,11 @@ python benchmarks/phase1/kbench.py --device cpu --out /tmp/kbench
 | `cuda129` | apt 安裝和 venv 裡 torch 同版本的 CUDA 12 nvcc、cudart-dev、cccl，寫出 `/content/p0/cuda129.env`（`CUDA_HOME`、`TORCH_CUDA_ARCH_LIST=8.0`、`TORCH_EXTENSIONS_DIR`），後面每一步都會 source。系統的 nvcc 是 13.0，不能拿來編 extension。M6 之前用不到 |
 | `tests` | `pytest -q -rs tests/gpu tests/unit/test_nano_vllm_*.py`；只要有一行 `SKIPPED` 就算失敗（和 CI training job 同一條規則）。`tests/gpu` 還沒建立時只跑 unit tests |
 | `kbench` | `kbench.py`：每個 kernel 的每個 shape 先對 reference 檢查，再計時，輸出 `kbench/kbench.{json,md}` |
-| `ncu` | 每個 kbench kernel 各錄一份 ncu（`--kernel-name regex:<登記的 regex>`，sections 和 Phase 0 相同），再用 Phase 0 的 `analyze_ncu.py` 整理 |
+| `ncu` | 每個 kbench kernel 各錄一份 ncu（`--kernel-name regex:<登記的 regex>`，sections 和 Phase 0 相同），再用 Phase 0 的 `analyze_ncu.py` 整理。`P1_NCU_SHAPES` 另選 shape，`P1_NCU_SECTIONS` 加錄 section（`SourceCounters` 另外輸出逐指令的 source page） |
+| `trace` | `tiled_trace.py`：`gemm_w4a16_tiled` 的 trace build，在冷的權重上拆出每個 block 的時間（prologue、每個 tile、slice 結尾、最後結束的 block），輸出 `trace/trace.{json,md}` 和 Gantt 圖。不在預設步驟裡 |
+| `golden` | `golden.py`：第一次把 tiled kernel 對固定輸入的輸出存到 `P1_GOLDEN`，之後的 run 逐 bit 比對。不在預設步驟裡 |
 | `tune` | `tune.py`：每個 kernel、每個 shape 掃一遍 launch 設定，和程式目前選的設定並排，輸出 `tune/tune.{json,md}`。不在預設步驟裡 |
-| `e2e` | 每組 `P1_NANO_CONFIGS` 各跑一次 `nano_bench.py`（`static:1:128:256,paged:1:128:256,paged:16:1024:256,paged:64:1024:256`）；`vllm_offline.py` 跑同樣的 paged 點；最後一組 nano 設定的 paged b=1 和 b=16 錄 nsys |
+| `e2e` | 每組 `P1_NANO_CONFIGS` 各跑一次 `nano_bench.py`（`static:1:128:256,paged:1:128:256,paged:16:1024:256,paged:64:1024:256`）；`vllm_offline.py` 跑同樣的 paged 點；最後一組 nano 設定的 paged b=1、16、64 錄 nsys。最後一組是 W4A16 時，vLLM 的 AWQ 也錄 nsys，再用 `gemm_breakdown.py` 讀出兩邊 decode 裡每個投影的 GEMM 時間 |
 | `quality` | `quality.py`：在真的 8B 上，用 wikitext-2 test 的 2048-token 區塊做 teacher forcing，比 torch 路徑、Triton kernel、Triton + W4A16 的 perplexity 和 top-1 一致率 |
 | `summarize` | 全部整理成 `summary.md` |
 
@@ -242,7 +244,7 @@ nsys（b=16，每步）：`torch.cumsum` 沿 128k vocab 的 innermost scan 要 2
 
 - **ncu（t1b）**：
   - M=1 不是頻寬限制而是指令限制：同樣的工作，第一版發出的指令多約 45%；
-  - 從 base clock 換到 boost clock，Marlin 快了 43%，我們只快 6%。
+  - 從 base clock 換到 boost clock，Marlin 快了 43%，我們只快 6%。（第三輪更正：ncu 一直是 `--clock-control none`，也就是 boost clock；這 43% 是 ncu 每次清 cache 的冷權重，換成 kbench 裡留在 L2 的暖權重的差別，見第三輪。）
 - **nvdisasm（t1d）**：
   - nvcc 把 `(w >> 4s) & 0x000F000F | magic` 編成兩個 LOP3，每對 code 要 5 個指令；
   - 改用 inline `lop3.b32 …, 0xEA` 之後是 4 個；
@@ -261,7 +263,7 @@ nsys（b=16，每步）：`torch.cumsum` 沿 128k vocab 的 innermost scan 要 2
 | 32 | 23.0 / 27.5 | 20.6 / 22.2 | 72.1 / 72.1 | 41.4 / 37.4 | **157.1** / 159.2 | 258.6 |
 | 64 | 40.1 / 45.2 | 33.5 / 35.9 | 105.5 / 113.6 | 73.1 / 63.1 | **252.2** / 257.8 | 449.9 |
 
-down_proj（N=4096、K=14336）在每個 M 都還是 Marlin 的 1.1–1.3 倍，其他三層都追平或更快。
+down_proj（N=4096、K=14336）在每個 M 都還是 Marlin 的 1.1–1.3 倍，其他三層都追平或更快。（第三輪更正：kbench 量 down_proj 時只有一份權重，留在 L2 裡；冷的時候 down 在每個 M 都比 Marlin 快，見第三輪。）
 
 ### 端到端 decode（run `marlin-t2-20261023-104627-colab`，ms/step）
 
@@ -288,6 +290,94 @@ down_proj（N=4096、K=14336）在每個 M 都還是 Marlin 的 1.1–1.3 倍，
   - 單點不慢於 1.25 倍：down_proj M=8 是 1.29 倍，沒過。
 - **G3 e2e**：b=64 ≤ 17.5、b=16 ≤ 8.1、b=1 ≤ 5.68 ms，三項都過，所以預設 layout 改成 tiled。
 
+## Kernel 改進清單第三輪：down_proj（runs `down-d1` 到 `down-d3`）
+
+第二輪結束時 kbench 顯示 down_proj 在每個 M 都是 Marlin 的 1.10–1.29 倍。這一輪先查原因，結果大部分是量測的問題：冷的權重下 down 在 M ≤ 32 已經比 Marlin 快，真正的差距只在 M=64（b=64 decode）。修正之後，W4A16 的 decode 在 b=1、16、64 都比 vLLM 的 AWQ 快。分支同樣是 `claude/inference-kernels`，只在本機。
+
+### 量測的修正
+
+- **kbench 讓 down_proj 的權重留在 L2**：`copies_for` 依輸入 tensor 的大小決定輪替幾份權重，輸入裡是 bf16 的權重（down 117 MB），超過 2 倍 L2，於是 `copies=1`，100 次呼叫一直讀同一份 29 MB 的 4-bit 權重，大部分留在 40 MB 的 L2。
+  - 現在 `Kernel.rotate_bytes` 給出每次呼叫實際讀的 bytes，W4A16 依 4-bit 權重輪替（down 18 份、gate_up 9 份）。
+  - gate_up 的 4-bit 權重 59 MB 比 L2 大，第二輪本來就近乎冷的；qkv、o_proj 本來就有輪替；`tune.py` 一直依 4-bit 大小輪替。
+  - Marlin 暖的時候快 43%（33.3 → 23.3 µs），我們只快 4–7%，所以第二輪的 down 差距幾乎全是這個。
+- **ncu 是 boost clock**：`ncu_run` 從一開始就用 `--clock-control none`。第二輪寫的「base clock 換到 boost clock，Marlin 快 43%」其實是冷權重換成暖權重（上一節和 LOG 已加註）。
+- **三種量法對 Marlin 的結論不同**：kbench（冷、CUDA graph 連續呼叫）在 M ≥ 16 量到的 Marlin 比 decode 裡的 AWQ Marlin 慢 15–23%（down M=64：81.5 對 66.0 µs），ncu（單次、清 cache）和 decode 一致（68 µs），我們的 kernel 三種量法都一樣。所以和 Marlin 的比較以 decode 裡的時間為準：e2e 時 nano 和 vLLM 的 AWQ 都錄 nsys，`gemm_breakdown.py` 依位置認出每個投影（SiLU 之後的 GEMM 是 down_proj，前三個是 gate_up、o_proj、qkv）。
+
+### 工具
+
+- **trace build**：`gemm_w4a16_tiled` 加 `template <bool kTrace>`，一般版的 SASS 不變（和改之前的 build 逐指令比對過）。thread 0 把 `clock64` 時間戳寫在 shared memory，結束時才寫回：入口、第一個 tile 到齊、每次 slice 結尾的四個點、出口，加上 globaltimer、最後到的 block 等旗標和一個 atomic 取的結束順序。
+- **觀察**：
+  - globaltimer 每 1,024 ns 才跳一次，所以 block 內用 clock，跨 block 用結束順序。
+  - 同一個 VM 上，M ≥ 8 的 trace run 大多只有約 1.08 GHz，M=1 是 1.3–1.4 GHz；M=1 和 M=8 是同一個 kernel、同樣的指令，差別只在 x 有幾列不是 0，看起來是 400 W 的功耗上限。跨 run 的比較只看同 clock 的列，版本之間的比較用 kbench 和 e2e。
+  - 每次 GEMM 的關鍵路徑上，prologue（第一批 tile 從冷的 DRAM 到）約 3–4 µs，slice 結尾約 4–6 µs；穩態每個 tile 的時間和它分到的 DRAM 時間差不多。
+
+### 做了什麼
+
+| 改動 | commit | 結果 |
+|---|---|---|
+| stage 對齊 128 bytes | 17a3038 | static 的 `__shared__ int last_block` 把 dynamic shared memory 推到位址 16，每條權重 `cp.async` 的 L2 sector 是理想的 2 倍（ncu SourceCounters：50% excessive）。改放 dynamic allocation 尾端之後，down M=1 從 1.95M 降到 0.98M 個 sector，和 Marlin 一樣；kbench 四層加總 −1.2 到 −9.2%。輸出 bitwise 相同 |
+| slice 結尾 | 7a0072e | thread 0 一開始就 `ld.acquire` 讀 counter，看到其他 block 都到了就不寫 slot、不做 atomic（down 的最後到達有 59–81% 走這條）；其餘用一個 `atom.acq_rel`；block 最後一次 slice 結尾在已排空的 stage 裡同時寫各 warp 的部分和。四層加總 −0.3 到 −2.7%，bitwise 相同 |
+| 平行的 warp 相加 | 7e30049、8537411 | 放得下時前 n−1 個 warp 同時寫自己的 buffer，最後一個依序加上自己的。MT=4 時 warp 相加從 2.2 降到 1.0 µs，但主迴圈每個 tile 慢 5%（255 個暫存器），down M=64 72 → 81 µs，所以只留給 MT 1–2（約 −1%） |
+| 33–64 列用 128x128 tile | de05b0f、eb6b2a0 | 每個 warp 每個 stage 算兩個 k16 列（64x128 是一個），每 byte 的 slice 結尾減半。tune（冷）M=64：qkv 38.2 → 34.7、o_proj 31.6 → 27.9、down 72.0 → 62.4 µs；M=48 down 62.9 → 52.9。gate_up 留在 64x256 |
+
+沒做的兩項：
+- **下一個 GEMM 的 L2 預取（F5）**：`tiled_trace.py --prefetch-tiles 3` 先把每個 block 前 3 個 tile 拉進 L2 再量，短的 GEMM（qkv、o_proj 的 M=1）約快 2 µs，gate_up、down 只快 0–1 µs，因為 prologue 時 DRAM 本來就在搬所有 block 的前 3 個 tile；要改 model 的呼叫介面，對 down 沒有幫助，所以不做。
+- **`mma_trans`（F2）**：boost clock 下穩態每個 tile 不比 DRAM 慢，所以沒做。
+
+### kernel（kbench，冷，run `down-d3`，µs，tiled / Marlin）
+
+| M | qkv | o_proj | gate_up | down | 加總 | 加總，第三輪開始時（`down-d1`） |
+|---|---:|---:|---:|---:|---:|---:|
+| 1 | 16.2 / 18.9 | 14.5 / 17.4 | 51.6 / 59.4 | 30.1 / 33.5 | **112.4** / 129.2 | 116.0 |
+| 16 | 16.0 / 21.3 | 15.0 / 19.5 | 54.5 / 65.3 | 31.5 / 36.9 | **117.0** / 143.0 | 125.3 |
+| 32 | 19.7 / 27.3 | 18.5 / 21.8 | 65.5 / 71.8 | 38.2 / 48.3 | **141.9** / 169.2 | 157.0 |
+| 64 | 34.6 / 44.9 | 27.9 / 35.6 | 101.6 / 111.1 | 62.4 / 81.5 | **226.5** / 273.1 | 253.2 |
+
+（kbench 的 Marlin 在 M ≥ 16 偏慢，見上面；和 Marlin 的比較看下一張表。）
+
+### decode 裡每個投影的 GEMM（nsys，run `down-d3`，µs，nano / vLLM AWQ）
+
+| b | qkv | o_proj | gate_up | down | 每層 |
+|---|---:|---:|---:|---:|---:|
+| 1 | 16.6 / 16.4 | 14.8 / 14.6 | 52.3 / 55.6 | **30.4** / 31.0 | **114.2** / 117.6 |
+| 16 | 16.4 / 17.8 | 15.2 / 16.3 | 55.0 / 58.7 | **31.7** / 33.3 | **118.3** / 126.0 |
+| 64 | 34.6 / 34.8 | 28.3 / 30.4 | 102.0 / 89.6 | **62.0** / 66.0 | 227.0 / 220.8 |
+
+- down_proj 在 b=1、16、64 是 vLLM 的 0.98、0.95、0.94 倍；第三輪開始時 b=64 是 1.09 倍（71.7 對 65.9，run `down-d2b`）。
+- b=64 只剩 gate_up 慢（102.0 對 89.6 µs，每步約 0.4 ms）。
+
+### 端到端 decode（run `down-d3`，ms/step）
+
+| 設定 | b=1 | b=16 | b=64 |
+|---|---:|---:|---:|
+| nano W4A16 tiled（第三輪） | **5.19** | **7.10** | **15.94** |
+| nano W4A16 tiled（第二輪，`marlin-t2`） | 5.35 | 7.31 | 16.82 |
+| nano W4A16 rows（舊 kernel） | 5.68 | 8.29 | 22.94 |
+| vLLM AWQ（awq_marlin） | 5.55 | 7.85 | 16.19 |
+| nano bf16 | 12.04 | 14.12 | 22.57 |
+| vLLM bf16 | 12.64 | 14.84 | 23.04 |
+
+W4A16 在 b=1、16、64 分別比 vLLM AWQ 快 6.5%、9.5%、1.5%；第二輪 b=64 還慢 4%。
+
+### 門檻
+
+- **G0 量測**：冷的 down 在 kbench 是 Marlin 的 0.85–0.94 倍（`down-d1`），decode 裡 b=1/16 是 0.99/0.96 倍、b=64 是 1.09 倍（`down-d2b`）。第二輪 G2 的 down 單點（M=8 的 1.29 倍）改用冷的數字判定：通過。
+- **G1 正確性**：
+  - GPU 測試 645 passed，沒有 skip；
+  - 對齊、slice 結尾、平行相加之後，golden 16/16 bitwise 相同（`down-d2a` 到 `down-d2d`）；
+  - 128x128 的預設改了 M=64 三個 shape 的加總順序：`down-d3` 的 golden 13/16 相同，不同的是 qkv、o_proj、down 的 M=64，最大差 0.0078（bf16 在 1–2 附近的 1 ulp），每個 64×N 的輸出裡 51–148 個元素；trace 版和一般版 bitwise 相同。
+- **G2 kernel（冷）**：
+  - down 在 M=1、16 比 `down-d1` 快 ≥ 10%：沒過（−2%、−4%）；M=64 快 15%；
+  - down 在每個 M 都 ≤ Marlin 的 1.05 倍：通過（kbench 和 decode 都是）；
+  - 四層加總在任何 M 都不比 `down-d1` 慢：通過（−3.1 到 −10.5%）。
+- **G3 e2e**：沒有退步，b=1 5.19 ms ≤ 5.20：通過。
+
+### 還沒做
+
+- gate_up 在 M=64：102 對 89.6 µs，是 b=64 剩下最大的差距。
+- 功耗上限下 M ≥ 8 的 SM clock 約 1.08 GHz（trace），e2e 時是多少沒量。
+- kbench 量 Marlin 在 M ≥ 16 比 ncu、decode 慢的原因沒查。
+
 ## 檔案
 
 | 檔案 | 內容 |
@@ -295,10 +385,13 @@ down_proj（N=4096、K=14336）在每個 M 都還是 Marlin 的 1.1–1.3 倍，
 | `run_phase1.sh` | 主流程。step runner、安裝、nsys、ncu 函式來自 `../phase0/lib.sh` |
 | `kbench.py` | kernel micro-benchmark：登記、正確性檢查、CUDA graph 計時、JSON 和 markdown |
 | `tune.py` | launch 設定的 sweep，計時沿用 kbench |
+| `tiled_trace.py` | `gemm_w4a16_tiled` 的 trace build：每個 block 的時間拆解、最後結束的 block、`--prefetch-tiles` 量 L2 預取的上限 |
+| `golden.py` | tiled kernel 輸出的逐 bit 比對（存一次，之後檢查） |
+| `gemm_breakdown.py` | 從 nsys 的 SQLite 讀出 decode 裡每個投影的 GEMM 時間，nano 和 vLLM 都適用 |
 | `quality.py` | 8B 上的 perplexity 和 top-1 一致率 |
 | `interp/` | 本機用 Docker（linux/arm64）跑 `TRITON_INTERPRET=1` 檢查 Triton kernel 的邏輯：`interp_check.py`，以及證明 interpreter 的 bf16 `tl.dot` 有錯的 `dot_check.py` |
 | `summarize.py` | 把一次 run 整理成 `summary.md` |
-| `results/<run_id>/` | `summary.md`、`status.tsv`、`logs/`、`tests/`、`kbench/`、`tune/`、`ncu/`、`nsys/`、`offline/`、`quality/`、`environment.txt`，以及當次 run 的程式碼副本 `code/` |
+| `results/<run_id>/` | `summary.md`、`status.tsv`、`logs/`、`tests/`、`kbench/`、`tune/`、`ncu/`、`nsys/`、`offline/`、`quality/`、`trace/`、`environment.txt`，以及當次 run 的程式碼副本 `code/` |
 
 Colab 的 driver 和 launcher 沿用 Phase 0 的 `colab_phase0.sh`、`colab_launcher.py`，用 `BENCH_PHASE=phase1` 切換。tarball 除了 `benchmarks/phase0`、`benchmarks/phase1` 和 `src/serving/nano_vllm`，還會帶 `tests/unit/test_nano_vllm_*.py`、`tiny_llama.py`，以及這些測試在 nano_vllm 以外會 import 或讀取的檔案：`src/monitoring/metrics.py`、`src/api/model_routing.py`、`config/model_routing.nano.json`。`tests/gpu/` 存在的話也會帶上。
 
