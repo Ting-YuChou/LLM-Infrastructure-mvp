@@ -776,35 +776,58 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
     const int unit = i / 32;  // k16 row unit / kCols, column unit % kCols
     b_off[j] = ((unit / Sh::kCols) * units + unit % Sh::kCols) * 32 + i % 32;
   }
-  auto load = [&](int kr, int slice, int s) {
-    T* a = reinterpret_cast<T*>(stage(s));
-    const T* xs = x + kr * TILE_K;
-    for (int i = tid; i < m * Sh::kAChunks; i += kTiledThreads) {
-      const int row = i / Sh::kAChunks;
-      const int ch = i % Sh::kAChunks;
-      cp_async_16(a + row * TILE_K + (ch ^ (row % 8)) * 8, xs + static_cast<int64_t>(row) * k + ch * 8, 16);
-    }
-    uint4* b = reinterpret_cast<uint4*>(stage(s) + Sh::kABytes);
-    const uint4* bs = qweight + (static_cast<int64_t>(kr) * Sh::kKRows * units + slice * Sh::kCols) * 32;
+  // Likewise for x: thread tid copies chunk tid % kAChunks of rows
+  // tid / kAChunks + j * kARowStep. kARowStep is a multiple of 8, so the
+  // swizzle is the same for all of them: each copy is a base plus a stride
+  // (a loop over m * kAChunks spent ~20 instructions of index math on each).
+  constexpr int kARowStep = kTiledThreads / Sh::kAChunks;
+  constexpr int kAJobs = (Sh::kRows + kARowStep - 1) / kARowStep;
+  static_assert(kTiledThreads % Sh::kAChunks == 0 && kARowStep % 8 == 0, "one swizzle per thread");
+  const int a_row = tid / Sh::kAChunks;
+  const int a_ch = tid % Sh::kAChunks;
+  const T* x_thread = x + static_cast<int64_t>(a_row) * k + a_ch * 8;
+  const int a_dst = a_row * TILE_K + (a_ch ^ (a_row % 8)) * 8;
+  const int a_step = kARowStep * k;
+  unsigned a_rows = 0;  // bit j: row a_row + j * kARowStep is below m
 #pragma unroll
-    for (int j = 0; j < Sh::kBWords / kTiledThreads; ++j) cp_async_16(b + tid + j * kTiledThreads, bs + b_off[j], 16);
-    if (tid < Sh::kSWords) {
-      const int group = kr * TILE_K / 128 + tid / (Sh::kCols * 8);
-      cp_async_16(b + Sh::kBWords + tid,
-                  scales + (static_cast<int64_t>(group) * units + slice * Sh::kCols) * 8 + tid % (Sh::kCols * 8), 16);
-    }
-  };
+  for (int j = 0; j < kAJobs; ++j) a_rows |= (a_row + j * kARowStep < m ? 1u : 0u) << j;
   // The load stream runs kTiledStages - 1 tiles ahead of the compute stream.
+  // Its x and weight pointers step one k tile at a time and restart at each
+  // slice; 64-bit addresses rebuilt from (k tile, slice) cost ~45
+  // instructions a stage.
   int ld_t = begin;
   int ld_slice = begin / k_tiles;
   int ld_kr = begin - ld_slice * k_tiles;
+  const int b_step = Sh::kKRows * units * 32;  // uint4 per k tile
+  auto b_slice = [&](int slice) { return qweight + slice * Sh::kCols * 32; };
+  const T* ld_x = x_thread + ld_kr * TILE_K;
+  const uint4* ld_b = b_slice(ld_slice) + static_cast<int64_t>(ld_kr) * b_step;
+  auto load = [&](int s) {
+    T* a = reinterpret_cast<T*>(stage(s));
+#pragma unroll
+    for (int j = 0; j < kAJobs; ++j)
+      if (a_rows >> j & 1) cp_async_16(a + a_dst + j * kARowStep * TILE_K, ld_x + j * a_step, 16);
+    uint4* b = reinterpret_cast<uint4*>(stage(s) + Sh::kABytes);
+#pragma unroll
+    for (int j = 0; j < Sh::kBWords / kTiledThreads; ++j) cp_async_16(b + tid + j * kTiledThreads, ld_b + b_off[j], 16);
+    if (tid < Sh::kSWords) {
+      const int group = ld_kr * TILE_K / 128 + tid / (Sh::kCols * 8);
+      cp_async_16(b + Sh::kBWords + tid,
+                  scales + (static_cast<int64_t>(group) * units + ld_slice * Sh::kCols) * 8 + tid % (Sh::kCols * 8), 16);
+    }
+  };
   auto load_next = [&](int s) {
-    if (ld_t < end) load(ld_kr, ld_slice, s);
+    if (ld_t < end) load(s);
     cp_async_commit();  // an empty group past the end keeps the wait counts uniform
     ++ld_t;
     if (++ld_kr == k_tiles) {
       ld_kr = 0;
       ++ld_slice;
+      ld_x = x_thread;
+      ld_b = b_slice(ld_slice);
+    } else {
+      ld_x += TILE_K;
+      ld_b += b_step;
     }
   };
 
@@ -1058,10 +1081,10 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
         load_next(s == 0 ? kTiledStages - 1 : s - 1);  // the stage of tile t - 1, read by everyone
         cp_async_wait<kTiledStages - 2>();             // tile t + 1 has landed
         __syncthreads();
-        if (t + 1 < end) {
-          fetch(s_next, row0, a_nxt, b_nxt);
-          sc_nxt = fetch_scales(s_next);
-        }
+        // Past the last tile this reads a stale stage, unused: unconditional,
+        // the double buffer needs no register copies around the branch.
+        fetch(s_next, row0, a_nxt, b_nxt);
+        sc_nxt = fetch_scales(s_next);
       }
       mma_row(a_cur, b_cur, sc_cur);
 #pragma unroll
