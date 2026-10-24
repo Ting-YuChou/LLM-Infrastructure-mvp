@@ -21,7 +21,8 @@
 #             then checks later runs against them bit for bit
 #   e2e       nano_bench.py per nano config and vllm_offline.py at the same
 #             points (also on P1_VLLM_W4_MODEL when a config is w4a16); nsys on
-#             the last nano config
+#             the last nano config at b=1/16/64 and, when it is w4a16, on vLLM's AWQ, then
+#             gemm_breakdown.py: each projection's GEMM time inside decode, both engines
 #   quality   quality.py: wikitext-2 perplexity and top-1 agreement of the torch,
 #             Triton and W4A16 paths on the real model
 #   summarize summary.md
@@ -212,6 +213,18 @@ e2e() {
   nsys_run "nano_${label}_b64" "${PY}" "${P0_DIR}/nano_bench.py" --model "${MODEL}" \
     --runs paged:64:1024:64 $(nano_config_args "${last}") \
     --out "${OUT}/offline/nano_${label}_b64_nsys.json" || rc=1
+  if [[ "${last}" == *:w4a16* && -d "${W4_MODEL}" ]]; then
+    # vLLM's AWQ (Marlin) under nsys too, then each projection's GEMM time inside decode, both sides.
+    local b specs=()
+    for b in 1 16 64; do
+      nsys_run "vllmw4_b${b}" "${PY}" "${P0_DIR}/vllm_offline.py" --model "${W4_MODEL}" --batch "${b}" \
+        --input-len "$([[ ${b} == 1 ]] && echo 128 || echo 1024)" --output-len 64 --profile-steps 32 \
+        --out "${OUT}/offline/vllmw4_b${b}_nsys.json" || rc=1
+      specs+=("nano_b${b}=${OUT}/nsys/nano_${label}_b${b}.sqlite:gemm_w4a16"
+        "vllm_awq_b${b}=${OUT}/nsys/vllmw4_b${b}.sqlite:Marlin")
+    done
+    "${PY}" "${CODE_DIR}/gemm_breakdown.py" --out "${OUT}/offline/gemm_breakdown.md" "${specs[@]}" >&3 || rc=1
+  fi
   return "${rc}"
 }
 
