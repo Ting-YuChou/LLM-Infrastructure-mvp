@@ -90,3 +90,13 @@ def test_analyze_run_finds_the_last_block_and_its_path():
 def test_tile_dram_share():
     # 16 KB of weights, 512 B of scales, 512 B of x per 256x128 tile, 100 blocks at 1,000 GB/s
     assert tiled_trace.tile_dram_ns(1, 256, 128, 100, 1000.0) == pytest.approx((16384 + 512 + 512) / 10)
+
+
+def test_first_tile_units_cover_each_stripe_start():
+    schedule = tiled_schedule(N, K, TILE_K, TILE_N, GRID)
+    units = tiled_trace.first_tile_units(N, K, TILE_K, TILE_N, schedule, 2)
+    # 3 blocks x 2 tiles x (16 k16 rows x 2 n64 units); block 0 starts at slice 0, k tile 0
+    assert len(units) == 3 * 2 * 16 * 2 and len(set(units)) == len(units)
+    assert units[:2] == [0, 1] and units[2] == N // 64  # next k16 row, same columns
+    # block 1 starts at tile 22: slice 2, k tile 6 -> k16 row 96, units 4 and 5
+    assert units[64:66] == [96 * (N // 64) + 4, 96 * (N // 64) + 5]

@@ -21,6 +21,10 @@ a warm-up, with one sync at the end: a host round trip after each launch let
 the SM clock drop to ~1.08 GHz (run down-d1). Writes trace.json, trace.md and
 a Gantt chart of one run per shape (gantt_<layer>_M<m>.png).
 
+With --prefetch-tiles 0,3 every shape is also traced after a gather has
+pulled the first 3 tiles of each block's stripe into L2: the ceiling of
+prefetching the next GEMM's first tiles during the previous one.
+
   python tiled_trace.py --out results/trace
   python tiled_trace.py --out d --shapes down --rows 1,16 --runs 20
 """
@@ -79,6 +83,7 @@ def block_segments(row: list[int], ranges: tuple[int, int], k_tiles: int, rate: 
             "final": f == (end - 1) // k_tiles - begin // k_tiles,
             "last": bool(row[FLAGS] >> f & 1),
             "sole": bool(row[FLAGS] >> (8 + f) & 1),
+            "early": bool(row[FLAGS] >> (16 + f) & 1),
             "start": ns(start - row[CLK_ENTRY]),
             "sum_warps": ns(summed - start),
             "handoff": ns(handed - summed),
@@ -121,6 +126,7 @@ def analyze_run(rows: list[list[int]], schedule: dict, k_tiles: int, rate: float
         "sum_warps": median([f["sum_warps"] for f in mid + final]),
         "handoff": median([f["handoff"] for f in mid + final if not f["sole"]]),
         "last_tail": median([f["tail"] for f in mid + final if f["last"]]),
+        "early_share": sum(f["early"] for f in mid + final) / max(1, sum(f["last"] for f in mid + final)),
         "critical": {
             "block": last,
             "tiles": crit["tiles"],
@@ -187,7 +193,21 @@ def gantt(rows: list[list[int]], schedule: dict, k_tiles: int, rate: float, titl
     plt.close(fig)
 
 
-def trace_shape(layer: str, n: int, k: int, rows: int, runs: int, copy_gbps: float, out: Path) -> dict:
+def first_tile_units(n: int, k: int, tile_k: int, tile_n: int, schedule: dict, tiles: int) -> list[int]:
+    """Indexes of the 512-byte weight units ([K/16 * N/64] order) in the first
+    `tiles` tiles of every block's stripe."""
+    k_tiles, units, rows, cols = k // tile_k, n // 64, tile_k // 16, tile_n // 64
+    out = []
+    for begin, end in schedule["ranges"]:
+        for t in range(begin, min(end, begin + tiles)):
+            slice_, kr = divmod(t, k_tiles)
+            out += [(kr * rows + r) * units + slice_ * cols + c for r in range(rows) for c in range(cols)]
+    return out
+
+
+def trace_shape(
+    layer: str, n: int, k: int, rows: int, runs: int, copy_gbps: float, out: Path, prefetch: int = 0
+) -> dict:
     import torch
 
     from src.serving.nano_vllm.kernels.w4a16 import (
@@ -213,12 +233,15 @@ def trace_shape(layer: str, n: int, k: int, rows: int, runs: int, copy_gbps: flo
     for _ in range(20):  # warm-up at full load, so the SM clock is up
         for weight in weights:
             w4a16_linear(x, weight)
+    units = torch.tensor(first_tile_units(n, k, tile_k, tile_n, schedule, prefetch), device=x.device)
     pending = []
     for run in range(runs):
         target = run % copies
         for c in range(copies):  # every other copy, so the target's weight has left L2
             if c != target:
                 w4a16_linear(x, weights[c])
+        if prefetch:
+            weights[target].qweight.view(-1, 128).index_select(0, units)
         pending.append(w4a16_tiled_trace(x, weights[target])[1])
     traces = [trace.cpu().tolist() for trace in pending]  # the one sync
     k_tiles = k // tile_k
@@ -231,7 +254,7 @@ def trace_shape(layer: str, n: int, k: int, rows: int, runs: int, copy_gbps: flo
     )
     analyzed = [analyze_run(t, schedule, k_tiles, rate) for t in traces]
     result = {
-        "layer": layer, "N": n, "K": k, "M": rows, "tile": f"{tile_k}x{tile_n}",
+        "layer": layer, "N": n, "K": k, "M": rows, "prefetch": prefetch, "tile": f"{tile_k}x{tile_n}",
         "blocks": len(schedule["ranges"]), "iters": schedule["iters"], "copies": copies, "runs": runs,
         "cycles_per_ns": rate,
         "cycles_per_ns_runs": [rates[0], rates[-1]],  # slowest and fastest run
@@ -240,13 +263,15 @@ def trace_shape(layer: str, n: int, k: int, rows: int, runs: int, copy_gbps: flo
         "median": summarize(analyzed),
     }
     median_run = sorted(range(runs), key=lambda r: analyzed[r]["kernel"])[runs // 2]
-    gantt(traces[median_run], schedule, k_tiles, rate, f"{layer} M={rows} ({result['tile']})",
-          out / f"gantt_{layer}_M{rows}.png")
+    tag = f"_prefetch{prefetch}" if prefetch else ""
+    gantt(traces[median_run], schedule, k_tiles, rate, f"{layer} M={rows} ({result['tile']}){tag}",
+          out / f"gantt_{layer}_M{rows}{tag}.png")
     return result
 
 
 def markdown(results: list[dict]) -> str:
     us = lambda ns: f"{ns / 1e3:.2f}"  # noqa: E731
+    name = lambda r: f"{r['layer']} M={r['M']}" + (f", first {r['prefetch']} tiles in L2" if r["prefetch"] else "")  # noqa: E731
     lines = [
         "# gemm_w4a16_tiled trace (cold weights, medians over runs, µs)",
         "",
@@ -257,7 +282,7 @@ def markdown(results: list[dict]) -> str:
     for r in results:
         m, c = r["median"], r["median"]["critical"]
         lines.append(
-            f"| {r['layer']} M={r['M']} | {r['tile']}, {r['blocks']} × {r['iters']} | {us(m['kernel'])} | "
+            f"| {name(r)} | {r['tile']}, {r['blocks']} × {r['iters']} | {us(m['kernel'])} | "
             f"{us(m['launch_skew'])} | {us(m['prologue'])} | {us(m['per_tile'])} / {us(r['tile_dram_ns'])} | "
             f"{us(m['finish_mid'])} / {us(m['finish_final'])} ({us(m['finish_final_last'])}) | {us(m['end_skew'])} | "
             f"{us(c['start'])} + {us(c['prologue'])} + {us(c['streaming'])} + {us(c['finishes_ns'])} + {us(c['exit'])} |"
@@ -266,14 +291,14 @@ def markdown(results: list[dict]) -> str:
         "",
         "Slice ends split (median µs): warps summed / counter bumped (slot stored, fenced) / last block's slot sum.",
         "",
-        "| shape | sum warps | handoff | last block's sum | SM GHz (runs) | globaltimer tick |",
-        "|---|---:|---:|---:|---:|---:|",
+        "| shape | sum warps | handoff | last block's sum | last, saw it early | SM GHz (runs) | globaltimer tick |",
+        "|---|---:|---:|---:|---:|---:|---:|",
     ]
     for r in results:
         m, (slow, fast) = r["median"], r["cycles_per_ns_runs"]
         lines.append(
-            f"| {r['layer']} M={r['M']} | {us(m['sum_warps'])} | {us(m['handoff'])} | {us(m['last_tail'])} | "
-            f"{slow:.2f}–{fast:.2f} | {r['globaltimer_tick_ns']} ns |"
+            f"| {name(r)} | {us(m['sum_warps'])} | {us(m['handoff'])} | {us(m['last_tail'])} | "
+            f"{m['early_share']:.0%} | {slow:.2f}–{fast:.2f} | {r['globaltimer_tick_ns']} ns |"
         )
     return "\n".join(lines) + "\n"
 
@@ -284,6 +309,7 @@ def main() -> None:
     parser.add_argument("--shapes", default="", help="regex on the layer name (default: all but lm_head)")
     parser.add_argument("--rows", default=",".join(map(str, ROWS)))
     parser.add_argument("--runs", type=int, default=50)
+    parser.add_argument("--prefetch-tiles", default="0", help="comma-separated; 0: cold, P: first P tiles in L2")
     parser.add_argument("--copy-gbps", type=float, default=0.0, help="default: measured (phase0 bandwidth.py)")
     args = parser.parse_args()
 
@@ -297,9 +323,10 @@ def main() -> None:
         if layer == "lm_head" or (args.shapes and not re.search(args.shapes, layer)):
             continue
         for rows in map(int, args.rows.split(",")):
-            result = trace_shape(layer, n, k, rows, args.runs, copy_gbps, out)
-            print("TRACE " + json.dumps(result), flush=True)
-            results.append(result)
+            for prefetch in map(int, args.prefetch_tiles.split(",")):
+                result = trace_shape(layer, n, k, rows, args.runs, copy_gbps, out, prefetch)
+                print("TRACE " + json.dumps(result), flush=True)
+                results.append(result)
     (out / "trace.json").write_text(json.dumps({"copy_GBps": copy_gbps, "rows": results}, indent=1))
     (out / "trace.md").write_text(markdown(results))
     print(markdown(results))
