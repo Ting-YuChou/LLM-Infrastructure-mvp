@@ -370,8 +370,8 @@ def tiled_launch_config(rows: int, n: int, k: int, config: dict, sm_count: int) 
     if name == "auto":
         if mt <= 2:
             name = "256x128" if k % 256 == 0 else "128x128"
-        else:  # wide slices only pay off when there are many of them (tune.py, run marlin-t1c)
-            name = "64x256" if n >= 16384 and n % 256 == 0 else "64x128"
+        else:  # wide slices only pay off when there are many of them (tune.py, runs marlin-t1c, down-d2e)
+            name = "64x256" if n >= 16384 and n % 256 == 0 else "128x128"
     if name not in _TILED_TILES_BY_MT[mt]:
         raise ValueError(f"tile {name} is not built for {rows} rows (m16 tiles: {mt})")
     tile_k, tile_n = W4A16_TILED_TILES[name]

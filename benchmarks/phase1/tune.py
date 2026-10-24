@@ -231,7 +231,7 @@ def tune_w4a16_tiled():
             "qkv": (6144, 4096), "o_proj": (4096, 4096), "gate_up": (28672, 4096),
             "down": (4096, 14336),
         }.items()
-        for m in (1, 4, 16, 32, 64, 128, 256)
+        for m in (1, 4, 16, 32, 48, 64, 128, 256)
     ]
     keys = ("tiled_tile", "tiled_blocks_per_sm", "tiled_max_rows")
     configs = grid(tiled_tile=list(w4a16.W4A16_TILED_TILES), tiled_blocks_per_sm=[1, 2], tiled_max_rows=[256])
