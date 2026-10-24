@@ -878,7 +878,8 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
   // Every thread runs this (it has barriers). The block's sum of the slice
   // is ((w0 + w1) + w2) + ... over the column's warps w in order, whichever
   // way it is formed, so every path gives the same bits.
-  auto finish_slice = [&](int slice, bool final_end) {
+  auto finish_slice = [&](int slice, auto final_c) {
+    constexpr bool final_end = decltype(final_c)::value;  // the block's last slice end, after the main loop
     const int f = slice - begin / k_tiles;  // this block's f-th slice end (trace only)
     auto mark_finish = [&](int step) {
       if (f < kTraceFinishes) mark(kTraceFinish0 + 4 * f + step);
@@ -898,7 +899,7 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
     // them in order and its own into the first. Else, at the block's last slice end,
     // the drained stages hold one copy per warp (spread) and readers add them
     // in warp order. Else the column's warps add into one tile in turn.
-    const bool spread = Sh::kSpreadFits && final_end;
+    constexpr bool spread = Sh::kSpreadFits && final_end;
     float* parts = reinterpret_cast<float*>(smem);
     const int kw = warp / Sh::kCols;
     auto store_acc = [&](float* dst, bool add) {
@@ -943,7 +944,7 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
       }
       decide();
       __syncthreads();
-    } else if (spread) {
+    } else if constexpr (spread) {
       __syncthreads();  // every warp is done with the last stage
       store_acc(parts + kw * Sh::kPartFloats, false);
       decide();
@@ -1011,8 +1012,8 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
     if (last_block) {
       // Slots read before any is added, so their L2 latencies overlap: a few
       // at a time while the next tile's fragments fill the registers (fewer
-      // as MT grows; MT 4 would spill), four at MT 1-2's last slice end (more
-      // at MT 3-4 slowed their main loop, run down-d2c).
+      // as MT grows; more at MT 3-4 slowed their main loop, runs down-d2c,
+      // chunk-c5), four at the last slice end, which runs after the loop.
       auto sum_slots = [&](auto batch) {
         constexpr int kBatch = decltype(batch)::value;
         for (int i = tid; i < m * kVecs; i += kTiledThreads) {
@@ -1042,12 +1043,8 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
           *reinterpret_cast<uint4*>(ys + static_cast<int64_t>(row) * n + 8 * v) = pack8<T>(sum);
         }
       };
-      constexpr int kBatch = MT >= 4 ? 1 : (MT == 3 ? 2 : 4);
-      if (MT <= 2 && final_end) {
-        sum_slots(std::integral_constant<int, 4>{});
-      } else {
-        sum_slots(std::integral_constant<int, kBatch>{});
-      }
+      constexpr int kBatch = final_end ? 4 : (MT >= 4 ? 1 : (MT == 3 ? 2 : 4));
+      sum_slots(std::integral_constant<int, kBatch>{});
       if (tid == 0) counters[slice] = 0;  // ready for the next call
     }
     __syncthreads();
@@ -1095,12 +1092,14 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
     }
     sc_cur = sc_nxt;
     s = s_next;
-    if (kr == k_tiles - 1 || t == end - 1) finish_slice(slice, t == end - 1);
+    if (kr == k_tiles - 1 && t != end - 1) finish_slice(slice, std::false_type{});
     if (++kr == k_tiles) {
       kr = 0;
       ++slice;
     }
   }
+  // Outside the loop, so its registers do not crowd the main loop's.
+  finish_slice((end - 1) / k_tiles, std::true_type{});
   cp_async_wait<0>();
   if constexpr (kTrace) {
     if (tid == 0) {
