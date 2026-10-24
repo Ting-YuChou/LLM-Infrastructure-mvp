@@ -1,0 +1,247 @@
+{
+  "label": "vllmw4_b64",
+  "window_ms": 510.712125,
+  "gpu_busy_frac": 0.9602555842981014,
+  "per_step_source": "median of 32 NVTX step ranges",
+  "steps": 32,
+  "batch": 1,
+  "per_step": {
+    "wall_ms": 15.826609,
+    "gpu_busy_ms": 15.742285,
+    "gpu_idle_ms": 0.084324,
+    "kernels": 429.0,
+    "launch_calls": 15.0,
+    "launch_api_ms": 0.7027315
+  },
+  "kernel_time_by_category": {
+    "other": {
+      "ms": 220.359824,
+      "frac": 0.44962542923490384
+    },
+    "attention": {
+      "ms": 216.575416,
+      "frac": 0.44190366743407755
+    },
+    "gemm": {
+      "ms": 24.335998,
+      "frac": 0.04965552861673079
+    },
+    "elementwise/copy": {
+      "ms": 15.763467,
+      "frac": 0.03216401015143868
+    },
+    "norm": {
+      "ms": 7.396804,
+      "frac": 0.015092547784329568
+    },
+    "activation": {
+      "ms": 3.708218,
+      "frac": 0.0075663026030852
+    },
+    "sampling": {
+      "ms": 1.956717,
+      "frac": 0.003992514175434417
+    }
+  },
+  "top_kernels": [
+    {
+      "name": "Marlin",
+      "category": "other",
+      "count": 3974,
+      "total_ms": 220.229744,
+      "avg_us": 55.417650729743336,
+      "frac": 0.4493600120877433
+    },
+    {
+      "name": "flash_fwd_splitkv_kernel",
+      "category": "attention",
+      "count": 994,
+      "total_ms": 213.227932,
+      "avg_us": 214.5150221327968,
+      "frac": 0.4350734117956587
+    },
+    {
+      "name": "ampere_fp16_s16816gemm_fp16_128x64_ldg8_f2f_stages_64x3_tn",
+      "category": "gemm",
+      "count": 31,
+      "total_ms": 24.335998,
+      "avg_us": 785.0321935483871,
+      "frac": 0.04965552861673079
+    },
+    {
+      "name": "elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 2982,
+      "total_ms": 10.536174,
+      "avg_us": 3.5332575452716295,
+      "frac": 0.021498164553097634
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2",
+      "category": "norm",
+      "count": 962,
+      "total_ms": 3.787425,
+      "avg_us": 3.9370322245322247,
+      "frac": 0.0077279177320454095
+    },
+    {
+      "name": "triton_poi_fused_marlin_gemm_mul_silu_slice_1",
+      "category": "activation",
+      "count": 993,
+      "total_ms": 3.708218,
+      "avg_us": 3.7343585095669685,
+      "frac": 0.0075663026030852
+    },
+    {
+      "name": "reshape_and_cache_flash_kernel",
+      "category": "attention",
+      "count": 994,
+      "total_ms": 3.347484,
+      "avg_us": 3.3676901408450703,
+      "frac": 0.006830255638418792
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0",
+      "category": "norm",
+      "count": 993,
+      "total_ms": 3.341345,
+      "avg_us": 3.364899295065458,
+      "frac": 0.0068177295324346405
+    },
+    {
+      "name": "triton_poi_fused_3",
+      "category": "elementwise/copy",
+      "count": 962,
+      "total_ms": 3.019915,
+      "avg_us": 3.139204781704782,
+      "frac": 0.006161879028038816
+    },
+    {
+      "name": "reduce_kernel",
+      "category": "sampling",
+      "count": 31,
+      "total_ms": 1.956717,
+      "avg_us": 63.11990322580645,
+      "frac": 0.003992514175434417
+    },
+    {
+      "name": "unrolled_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 157,
+      "total_ms": 1.679918,
+      "avg_us": 10.70011464968153,
+      "frac": 0.0034277294205382973
+    },
+    {
+      "name": "vectorized_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 128,
+      "total_ms": 0.22592,
+      "avg_us": 1.765,
+      "frac": 0.00046097049420746255
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_embedding_marlin_gemm_mean_mul_pow_rsqrt_0",
+      "category": "norm",
+      "count": 32,
+      "total_ms": 0.152928,
+      "avg_us": 4.779,
+      "frac": 0.00031203654275034897
+    },
+    {
+      "name": "_compute_slot_mapping_kernel",
+      "category": "other",
+      "count": 32,
+      "total_ms": 0.13008,
+      "avg_us": 4.065,
+      "frac": 0.0002654171471605291
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2",
+      "category": "norm",
+      "count": 31,
+      "total_ms": 0.115106,
+      "avg_us": 3.713096774193548,
+      "frac": 0.00023486397709916867
+    },
+    {
+      "name": "index_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 32,
+      "total_ms": 0.112611,
+      "avg_us": 3.51909375,
+      "frac": 0.0002297731423654239
+    },
+    {
+      "name": "triton_poi_fused_1",
+      "category": "elementwise/copy",
+      "count": 32,
+      "total_ms": 0.098336,
+      "avg_us": 3.073,
+      "frac": 0.0002006462221954012
+    },
+    {
+      "name": "vectorized_gather_kernel",
+      "category": "elementwise/copy",
+      "count": 31,
+      "total_ms": 0.090593,
+      "avg_us": 2.9223548387096776,
+      "frac": 0.0001848472909956474
+    }
+  ],
+  "cuda_api": {
+    "cudaEventSynchronize": {
+      "calls": 64,
+      "total_ms": 465.232412
+    },
+    "cudaGraphLaunch": {
+      "calls": 32,
+      "total_ms": 17.725389
+    },
+    "cudaLaunchKernel": {
+      "calls": 416,
+      "total_ms": 5.103138
+    },
+    "cudaMemcpyAsync": {
+      "calls": 352,
+      "total_ms": 4.474829
+    },
+    "cudaEventQuery": {
+      "calls": 60,
+      "total_ms": 0.374895
+    },
+    "cudaEventRecord": {
+      "calls": 64,
+      "total_ms": 0.310172
+    },
+    "cuLaunchKernelEx": {
+      "calls": 32,
+      "total_ms": 0.308527
+    },
+    "cudaEventRecordWithFlags": {
+      "calls": 64,
+      "total_ms": 0.226751
+    },
+    "cudaEventCreateWithFlags": {
+      "calls": 64,
+      "total_ms": 0.168353
+    },
+    "cudaStreamIsCapturing": {
+      "calls": 128,
+      "total_ms": 0.14389
+    },
+    "cudaEventDestroy": {
+      "calls": 63,
+      "total_ms": 0.107321
+    },
+    "cudaStreamWaitEvent": {
+      "calls": 32,
+      "total_ms": 0.094853
+    }
+  },
+  "timeline_slice_ns": [
+    277463027,
+    282463027
+  ],
+  "nvtx_phases": {}
+}

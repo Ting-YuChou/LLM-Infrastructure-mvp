@@ -757,3 +757,18 @@ ncu（base clock，每次 launch 前清 cache）：（更正：`ncu_run` 用 `--
 
 - **decode 裡的 GEMM**（nano / vLLM AWQ，µs）：down 30.4 / 31.0、31.7 / 33.3、62.0 / 66.0（b=1/16/64）；每層 114.2 / 117.6、118.3 / 126.0、227.0 / 220.8。b=64 只剩 gate_up 慢（102.0 / 89.6）。
 - 跑完把 Colab VM（`down`）關掉了。
+
+## 2026-10-24 02:58 — run `concur-c1-20261024-025830-colab`：e2e 在 b=128、256（新 VM `concur`）
+
+`P1_STEPS="installs cuda129 e2e summarize"`，`P1_NANO_CONFIGS="w4a16_tiled:...:async+tiled w4a16_tiled_full:...:async+tiled+fullgraph"`，`P1_E2E_RUNS="paged:64:1024:256,paged:128:1024:256,paged:128:512:256,paged:256:512:256"`，`P1_NSYS_RUNS="64:1024 128:1024 256:512"`。程式在 bb80af4（`--full-graphs`、`P1_NSYS_RUNS`、`gemm_breakdown` 合併連續 launch 和反量化前置 kernel）。
+
+- **e2e**（ms/step，nano 預設 / fullgraph / vLLM AWQ）：
+  - b=64/1k：16.02 / 16.04 / 16.20（和 `down-d3` 的 15.94、16.19 一致）；
+  - b=128/1k：30.57 / 30.20 / 27.45；
+  - b=128/512：24.57 / 24.21 / 21.42；
+  - b=256/512：50.44 / 49.99 / 39.04。
+- **vLLM bf16**：27.28、25.35、32.86 ms（b=128/1k、128/512、256/512）。KV cache 只有 142–144k token，b=128/1k 和 b=256/512 會 preempt，不能比。
+- **decode 裡的 GEMM**（每層 µs，nano / vLLM AWQ）：b=64 227.1 / 221.4，b=128 454.2 / 353.1，b=256 1008.0 / 632.4。
+- **b=256 的 nano**：反量化 kernel 每次平均 104 µs（每步 13.4 ms），cuBLAS 每層約 590 µs。
+- **attention**：每層約 404–416 µs，和 vLLM 的 419 µs 相同。
+- **VM**：跑完把 Colab VM（`concur`）關掉了。

@@ -378,6 +378,62 @@ W4A16 在 b=1、16、64 分別比 vLLM AWQ 快 6.5%、9.5%、1.5%；第二輪 b=
 - 功耗上限下 M ≥ 8 的 SM clock 約 1.08 GHz（trace），e2e 時是多少沒量。
 - kbench 量 Marlin 在 M ≥ 16 比 ncu、decode 慢的原因沒查。
 
+## 大 batch：b=128、256（run `concur-c1`）
+
+第三輪之後在 b=128、256 量 decode。W4A16 在 b=64 和 vLLM AWQ 打平，過了 64 列差距隨 batch 變大，而且全部來自 GEMM：attention 兩邊一樣。
+
+- **跑法**：nano 只跑 W4A16 tiled（async），兩種 graph：
+  - 預設：decode graph 到 64 列，再大的 batch 用 piecewise graph，attention 在 graph 外；
+  - `fullgraph`（`nano_bench.py --full-graphs`）：decode graph 到最大的 batch，和 vLLM 一樣。
+- **context**：b=256 用 512 個 prompt token（加 256 個輸出），因為 1k 的 KV 放不下 40 GB；b=128 兩種長度都跑。
+- **nano 的 GEMM 路徑**：
+  - 65–128 列：tiled kernel 每 64 列 launch 一次，每次都把整份權重讀一遍；
+  - 超過 `tiled_max_rows`（128）：每個投影先把整份權重反量化成 bf16，再呼叫 cuBLAS。
+
+### 端到端 decode（ms/step，tok/s）
+
+| b / prompt | nano 預設 | nano fullgraph | vLLM AWQ | nano / vLLM | tok/s：nano / vLLM |
+|---|---:|---:|---:|---:|---:|
+| 64 / 1024 | 16.02 | 16.04 | 16.20 | 0.99 | 3,989 / 3,951 |
+| 128 / 1024 | 30.57 | 30.20 | 27.45 | 1.10 | 4,239 / 4,663 |
+| 128 / 512 | 24.57 | 24.21 | 21.42 | 1.13 | 5,286 / 5,974 |
+| 256 / 512 | 50.44 | 49.99 | 39.04 | 1.28 | 5,121 / 6,558 |
+
+- **graph**：fullgraph 只快 0.1–1.6%。
+- **吞吐量**：nano 從 b=128 到 b=256 反而略降（5,286 → 5,121 tok/s），vLLM 多 10%。
+- **vLLM bf16 不能比**：KV cache 只有 142–144k token，b=128/1k（164k）和 b=256/512（196k）都放不下，會 preempt，所以這兩點沒列。AWQ 有 221–223k，兩點都放得下。
+- **prefill_s 不能比**：vLLM 先用同一批 prompt 暖機，正式量測時命中 prefix cache。
+
+### decode 裡每個投影的 GEMM（nsys，µs，nano fullgraph / vLLM AWQ）
+
+| b | qkv | o_proj | gate_up | down | 每層 | 每步（×32） |
+|---|---:|---:|---:|---:|---:|---:|
+| 64 | 34.7 / 34.8 | 28.3 / 30.5 | 102.1 / 89.5 | 62.0 / 66.5 | 227.1 / 221.4 | 7.3 / 7.1 ms |
+| 128 | 69.1 / 49.8 | 56.7 / 41.6 | 203.7 / 167.1 | 124.7 / 94.7 | 454.2 / 353.1 | 14.5 / 11.3 ms |
+| 256 | 110.7 / 80.7 | 78.5 / 59.0 | 556.8 / 326.6 | 262.1 / 166.1 | 1008.0 / 632.4 | 32.3 / 20.2 ms |
+
+（`gemm_breakdown.py` 把同一個投影連續的幾次 launch 加成一次呼叫；超過 128 列時反量化 kernel 算進後面的 cuBLAS。）
+
+- **差距的來源**：
+  - b=128：GEMM 多 3.2 ms/步，e2e 差 2.75 ms；
+  - b=256：GEMM 多 12.0 ms/步，e2e 差 11.0 ms。
+- **attention 一樣**：nano 的 `_paged_decode_split_kernel` 在 b=256/512 每層 416 µs，vLLM 的 `flash_fwd_splitkv_kernel` 419 µs。
+- **b=128**：nano 正好是 b=64 的 2 倍（兩次 launch，權重讀兩遍）；vLLM 的 Marlin 一次 launch 處理所有 64 列一組的 M 區塊，只要 1.6 倍。
+- **b=256**：
+  - 反量化每層 4 次、平均 104 µs，每層 418 µs、每步 13.4 ms，全是多出來的；
+  - cuBLAS 本身每層約 590 µs，已經比 Marlin 的 632 µs 快。
+  - `down-d2e` 的 tune 量過 M=256 時改用 4 次 tiled launch：gate_up 416 對 554 µs、down 249 對 258 µs 比較快，qkv、o_proj 還是反量化比較快。
+- **離上限還遠**：M=256 的 down 是 30 GFLOP，A100 實際約 280 TFLOPS 時要 107 µs，權重讀一次 21 µs；Marlin 是 166 µs，nano 是 262 µs。
+
+### 能做的
+
+1. **一次 launch 處理 65–256 列**：
+   - 做法：tiled kernel 的 persistent 排程加一個 M 區塊的維度，同一個權重 tile 給不同 M 區塊的 block 同時處理，第二次以後從 L2 讀；
+   - 預期：b=128 從 2 倍降到 Marlin 的 1.6 倍左右，b=256 也不必反量化。
+   - 這是最大的一項。
+2. **權重 tile 在一個 block 裡用給 128 列**：B fragment 解一次、用兩次。MT=4 已經用滿 255 個暫存器，要把 warp 分成 M 和 K 兩組。
+3. **暫時的做法**：超過 128 列時依投影選路徑，gate_up 和 down 用 tiled，qkv 和 o_proj 用反量化。依 `down-d2e` 的 tune，b=256 每層約省 160 µs、每步約 5 ms，但仍比 vLLM 慢。
+
 ## 檔案
 
 | 檔案 | 內容 |
