@@ -114,7 +114,8 @@ TILED_TRACE_EVENTS = 24
 TILED_TRACE_FINISHES = 4  # slice ends recorded per block, 4 stamps each
 TILED_TRACE_GT_ENTRY, TILED_TRACE_CLK_ENTRY, TILED_TRACE_CLK_FIRST, TILED_TRACE_TILES = 0, 1, 2, 3
 TILED_TRACE_FINISH0 = 4  # start, warps summed, counter bumped or y written, done
-TILED_TRACE_FLAGS = 20  # bit f: last to arrive at finish f; bit 8 + f: sole owner of that slice
+TILED_TRACE_FLAGS = 20  # bit f: last to arrive at finish f; bit 8 + f: sole owner of that slice;
+# bit 16 + f: last, and saw so before storing its slot (no slot, no atomic)
 TILED_TRACE_CLK_EXIT, TILED_TRACE_GT_EXIT, TILED_TRACE_TICKET = 21, 22, 23
 _WORKSPACE: dict[torch.device, tuple[torch.Tensor, torch.Tensor]] = {}
 _RETIRED: list[tuple[torch.Tensor, torch.Tensor]] = []

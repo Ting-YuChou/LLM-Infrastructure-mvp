@@ -607,12 +607,25 @@ constexpr int kTiledStages = 4;
 // the tile count, four stamps for each of the first kTraceFinishes slice
 // ends (start, warps summed, counter bumped or y written, done), a flag word
 // (bit f: last to arrive at finish f, bit 8 + f: sole owner, y written
-// directly), the clock and globaltimer at exit, and the exit order. Row
+// directly, bit 16 + f: last and saw so before its slot store), the clock and
+// globaltimer at exit, and the exit order. Row
 // `blocks` holds the exit ticket counter. w4a16.py's TILED_TRACE_* mirror this.
 constexpr int kTraceEvents = 24;
 constexpr int kTraceFinishes = 4;
 constexpr int kTraceGtEntry = 0, kTraceClkEntry = 1, kTraceClkFirst = 2, kTraceTiles = 3, kTraceFinish0 = 4;
 constexpr int kTraceFlags = 20, kTraceClkExit = 21, kTraceGtExit = 22, kTraceTicket = 23;
+
+__device__ __forceinline__ int ld_acquire(const int* p) {
+  int v;
+  asm volatile("ld.acquire.gpu.global.b32 %0, [%1];\n" : "=r"(v) : "l"(p) : "memory");
+  return v;
+}
+
+__device__ __forceinline__ int atom_add_acq_rel(int* p, int v) {
+  int old;
+  asm volatile("atom.acq_rel.gpu.global.add.s32 %0, [%1], %2;\n" : "=r"(old) : "l"(p), "r"(v) : "memory");
+  return old;
+}
 
 __device__ __forceinline__ long long globaltimer() {
   long long t;
@@ -639,6 +652,9 @@ struct TiledShape {
   static constexpr int kFlagOffset = kTileOffset + kRows * kTileStride * 4;
   static constexpr int kTraceOffset = kFlagOffset + 16;
   static constexpr int kSmemBytes = kTraceOffset + kTraceEvents * 8;
+  // One fp32 tile per warp of a column, laid over the stages at the last slice end.
+  static constexpr int kPartFloats = kRows * kTileStride;
+  static constexpr bool kSpreadFits = kWarpsPerCol * kPartFloats * 4 <= kTileOffset;
   static_assert(kStageBytes % 128 == 0, "stages start on 128-byte lines");
   static_assert(kKRows % kWarpsPerCol == 0 && kRowsPerWarp >= 1, "the warps of a column split the k16 rows");
   static_assert(kAChunks >= 8, "the x swizzle spans 8 chunks");
@@ -809,51 +825,84 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
     }
   };
 
-  // Every thread runs this (it has barriers).
-  auto finish_slice = [&](int slice) {
+  // Every thread runs this (it has barriers). The block's sum of the slice
+  // is ((w0 + w1) + w2) + ... over the column's warps w in order, whichever
+  // way it is formed, so every path gives the same bits.
+  auto finish_slice = [&](int slice, bool final_end) {
     const int f = slice - begin / k_tiles;  // this block's f-th slice end (trace only)
     auto mark_finish = [&](int step) {
       if (f < kTraceFinishes) mark(kTraceFinish0 + 4 * f + step);
     };
     mark_finish(0);
-    // The column's warps add into the fp32 tile one after another; acc[mt][j]
-    // holds rows g, g + 8 of m16 tile mt at columns 2c, 2c + 1 of n8 tile j.
-    const int kw = warp / Sh::kCols;
-#pragma unroll
-    for (int w = 0; w < Sh::kWarpsPerCol; ++w) {
-      if (kw == w) {
-#pragma unroll
-        for (int mt = 0; mt < MT; ++mt)
-#pragma unroll
-          for (int j = 0; j < 8; ++j)
-#pragma unroll
-            for (int h = 0; h < 2; ++h) {
-              float2* p = reinterpret_cast<float2*>(tile + (16 * mt + g + 8 * h) * Sh::kTileStride + col * 64 +
-                                                    8 * j + 2 * c);
-              float2 v = make_float2(acc[mt][j][2 * h], acc[mt][j][2 * h + 1]);
-              if (w > 0) {
-                const float2 o = *p;
-                v = make_float2(o.x + v.x, o.y + v.y);
-              }
-              *p = v;
-            }
-      }
-      __syncthreads();
-    }
-    mark_finish(1);
-    zero_acc();
     const int first = slice * k_tiles;
     const int lo = first / iters;  // the blocks whose stripes meet this slice
     const int hi = (first + k_tiles - 1) / iters;
+    // A shared slice's counter, read now so the load overlaps the warps'
+    // sums: when every other block has already arrived, this one is the last
+    // and needs neither its own slot nor the atomic.
+    int seen = -1;
+    if (lo != hi && tid == 0) seen = ld_acquire(counters + slice);
+    // acc[mt][j] holds rows g, g + 8 of m16 tile mt at columns 2c, 2c + 1 of
+    // n8 tile j. At the block's last slice end the pipeline stages are free:
+    // each warp writes its own copy there at once (spread), then readers add
+    // the copies in warp order. Otherwise the column's warps add into the
+    // fp32 tile one after another.
+    const bool spread = Sh::kSpreadFits && final_end;
+    float* parts = reinterpret_cast<float*>(smem);
+    const int kw = warp / Sh::kCols;
+    auto store_acc = [&](float* dst, bool add) {
+#pragma unroll
+      for (int mt = 0; mt < MT; ++mt)
+#pragma unroll
+        for (int j = 0; j < 8; ++j)
+#pragma unroll
+          for (int h = 0; h < 2; ++h) {
+            float2* p = reinterpret_cast<float2*>(dst + (16 * mt + g + 8 * h) * Sh::kTileStride + col * 64 + 8 * j + 2 * c);
+            float2 v = make_float2(acc[mt][j][2 * h], acc[mt][j][2 * h + 1]);
+            if (add) {
+              const float2 o = *p;
+              v = make_float2(o.x + v.x, o.y + v.y);
+            }
+            *p = v;
+          }
+    };
+    auto decide = [&]() {  // before the barrier that ends the sums
+      if (tid == 0) last_block = seen == hi - lo ? 2 : 0;  // 2: last already, skip the slot
+    };
+    if (spread) {
+      __syncthreads();  // every warp is done with the last stage
+      store_acc(parts + kw * Sh::kPartFloats, false);
+      decide();
+      __syncthreads();
+    } else {
+#pragma unroll
+      for (int w = 0; w < Sh::kWarpsPerCol; ++w) {
+        if (kw == w) store_acc(tile, w > 0);
+        if (w == Sh::kWarpsPerCol - 1) decide();
+        __syncthreads();
+      }
+    }
+    mark_finish(1);
+    zero_acc();
+    // The block's sum at 4 columns from 4 * v4 of a row.
+    auto block_sum4 = [&](int row, int v4) {
+      if (!spread) return *reinterpret_cast<const float4*>(tile + row * Sh::kTileStride + 4 * v4);
+      float4 b = *reinterpret_cast<const float4*>(parts + row * Sh::kTileStride + 4 * v4);
+#pragma unroll
+      for (int w = 1; w < Sh::kWarpsPerCol; ++w) {
+        const float4 o = *reinterpret_cast<const float4*>(parts + w * Sh::kPartFloats + row * Sh::kTileStride + 4 * v4);
+        b = make_float4(b.x + o.x, b.y + o.y, b.z + o.z, b.w + o.w);
+      }
+      return b;
+    };
     T* ys = y + slice * TILE_N;
     constexpr int kVecs = TILE_N / 8;  // 8 outputs per thread and step
     if (lo == hi) {
       for (int i = tid; i < m * kVecs; i += kTiledThreads) {
         const int row = i / kVecs;
         const int v = i % kVecs;
-        const float4* src = reinterpret_cast<const float4*>(tile + row * Sh::kTileStride + 8 * v);
         float sum[8] = {0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f};
-        add8(sum, src[0], src[1]);
+        add8(sum, block_sum4(row, 2 * v), block_sum4(row, 2 * v + 1));
         *reinterpret_cast<uint4*>(ys + static_cast<int64_t>(row) * n + 8 * v) = pack8<T>(sum);
       }
       mark_finish(2);
@@ -865,28 +914,25 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
       return;
     }
     const int64_t slot_floats = Sh::kRows * TILE_N;
-    float* mine = slots + (blockIdx.x + slice) * slot_floats;
-    for (int i = tid; i < m * TILE_N / 4; i += kTiledThreads) {
-      const int row = i / (TILE_N / 4);
-      const int v = i % (TILE_N / 4);
-      __stcg(reinterpret_cast<float4*>(mine + row * TILE_N) + v,
-             *reinterpret_cast<const float4*>(tile + row * Sh::kTileStride + 4 * v));
+    const bool early = last_block == 2;
+    if (!early) {
+      float* mine = slots + (blockIdx.x + slice) * slot_floats;
+      for (int i = tid; i < m * TILE_N / 4; i += kTiledThreads) {
+        const int row = i / (TILE_N / 4);
+        const int v = i % (TILE_N / 4);
+        __stcg(reinterpret_cast<float4*>(mine + row * TILE_N) + v, block_sum4(row, v));
+      }
+      // Release and acquire in one atomic: the barrier orders every thread's
+      // slot stores before thread 0's release (cumulative, as in CUTLASS's
+      // semaphore and Marlin's locks), and the barrier after it orders the
+      // last block's L2 reads (ld.cg) after its acquire.
+      __syncthreads();
+      if (tid == 0) last_block = atom_add_acq_rel(counters + slice, 1) == hi - lo;
+      __syncthreads();
     }
-    // Release: after the barrier, one fence by thread 0 makes every thread's
-    // slot stores visible before the counter moves (the barrier orders them
-    // before it, as in CUTLASS's semaphore and Marlin's locks). Acquire: the
-    // last block's thread 0 fences after reading the counter, and the barrier
-    // orders everyone's L2 reads (ld.cg) after that.
-    __syncthreads();
-    if (tid == 0) {
-      __threadfence();
-      last_block = atomicAdd(counters + slice, 1) == hi - lo;
-      if (last_block) __threadfence();
-    }
-    __syncthreads();
     mark_finish(2);
     if constexpr (kTrace) {
-      if (tid == 0 && last_block && f < kTraceFinishes) trace_sh[kTraceFlags] |= 1ll << f;
+      if (tid == 0 && last_block && f < kTraceFinishes) trace_sh[kTraceFlags] |= (1ll << f) | (early ? 1ll << (16 + f) : 0);
     }
     if (last_block) {
       // Slots read before any is added, so their L2 latencies overlap; fewer
@@ -903,14 +949,12 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
           for (int q = 0; q < kBatch; ++q) {
             const int blk = blk0 + q;
             if (blk > hi) break;
-            const float4* src = blk == static_cast<int>(blockIdx.x)
-                                    ? reinterpret_cast<const float4*>(tile + row * Sh::kTileStride + 8 * v)
-                                    : reinterpret_cast<const float4*>(slots + (blk + slice) * slot_floats +
-                                                                      row * TILE_N + 8 * v);
             if (blk == static_cast<int>(blockIdx.x)) {
-              part[q][0] = src[0];
-              part[q][1] = src[1];
+              part[q][0] = block_sum4(row, 2 * v);
+              part[q][1] = block_sum4(row, 2 * v + 1);
             } else {
+              const float4* src =
+                  reinterpret_cast<const float4*>(slots + (blk + slice) * slot_floats + row * TILE_N + 8 * v);
               part[q][0] = __ldcg(src);
               part[q][1] = __ldcg(src + 1);
             }
@@ -968,7 +1012,7 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
     }
     sc_cur = sc_nxt;
     s = s_next;
-    if (kr == k_tiles - 1 || t == end - 1) finish_slice(slice);
+    if (kr == k_tiles - 1 || t == end - 1) finish_slice(slice, t == end - 1);
     if (++kr == k_tiles) {
       kr = 0;
       ++slice;
