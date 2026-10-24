@@ -654,8 +654,10 @@ struct TiledShape {
   // trace build's stamps.
   static constexpr int kPartFloats = kRows * kTileStride;
   static constexpr int kMaxSmem = 163 * 1024;  // A100's opt-in limit per block
-  static constexpr bool kParallel =
-      kWarpsPerCol >= 3 && kTileOffset + (kWarpsPerCol - 1) * kPartFloats * 4 + 16 + kTraceEvents * 8 <= kMaxSmem;
+  // Not at MT 3-4: at the 255-register limit the main loop came out 5% slower
+  // per tile with it (trace, run down-d2c), more than the barriers saved.
+  static constexpr bool kParallel = MT <= 2 && kWarpsPerCol >= 3 &&
+      kTileOffset + (kWarpsPerCol - 1) * kPartFloats * 4 + 16 + kTraceEvents * 8 <= kMaxSmem;
   static constexpr int kFlagOffset = kTileOffset + (kParallel ? kWarpsPerCol - 1 : 1) * kPartFloats * 4;
   static constexpr int kTraceOffset = kFlagOffset + 16;
   static constexpr int kSmemBytes = kTraceOffset + kTraceEvents * 8;
@@ -968,7 +970,8 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
     if (last_block) {
       // Slots read before any is added, so their L2 latencies overlap: a few
       // at a time while the next tile's fragments fill the registers (fewer
-      // as MT grows; MT 4 would spill), more at the block's last slice end.
+      // as MT grows; MT 4 would spill), four at MT 1-2's last slice end (more
+      // at MT 3-4 slowed their main loop, run down-d2c).
       auto sum_slots = [&](auto batch) {
         constexpr int kBatch = decltype(batch)::value;
         for (int i = tid; i < m * kVecs; i += kTiledThreads) {
@@ -998,10 +1001,11 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
           *reinterpret_cast<uint4*>(ys + static_cast<int64_t>(row) * n + 8 * v) = pack8<T>(sum);
         }
       };
-      if (final_end) {
-        sum_slots(std::integral_constant<int, MT < 4 ? 4 : (TILE_N < 256 ? 2 : 1)>{});
+      constexpr int kBatch = MT >= 4 ? 1 : (MT == 3 ? 2 : 4);
+      if (MT <= 2 && final_end) {
+        sum_slots(std::integral_constant<int, 4>{});
       } else {
-        sum_slots(std::integral_constant<int, MT >= 4 ? 1 : (MT == 3 ? 2 : 4)>{});
+        sum_slots(std::integral_constant<int, kBatch>{});
       }
       if (tid == 0) counters[slice] = 0;  // ready for the next call
     }
