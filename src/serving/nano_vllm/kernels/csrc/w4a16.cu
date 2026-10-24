@@ -1345,6 +1345,8 @@ void launch_tiled_config(const torch::Tensor& x, const torch::Tensor& qweight, c
   const int mt = static_cast<int>((x.size(0) + 15) / 16);
   if (tile_k == 128 && tile_n == 128 && mt == 1) return launch_tiled<T, 1, 128, 128>(x, qweight, scales, counters, out, grid, trace, stream);
   if (tile_k == 128 && tile_n == 128 && mt == 2) return launch_tiled<T, 2, 128, 128>(x, qweight, scales, counters, out, grid, trace, stream);
+  if (tile_k == 128 && tile_n == 128 && mt == 3) return launch_tiled<T, 3, 128, 128>(x, qweight, scales, counters, out, grid, trace, stream);
+  if (tile_k == 128 && tile_n == 128 && mt == 4) return launch_tiled<T, 4, 128, 128>(x, qweight, scales, counters, out, grid, trace, stream);
   if (tile_k == 256 && tile_n == 128 && mt == 1) return launch_tiled<T, 1, 256, 128>(x, qweight, scales, counters, out, grid, trace, stream);
   if (tile_k == 256 && tile_n == 128 && mt == 2) return launch_tiled<T, 2, 256, 128>(x, qweight, scales, counters, out, grid, trace, stream);
   if (tile_k == 64 && tile_n == 256 && mt == 1) return launch_tiled<T, 1, 64, 256>(x, qweight, scales, counters, out, grid, trace, stream);

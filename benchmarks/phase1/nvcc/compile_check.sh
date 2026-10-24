@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # nvcc -c every kernels/csrc/*.cu for sm_80 with torch.utils.cpp_extension's flags.
-# Prints spills; REGS=<regex> also lists registers and spill bytes (stores+loads) per matching kernel:
+# Prints spills; REGS=<regex on the mangled name, e.g. tiled or Li4ELi128ELi128E> also lists registers and
+# spill bytes (stores+loads) per matching kernel:
 #   docker run --rm -e REGS=tiled -v "$PWD":/repo:ro nano-nvcc
 set -uo pipefail
 NVCC=$(ls -d /usr/local/cuda-*/bin/nvcc | head -1)

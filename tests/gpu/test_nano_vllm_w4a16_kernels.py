@@ -194,7 +194,7 @@ def test_tiled_kernel_matches_dequantized_matmul(shape, rows):
 @pytest.mark.parametrize(
     "rows,tile",
     [(5, "128x128"), (5, "256x128"), (5, "64x256"), (20, "128x128"), (20, "256x128"), (40, "64x256"),
-     (40, "64x128"), (64, "64x256")],
+     (40, "64x128"), (40, "128x128"), (64, "64x256"), (64, "128x128")],
 )
 def test_tiled_kernel_schedules_and_tiles(rows, tile, grid):
     """grid = slices gives each block one slice (no cross-block sum, the
