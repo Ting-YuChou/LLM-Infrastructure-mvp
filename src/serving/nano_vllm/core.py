@@ -467,4 +467,3 @@ def request_from_sequence(seq: Sequence) -> EngineRequest:
         sampling=replace(seq.sampling, stop=None),
         eos_token_ids=tuple(sorted(seq.eos_token_ids)),
     )
-
