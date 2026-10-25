@@ -28,6 +28,7 @@ A complete end-to-end infrastructure for large language model training and deplo
   - ✅ OpenAI-Compatible API
   - ✅ Streaming Generation Support
   - ✅ Model Quantization (INT8/INT4)
+  - ✅ [nano_vllm](src/serving/nano_vllm/README.md): an engine written from scratch, with its own Triton/CUDA kernels; decodes faster than vLLM 0.19.1 on A100 (BF16, FP8 KV, W4A16)
 
 - **Production-Ready Infrastructure**
   - ✅ API Gateway (Authentication, Rate Limiting, Routing)
