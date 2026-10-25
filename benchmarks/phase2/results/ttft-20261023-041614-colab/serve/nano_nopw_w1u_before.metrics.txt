@@ -1,0 +1,129 @@
+# HELP llm_requests_total Total number of LLM inference requests
+# TYPE llm_requests_total counter
+llm_requests_total{endpoint="/v1/completions",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct",status="success"} 554.0
+# HELP llm_requests_created Total number of LLM inference requests
+# TYPE llm_requests_created gauge
+llm_requests_created{endpoint="/v1/completions",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct",status="success"} 1.7927311891697557e+09
+# HELP llm_request_duration_seconds Request duration in seconds
+# TYPE llm_request_duration_seconds histogram
+llm_request_duration_seconds_bucket{endpoint="/v1/completions",le="0.1",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 0.0
+llm_request_duration_seconds_bucket{endpoint="/v1/completions",le="0.5",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 0.0
+llm_request_duration_seconds_bucket{endpoint="/v1/completions",le="1.0",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 0.0
+llm_request_duration_seconds_bucket{endpoint="/v1/completions",le="2.0",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 20.0
+llm_request_duration_seconds_bucket{endpoint="/v1/completions",le="5.0",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 234.0
+llm_request_duration_seconds_bucket{endpoint="/v1/completions",le="10.0",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 506.0
+llm_request_duration_seconds_bucket{endpoint="/v1/completions",le="30.0",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 554.0
+llm_request_duration_seconds_bucket{endpoint="/v1/completions",le="60.0",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 554.0
+llm_request_duration_seconds_bucket{endpoint="/v1/completions",le="+Inf",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 554.0
+llm_request_duration_seconds_count{endpoint="/v1/completions",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 554.0
+llm_request_duration_seconds_sum{endpoint="/v1/completions",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 3316.1442019939423
+# HELP llm_request_duration_seconds_created Request duration in seconds
+# TYPE llm_request_duration_seconds_created gauge
+llm_request_duration_seconds_created{endpoint="/v1/completions",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 1.7927311891681128e+09
+# HELP llm_active_requests Number of requests currently being processed
+# TYPE llm_active_requests gauge
+llm_active_requests{model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 0.0
+# HELP llm_request_queue_size Number of requests waiting in queue
+# TYPE llm_request_queue_size gauge
+llm_request_queue_size{model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 0.0
+# HELP llm_tokens_processed_total Total number of tokens processed
+# TYPE llm_tokens_processed_total counter
+llm_tokens_processed_total{model="/content/p0/models/Meta-Llama-3.1-8B-Instruct",type="prompt"} 567296.0
+llm_tokens_processed_total{model="/content/p0/models/Meta-Llama-3.1-8B-Instruct",type="completion"} 135680.0
+# HELP llm_tokens_processed_created Total number of tokens processed
+# TYPE llm_tokens_processed_created gauge
+llm_tokens_processed_created{model="/content/p0/models/Meta-Llama-3.1-8B-Instruct",type="prompt"} 1.7927311891697907e+09
+llm_tokens_processed_created{model="/content/p0/models/Meta-Llama-3.1-8B-Instruct",type="completion"} 1.792731189169803e+09
+# HELP llm_tokens_per_second Current tokens processed per second
+# TYPE llm_tokens_per_second gauge
+llm_tokens_per_second{model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 223.4617739996859
+# HELP llm_time_to_first_token_seconds Time to generate first token
+# TYPE llm_time_to_first_token_seconds histogram
+llm_time_to_first_token_seconds_bucket{le="0.01",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 0.0
+llm_time_to_first_token_seconds_bucket{le="0.05",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 33.0
+llm_time_to_first_token_seconds_bucket{le="0.1",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 129.0
+llm_time_to_first_token_seconds_bucket{le="0.2",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 212.0
+llm_time_to_first_token_seconds_bucket{le="0.5",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 448.0
+llm_time_to_first_token_seconds_bucket{le="1.0",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 489.0
+llm_time_to_first_token_seconds_bucket{le="2.0",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 521.0
+llm_time_to_first_token_seconds_bucket{le="+Inf",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 554.0
+llm_time_to_first_token_seconds_count{model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 554.0
+llm_time_to_first_token_seconds_sum{model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 270.38283014297485
+# HELP llm_time_to_first_token_seconds_created Time to generate first token
+# TYPE llm_time_to_first_token_seconds_created gauge
+llm_time_to_first_token_seconds_created{model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 1.7927311873849614e+09
+# HELP llm_inter_token_latency_seconds Time between consecutive tokens
+# TYPE llm_inter_token_latency_seconds histogram
+llm_inter_token_latency_seconds_bucket{le="0.01",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 282.0
+llm_inter_token_latency_seconds_bucket{le="0.02",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 68041.0
+llm_inter_token_latency_seconds_bucket{le="0.05",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 126417.0
+llm_inter_token_latency_seconds_bucket{le="0.1",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 135080.0
+llm_inter_token_latency_seconds_bucket{le="0.2",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 135115.0
+llm_inter_token_latency_seconds_bucket{le="0.5",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 135126.0
+llm_inter_token_latency_seconds_bucket{le="+Inf",model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 135126.0
+llm_inter_token_latency_seconds_count{model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 135126.0
+llm_inter_token_latency_seconds_sum{model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 3045.6773161888123
+# HELP llm_inter_token_latency_seconds_created Time between consecutive tokens
+# TYPE llm_inter_token_latency_seconds_created gauge
+llm_inter_token_latency_seconds_created{model="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 1.7927311874474292e+09
+# HELP llm_model_load_duration_seconds Time taken to load model
+# TYPE llm_model_load_duration_seconds summary
+# HELP llm_model_memory_bytes Model memory usage in bytes
+# TYPE llm_model_memory_bytes gauge
+# HELP llm_kv_cache_usage_percent KV cache usage percentage
+# TYPE llm_kv_cache_usage_percent gauge
+# HELP llm_engine_kv_blocks_total Engine stat kv_blocks_total
+# TYPE llm_engine_kv_blocks_total gauge
+llm_engine_kv_blocks_total{model="nano-llm-local"} 9942.0
+# HELP llm_engine_kv_blocks_free Engine stat kv_blocks_free
+# TYPE llm_engine_kv_blocks_free gauge
+llm_engine_kv_blocks_free{model="nano-llm-local"} 16.0
+# HELP llm_engine_kv_blocks_cached Engine stat kv_blocks_cached
+# TYPE llm_engine_kv_blocks_cached gauge
+llm_engine_kv_blocks_cached{model="nano-llm-local"} 9926.0
+# HELP llm_engine_kv_blocks_used Engine stat kv_blocks_used
+# TYPE llm_engine_kv_blocks_used gauge
+llm_engine_kv_blocks_used{model="nano-llm-local"} 0.0
+# HELP llm_engine_prefix_query_tokens Engine stat prefix_query_tokens
+# TYPE llm_engine_prefix_query_tokens gauge
+llm_engine_prefix_query_tokens{model="nano-llm-local"} 567296.0
+# HELP llm_engine_prefix_hit_tokens Engine stat prefix_hit_tokens
+# TYPE llm_engine_prefix_hit_tokens gauge
+llm_engine_prefix_hit_tokens{model="nano-llm-local"} 286032.0
+# HELP llm_engine_prefix_hit_rate Engine stat prefix_hit_rate
+# TYPE llm_engine_prefix_hit_rate gauge
+llm_engine_prefix_hit_rate{model="nano-llm-local"} 0.5042023916967509
+# HELP llm_engine_recompute_query_tokens Engine stat recompute_query_tokens
+# TYPE llm_engine_recompute_query_tokens gauge
+llm_engine_recompute_query_tokens{model="nano-llm-local"} 0.0
+# HELP llm_engine_recompute_hit_tokens Engine stat recompute_hit_tokens
+# TYPE llm_engine_recompute_hit_tokens gauge
+llm_engine_recompute_hit_tokens{model="nano-llm-local"} 0.0
+# HELP llm_engine_evicted_blocks Engine stat evicted_blocks
+# TYPE llm_engine_evicted_blocks gauge
+llm_engine_evicted_blocks{model="nano-llm-local"} 12850.0
+# HELP llm_engine_kv_internal_fragmentation Engine stat kv_internal_fragmentation
+# TYPE llm_engine_kv_internal_fragmentation gauge
+llm_engine_kv_internal_fragmentation{model="nano-llm-local"} 0.0
+# HELP llm_engine_num_running Engine stat num_running
+# TYPE llm_engine_num_running gauge
+llm_engine_num_running{model="nano-llm-local"} 0.0
+# HELP llm_engine_num_waiting Engine stat num_waiting
+# TYPE llm_engine_num_waiting gauge
+llm_engine_num_waiting{model="nano-llm-local"} 0.0
+# HELP llm_gpu_utilization_percent GPU utilization percentage
+# TYPE llm_gpu_utilization_percent gauge
+# HELP llm_gpu_memory_used_bytes GPU memory used in bytes
+# TYPE llm_gpu_memory_used_bytes gauge
+# HELP llm_gpu_temperature_celsius GPU temperature in Celsius
+# TYPE llm_gpu_temperature_celsius gauge
+# HELP llm_errors_total Total number of errors
+# TYPE llm_errors_total counter
+# HELP llm_timeouts_total Total number of request timeouts
+# TYPE llm_timeouts_total counter
+# HELP llm_training_step Current training step
+# TYPE llm_training_step gauge
+# HELP llm_training_loss Current training loss
+# TYPE llm_training_loss gauge
+# HELP llm_learning_rate Current learning rate
+# TYPE llm_learning_rate gauge

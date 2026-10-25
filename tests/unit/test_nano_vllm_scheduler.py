@@ -25,7 +25,7 @@ def test_block_manager_allocates_releases_and_reuses_prefix_cache():
     cached = manager.can_allocate(seq)
     manager.allocate(seq, cached)
     seq.num_scheduled_tokens = 5
-    manager.hash_blocks(seq)
+    manager.commit(seq)
 
     assert cached == 0
     assert len(seq.block_table) == 2
@@ -38,7 +38,7 @@ def test_block_manager_allocates_releases_and_reuses_prefix_cache():
 
     assert cached_clone == 1
     assert clone.block_table[0] == first_block
-    assert manager.blocks[first_block].ref_count == 1
+    assert manager.num_cached_blocks == 0  # the hit is locked by clone again
 
 
 def test_scheduler_chunked_prefill_and_decode_batching():
@@ -102,21 +102,28 @@ def test_scheduler_preempts_youngest_when_decode_needs_block_without_capacity():
     assert list(scheduler.waiting) == [younger]
 
 
+def _tree(node):
+    return [
+        (child.key, list(child.blocks), child.lock_ref, _tree(child))
+        for child in node.children.values()
+    ]
+
+
 def _blocks_snapshot(manager):
     return (
         list(manager.free_block_ids),
-        set(manager.used_block_ids),
-        dict(manager.hash_to_block_id),
-        [(block.ref_count, block.content_hash) for block in manager.blocks],
+        manager.num_cached_blocks,
+        manager.stats_dict(),
+        _tree(manager.root),
     )
 
 
 def _fill_prefix_cache(manager):
-    """Leave blocks 0/1 hashed for tokens 1..8 but free (ref_count 0)."""
+    """Leave blocks 0/1 cached in the tree for tokens 1..8 but unlocked."""
     cached = _seq([1, 2, 3, 4, 5, 6, 7, 8, 9])
     manager.allocate(cached, manager.can_allocate(cached))
     cached.num_scheduled_tokens = cached.num_tokens
-    manager.hash_blocks(cached)
+    manager.commit(cached)
     manager.deallocate(cached)
     other = _seq([50])
     manager.allocate(other, manager.can_allocate(other))
@@ -260,9 +267,46 @@ def test_sequence_finish_reasons_cover_eos_lists_stop_ids_and_length():
     assert seq.should_finish(4) and seq.finish_reason == "length"
 
 
-def test_prefix_hash_chain_never_overflows():
-    # Each hash is fed back as the next block's 8-byte signed prefix.
-    previous = -1
-    for block_index in range(256):
-        previous = BlockManager.compute_hash([block_index, 1, 2, 3], previous)
-        assert -(2**63) <= previous < 2**63
+def test_mixed_policy_decodes_first_and_fills_the_budget_with_prefill_chunks():
+    manager = BlockManager(num_blocks=16, block_size=4, enable_prefix_cache=False)
+    scheduler = Scheduler(manager, max_num_seqs=4, max_num_batched_tokens=6, policy="mixed")
+    a = _seq([1, 2, 3], max_tokens=8)
+    scheduler.add(a)
+    scheduled, has_prefill = scheduler.schedule()
+    assert scheduled == [a] and has_prefill
+    scheduler.postprocess(scheduled, [7])
+
+    b = _seq([10, 11, 12, 13, 14, 15, 16, 17], max_tokens=8)
+    scheduler.add(b)
+    scheduled, has_prefill = scheduler.schedule()
+    # a decodes (1 token); b gets the other 5 tokens of the budget.
+    assert scheduled == [a, b] and has_prefill
+    assert (a.is_prefill, a.num_scheduled_tokens) == (False, 1)
+    assert (b.is_prefill, b.num_scheduled_tokens) == (True, 5)
+    assert scheduler.postprocess(scheduled, [8, 99]) == [(a, 8)]  # b's chunk samples nothing
+
+    scheduled, has_prefill = scheduler.schedule()
+    assert scheduled == [a, b] and has_prefill and b.num_scheduled_tokens == 3
+    assert scheduler.postprocess(scheduled, [9, 20]) == [(a, 9), (b, 20)]
+
+    scheduled, has_prefill = scheduler.schedule()
+    assert scheduled == [a, b] and not has_prefill
+
+
+def test_decode_frees_a_partial_prefill_before_preempting_running_sequences():
+    manager = BlockManager(num_blocks=5, block_size=2, enable_prefix_cache=False)
+    scheduler = Scheduler(manager, max_num_seqs=2, max_num_batched_tokens=3, policy="mixed")
+    a = _seq([1, 2], max_tokens=8, block_size=2)
+    scheduler.add(a)
+    scheduler.postprocess(scheduler.schedule()[0], [3])  # a: 3 tokens, 2 blocks at decode
+    b = _seq([4, 5, 6, 7, 8, 9], max_tokens=2, block_size=2)
+    scheduler.add(b)
+    scheduler.postprocess(scheduler.schedule()[0], [10, 0])  # b admitted: 3 blocks, none free
+    scheduler.postprocess(scheduler.schedule()[0], [11, 0])  # a now has 5 tokens
+    assert manager.num_free_blocks == 0 and b.block_table
+
+    scheduled, _ = scheduler.schedule()  # a needs a third block
+
+    assert scheduled == [a] and a.status == SequenceStatus.RUNNING
+    assert b.block_table == [] and b.num_cached_tokens == 0
+    assert list(scheduler.waiting) == [b]

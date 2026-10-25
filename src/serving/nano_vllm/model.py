@@ -3,16 +3,34 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 import torch
 import torch.nn.functional as F
 
-from .kernels import apply_rope, causal_attention, rms_norm, silu_mul
+from .kernels import (
+    apply_rope,
+    causal_attention,
+    fused_add_rms_norm,
+    linear,
+    W4A16Weight,
+    load_cuda_extension,
+    paged_decode_attention,
+    paged_prefill_attention,
+    rms_norm,
+    rope_and_cache_write,
+    quantize_w4a16,
+    rope_cos_sin,
+    silu_and_mul,
+)
+from .kernels.fp8 import KV_CACHE_DTYPES
 from .kernels.rotary import compute_inv_freq, validate_rope_scaling
+from .kernels.w4a16 import W4A16_CONFIG, w4a16_tiled_supported, w4a16_workspace
 from .kv_cache import PagedKVCache, StaticKVCache
+from .metadata import BatchMetadata, build_batch
 
 
 def torch_dtype_from_string(
@@ -78,7 +96,13 @@ class NanoLlamaConfig:
                 f"got model_type={model_type!r}"
             )
         heads = int(data["num_attention_heads"])
+        # transformers >= 5 writes rope_theta and the scaling keys together
+        # under "rope_parameters" instead of "rope_theta" / "rope_scaling".
+        rope_parameters = dict(data.get("rope_parameters") or {})
+        rope_theta = data.get("rope_theta", rope_parameters.pop("rope_theta", 10000.0))
         rope_scaling = data.get("rope_scaling")
+        if not rope_scaling and rope_parameters.get("rope_type", "default") != "default":
+            rope_scaling = rope_parameters
         return cls(
             vocab_size=int(data["vocab_size"]),
             hidden_size=int(data["hidden_size"]),
@@ -88,7 +112,7 @@ class NanoLlamaConfig:
             num_key_value_heads=int(data.get("num_key_value_heads", heads)),
             max_position_embeddings=int(data.get("max_position_embeddings", 2048)),
             rms_norm_eps=float(data.get("rms_norm_eps", 1e-6)),
-            rope_theta=float(data.get("rope_theta", 10000.0)),
+            rope_theta=float(rope_theta),
             rope_scaling=dict(rope_scaling) if rope_scaling else None,
             # LlamaConfig defaults to untied; only tie when the checkpoint says so.
             tie_word_embeddings=bool(data.get("tie_word_embeddings", False)),
@@ -126,6 +150,71 @@ def _first_floating_dtype(weights: Dict[str, torch.Tensor]) -> Optional[torch.dt
     return None
 
 
+def _concat_projections(
+    weights: Dict[str, torch.Tensor], prefixes: list[str], fused: str
+) -> None:
+    """Replace several linear layers that read the same input with one."""
+    weights[f"{fused}.weight"] = torch.cat(
+        [weights.pop(f"{prefix}.weight") for prefix in prefixes]
+    )
+    biases = [weights.pop(f"{prefix}.bias", None) for prefix in prefixes]
+    if any(bias is not None for bias in biases):
+        if any(bias is None for bias in biases):
+            raise ValueError(f"{fused}: either all or none of {prefixes} need a bias")
+        weights[f"{fused}.bias"] = torch.cat(biases)
+
+
+def fuse_projections(
+    weights: Dict[str, torch.Tensor], num_layers: int
+) -> Dict[str, torch.Tensor]:
+    """q/k/v -> ``self_attn.qkv_proj`` and gate/up -> ``mlp.gate_up_proj``.
+
+    One GEMM instead of three (and two) per layer. Done on the checkpoint's
+    device (CPU) before weights move, so the GPU never holds both copies.
+    """
+    weights = dict(weights)
+    for layer_idx in range(num_layers):
+        attn = f"model.layers.{layer_idx}.self_attn"
+        mlp = f"model.layers.{layer_idx}.mlp"
+        _concat_projections(
+            weights, [f"{attn}.q_proj", f"{attn}.k_proj", f"{attn}.v_proj"],
+            f"{attn}.qkv_proj",
+        )
+        _concat_projections(
+            weights, [f"{mlp}.gate_proj", f"{mlp}.up_proj"], f"{mlp}.gate_up_proj"
+        )
+    return weights
+
+
+WEIGHT_QUANT_MODES = ("none", "w4a16")
+# The decoder-layer projections; embeddings, norms and lm_head stay in the
+# model dtype under weight_quant="w4a16".
+QUANTIZED_LINEARS = (
+    "self_attn.qkv_proj.weight",
+    "self_attn.o_proj.weight",
+    "mlp.gate_up_proj.weight",
+    "mlp.down_proj.weight",
+)
+
+Linear = Union[torch.Tensor, W4A16Weight]
+
+
+@dataclass(frozen=True)
+class _LayerWeights:
+    """Per-layer tensors, looked up once instead of by name on every call."""
+
+    input_norm: torch.Tensor
+    qkv: Linear
+    qkv_bias: Optional[torch.Tensor]
+    o_proj: Linear
+    o_bias: Optional[torch.Tensor]
+    post_norm: torch.Tensor
+    gate_up: Linear
+    gate_up_bias: Optional[torch.Tensor]
+    down: Linear
+    down_bias: Optional[torch.Tensor]
+
+
 class NanoLlamaForCausalLM:
     """Small, explicit Llama forward path for learning serving internals."""
 
@@ -137,22 +226,60 @@ class NanoLlamaForCausalLM:
         dtype: torch.dtype,
         use_triton: bool = True,
         attention_backend: str = "torch",
+        max_model_len: Optional[int] = None,
+        linear_backend: str = "torch",
+        weight_quant: str = "none",
+        kv_cache_dtype: str = "auto",
     ) -> None:
+        if weight_quant not in WEIGHT_QUANT_MODES:
+            raise ValueError(f"weight_quant must be one of: {', '.join(WEIGHT_QUANT_MODES)}")
+        if kv_cache_dtype not in KV_CACHE_DTYPES:
+            raise ValueError(f"kv_cache_dtype must be one of: {', '.join(KV_CACHE_DTYPES)}")
         self.config = config
         self.device = device
         self.dtype = dtype if device.type == "cuda" else torch.float32
         self.use_triton = use_triton
         self.attention_backend = attention_backend
+        self.linear_backend = linear_backend
+        self.weight_quant = weight_quant
+        # The paged caches this model makes (new_paged_cache): "fp8" stores
+        # e4m3 codes with a scale per vector (kernels/fp8.py).
+        self.kv_cache_dtype = kv_cache_dtype
+        if device.type == "cuda":
+            # Build the extensions now, never inside a CUDA-graph capture.
+            if linear_backend == "cuda":
+                load_cuda_extension()
+            if weight_quant == "w4a16":
+                load_cuda_extension("w4a16")
+        self._validate_required_weights(weights)
+        weights = fuse_projections(weights, config.num_hidden_layers)
         self.weights = {
-            name: self._move_weight(tensor) for name, tensor in weights.items()
+            name: self._load_weight(name, tensor) for name, tensor in weights.items()
         }
-        self._validate_required_weights()
+        quantized = [w for w in self.weights.values() if isinstance(w, W4A16Weight)]
+        if quantized and device.type == "cuda":
+            # Split-K buffers, before any CUDA graph is captured.
+            w4a16_workspace(device, max(w.shape[0] for w in quantized))
         self.lm_head_weight = self._resolve_lm_head()
+        self.layers = [
+            self._layer_weights(layer_idx)
+            for layer_idx in range(config.num_hidden_layers)
+        ]
+        q_size = config.num_attention_heads * config.head_dim
+        kv_size = config.num_key_value_heads * config.head_dim
+        self._qkv_sizes = [q_size, kv_size, kv_size]
         self.inv_freq = compute_inv_freq(
             config.head_dim,
             theta=config.rope_theta,
             rope_scaling=config.rope_scaling,
             device=device,
+        )
+        # Indexed by position in forward_batch instead of recomputing cos/sin
+        # in every layer.
+        self.rope_cos, self.rope_sin = rope_cos_sin(
+            self.inv_freq,
+            max_model_len or config.max_position_embeddings,
+            self.dtype,
         )
 
     @classmethod
@@ -163,6 +290,10 @@ class NanoLlamaForCausalLM:
         device: str = "auto",
         use_triton: bool = True,
         attention_backend: str = "torch",
+        max_model_len: Optional[int] = None,
+        linear_backend: str = "torch",
+        weight_quant: str = "none",
+        kv_cache_dtype: str = "auto",
     ) -> "NanoLlamaForCausalLM":
         path = Path(model_path)
         if not path.is_dir():
@@ -179,6 +310,10 @@ class NanoLlamaForCausalLM:
             dtype=torch_dtype_from_string(dtype, checkpoint_dtype),
             use_triton=use_triton,
             attention_backend=attention_backend,
+            max_model_len=max_model_len,
+            linear_backend=linear_backend,
+            weight_quant=weight_quant,
+            kv_cache_dtype=kv_cache_dtype,
         )
 
     def new_cache(self, batch_size: int, max_seq_len: int) -> StaticKVCache:
@@ -205,6 +340,7 @@ class NanoLlamaForCausalLM:
             head_dim=self.config.head_dim,
             dtype=self.dtype,
             device=self.device,
+            kv_cache_dtype=self.kv_cache_dtype,
         )
 
     @torch.inference_mode()
@@ -228,17 +364,16 @@ class NanoLlamaForCausalLM:
         )
         x = self.weights["model.embed_tokens.weight"][input_ids.to(self.device)]
 
-        for layer_idx in range(self.config.num_hidden_layers):
+        for layer_idx, layer in enumerate(self.layers):
             residual = x
             x_norm = rms_norm(
                 x,
-                self._weight(f"model.layers.{layer_idx}.input_layernorm.weight"),
+                layer.input_norm,
                 eps=self.config.rms_norm_eps,
                 use_triton=self.use_triton,
             )
-            query = self._linear(x_norm, f"model.layers.{layer_idx}.self_attn.q_proj")
-            key = self._linear(x_norm, f"model.layers.{layer_idx}.self_attn.k_proj")
-            value = self._linear(x_norm, f"model.layers.{layer_idx}.self_attn.v_proj")
+            qkv = linear(x_norm, layer.qkv, layer.qkv_bias)
+            query, key, value = qkv.split(self._qkv_sizes, dim=-1)
             query = self._shape_heads(query, self.config.num_attention_heads)
             key = self._shape_heads(key, self.config.num_key_value_heads)
             value = self._shape_heads(value, self.config.num_key_value_heads)
@@ -265,25 +400,8 @@ class NanoLlamaForCausalLM:
                 use_triton=self.use_triton,
             )
             attn = attn.transpose(1, 2).contiguous().view(batch_size, seq_len, -1)
-            x = residual + self._linear(
-                attn, f"model.layers.{layer_idx}.self_attn.o_proj"
-            )
-
-            residual = x
-            x_norm = rms_norm(
-                x,
-                self._weight(
-                    f"model.layers.{layer_idx}.post_attention_layernorm.weight"
-                ),
-                eps=self.config.rms_norm_eps,
-                use_triton=self.use_triton,
-            )
-            gate = self._linear(x_norm, f"model.layers.{layer_idx}.mlp.gate_proj")
-            up = self._linear(x_norm, f"model.layers.{layer_idx}.mlp.up_proj")
-            x = residual + self._linear(
-                silu_mul(gate, up, use_triton=self.use_triton),
-                f"model.layers.{layer_idx}.mlp.down_proj",
-            )
+            x = residual + linear(attn, layer.o_proj, layer.o_bias)
+            x = x + self._mlp(x, layer)
 
         x = rms_norm(
             x,
@@ -292,6 +410,241 @@ class NanoLlamaForCausalLM:
             use_triton=self.use_triton,
         )
         return F.linear(x, self.lm_head_weight)
+
+    @torch.inference_mode()
+    def forward_batch(
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        cache: PagedKVCache,
+        metadata: BatchMetadata,
+    ) -> torch.Tensor:
+        """Forward over a packed scheduler batch on the paged KV cache.
+
+        Returns logits for the rows in ``metadata.logits_indices`` (all rows
+        when it is None). Nothing here reads a device value back to the host.
+
+        The pass is split at each attention: :meth:`forward_head` runs up to
+        layer 0's attention, :meth:`forward_between` from layer i's attention
+        output to layer i+1's query, :meth:`forward_tail` from the last
+        attention output to the logits. Everything but the attention depends
+        only on the token count, so the model runner captures these pieces in
+        CUDA graphs per token count and runs the attention eagerly between
+        them (piecewise graphs, for steps with prefill rows).
+        """
+        query, residual, rope = self.forward_head(input_ids, positions, cache, metadata.slot_mapping)
+        last = len(self.layers) - 1
+        for layer_idx in range(last):
+            attn = self.attention(layer_idx, query, cache, metadata)
+            query, residual = self.forward_between(
+                layer_idx, attn, residual, rope, cache, metadata.slot_mapping
+            )
+        attn = self.attention(last, query, cache, metadata)
+        return self.forward_tail(attn, residual, metadata.logits_indices)
+
+    def forward_head(
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        cache: PagedKVCache,
+        slot_mapping: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+        """Embedding through layer 0's query: (query, residual, (cos, sin))."""
+        if self.attention_backend not in {"torch", "triton"}:
+            raise NotImplementedError(
+                "nano-vLLM's paged path supports the torch and triton attention "
+                "backends; flash_attn is not implemented."
+            )
+        rope = (self.rope_cos[positions], self.rope_sin[positions])  # [tokens, head_dim]
+        # x is each sublayer's output; fused_add_rms_norm folds it into the
+        # residual stream and normalizes for the next sublayer in one pass.
+        residual = self.weights["model.embed_tokens.weight"][input_ids]
+        x_norm = rms_norm(
+            residual, self.layers[0].input_norm, eps=self.config.rms_norm_eps, use_triton=self.use_triton
+        )
+        return self._query(0, x_norm, rope, cache, slot_mapping), residual, rope
+
+    def forward_between(
+        self,
+        layer_idx: int,
+        attn: torch.Tensor,
+        residual: torch.Tensor,
+        rope: tuple[torch.Tensor, torch.Tensor],
+        cache: PagedKVCache,
+        slot_mapping: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Layer ``layer_idx``'s attention output through layer + 1's query."""
+        x, residual = self._finish_layer(layer_idx, attn, residual)
+        x_norm, residual = fused_add_rms_norm(
+            x,
+            residual,
+            self.layers[layer_idx + 1].input_norm,
+            eps=self.config.rms_norm_eps,
+            use_triton=self.use_triton,
+        )
+        return self._query(layer_idx + 1, x_norm, rope, cache, slot_mapping), residual
+
+    def forward_tail(
+        self, attn: torch.Tensor, residual: torch.Tensor, logits_indices: Optional[torch.Tensor]
+    ) -> torch.Tensor:
+        """The last attention output to logits, for ``logits_indices`` (all rows if None)."""
+        x, residual = self._finish_layer(len(self.layers) - 1, attn, residual)
+        if logits_indices is not None:
+            x = x[logits_indices]
+            residual = residual[logits_indices]
+        x_norm, _ = fused_add_rms_norm(
+            x,
+            residual,
+            self._weight("model.norm.weight"),
+            eps=self.config.rms_norm_eps,
+            use_triton=self.use_triton,
+        )
+        return self._linear(x_norm, self.lm_head_weight)
+
+    def attention(
+        self,
+        layer_idx: int,
+        query: torch.Tensor,
+        cache: PagedKVCache,
+        metadata: BatchMetadata,
+        out: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """Paged attention of layer ``layer_idx`` (into ``out`` when given)."""
+        return self._paged_attention(
+            query, cache.keys[layer_idx], cache.values[layer_idx], metadata, out=out,
+            key_scales=cache.key_scales[layer_idx], value_scales=cache.value_scales[layer_idx],
+        )
+
+    def _query(
+        self,
+        layer_idx: int,
+        x_norm: torch.Tensor,
+        rope: tuple[torch.Tensor, torch.Tensor],
+        cache: PagedKVCache,
+        slot_mapping: torch.Tensor,
+    ) -> torch.Tensor:
+        """QKV projection, RoPE, and the new keys/values written to the cache."""
+        layer = self.layers[layer_idx]
+        qkv = self._linear(x_norm, layer.qkv, layer.qkv_bias)
+        return rope_and_cache_write(
+            qkv,
+            rope[0],
+            rope[1],
+            cache.keys[layer_idx],
+            cache.values[layer_idx],
+            slot_mapping,
+            self.config.num_attention_heads,
+            self.config.num_key_value_heads,
+            use_triton=self.attention_backend == "triton",
+            key_scales=cache.key_scales[layer_idx],
+            value_scales=cache.value_scales[layer_idx],
+        )
+
+    def _finish_layer(
+        self, layer_idx: int, attn: torch.Tensor, residual: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """o_proj, residual + post-attention norm and the MLP: (x, residual)."""
+        layer = self.layers[layer_idx]
+        x = self._linear(attn.reshape(attn.shape[0], -1), layer.o_proj, layer.o_bias)
+        x_norm, residual = fused_add_rms_norm(
+            x, residual, layer.post_norm, eps=self.config.rms_norm_eps, use_triton=self.use_triton
+        )
+        gate_up = self._linear(x_norm, layer.gate_up, layer.gate_up_bias)
+        x = self._linear(
+            silu_and_mul(gate_up, use_triton=self.use_triton), layer.down, layer.down_bias
+        )
+        return x, residual
+
+    def _linear(
+        self, x: torch.Tensor, weight: torch.Tensor, bias: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        return linear(x, weight, bias, backend=self.linear_backend)
+
+    def _paged_attention(
+        self,
+        query: torch.Tensor,
+        key_cache: torch.Tensor,
+        value_cache: torch.Tensor,
+        metadata: BatchMetadata,
+        out: Optional[torch.Tensor] = None,
+        key_scales: Optional[torch.Tensor] = None,
+        value_scales: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        scale = 1.0 / math.sqrt(self.config.head_dim)
+        use_triton = self.attention_backend == "triton"
+        scales = dict(key_scales=key_scales, value_scales=value_scales)
+        if metadata.decode_only:
+            return paged_decode_attention(
+                query,
+                key_cache,
+                value_cache,
+                metadata.block_tables,
+                metadata.context_lens,
+                scale,
+                use_triton=use_triton,
+                out=out,
+                **scales,
+            )
+        decode_rows = metadata.num_decode_rows
+        if decode_rows == 0:
+            return paged_prefill_attention(
+                query,
+                key_cache,
+                value_cache,
+                metadata.block_tables,
+                metadata.cu_seqlens_q,
+                metadata.context_lens,
+                metadata.query_lens,
+                metadata.context_lens_host,
+                scale,
+                use_triton=use_triton,
+                out=out,
+                **scales,
+            )
+        # Mixed batch: the decode rows come first (one token each, so token i
+        # is row i) and take the split-KV decode kernel; the prefill rows
+        # after them take the varlen prefill kernel, with their own aligned
+        # copies of the per-row fields (see build_batch).
+        if out is None:
+            out = torch.empty_like(query)
+        paged_decode_attention(
+            query[:decode_rows],
+            key_cache,
+            value_cache,
+            metadata.block_tables[:decode_rows],
+            metadata.context_lens[:decode_rows],
+            scale,
+            use_triton=use_triton,
+            out=out[:decode_rows],
+            **scales,
+        )
+        paged_prefill_attention(
+            query[decode_rows:],
+            key_cache,
+            value_cache,
+            metadata.prefill_block_tables,
+            metadata.prefill_cu_seqlens_q,
+            metadata.prefill_context_lens,
+            metadata.query_lens[decode_rows:],
+            metadata.context_lens_host[decode_rows:],
+            scale,
+            use_triton=use_triton,
+            out=out[decode_rows:],
+            **scales,
+        )
+        return out
+
+    def _mlp(self, x: torch.Tensor, layer: _LayerWeights) -> torch.Tensor:
+        x_norm = rms_norm(
+            x,
+            layer.post_norm,
+            eps=self.config.rms_norm_eps,
+            use_triton=self.use_triton,
+        )
+        gate_up = linear(x_norm, layer.gate_up, layer.gate_up_bias)
+        return linear(
+            silu_and_mul(gate_up, use_triton=self.use_triton), layer.down, layer.down_bias
+        )
 
     @torch.inference_mode()
     def forward_paged(
@@ -305,120 +658,36 @@ class NanoLlamaForCausalLM:
         query_lens: list[int],
         is_prefill: bool,
     ) -> torch.Tensor:
-        """Forward over a scheduler batch using paged KV cache metadata."""
-        del is_prefill
-        if self.attention_backend != "torch":
-            raise NotImplementedError(
-                "nano-vLLM v0.2 implements the paged KV contract with the "
-                "PyTorch attention backend. flash_attn is reserved for the "
-                "GPU fast-path phase."
-            )
+        """Per-row logits for a batch given as tensors (the pre-metadata API).
+
+        Kept for tests and scripts that build batches by hand: it moves the
+        tensors to the host, builds BatchMetadata and runs forward_batch over
+        every row. block_tables may be padded with -1.
+        """
         if input_ids.ndim != 1:
             raise ValueError("forward_paged expects flat input_ids")
         if positions.shape != input_ids.shape:
             raise ValueError("positions must match input_ids shape")
         if slot_mapping.shape != input_ids.shape:
             raise ValueError("slot_mapping must match input_ids shape")
-        if sum(query_lens) != input_ids.numel():
-            raise ValueError("query_lens must sum to the flat token count")
-
-        input_ids = input_ids.to(self.device)
-        positions = positions.to(self.device)
-        slot_mapping = slot_mapping.to(self.device)
-        block_tables = block_tables.to(self.device)
-        context_lens = context_lens.to(self.device)
-        x = self.weights["model.embed_tokens.weight"][input_ids]
-        query_offsets = self._query_offsets(query_lens)
-
-        for layer_idx in range(self.config.num_hidden_layers):
-            residual = x
-            x_norm = rms_norm(
-                x,
-                self._weight(f"model.layers.{layer_idx}.input_layernorm.weight"),
-                eps=self.config.rms_norm_eps,
-                use_triton=self.use_triton,
-            )
-            query = self._linear(x_norm, f"model.layers.{layer_idx}.self_attn.q_proj")
-            key = self._linear(x_norm, f"model.layers.{layer_idx}.self_attn.k_proj")
-            value = self._linear(x_norm, f"model.layers.{layer_idx}.self_attn.v_proj")
-            query = query.view(
-                -1,
-                self.config.num_attention_heads,
-                self.config.head_dim,
-            )
-            key = key.view(-1, self.config.num_key_value_heads, self.config.head_dim)
-            value = value.view(
-                -1, self.config.num_key_value_heads, self.config.head_dim
-            )
-
-            query_segments = []
-            key_segments = []
-            for start, end in query_offsets:
-                q_seg = query[start:end].transpose(0, 1).unsqueeze(0)
-                k_seg = key[start:end].transpose(0, 1).unsqueeze(0)
-                q_seg, k_seg = apply_rope(
-                    q_seg,
-                    k_seg,
-                    positions=positions[start:end],
-                    theta=self.config.rope_theta,
-                    use_triton=self.use_triton,
-                    inv_freq=self.inv_freq,
-                )
-                query_segments.append(q_seg.squeeze(0).transpose(0, 1))
-                key_segments.append(k_seg.squeeze(0).transpose(0, 1))
-            query = torch.cat(query_segments, dim=0)
-            key = torch.cat(key_segments, dim=0)
-            cache.update(layer_idx, slot_mapping, key, value)
-
-            attn_segments = []
-            for seq_index, (start, end) in enumerate(query_offsets):
-                seq_query = query[start:end].transpose(0, 1).unsqueeze(0)
-                seq_key, seq_value = cache.read_sequence(
-                    layer_idx,
-                    block_tables[seq_index],
-                    int(context_lens[seq_index].item()),
-                )
-                seq_key = self._repeat_kv(seq_key)
-                seq_value = self._repeat_kv(seq_value)
-                attn = causal_attention(
-                    seq_query,
-                    seq_key,
-                    seq_value,
-                    query_positions=positions[start:end],
-                    use_triton=self.use_triton,
-                )
-                attn_segments.append(attn.squeeze(0).transpose(0, 1))
-            attn = (
-                torch.cat(attn_segments, dim=0).contiguous().view(input_ids.numel(), -1)
-            )
-            x = residual + self._linear(
-                attn,
-                f"model.layers.{layer_idx}.self_attn.o_proj",
-            )
-
-            residual = x
-            x_norm = rms_norm(
-                x,
-                self._weight(
-                    f"model.layers.{layer_idx}.post_attention_layernorm.weight"
-                ),
-                eps=self.config.rms_norm_eps,
-                use_triton=self.use_triton,
-            )
-            gate = self._linear(x_norm, f"model.layers.{layer_idx}.mlp.gate_proj")
-            up = self._linear(x_norm, f"model.layers.{layer_idx}.mlp.up_proj")
-            x = residual + self._linear(
-                silu_mul(gate, up, use_triton=self.use_triton),
-                f"model.layers.{layer_idx}.mlp.down_proj",
-            )
-
-        x = rms_norm(
-            x,
-            self._weight("model.norm.weight"),
-            eps=self.config.rms_norm_eps,
-            use_triton=self.use_triton,
+        tables = [
+            [int(block) for block in row if int(block) >= 0]
+            for row in block_tables.tolist()
+        ]
+        input_ids_t, positions_t, metadata = build_batch(
+            input_ids=input_ids.tolist(),
+            positions=positions.tolist(),
+            slots=slot_mapping.tolist(),
+            block_tables=tables,
+            context_lens=context_lens.tolist(),
+            query_lens=list(query_lens),
+            is_prefill=is_prefill,
+            null_block=cache.null_block,
+            num_slots=cache.total_slots,
+            device=self.device,
+            all_logits=True,
         )
-        return F.linear(x, self.lm_head_weight)
+        return self.forward_batch(input_ids_t, positions_t, cache, metadata)
 
     def _resolve_lm_head(self) -> torch.Tensor:
         if self.config.tie_word_embeddings:
@@ -441,10 +710,34 @@ class NanoLlamaForCausalLM:
             return tensor.to(device=self.device, dtype=self.dtype)
         return tensor.to(device=self.device)
 
-    def _linear(self, x: torch.Tensor, prefix: str) -> torch.Tensor:
-        weight = self._weight(f"{prefix}.weight")
-        bias = self.weights.get(f"{prefix}.bias")
-        return F.linear(x, weight, bias)
+    def _load_weight(self, name: str, tensor: torch.Tensor) -> torch.Tensor | W4A16Weight:
+        """Move one checkpoint tensor; quantize it here under weight_quant.
+
+        One weight at a time, so the full-precision copy of a quantized
+        projection is on the device only while it is being quantized. The
+        layout follows W4A16_CONFIG["layout"]; a shape the tiled kernel
+        cannot take stays in rows.
+        """
+        moved = self._move_weight(tensor)
+        if self.weight_quant == "w4a16" and name.endswith(QUANTIZED_LINEARS):
+            tiled = W4A16_CONFIG["layout"] == "tiled" and w4a16_tiled_supported(*moved.shape)
+            return quantize_w4a16(moved, layout="tiled" if tiled else "rows")
+        return moved
+
+    def _layer_weights(self, layer_idx: int) -> _LayerWeights:
+        prefix = f"model.layers.{layer_idx}"
+        return _LayerWeights(
+            input_norm=self._weight(f"{prefix}.input_layernorm.weight"),
+            qkv=self._weight(f"{prefix}.self_attn.qkv_proj.weight"),
+            qkv_bias=self.weights.get(f"{prefix}.self_attn.qkv_proj.bias"),
+            o_proj=self._weight(f"{prefix}.self_attn.o_proj.weight"),
+            o_bias=self.weights.get(f"{prefix}.self_attn.o_proj.bias"),
+            post_norm=self._weight(f"{prefix}.post_attention_layernorm.weight"),
+            gate_up=self._weight(f"{prefix}.mlp.gate_up_proj.weight"),
+            gate_up_bias=self.weights.get(f"{prefix}.mlp.gate_up_proj.bias"),
+            down=self._weight(f"{prefix}.mlp.down_proj.weight"),
+            down_bias=self.weights.get(f"{prefix}.mlp.down_proj.bias"),
+        )
 
     def _shape_heads(self, x: torch.Tensor, num_heads: int) -> torch.Tensor:
         batch_size, seq_len, _ = x.shape
@@ -458,16 +751,7 @@ class NanoLlamaForCausalLM:
             return x
         return x.repeat_interleave(repeats, dim=1)
 
-    def _query_offsets(self, query_lens: list[int]) -> list[tuple[int, int]]:
-        offsets = []
-        start = 0
-        for query_len in query_lens:
-            end = start + query_len
-            offsets.append((start, end))
-            start = end
-        return offsets
-
-    def _validate_required_weights(self) -> None:
+    def _validate_required_weights(self, weights: Dict[str, torch.Tensor]) -> None:
         required = [
             "model.embed_tokens.weight",
             "model.norm.weight",
@@ -486,7 +770,7 @@ class NanoLlamaForCausalLM:
                     f"model.layers.{layer_idx}.mlp.down_proj.weight",
                 ]
             )
-        missing = [name for name in required if name not in self.weights]
+        missing = [name for name in required if name not in weights]
         if missing:
             raise KeyError(
                 f"Model checkpoint is missing required Llama weights: {missing[:5]}"

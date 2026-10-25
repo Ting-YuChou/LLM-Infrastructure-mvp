@@ -1,0 +1,207 @@
+# Phase 1 results: run marlin-t1e-20261023-104222-colab
+
+## Steps
+
+| step | rc | seconds |
+|---|---:|---:|
+| tests | ok | 95 |
+| kbench | ok | 86 |
+| environment | ok | 2 |
+
+## Environment
+
+```
+run_id: marlin-t1e-20261023-104222-colab
+name, driver_version, memory.total [MiB], clocks.max.sm [MHz], clocks.max.memory [MHz], power.limit [W]
+NVIDIA A100-SXM4-40GB, 580.82.07, 40960 MiB, 1410 MHz, 1215 MHz, 400.00 W
+RmProfilingAdminOnly: 1
+vllm 0.19.1 | torch 2.10.0+cu128 cuda 12.8 | triton 3.6.0
+CUDA_HOME=/usr/local/cuda-12.8; nvcc: Build cuda_12.8.r12.8/compiler.35583870_0
+NVIDIA Nsight Systems version 2025.3.1.0
+Version 2025.3.1.0 (build 36398880) (public-release)
+```
+
+## Tests
+
+```
+207 passed in 92.88s (0:01:32)
+```
+
+## Kernels (kbench)
+
+Peak 1,555 GB/s HBM and 312 TFLOPs bf16; measured copy 1,381 GB/s. Time per call from CUDA-graph replay, inputs rotated past L2. x base: speed relative to the first impl.
+
+### w4a16_linear
+
+| shape | impl | check | us | GB/s | % peak | % copy | x base |
+|---|---|---|---:|---:|---:|---:|---:|
+| qkv_proj M=1 N=6144 K=4096 | vllm_marlin | ok (1.6e-02) | 19.1 | 681 | 44 | 49 | 1.00 |
+| qkv_proj M=1 N=6144 K=4096 | cuda_gemv | ok (0.0e+00) | 22.2 | 586 | 38 | 42 | 0.86 |
+| qkv_proj M=1 N=6144 K=4096 | cuda_mma | ok (4.8e-07) | 24.2 | 537 | 35 | 39 | 0.79 |
+| qkv_proj M=1 N=6144 K=4096 | cuda_wide | ok (1.6e-02) | 21.5 | 604 | 39 | 44 | 0.89 |
+| qkv_proj M=1 N=6144 K=4096 | cuda_auto | ok (0.0e+00) | 18.0 | 723 | 47 | 52 | 1.06 |
+| qkv_proj M=1 N=6144 K=4096 | cuda_tiled | ok (1.6e-02) | 17.5 | 743 | 48 | 54 | 1.09 |
+| qkv_proj M=1 N=6144 K=4096 | cublas_bf16 | ok (1.6e-02) | 41.0 | 317 | 20 | 23 | 0.46 |
+| qkv_proj M=4 N=6144 K=4096 | vllm_marlin | ok (3.1e-02) | 19.1 | 684 | 44 | 50 | 1.00 |
+| qkv_proj M=4 N=6144 K=4096 | cuda_gemv | ok (6.1e-05) | 46.2 | 282 | 18 | 20 | 0.41 |
+| qkv_proj M=4 N=6144 K=4096 | cuda_mma | ok (6.1e-05) | 24.3 | 537 | 35 | 39 | 0.78 |
+| qkv_proj M=4 N=6144 K=4096 | cuda_wide | ok (3.1e-02) | 22.8 | 572 | 37 | 41 | 0.84 |
+| qkv_proj M=4 N=6144 K=4096 | cuda_auto | ok (6.1e-05) | 20.4 | 640 | 41 | 46 | 0.94 |
+| qkv_proj M=4 N=6144 K=4096 | cuda_tiled | ok (3.1e-02) | 17.6 | 743 | 48 | 54 | 1.09 |
+| qkv_proj M=4 N=6144 K=4096 | cublas_bf16 | ok (3.1e-02) | 41.1 | 318 | 20 | 23 | 0.46 |
+| qkv_proj M=8 N=6144 K=4096 | vllm_marlin | ok (3.1e-02) | 19.1 | 689 | 44 | 50 | 1.00 |
+| qkv_proj M=8 N=6144 K=4096 | cuda_gemv | ok (6.1e-05) | 57.1 | 230 | 15 | 17 | 0.33 |
+| qkv_proj M=8 N=6144 K=4096 | cuda_mma | ok (3.1e-05) | 20.6 | 639 | 41 | 46 | 0.93 |
+| qkv_proj M=8 N=6144 K=4096 | cuda_wide | ok (3.1e-02) | 24.3 | 540 | 35 | 39 | 0.78 |
+| qkv_proj M=8 N=6144 K=4096 | cuda_auto | ok (3.1e-05) | 20.5 | 640 | 41 | 46 | 0.93 |
+| qkv_proj M=8 N=6144 K=4096 | cuda_tiled | ok (3.1e-02) | 17.9 | 733 | 47 | 53 | 1.06 |
+| qkv_proj M=8 N=6144 K=4096 | cublas_bf16 | ok (3.1e-02) | 41.3 | 318 | 20 | 23 | 0.46 |
+| qkv_proj M=16 N=6144 K=4096 | vllm_marlin | ok (3.1e-02) | 21.2 | 627 | 40 | 45 | 1.00 |
+| qkv_proj M=16 N=6144 K=4096 | cuda_gemv | ok (1.2e-04) | 112.0 | 119 | 8 | 9 | 0.19 |
+| qkv_proj M=16 N=6144 K=4096 | cuda_mma | ok (7.8e-03) | 21.4 | 623 | 40 | 45 | 0.99 |
+| qkv_proj M=16 N=6144 K=4096 | cuda_wide | ok (3.1e-02) | 28.0 | 476 | 31 | 34 | 0.76 |
+| qkv_proj M=16 N=6144 K=4096 | cuda_auto | ok (7.8e-03) | 21.4 | 622 | 40 | 45 | 0.99 |
+| qkv_proj M=16 N=6144 K=4096 | cuda_tiled | ok (3.1e-02) | 18.2 | 730 | 47 | 53 | 1.16 |
+| qkv_proj M=16 N=6144 K=4096 | cublas_bf16 | ok (3.1e-02) | 41.5 | 320 | 21 | 23 | 0.51 |
+| qkv_proj M=32 N=6144 K=4096 | vllm_marlin | ok (3.1e-02) | 27.5 | 495 | 32 | 36 | 1.00 |
+| qkv_proj M=32 N=6144 K=4096 | cuda_gemv | ok (7.8e-03) | 221.8 | 61 | 4 | 4 | 0.12 |
+| qkv_proj M=32 N=6144 K=4096 | cuda_mma | ok (7.8e-03) | 30.8 | 442 | 28 | 32 | 0.89 |
+| qkv_proj M=32 N=6144 K=4096 | cuda_wide | ok (3.1e-02) | 40.5 | 337 | 22 | 24 | 0.68 |
+| qkv_proj M=32 N=6144 K=4096 | cuda_auto | ok (3.1e-02) | 40.4 | 337 | 22 | 24 | 0.68 |
+| qkv_proj M=32 N=6144 K=4096 | cuda_tiled | ok (3.1e-02) | 22.9 | 594 | 38 | 43 | 1.20 |
+| qkv_proj M=32 N=6144 K=4096 | cublas_bf16 | ok (3.1e-02) | 42.2 | 323 | 21 | 23 | 0.65 |
+| qkv_proj M=64 N=6144 K=4096 | vllm_marlin | ok (3.1e-02) | 45.1 | 317 | 20 | 23 | 1.00 |
+| qkv_proj M=64 N=6144 K=4096 | cuda_gemv | skipped: the gemv kernel takes up to 32 rows | - | - | - | - | - |
+| qkv_proj M=64 N=6144 K=4096 | cuda_mma | ok (7.8e-03) | 81.9 | 174 | 11 | 13 | 0.55 |
+| qkv_proj M=64 N=6144 K=4096 | cuda_wide | ok (3.1e-02) | 64.1 | 223 | 14 | 16 | 0.70 |
+| qkv_proj M=64 N=6144 K=4096 | cuda_auto | ok (3.1e-02) | 64.2 | 222 | 14 | 16 | 0.70 |
+| qkv_proj M=64 N=6144 K=4096 | cuda_tiled | ok (3.1e-02) | 40.0 | 357 | 23 | 26 | 1.13 |
+| qkv_proj M=64 N=6144 K=4096 | cublas_bf16 | ok (3.1e-02) | 42.9 | 333 | 21 | 24 | 1.05 |
+| o_proj M=1 N=4096 K=4096 | vllm_marlin | ok (1.6e-02) | 17.5 | 496 | 32 | 36 | 1.00 |
+| o_proj M=1 N=4096 K=4096 | cuda_gemv | ok (0.0e+00) | 16.6 | 523 | 34 | 38 | 1.06 |
+| o_proj M=1 N=4096 K=4096 | cuda_mma | ok (0.0e+00) | 15.6 | 556 | 36 | 40 | 1.12 |
+| o_proj M=1 N=4096 K=4096 | cuda_wide | ok (1.6e-02) | 16.4 | 528 | 34 | 38 | 1.07 |
+| o_proj M=1 N=4096 K=4096 | cuda_auto | ok (0.0e+00) | 13.2 | 655 | 42 | 47 | 1.32 |
+| o_proj M=1 N=4096 K=4096 | cuda_tiled | ok (1.6e-02) | 15.8 | 548 | 35 | 40 | 1.10 |
+| o_proj M=1 N=4096 K=4096 | cublas_bf16 | ok (1.6e-02) | 28.6 | 303 | 19 | 22 | 0.61 |
+| o_proj M=4 N=4096 K=4096 | vllm_marlin | ok (3.1e-02) | 17.6 | 494 | 32 | 36 | 1.00 |
+| o_proj M=4 N=4096 K=4096 | cuda_gemv | ok (6.1e-05) | 28.1 | 310 | 20 | 22 | 0.63 |
+| o_proj M=4 N=4096 K=4096 | cuda_mma | ok (9.8e-04) | 18.7 | 465 | 30 | 34 | 0.94 |
+| o_proj M=4 N=4096 K=4096 | cuda_wide | ok (3.1e-02) | 17.9 | 487 | 31 | 35 | 0.98 |
+| o_proj M=4 N=4096 K=4096 | cuda_auto | ok (9.8e-04) | 15.7 | 553 | 36 | 40 | 1.12 |
+| o_proj M=4 N=4096 K=4096 | cuda_tiled | ok (3.1e-02) | 15.8 | 551 | 35 | 40 | 1.12 |
+| o_proj M=4 N=4096 K=4096 | cublas_bf16 | ok (3.1e-02) | 28.8 | 303 | 19 | 22 | 0.61 |
+| o_proj M=8 N=4096 K=4096 | vllm_marlin | ok (3.1e-02) | 17.6 | 499 | 32 | 36 | 1.00 |
+| o_proj M=8 N=4096 K=4096 | cuda_gemv | ok (6.1e-05) | 49.5 | 177 | 11 | 13 | 0.36 |
+| o_proj M=8 N=4096 K=4096 | cuda_mma | ok (9.8e-04) | 16.2 | 541 | 35 | 39 | 1.08 |
+| o_proj M=8 N=4096 K=4096 | cuda_wide | ok (3.1e-02) | 20.3 | 433 | 28 | 31 | 0.87 |
+| o_proj M=8 N=4096 K=4096 | cuda_auto | ok (9.8e-04) | 16.2 | 542 | 35 | 39 | 1.09 |
+| o_proj M=8 N=4096 K=4096 | cuda_tiled | ok (3.1e-02) | 15.7 | 561 | 36 | 41 | 1.12 |
+| o_proj M=8 N=4096 K=4096 | cublas_bf16 | ok (3.1e-02) | 28.9 | 304 | 20 | 22 | 0.61 |
+| o_proj M=16 N=4096 K=4096 | vllm_marlin | ok (3.1e-02) | 19.6 | 454 | 29 | 33 | 1.00 |
+| o_proj M=16 N=4096 K=4096 | cuda_gemv | ok (4.9e-04) | 92.1 | 97 | 6 | 7 | 0.21 |
+| o_proj M=16 N=4096 K=4096 | cuda_mma | ok (9.8e-04) | 17.6 | 506 | 33 | 37 | 1.11 |
+| o_proj M=16 N=4096 K=4096 | cuda_wide | ok (3.1e-02) | 24.5 | 364 | 23 | 26 | 0.80 |
+| o_proj M=16 N=4096 K=4096 | cuda_auto | ok (9.8e-04) | 17.6 | 506 | 33 | 37 | 1.12 |
+| o_proj M=16 N=4096 K=4096 | cuda_tiled | ok (3.1e-02) | 16.1 | 555 | 36 | 40 | 1.22 |
+| o_proj M=16 N=4096 K=4096 | cublas_bf16 | ok (3.1e-02) | 29.0 | 308 | 20 | 22 | 0.68 |
+| o_proj M=32 N=4096 K=4096 | vllm_marlin | ok (3.1e-02) | 22.2 | 413 | 27 | 30 | 1.00 |
+| o_proj M=32 N=4096 K=4096 | cuda_gemv | ok (7.8e-03) | 177.0 | 52 | 3 | 4 | 0.13 |
+| o_proj M=32 N=4096 K=4096 | cuda_mma | ok (9.8e-04) | 35.8 | 257 | 16 | 19 | 0.62 |
+| o_proj M=32 N=4096 K=4096 | cuda_wide | ok (3.1e-02) | 35.8 | 256 | 16 | 19 | 0.62 |
+| o_proj M=32 N=4096 K=4096 | cuda_auto | ok (3.1e-02) | 35.9 | 256 | 16 | 19 | 0.62 |
+| o_proj M=32 N=4096 K=4096 | cuda_tiled | ok (3.1e-02) | 20.6 | 446 | 29 | 32 | 1.08 |
+| o_proj M=32 N=4096 K=4096 | cublas_bf16 | ok (3.1e-02) | 29.3 | 313 | 20 | 23 | 0.76 |
+| o_proj M=64 N=4096 K=4096 | vllm_marlin | ok (3.1e-02) | 35.8 | 271 | 17 | 20 | 1.00 |
+| o_proj M=64 N=4096 K=4096 | cuda_gemv | skipped: the gemv kernel takes up to 32 rows | - | - | - | - | - |
+| o_proj M=64 N=4096 K=4096 | cuda_mma | ok (7.8e-03) | 70.5 | 138 | 9 | 10 | 0.51 |
+| o_proj M=64 N=4096 K=4096 | cuda_wide | ok (3.1e-02) | 56.9 | 171 | 11 | 12 | 0.63 |
+| o_proj M=64 N=4096 K=4096 | cuda_auto | ok (3.1e-02) | 57.0 | 170 | 11 | 12 | 0.63 |
+| o_proj M=64 N=4096 K=4096 | cuda_tiled | ok (3.1e-02) | 33.4 | 290 | 19 | 21 | 1.07 |
+| o_proj M=64 N=4096 K=4096 | cublas_bf16 | ok (3.1e-02) | 30.0 | 323 | 21 | 23 | 1.19 |
+| gate_up_proj M=1 N=28672 K=4096 | vllm_marlin | ok (1.6e-02) | 59.1 | 1,025 | 66 | 74 | 1.00 |
+| gate_up_proj M=1 N=28672 K=4096 | cuda_gemv | ok (3.9e-03) | 59.5 | 1,019 | 66 | 74 | 0.99 |
+| gate_up_proj M=1 N=28672 K=4096 | cuda_mma | ok (3.9e-03) | 65.6 | 924 | 59 | 67 | 0.90 |
+| gate_up_proj M=1 N=28672 K=4096 | cuda_wide | ok (1.6e-02) | 84.5 | 717 | 46 | 52 | 0.70 |
+| gate_up_proj M=1 N=28672 K=4096 | cuda_auto | ok (3.9e-03) | 59.6 | 1,018 | 65 | 74 | 0.99 |
+| gate_up_proj M=1 N=28672 K=4096 | cuda_tiled | ok (1.6e-02) | 52.4 | 1,157 | 74 | 84 | 1.13 |
+| gate_up_proj M=1 N=28672 K=4096 | cublas_bf16 | ok (3.1e-02) | 177.9 | 341 | 22 | 25 | 0.33 |
+| gate_up_proj M=4 N=28672 K=4096 | vllm_marlin | ok (3.1e-02) | 59.1 | 1,029 | 66 | 75 | 1.00 |
+| gate_up_proj M=4 N=28672 K=4096 | cuda_gemv | ok (3.9e-03) | 119.4 | 509 | 33 | 37 | 0.49 |
+| gate_up_proj M=4 N=28672 K=4096 | cuda_mma | ok (7.8e-03) | 66.4 | 916 | 59 | 66 | 0.89 |
+| gate_up_proj M=4 N=28672 K=4096 | cuda_wide | ok (3.1e-02) | 86.8 | 701 | 45 | 51 | 0.68 |
+| gate_up_proj M=4 N=28672 K=4096 | cuda_auto | ok (7.8e-03) | 66.4 | 917 | 59 | 66 | 0.89 |
+| gate_up_proj M=4 N=28672 K=4096 | cuda_tiled | ok (3.1e-02) | 53.7 | 1,132 | 73 | 82 | 1.10 |
+| gate_up_proj M=4 N=28672 K=4096 | cublas_bf16 | ok (3.1e-02) | 179.7 | 338 | 22 | 24 | 0.33 |
+| gate_up_proj M=8 N=28672 K=4096 | vllm_marlin | ok (3.1e-02) | 59.7 | 1,023 | 66 | 74 | 1.00 |
+| gate_up_proj M=8 N=28672 K=4096 | cuda_gemv | ok (7.8e-03) | 229.2 | 267 | 17 | 19 | 0.26 |
+| gate_up_proj M=8 N=28672 K=4096 | cuda_mma | ok (7.8e-03) | 67.4 | 907 | 58 | 66 | 0.89 |
+| gate_up_proj M=8 N=28672 K=4096 | cuda_wide | ok (3.1e-02) | 88.7 | 689 | 44 | 50 | 0.67 |
+| gate_up_proj M=8 N=28672 K=4096 | cuda_auto | ok (7.8e-03) | 67.4 | 906 | 58 | 66 | 0.89 |
+| gate_up_proj M=8 N=28672 K=4096 | cuda_tiled | ok (3.1e-02) | 54.7 | 1,117 | 72 | 81 | 1.09 |
+| gate_up_proj M=8 N=28672 K=4096 | cublas_bf16 | ok (3.1e-02) | 180.7 | 338 | 22 | 24 | 0.33 |
+| gate_up_proj M=16 N=28672 K=4096 | vllm_marlin | ok (3.1e-02) | 65.4 | 941 | 61 | 68 | 1.00 |
+| gate_up_proj M=16 N=28672 K=4096 | cuda_gemv | ok (7.8e-03) | 458.4 | 134 | 9 | 10 | 0.14 |
+| gate_up_proj M=16 N=28672 K=4096 | cuda_mma | ok (7.8e-03) | 71.5 | 861 | 55 | 62 | 0.91 |
+| gate_up_proj M=16 N=28672 K=4096 | cuda_wide | ok (3.1e-02) | 90.5 | 681 | 44 | 49 | 0.72 |
+| gate_up_proj M=16 N=28672 K=4096 | cuda_auto | ok (7.8e-03) | 71.5 | 861 | 55 | 62 | 0.91 |
+| gate_up_proj M=16 N=28672 K=4096 | cuda_tiled | ok (3.1e-02) | 62.6 | 985 | 63 | 71 | 1.05 |
+| gate_up_proj M=16 N=28672 K=4096 | cublas_bf16 | ok (3.1e-02) | 182.4 | 338 | 22 | 24 | 0.36 |
+| gate_up_proj M=32 N=28672 K=4096 | vllm_marlin | ok (3.1e-02) | 72.0 | 870 | 56 | 63 | 1.00 |
+| gate_up_proj M=32 N=28672 K=4096 | cuda_gemv | ok (7.8e-03) | 916.3 | 68 | 4 | 5 | 0.08 |
+| gate_up_proj M=32 N=28672 K=4096 | cuda_mma | ok (7.8e-03) | 135.4 | 463 | 30 | 34 | 0.53 |
+| gate_up_proj M=32 N=28672 K=4096 | cuda_wide | ok (3.1e-02) | 113.4 | 552 | 36 | 40 | 0.64 |
+| gate_up_proj M=32 N=28672 K=4096 | cuda_auto | ok (3.1e-02) | 113.7 | 551 | 35 | 40 | 0.63 |
+| gate_up_proj M=32 N=28672 K=4096 | cuda_tiled | ok (3.1e-02) | 72.4 | 866 | 56 | 63 | 1.00 |
+| gate_up_proj M=32 N=28672 K=4096 | cublas_bf16 | ok (3.1e-02) | 215.6 | 291 | 19 | 21 | 0.33 |
+| gate_up_proj M=64 N=28672 K=4096 | vllm_marlin | ok (3.1e-02) | 112.1 | 577 | 37 | 42 | 1.00 |
+| gate_up_proj M=64 N=28672 K=4096 | cuda_gemv | skipped: the gemv kernel takes up to 32 rows | - | - | - | - | - |
+| gate_up_proj M=64 N=28672 K=4096 | cuda_mma | ok (7.8e-03) | 309.7 | 209 | 13 | 15 | 0.36 |
+| gate_up_proj M=64 N=28672 K=4096 | cuda_wide | ok (3.1e-02) | 198.5 | 326 | 21 | 24 | 0.56 |
+| gate_up_proj M=64 N=28672 K=4096 | cuda_auto | ok (3.1e-02) | 198.1 | 327 | 21 | 24 | 0.57 |
+| gate_up_proj M=64 N=28672 K=4096 | cuda_tiled | ok (3.1e-02) | 105.5 | 614 | 39 | 44 | 1.06 |
+| gate_up_proj M=64 N=28672 K=4096 | cublas_bf16 | ok (3.1e-02) | 264.8 | 245 | 16 | 18 | 0.42 |
+| down_proj M=1 N=4096 K=14336 | vllm_marlin | ok (1.6e-02) | 23.3 | 1,299 | 84 | 94 | 1.00 |
+| down_proj M=1 N=4096 K=14336 | cuda_gemv | ok (2.4e-07) | 35.4 | 856 | 55 | 62 | 0.66 |
+| down_proj M=1 N=4096 K=14336 | cuda_mma | ok (2.4e-07) | 34.3 | 883 | 57 | 64 | 0.68 |
+| down_proj M=1 N=4096 K=14336 | cuda_wide | ok (1.6e-02) | 37.4 | 811 | 52 | 59 | 0.62 |
+| down_proj M=1 N=4096 K=14336 | cuda_auto | ok (2.4e-07) | 35.4 | 857 | 55 | 62 | 0.66 |
+| down_proj M=1 N=4096 K=14336 | cuda_tiled | ok (1.6e-02) | 28.8 | 1,053 | 68 | 76 | 0.81 |
+| down_proj M=1 N=4096 K=14336 | cublas_bf16 | ok (1.6e-02) | 92.6 | 327 | 21 | 24 | 0.25 |
+| down_proj M=4 N=4096 K=14336 | vllm_marlin | ok (1.6e-02) | 23.3 | 1,305 | 84 | 94 | 1.00 |
+| down_proj M=4 N=4096 K=14336 | cuda_gemv | ok (9.8e-04) | 63.6 | 479 | 31 | 35 | 0.37 |
+| down_proj M=4 N=4096 K=14336 | cuda_mma | ok (9.8e-04) | 34.9 | 873 | 56 | 63 | 0.67 |
+| down_proj M=4 N=4096 K=14336 | cuda_wide | ok (1.6e-02) | 38.8 | 784 | 50 | 57 | 0.60 |
+| down_proj M=4 N=4096 K=14336 | cuda_auto | ok (9.8e-04) | 34.8 | 873 | 56 | 63 | 0.67 |
+| down_proj M=4 N=4096 K=14336 | cuda_tiled | ok (1.6e-02) | 28.9 | 1,054 | 68 | 76 | 0.81 |
+| down_proj M=4 N=4096 K=14336 | cublas_bf16 | ok (1.6e-02) | 92.9 | 328 | 21 | 24 | 0.25 |
+| down_proj M=8 N=4096 K=14336 | vllm_marlin | ok (1.6e-02) | 23.2 | 1,315 | 85 | 95 | 1.00 |
+| down_proj M=8 N=4096 K=14336 | cuda_gemv | ok (3.9e-03) | 159.5 | 192 | 12 | 14 | 0.15 |
+| down_proj M=8 N=4096 K=14336 | cuda_mma | ok (3.9e-03) | 35.9 | 851 | 55 | 62 | 0.65 |
+| down_proj M=8 N=4096 K=14336 | cuda_wide | ok (1.6e-02) | 40.6 | 753 | 48 | 54 | 0.57 |
+| down_proj M=8 N=4096 K=14336 | cuda_auto | ok (3.9e-03) | 35.9 | 852 | 55 | 62 | 0.65 |
+| down_proj M=8 N=4096 K=14336 | cuda_tiled | ok (1.6e-02) | 29.9 | 1,021 | 66 | 74 | 0.78 |
+| down_proj M=8 N=4096 K=14336 | cublas_bf16 | ok (1.6e-02) | 93.2 | 328 | 21 | 24 | 0.25 |
+| down_proj M=16 N=4096 K=14336 | vllm_marlin | ok (1.6e-02) | 27.5 | 1,124 | 72 | 81 | 1.00 |
+| down_proj M=16 N=4096 K=14336 | cuda_gemv | ok (3.9e-03) | 317.1 | 97 | 6 | 7 | 0.09 |
+| down_proj M=16 N=4096 K=14336 | cuda_mma | ok (3.9e-03) | 39.3 | 785 | 50 | 57 | 0.70 |
+| down_proj M=16 N=4096 K=14336 | cuda_wide | ok (1.6e-02) | 45.8 | 675 | 43 | 49 | 0.60 |
+| down_proj M=16 N=4096 K=14336 | cuda_auto | ok (3.9e-03) | 39.3 | 785 | 50 | 57 | 0.70 |
+| down_proj M=16 N=4096 K=14336 | cuda_tiled | ok (1.6e-02) | 30.9 | 998 | 64 | 72 | 0.89 |
+| down_proj M=16 N=4096 K=14336 | cublas_bf16 | ok (1.6e-02) | 93.5 | 330 | 21 | 24 | 0.29 |
+| down_proj M=32 N=4096 K=14336 | vllm_marlin | ok (1.6e-02) | 37.4 | 841 | 54 | 61 | 1.00 |
+| down_proj M=32 N=4096 K=14336 | cuda_gemv | ok (7.8e-03) | 639.4 | 49 | 3 | 4 | 0.06 |
+| down_proj M=32 N=4096 K=14336 | cuda_mma | ok (7.8e-03) | 99.5 | 316 | 20 | 23 | 0.38 |
+| down_proj M=32 N=4096 K=14336 | cuda_wide | ok (1.6e-02) | 68.6 | 458 | 29 | 33 | 0.55 |
+| down_proj M=32 N=4096 K=14336 | cuda_auto | ok (1.6e-02) | 68.4 | 460 | 30 | 33 | 0.55 |
+| down_proj M=32 N=4096 K=14336 | cuda_tiled | ok (1.6e-02) | 41.3 | 761 | 49 | 55 | 0.91 |
+| down_proj M=32 N=4096 K=14336 | cublas_bf16 | ok (3.1e-02) | 102.6 | 307 | 20 | 22 | 0.36 |
+| down_proj M=64 N=4096 K=14336 | vllm_marlin | ok (3.1e-02) | 63.0 | 518 | 33 | 37 | 1.00 |
+| down_proj M=64 N=4096 K=14336 | cuda_gemv | skipped: the gemv kernel takes up to 32 rows | - | - | - | - | - |
+| down_proj M=64 N=4096 K=14336 | cuda_mma | ok (7.8e-03) | 234.8 | 139 | 9 | 10 | 0.27 |
+| down_proj M=64 N=4096 K=14336 | cuda_wide | ok (3.1e-02) | 129.9 | 251 | 16 | 18 | 0.49 |
+| down_proj M=64 N=4096 K=14336 | cuda_auto | ok (3.1e-02) | 130.6 | 250 | 16 | 18 | 0.48 |
+| down_proj M=64 N=4096 K=14336 | cuda_tiled | ok (3.1e-02) | 73.1 | 446 | 29 | 32 | 0.86 |
+| down_proj M=64 N=4096 K=14336 | cublas_bf16 | ok (3.1e-02) | 98.7 | 331 | 21 | 24 | 0.64 |
+
+

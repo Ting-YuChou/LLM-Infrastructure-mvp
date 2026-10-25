@@ -1,0 +1,6 @@
+# Profiler reports are tens to hundreds of MB (nsys-rep up to 60 MB, ncu-rep
+# up to 130 MB); they stay on the machine that ran the profile. The JSON, CSV
+# and PNG analyses next to them are what gets committed.
+results/**/*.nsys-rep
+results/**/*.ncu-rep
+results/**/*.sqlite

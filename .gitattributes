@@ -1,0 +1,3 @@
+# Benchmark runs keep tool output byte for byte (nsys CSVs with CRLF, vLLM's
+# Prometheus dumps, pytest junit, generated summaries): no whitespace checks.
+benchmarks/*/results/** -whitespace

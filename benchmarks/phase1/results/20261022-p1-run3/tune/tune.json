@@ -1,0 +1,5129 @@
+[
+  {
+    "kernel": "decode",
+    "shape": {
+      "B": 1,
+      "ctx": 1024
+    },
+    "best": {
+      "config": {
+        "block_n": 32,
+        "num_warps": 8,
+        "num_stages": 1
+      },
+      "us": 12.384000234305859
+    },
+    "default": {
+      "config": {
+        "block_n": 32,
+        "num_warps": 4,
+        "num_stages": 3
+      },
+      "us": 14.688000082969666
+    },
+    "speedup_vs_default": 1.1860464958875987,
+    "all": [
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 14.48800042271614
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 14.576000161468983
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 14.688000082969666
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 12.384000234305859
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 12.839999981224537
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 13.024000450968742
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 14.460000209510326
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 13.592000119388103
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 14.551999978721142
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 14.39599972218275
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 13.899999670684338
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 13.97200021892786
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 17.664000391960144
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 16.472000628709793
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 16.023999080061913
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 18.00399925559759
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 16.212000511586666
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 17.62400008738041
+      }
+    ]
+  },
+  {
+    "kernel": "decode",
+    "shape": {
+      "B": 1,
+      "ctx": 4096
+    },
+    "best": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 8,
+        "num_stages": 1
+      },
+      "us": 20.88800072669983
+    },
+    "default": {
+      "config": {
+        "block_n": 32,
+        "num_warps": 4,
+        "num_stages": 3
+      },
+      "us": 22.635999135673046
+    },
+    "speedup_vs_default": 1.0836843330218224,
+    "all": [
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 22.532000206410885
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 21.888000890612602
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 22.635999135673046
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 23.183999583125114
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 23.159999400377274
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 23.391999304294586
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 21.503999829292297
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 22.45599962770939
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 23.056000471115112
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 20.88800072669983
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 21.144000813364983
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 22.943999618291855
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 22.403999231755733
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 24.076000787317753
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 23.780000396072865
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 23.080000653862953
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 24.343999102711678
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 25.10399930179119
+      }
+    ]
+  },
+  {
+    "kernel": "decode",
+    "shape": {
+      "B": 16,
+      "ctx": 1024
+    },
+    "best": {
+      "config": {
+        "block_n": 32,
+        "num_warps": 4,
+        "num_stages": 1
+      },
+      "us": 61.243075590867264
+    },
+    "default": {
+      "config": {
+        "block_n": 32,
+        "num_warps": 4,
+        "num_stages": 3
+      },
+      "us": 61.257846080339874
+    },
+    "speedup_vs_default": 1.0002411781140987,
+    "all": [
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 61.243075590867264
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 61.89784636864296
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 61.257846080339874
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 72.97476896872888
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 69.71077047861539
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 71.21230776493366
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 68.99199806726895
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 64.57599997520447
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 66.8553847533006
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 64.07877115102914
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 64.11815606630765
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 66.14646315574646
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 63.049845970593964
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 65.76246252426735
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 65.27507763642531
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 65.02892191593463
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 65.10276748583867
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 66.23015495447012
+      }
+    ]
+  },
+  {
+    "kernel": "decode",
+    "shape": {
+      "B": 32,
+      "ctx": 1024
+    },
+    "best": {
+      "config": {
+        "block_n": 32,
+        "num_warps": 4,
+        "num_stages": 2
+      },
+      "us": 108.64128112792969
+    },
+    "default": {
+      "config": {
+        "block_n": 128,
+        "num_warps": 4,
+        "num_stages": 3
+      },
+      "us": 111.08352184295654
+    },
+    "speedup_vs_default": 1.022479859310118,
+    "all": [
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 112.12800025939941
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 108.64128112792969
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 112.32768058776855
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 130.8672046661377
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 130.1145601272583
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 126.89919948577881
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 126.54079914093018
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 118.73791694641113
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 121.50271892547607
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 114.23744201660156
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 113.00352096557617
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 115.30240058898926
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 112.33280181884766
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 112.95743942260742
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 111.08352184295654
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 115.5123233795166
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 113.59744071960449
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 114.03264045715332
+      }
+    ]
+  },
+  {
+    "kernel": "decode",
+    "shape": {
+      "B": 64,
+      "ctx": 1024
+    },
+    "best": {
+      "config": {
+        "block_n": 32,
+        "num_warps": 4,
+        "num_stages": 2
+      },
+      "us": 200.3455924987793
+    },
+    "default": {
+      "config": {
+        "block_n": 128,
+        "num_warps": 4,
+        "num_stages": 3
+      },
+      "us": 200.4275131225586
+    },
+    "speedup_vs_default": 1.0004088965609752,
+    "all": [
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 202.78271675109863
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 200.3455924987793
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 230.96320152282715
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 244.06015396118164
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 237.0355224609375
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 215.32672882080078
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 234.01471138000488
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 221.65504455566406
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 200.9548854827881
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 207.10911750793457
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 202.92096138000488
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 202.93631553649902
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 211.12319946289062
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 204.29312705993652
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 200.4275131225586
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 209.94047164916992
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 204.61055755615234
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 203.43807220458984
+      }
+    ]
+  },
+  {
+    "kernel": "decode",
+    "shape": {
+      "B": 64,
+      "ctx": 4096
+    },
+    "best": {
+      "config": {
+        "block_n": 128,
+        "num_warps": 4,
+        "num_stages": 3
+      },
+      "us": 767.5443267822266
+    },
+    "default": {
+      "config": {
+        "block_n": 128,
+        "num_warps": 4,
+        "num_stages": 3
+      },
+      "us": 767.5443267822266
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 775.2601623535156
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 770.3449249267578
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 891.7298889160156
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 949.1455841064453
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 909.5475006103516
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 830.3359985351562
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 905.4412841796875
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 859.2947006225586
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 768.8806533813477
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 804.5619201660156
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 778.9619064331055
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 778.9004516601562
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 824.4684600830078
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 779.397087097168
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 767.5443267822266
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 821.8982315063477
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 787.2665405273438
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 784.5478057861328
+      }
+    ]
+  },
+  {
+    "kernel": "decode",
+    "shape": {
+      "B": 128,
+      "ctx": 1024
+    },
+    "best": {
+      "config": {
+        "block_n": 128,
+        "num_warps": 4,
+        "num_stages": 3
+      },
+      "us": 379.95521545410156
+    },
+    "default": {
+      "config": {
+        "block_n": 128,
+        "num_warps": 4,
+        "num_stages": 3
+      },
+      "us": 379.95521545410156
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 393.7638282775879
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 389.5910453796387
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 398.84286880493164
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 465.6639862060547
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 406.0211181640625
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 412.6873588562012
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 402.61119842529297
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 386.92352294921875
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 405.9545707702637
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 409.7638511657715
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 403.66079330444336
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 394.21953201293945
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 1
+        },
+        "us": 386.8262481689453
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 383.65184783935547
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 379.95521545410156
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 1
+        },
+        "us": 387.06687927246094
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 384.8601531982422
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 383.3804702758789
+      }
+    ]
+  },
+  {
+    "kernel": "prefill",
+    "shape": {
+      "seqs": 1,
+      "qlen": 1024
+    },
+    "best": {
+      "config": {
+        "block_m": 128,
+        "block_n": 128,
+        "num_warps": 8,
+        "num_stages": 2
+      },
+      "us": 104.91345145485617
+    },
+    "default": {
+      "config": {
+        "block_m": 128,
+        "block_n": 64,
+        "num_warps": 8,
+        "num_stages": 2
+      },
+      "us": 105.30909191478383
+    },
+    "speedup_vs_default": 1.0037711128024218,
+    "all": [
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 168.0104689164595
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 168.24784712357956
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 287.75331323797053
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 268.4509017250755
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 129.73614605990323
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 137.89091110229492
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 190.79912359064275
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 196.54749090021306
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 165.65061916004527
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 161.84786016290838
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 155.91330961747605
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 162.72756403142756
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 105.29978492043236
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 110.95505194230512
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 136.19665666060013
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 129.91301796653053
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 126.25920122320002
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 122.57745482704857
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 105.30909191478383
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 109.31665247136897
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 3880.6992964311075
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 3882.3842828924007
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 104.91345145485617
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 112.49105280095881
+      }
+    ]
+  },
+  {
+    "kernel": "prefill",
+    "shape": {
+      "seqs": 1,
+      "qlen": 4096
+    },
+    "best": {
+      "config": {
+        "block_m": 128,
+        "block_n": 128,
+        "num_warps": 8,
+        "num_stages": 2
+      },
+      "us": 940.7283020019531
+    },
+    "default": {
+      "config": {
+        "block_m": 128,
+        "block_n": 64,
+        "num_warps": 8,
+        "num_stages": 2
+      },
+      "us": 1019.7196960449219
+    },
+    "speedup_vs_default": 1.0839683401412161,
+    "all": [
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 1803.2691192626953
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 1846.7327880859375
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 3484.7384643554688
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 3191.8234252929688
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 1332.6541137695312
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 1398.6866760253906
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 2255.994873046875
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 2271.426544189453
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 1688.089599609375
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 1592.3712158203125
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 1709.7216033935547
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 1702.87109375
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 952.6169586181641
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 991.2729644775391
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 1309.2095947265625
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 1254.830093383789
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 1072.0819091796875
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 1045.6524658203125
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 1019.7196960449219
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 1064.345588684082
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 48151.8701171875
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 48136.61376953125
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 940.7283020019531
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 1001.5641784667969
+      }
+    ]
+  },
+  {
+    "kernel": "prefill",
+    "shape": {
+      "seqs": 4,
+      "qlen": 1024
+    },
+    "best": {
+      "config": {
+        "block_m": 128,
+        "block_n": 32,
+        "num_warps": 4,
+        "num_stages": 2
+      },
+      "us": 295.68511962890625
+    },
+    "default": {
+      "config": {
+        "block_m": 128,
+        "block_n": 64,
+        "num_warps": 8,
+        "num_stages": 2
+      },
+      "us": 319.498233795166
+    },
+    "speedup_vs_default": 1.0805353823558856,
+    "all": [
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 507.48416900634766
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 516.5158271789551
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 953.6563110351562
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 893.7471771240234
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 402.5958442687988
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 427.458553314209
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 641.3926315307617
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 658.416633605957
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 566.5792083740234
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 555.2691268920898
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 529.0803337097168
+      },
+      {
+        "config": {
+          "block_m": 64,
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 553.2876968383789
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 295.68511962890625
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 316.9996738433838
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 394.32193756103516
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 32,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 383.0527877807617
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 351.32415771484375
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 340.6540870666504
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 319.498233795166
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 333.1328010559082
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 13436.88232421875
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 13505.771484375
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 317.90080070495605
+      },
+      {
+        "config": {
+          "block_m": 128,
+          "block_n": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 340.02431869506836
+      }
+    ]
+  },
+  {
+    "kernel": "gemv",
+    "shape": {
+      "layer": "qkv",
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "block_n": 32,
+        "block_k": 128,
+        "num_warps": 4,
+        "num_stages": 3
+      },
+      "us": 41.45338318564675
+    },
+    "default": {
+      "config": {
+        "block_n": 64,
+        "block_k": 128,
+        "num_warps": 4,
+        "num_stages": 4
+      },
+      "us": 42.25861809470437
+    },
+    "speedup_vs_default": 1.0194250709393589,
+    "all": [
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 41.956073587591
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 41.45338318564675
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 42.17483563856645
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 43.20349259810014
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 43.29658204858953
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 45.06065412001176
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 42.421527342362836
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 43.5711990703236
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 42.66356338154186
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 44.069238142533735
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 48.067491704767406
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 44.944290681318805
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 46.5733831579035
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 42.58909225463867
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 43.561889908530496
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 48.70050820437345
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 45.39112611250444
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 46.559418331493035
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 42.31447306546298
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 42.24465543573553
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 42.25861809470437
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 42.821816964582965
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 42.87301843816584
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 43.19418343630704
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 42.43083433671431
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 42.36567237160423
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 43.04523468017578
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 43.408289822665125
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 43.33381652832031
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 43.95287253639915
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 42.80320080843839
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 44.88378221338446
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 245760, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 43.69221817363392
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 45.232872529463336
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 245760, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 43.12901930375533
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 44.334546002474696
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 44.6464018388228
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 43.23607358065519
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 44.27403536709872
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 44.948946345936164
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 43.99941834536466
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 45.64247131347656
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 221184, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 44.40901929681951
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 45.428362759676844
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 221184, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 45.609890330921516
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 294912, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 442368, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 48.43054467981512
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 294912, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 442368, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      }
+    ]
+  },
+  {
+    "kernel": "gemv",
+    "shape": {
+      "layer": "o_proj",
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "block_n": 32,
+        "block_k": 128,
+        "num_warps": 4,
+        "num_stages": 3
+      },
+      "us": 29.41257187298366
+    },
+    "default": {
+      "config": {
+        "block_n": 64,
+        "block_k": 128,
+        "num_warps": 4,
+        "num_stages": 4
+      },
+      "us": 31.035428600651876
+    },
+    "speedup_vs_default": 1.055175614518731,
+    "all": [
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 30.427428228514536
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 29.41257187298366
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 29.93371444089072
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 32.827429473400116
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 30.761142926556722
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 32.036570566041135
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 30.180571334702627
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 30.509714569364274
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 31.657143362930846
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 31.64342897278922
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 32.79542922973633
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 34.42742888416562
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 31.917714646884374
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 31.076571771076747
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 32.00000098773411
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 33.68685713836125
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 33.545142837933135
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 34.962285842214314
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 29.997714928218297
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 30.11657084737505
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 31.035428600651876
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 30.546286276408605
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 30.79314317022051
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 32.21485763788223
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 30.23542889526912
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 29.956571757793427
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 31.3508574451719
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 31.090286161218373
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 30.729142682892935
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 32.16457154069628
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 31.05371445417404
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 33.16571350608553
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 245760, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 31.59771433898381
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 33.59542893511909
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 245760, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 32.15085715055466
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 32.08685666322708
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 32.80000069311687
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 31.661714826311385
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 32.46628599507468
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 33.03314319678715
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 31.945143427167622
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 33.84685729231153
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 221184, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 33.06971490383148
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 33.78742826836449
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 221184, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 34.86628511122295
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 294912, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 442368, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 34.93485706193106
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 294912, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 442368, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      }
+    ]
+  },
+  {
+    "kernel": "gemv",
+    "shape": {
+      "layer": "gate_up",
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "block_n": 32,
+        "block_k": 512,
+        "num_warps": 4,
+        "num_stages": 4
+      },
+      "us": 165.42208671569824
+    },
+    "default": {
+      "config": {
+        "block_n": 64,
+        "block_k": 128,
+        "num_warps": 4,
+        "num_stages": 4
+      },
+      "us": 170.79808235168457
+    },
+    "speedup_vs_default": 1.0324986568766101,
+    "all": [
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 166.1593532562256
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 168.3558464050293
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 174.69440460205078
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 179.72224235534668
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 170.81344604492188
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 172.0832061767578
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 169.22624588012695
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 167.58783340454102
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 170.68031311035156
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 181.63199424743652
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 168.90880584716797
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 173.80352020263672
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 166.1440086364746
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 166.0416030883789
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 165.42208671569824
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 170.72128295898438
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 173.65504264831543
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 170.67008018493652
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 167.52639770507812
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 181.42208099365234
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 170.79808235168457
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 167.07584381103516
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 171.35616302490234
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 175.04767417907715
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 192.5171184539795
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 168.98560523986816
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 166.68672561645508
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 190.90432167053223
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 171.44832611083984
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 168.81152153015137
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 174.72512245178223
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 167.9360008239746
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 245760, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 175.67232131958008
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 168.69376182556152
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 245760, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 169.12896156311035
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 180.6438446044922
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 169.63583946228027
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 167.96672821044922
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 182.91199684143066
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 172.2009563446045
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 188.84095191955566
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 169.71263885498047
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 221184, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 194.11456108093262
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 170.14272689819336
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 221184, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 181.25311851501465
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 294912, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 442368, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 182.90175437927246
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 294912, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 442368, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      }
+    ]
+  },
+  {
+    "kernel": "gemv",
+    "shape": {
+      "layer": "down",
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "block_n": 64,
+        "block_k": 128,
+        "num_warps": 4,
+        "num_stages": 3
+      },
+      "us": 87.82336235046387
+    },
+    "default": {
+      "config": {
+        "block_n": 64,
+        "block_k": 128,
+        "num_warps": 4,
+        "num_stages": 4
+      },
+      "us": 91.0745620727539
+    },
+    "speedup_vs_default": 1.0370197591537882,
+    "all": [
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 93.95711898803711
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 88.64768028259277
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 88.77056121826172
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 101.65247917175293
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 92.20095634460449
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 93.06111812591553
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 91.41248226165771
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 88.35583686828613
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 95.59552192687988
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 95.97439765930176
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 93.3017635345459
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 108.80512237548828
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 93.48095893859863
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 88.89344215393066
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 88.68864059448242
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 95.62111854553223
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 96.05119705200195
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 96.11264228820801
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 89.69727993011475
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 87.82336235046387
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 91.0745620727539
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 90.82880020141602
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 88.66815567016602
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 94.59712028503418
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 89.60512161254883
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 90.35776138305664
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 87.85408020019531
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 90.04032135009766
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 93.2044792175293
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 89.36448097229004
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 96.99327945709229
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 89.44640159606934
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 245760, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 98.80064010620117
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 89.94815826416016
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 245760, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 90.79807758331299
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 91.42784118652344
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 90.5728006362915
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 90.21439552307129
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 92.32384204864502
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 90.72640419006348
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 96.60927772521973
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 90.25536060333252
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 221184, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 97.72543907165527
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 90.25536060333252
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 221184, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 97.60767936706543
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 294912, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 442368, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 98.6624002456665
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 294912, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 442368, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      }
+    ]
+  },
+  {
+    "kernel": "gemv",
+    "shape": {
+      "layer": "lm_head",
+      "N": 128256,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "block_n": 128,
+        "block_k": 256,
+        "num_warps": 4,
+        "num_stages": 3
+      },
+      "us": 707.0515441894531
+    },
+    "default": {
+      "config": {
+        "block_n": 64,
+        "block_k": 128,
+        "num_warps": 4,
+        "num_stages": 4
+      },
+      "us": 709.3862152099609
+    },
+    "speedup_vs_default": 1.0033019813614639,
+    "all": [
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 714.0966415405273
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 712.9241561889648
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 711.9718170166016
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 730.9260559082031
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 714.5113754272461
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 714.1888046264648
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 713.72802734375
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 725.2070236206055
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 726.2105560302734
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 718.5356903076172
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 713.2415771484375
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 713.256950378418
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 712.0486450195312
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 713.3286285400391
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 707.7426910400391
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 719.4624328613281
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 728.4223937988281
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 714.5574188232422
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 714.2041778564453
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 710.9426879882812
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 709.3862152099609
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 733.9878463745117
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 710.6406402587891
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 711.4035415649414
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 713.3798217773438
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 707.8912353515625
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 707.2921371459961
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 713.1852722167969
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 709.5756912231445
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 708.5465240478516
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 712.176628112793
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 707.6761627197266
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 245760, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 712.2175979614258
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 708.4441375732422
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 245760, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 717.6345443725586
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 708.6387252807617
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "us": 707.4201583862305
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 719.9692535400391
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 709.9750518798828
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 128,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "us": 708.7052917480469
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 710.9632110595703
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "us": 707.0515441894531
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 221184, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 712.3251342773438
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "us": 707.4098968505859
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 256,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 221184, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 2
+        },
+        "us": 725.667839050293
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 3
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 294912, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 4,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 442368, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 2
+        },
+        "us": 726.4614486694336
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 3
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 294912, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      },
+      {
+        "config": {
+          "block_n": 128,
+          "block_k": 512,
+          "num_warps": 8,
+          "num_stages": 4
+        },
+        "error": "OutOfResources: out of resource: shared memory, Required: 442368, Hardware limit: 166912. Reducing block sizes or `num_stages` may help."
+      }
+    ]
+  },
+  {
+    "kernel": "cuda_gemv",
+    "shape": {
+      "layer": "qkv",
+      "M": 1,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "rows_per_warp": 4
+      },
+      "us": 41.285816105929285
+    },
+    "default": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 43.41294548728249
+    },
+    "speedup_vs_default": 1.0515220378808914,
+    "all": [
+      {
+        "config": {
+          "rows_per_warp": 1
+        },
+        "us": 45.47956423325972
+      },
+      {
+        "config": {
+          "rows_per_warp": 2
+        },
+        "us": 43.41294548728249
+      },
+      {
+        "config": {
+          "rows_per_warp": 4
+        },
+        "us": 41.285816105929285
+      }
+    ]
+  },
+  {
+    "kernel": "cuda_gemv",
+    "shape": {
+      "layer": "qkv",
+      "M": 4,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "rows_per_warp": 4
+      },
+      "us": 42.47272664850408
+    },
+    "default": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 43.28261722217907
+    },
+    "speedup_vs_default": 1.0190684855337282,
+    "all": [
+      {
+        "config": {
+          "rows_per_warp": 1
+        },
+        "us": 48.41657985340465
+      },
+      {
+        "config": {
+          "rows_per_warp": 2
+        },
+        "us": 43.28261722217907
+      },
+      {
+        "config": {
+          "rows_per_warp": 4
+        },
+        "us": 42.47272664850408
+      }
+    ]
+  },
+  {
+    "kernel": "cuda_gemv",
+    "shape": {
+      "layer": "qkv",
+      "M": 8,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "rows_per_warp": 4
+      },
+      "us": 49.43592765114524
+    },
+    "default": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 59.18719985268333
+    },
+    "speedup_vs_default": 1.1972507175419047,
+    "all": [
+      {
+        "config": {
+          "rows_per_warp": 1
+        },
+        "us": 87.17963478781961
+      },
+      {
+        "config": {
+          "rows_per_warp": 2
+        },
+        "us": 59.18719985268333
+      },
+      {
+        "config": {
+          "rows_per_warp": 4
+        },
+        "us": 49.43592765114524
+      }
+    ]
+  },
+  {
+    "kernel": "cuda_gemv",
+    "shape": {
+      "layer": "o_proj",
+      "M": 1,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "rows_per_warp": 1
+      },
+      "us": 29.174857905932836
+    },
+    "default": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 29.257142118045262
+    },
+    "speedup_vs_default": 1.0028203809039185,
+    "all": [
+      {
+        "config": {
+          "rows_per_warp": 1
+        },
+        "us": 29.174857905932836
+      },
+      {
+        "config": {
+          "rows_per_warp": 2
+        },
+        "us": 29.257142118045262
+      },
+      {
+        "config": {
+          "rows_per_warp": 4
+        },
+        "us": 31.25485671418054
+      }
+    ]
+  },
+  {
+    "kernel": "cuda_gemv",
+    "shape": {
+      "layer": "o_proj",
+      "M": 4,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 31.414857932499476
+    },
+    "default": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 31.414857932499476
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "rows_per_warp": 1
+        },
+        "us": 40.24228666509901
+      },
+      {
+        "config": {
+          "rows_per_warp": 2
+        },
+        "us": 31.414857932499476
+      },
+      {
+        "config": {
+          "rows_per_warp": 4
+        },
+        "us": 31.81714245251247
+      }
+    ]
+  },
+  {
+    "kernel": "cuda_gemv",
+    "shape": {
+      "layer": "o_proj",
+      "M": 8,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "rows_per_warp": 4
+      },
+      "us": 39.49714132717678
+    },
+    "default": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 48.43885557992118
+    },
+    "speedup_vs_default": 1.2263888968235754,
+    "all": [
+      {
+        "config": {
+          "rows_per_warp": 1
+        },
+        "us": 63.954285212925505
+      },
+      {
+        "config": {
+          "rows_per_warp": 2
+        },
+        "us": 48.43885557992118
+      },
+      {
+        "config": {
+          "rows_per_warp": 4
+        },
+        "us": 39.49714132717678
+      }
+    ]
+  },
+  {
+    "kernel": "cuda_gemv",
+    "shape": {
+      "layer": "gate_up",
+      "M": 1,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "rows_per_warp": 1
+      },
+      "us": 165.02272605895996
+    },
+    "default": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 165.12511253356934
+    },
+    "speedup_vs_default": 1.000620438633239,
+    "all": [
+      {
+        "config": {
+          "rows_per_warp": 1
+        },
+        "us": 165.02272605895996
+      },
+      {
+        "config": {
+          "rows_per_warp": 2
+        },
+        "us": 165.12511253356934
+      },
+      {
+        "config": {
+          "rows_per_warp": 4
+        },
+        "us": 167.43935585021973
+      }
+    ]
+  },
+  {
+    "kernel": "cuda_gemv",
+    "shape": {
+      "layer": "gate_up",
+      "M": 4,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 170.70591926574707
+    },
+    "default": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 170.70591926574707
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "rows_per_warp": 1
+        },
+        "us": 187.34591484069824
+      },
+      {
+        "config": {
+          "rows_per_warp": 2
+        },
+        "us": 170.70591926574707
+      },
+      {
+        "config": {
+          "rows_per_warp": 4
+        },
+        "us": 171.8886375427246
+      }
+    ]
+  },
+  {
+    "kernel": "cuda_gemv",
+    "shape": {
+      "layer": "gate_up",
+      "M": 8,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "rows_per_warp": 4
+      },
+      "us": 189.4655990600586
+    },
+    "default": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 233.68191719055176
+    },
+    "speedup_vs_default": 1.233373859686671,
+    "all": [
+      {
+        "config": {
+          "rows_per_warp": 1
+        },
+        "us": 367.2524833679199
+      },
+      {
+        "config": {
+          "rows_per_warp": 2
+        },
+        "us": 233.68191719055176
+      },
+      {
+        "config": {
+          "rows_per_warp": 4
+        },
+        "us": 189.4655990600586
+      }
+    ]
+  },
+  {
+    "kernel": "cuda_gemv",
+    "shape": {
+      "layer": "down",
+      "M": 1,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 88.81663799285889
+    },
+    "default": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 88.81663799285889
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "rows_per_warp": 1
+        },
+        "us": 88.89344215393066
+      },
+      {
+        "config": {
+          "rows_per_warp": 2
+        },
+        "us": 88.81663799285889
+      },
+      {
+        "config": {
+          "rows_per_warp": 4
+        },
+        "us": 99.13343906402588
+      }
+    ]
+  },
+  {
+    "kernel": "cuda_gemv",
+    "shape": {
+      "layer": "down",
+      "M": 4,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 98.4115219116211
+    },
+    "default": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 98.4115219116211
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "rows_per_warp": 1
+        },
+        "us": 131.6710376739502
+      },
+      {
+        "config": {
+          "rows_per_warp": 2
+        },
+        "us": 98.4115219116211
+      },
+      {
+        "config": {
+          "rows_per_warp": 4
+        },
+        "us": 100.54143905639648
+      }
+    ]
+  },
+  {
+    "kernel": "cuda_gemv",
+    "shape": {
+      "layer": "down",
+      "M": 8,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "rows_per_warp": 4
+      },
+      "us": 123.97567749023438
+    },
+    "default": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 162.34496116638184
+    },
+    "speedup_vs_default": 1.3094904133850758,
+    "all": [
+      {
+        "config": {
+          "rows_per_warp": 1
+        },
+        "us": 213.23776245117188
+      },
+      {
+        "config": {
+          "rows_per_warp": 2
+        },
+        "us": 162.34496116638184
+      },
+      {
+        "config": {
+          "rows_per_warp": 4
+        },
+        "us": 123.97567749023438
+      }
+    ]
+  },
+  {
+    "kernel": "cuda_gemv",
+    "shape": {
+      "layer": "lm_head",
+      "M": 1,
+      "N": 128256,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 711.1935806274414
+    },
+    "default": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 711.1935806274414
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "rows_per_warp": 1
+        },
+        "us": 715.0233840942383
+      },
+      {
+        "config": {
+          "rows_per_warp": 2
+        },
+        "us": 711.1935806274414
+      },
+      {
+        "config": {
+          "rows_per_warp": 4
+        },
+        "us": 718.7200164794922
+      }
+    ]
+  },
+  {
+    "kernel": "cuda_gemv",
+    "shape": {
+      "layer": "lm_head",
+      "M": 4,
+      "N": 128256,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "rows_per_warp": 4
+      },
+      "us": 731.5865325927734
+    },
+    "default": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 735.4367828369141
+    },
+    "speedup_vs_default": 1.0052628774213423,
+    "all": [
+      {
+        "config": {
+          "rows_per_warp": 1
+        },
+        "us": 805.2121734619141
+      },
+      {
+        "config": {
+          "rows_per_warp": 2
+        },
+        "us": 735.4367828369141
+      },
+      {
+        "config": {
+          "rows_per_warp": 4
+        },
+        "us": 731.5865325927734
+      }
+    ]
+  },
+  {
+    "kernel": "cuda_gemv",
+    "shape": {
+      "layer": "lm_head",
+      "M": 8,
+      "N": 128256,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "rows_per_warp": 4
+      },
+      "us": 789.5040130615234
+    },
+    "default": {
+      "config": {
+        "rows_per_warp": 2
+      },
+      "us": 1000.6732940673828
+    },
+    "speedup_vs_default": 1.2674708139696353,
+    "all": [
+      {
+        "config": {
+          "rows_per_warp": 1
+        },
+        "us": 1624.1305541992188
+      },
+      {
+        "config": {
+          "rows_per_warp": 2
+        },
+        "us": 1000.6732940673828
+      },
+      {
+        "config": {
+          "rows_per_warp": 4
+        },
+        "us": 789.5040130615234
+      }
+    ]
+  }
+]

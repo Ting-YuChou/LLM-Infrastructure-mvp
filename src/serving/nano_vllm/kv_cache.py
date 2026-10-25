@@ -7,6 +7,8 @@ from typing import Optional
 
 import torch
 
+from .kernels.fp8 import KV_CACHE_DTYPES, fp8_dequantize_reference, fp8_quantize_reference
+
 
 @dataclass
 class StaticKVCache:
@@ -97,8 +99,17 @@ class StaticKVCache:
 class PagedKVCache:
     """Global block-addressed KV cache.
 
-    Layout is [num_blocks, block_size, kv_heads, head_dim] per layer. Scheduler
-    state maps each sequence's logical token positions to physical cache slots.
+    Layout is [num_blocks + 1, block_size, kv_heads, head_dim] per layer.
+    Scheduler state maps each sequence's logical token positions to physical
+    cache slots. The extra block (``null_block``) is outside the block
+    manager's pool: block tables are padded with it, and padded batch rows
+    write into it, so neither ever touches a real sequence's KV.
+
+    ``kv_cache_dtype="fp8"`` stores float8_e4m3fn codes plus one fp32 scale
+    per (slot, kv head) in ``key_scales`` / ``value_scales``
+    ([num_blocks + 1, block_size, kv_heads] per layer; kernels/fp8.py);
+    ``dtype`` stays the model's, what update() takes and read_sequence()
+    returns. With "auto" the scale lists hold None.
     """
 
     num_layers: int
@@ -108,27 +119,66 @@ class PagedKVCache:
     head_dim: int
     dtype: torch.dtype
     device: torch.device | str
+    kv_cache_dtype: str = "auto"
 
     def __post_init__(self) -> None:
+        if self.kv_cache_dtype not in KV_CACHE_DTYPES:
+            raise ValueError(f"kv_cache_dtype must be one of: {', '.join(KV_CACHE_DTYPES)}")
         self.device = torch.device(self.device)
         shape = (
-            self.num_blocks,
+            self.num_blocks + 1,
             self.block_size,
             self.num_key_value_heads,
             self.head_dim,
         )
+        storage = torch.float8_e4m3fn if self.quantized else self.dtype
+        # Zeroed, not empty: attention reads whole blocks and masks the slots
+        # past a sequence's length, and those must not hold NaN bit patterns.
         self.keys = [
-            torch.empty(shape, dtype=self.dtype, device=self.device)
+            torch.zeros(shape, dtype=storage, device=self.device)
             for _ in range(self.num_layers)
         ]
         self.values = [
-            torch.empty(shape, dtype=self.dtype, device=self.device)
+            torch.zeros(shape, dtype=storage, device=self.device)
+            for _ in range(self.num_layers)
+        ]
+        self.key_scales: list[Optional[torch.Tensor]] = [
+            torch.zeros(shape[:-1], dtype=torch.float32, device=self.device) if self.quantized else None
+            for _ in range(self.num_layers)
+        ]
+        self.value_scales: list[Optional[torch.Tensor]] = [
+            torch.zeros(shape[:-1], dtype=torch.float32, device=self.device) if self.quantized else None
             for _ in range(self.num_layers)
         ]
 
     @property
+    def quantized(self) -> bool:
+        return self.kv_cache_dtype == "fp8"
+
+    @property
+    def null_block(self) -> int:
+        return self.num_blocks
+
+    @staticmethod
+    def bytes_per_block(
+        num_layers: int,
+        block_size: int,
+        num_key_value_heads: int,
+        head_dim: int,
+        dtype: torch.dtype,
+        kv_cache_dtype: str = "auto",
+    ) -> int:
+        """K and V bytes of one block across all layers (fp8: codes and scales)."""
+        if kv_cache_dtype == "fp8":
+            per_vector = head_dim + 4  # one byte per value, one fp32 scale
+        else:
+            per_vector = head_dim * torch.empty((), dtype=dtype).element_size()
+        return 2 * num_layers * block_size * num_key_value_heads * per_vector
+
+    @property
     def total_slots(self) -> int:
-        return self.num_blocks * self.block_size
+        """Addressable slots, including the null block's."""
+        return (self.num_blocks + 1) * self.block_size
 
     def update(
         self,
@@ -148,11 +198,12 @@ class PagedKVCache:
                 f"key/value shape must be {expected}, got {tuple(key.shape)}"
             )
 
+        # No bounds check here: it would read the slots back to the host on
+        # every layer. Callers build slot_mapping from block tables and check
+        # it on the host (metadata.build_batch).
         slot_mapping = slot_mapping.to(device=self.device, dtype=torch.long)
         if slot_mapping.numel() == 0:
             return
-        if int(slot_mapping.max().item()) >= self.total_slots:
-            raise ValueError("slot_mapping references a slot outside the KV cache")
 
         flat_keys = self.keys[layer_idx].view(
             self.total_slots,
@@ -164,8 +215,18 @@ class PagedKVCache:
             self.num_key_value_heads,
             self.head_dim,
         )
-        flat_keys[slot_mapping] = key.to(device=self.device)
-        flat_values[slot_mapping] = value.to(device=self.device)
+        key, value = key.to(device=self.device), value.to(device=self.device)
+        if self.quantized:
+            # Indexing goes through uint8 views: not every device implements
+            # index ops for float8.
+            key, key_scale = fp8_quantize_reference(key)
+            value, value_scale = fp8_quantize_reference(value)
+            key, value = key.view(torch.uint8), value.view(torch.uint8)
+            flat_keys, flat_values = flat_keys.view(torch.uint8), flat_values.view(torch.uint8)
+            self.key_scales[layer_idx].view(self.total_slots, -1)[slot_mapping] = key_scale
+            self.value_scales[layer_idx].view(self.total_slots, -1)[slot_mapping] = value_scale
+        flat_keys[slot_mapping] = key
+        flat_values[slot_mapping] = value
 
     def read_sequence(
         self,
@@ -206,8 +267,17 @@ class PagedKVCache:
             self.num_key_value_heads,
             self.head_dim,
         )
-        key = flat_keys.index_select(0, slot_tensor)
-        value = flat_values.index_select(0, slot_tensor)
+        if self.quantized:
+            fp8 = torch.float8_e4m3fn
+            key = flat_keys.view(torch.uint8).index_select(0, slot_tensor).view(fp8)
+            value = flat_values.view(torch.uint8).index_select(0, slot_tensor).view(fp8)
+            key_scale = self.key_scales[layer_idx].view(self.total_slots, -1).index_select(0, slot_tensor)
+            value_scale = self.value_scales[layer_idx].view(self.total_slots, -1).index_select(0, slot_tensor)
+            key = fp8_dequantize_reference(key, key_scale).to(self.dtype)
+            value = fp8_dequantize_reference(value, value_scale).to(self.dtype)
+        else:
+            key = flat_keys.index_select(0, slot_tensor)
+            value = flat_values.index_select(0, slot_tensor)
         return (
             key.transpose(0, 1).unsqueeze(0).contiguous(),
             value.transpose(0, 1).unsqueeze(0).contiguous(),

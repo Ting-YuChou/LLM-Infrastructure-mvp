@@ -1,10 +1,12 @@
-"""Generation engine wrapper for the nano-vLLM server."""
+"""Generation engine frontend for the nano-vLLM server."""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
+import multiprocessing
+import threading
 from contextlib import aclosing
 from dataclasses import dataclass, field
 from dataclasses import replace
@@ -13,16 +15,33 @@ from typing import AsyncIterator, Iterable, Optional
 
 import torch
 
-from .block_manager import BlockManager
 from .config import NanoVLLMConfig
-from .kv_cache import PagedKVCache
-from .model import NanoLlamaForCausalLM
-from .scheduler import Scheduler
+from .core import (
+    CPU_KV_BLOCKS,
+    KV_RESERVE_BYTES,
+    EngineCore,
+    RequestOutput,
+    load_model,
+    request_from_sequence,
+    run_core_process,
+    size_kv_cache,
+)
+from .nvtx import nvtx_range
 from .sampling import SamplingOptions, sample_next_token
 from .sequence import GenerationEvent, Sequence, SequenceStatus
 
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "CPU_KV_BLOCKS",
+    "KV_RESERVE_BYTES",
+    "GenerationResult",
+    "InvalidRequestError",
+    "NanoLlamaEngine",
+    "StreamOutput",
+    "size_kv_cache",
+]
 
 
 class InvalidRequestError(ValueError):
@@ -157,24 +176,47 @@ class _OutputProcessor:
 
 
 class NanoLlamaEngine:
-    """Single-model decoder with sync fallback and async continuous batching."""
+    """Frontend of the nano-vLLM engine around an :class:`EngineCore`.
+
+    The frontend tokenizes, validates, detokenizes and applies stop strings;
+    the core schedules and runs the model on token ids. By default the core
+    lives in this process and its steps run in a worker thread; with
+    ``engine.multiprocess`` it runs in a process of its own
+    (:class:`_CoreProcess`), so detokenization, HTTP and SSE never compete
+    with the model steps for the GIL.
+    """
 
     def __init__(self, config: NanoVLLMConfig):
         self.config = config
-        self.model: Optional[NanoLlamaForCausalLM] = None
+        self.model = None
         self.tokenizer = None
         self.initialized = False
-        self.block_manager: Optional[BlockManager] = None
-        self.scheduler: Optional[Scheduler] = None
-        self.paged_cache: Optional[PagedKVCache] = None
+        self.core: Optional[EngineCore] = None
+        self._core_process: Optional[_CoreProcess] = None
         self._scheduler_task: Optional[asyncio.Task] = None
         self._scheduler_event: Optional[asyncio.Event] = None
-        self._scheduler_lock: Optional[asyncio.Lock] = None
+        self._step_future: Optional[asyncio.Future] = None
         self._stopping = False
         self._eos_token_ids: Optional[frozenset[int]] = None
-        # Sequences inside the running model step; aborting one of them only
-        # marks it, and postprocess() frees its blocks once the step returns.
-        self._inflight_seq_ids: set[int] = set()
+        # The frontend's view of every request the core is still working on.
+        self._requests: dict[int, Sequence] = {}
+
+    # The in-process core's parts (tests and benchmarks look at them).
+    @property
+    def scheduler(self):
+        return self.core.scheduler if self.core is not None else None
+
+    @property
+    def block_manager(self):
+        return self.core.block_manager if self.core is not None else None
+
+    @property
+    def paged_cache(self):
+        return self.core.paged_cache if self.core is not None else None
+
+    @property
+    def model_runner(self):
+        return self.core.model_runner if self.core is not None else None
 
     def initialize(self) -> None:
         from transformers import AutoTokenizer
@@ -187,14 +229,13 @@ class NanoLlamaEngine:
         if getattr(self.tokenizer, "pad_token_id", None) is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        self.model = NanoLlamaForCausalLM.from_pretrained(
-            self.config.model_name,
-            dtype=self.config.dtype,
-            device=self.config.device,
-            use_triton=self.config.use_triton,
-            attention_backend=self.config.attention_backend,
-        )
-        self._initialize_batching_state()
+        if self.config.multiprocess:
+            self._core_process = _CoreProcess(self.config)
+            self._core_process.start()
+        else:
+            self.model = load_model(self.config)
+            self._initialize_batching_state()
+            self.core.capture_graphs()
         logger.info("nano-vLLM EOS token ids: %s", sorted(self.eos_token_ids))
         self.initialized = True
 
@@ -214,17 +255,28 @@ class NanoLlamaEngine:
             except asyncio.CancelledError:
                 pass
             self._scheduler_task = None
-        if self.scheduler is not None:
-            pending = [*self.scheduler.running, *self.scheduler.waiting]
-            self._fail_sequences(pending, RuntimeError("nano-vLLM engine shut down"))
+        if self._step_future is not None:
+            # A step already running in the worker thread cannot be cancelled;
+            # let it finish before touching the core.
+            await asyncio.wait([self._step_future])
+            self._step_future = None
+        error = RuntimeError("nano-vLLM engine shut down")
+        if self.core is not None:
+            self._dispatch(self.core.fail_all(error))
+        if self._core_process is not None:
+            await asyncio.to_thread(self._core_process.shutdown)
+        self._fail_frontend_requests(error)
 
     def start_background_loop(self) -> None:
         self._ensure_batching_state()
-        if self._scheduler_task is not None and not self._scheduler_task.done():
-            return
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
+            return
+        if self._core_process is not None:
+            self._core_process.start_reader(loop, self._on_core_message)
+            return
+        if self._scheduler_task is not None and not self._scheduler_task.done():
             return
         self._stopping = False
         self._scheduler_task = loop.create_task(self._scheduler_loop())
@@ -238,10 +290,11 @@ class NanoLlamaEngine:
         """
         if self._eos_token_ids is None:
             ids: list[int] = []
-            generation_config = Path(self.config.model_name) / "generation_config.json"
-            if generation_config.is_file():
-                data = json.loads(generation_config.read_text(encoding="utf-8"))
-                ids.extend(_token_id_list(data.get("eos_token_id")))
+            for name in ("generation_config.json", "config.json"):
+                path = Path(self.config.model_name) / name
+                if path.is_file():
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                    ids.extend(_token_id_list(data.get("eos_token_id")))
             model_config = getattr(self.model, "config", None)
             ids.extend(_token_id_list(getattr(model_config, "eos_token_id", None)))
             ids.extend(
@@ -259,12 +312,16 @@ class NanoLlamaEngine:
     ) -> GenerationResult:
         """Single-request decode on the static KV cache (v0.1 reference path)."""
         if not self.initialized or self.model is None or self.tokenizer is None:
-            raise RuntimeError("nano-vLLM engine is not initialized")
+            raise RuntimeError(
+                "nano-vLLM's static path needs an initialized in-process engine"
+            )
 
         prompt_ids = self._encode(prompt)
         prompt_tokens = len(prompt_ids)
         max_tokens = self._resolve_max_tokens(prompt_tokens, sampling.max_tokens)
-        stop_token_ids = self.eos_token_ids | set(sampling.stop_token_ids or ())
+        stop_token_ids = set(sampling.stop_token_ids or ())
+        if not sampling.ignore_eos:
+            stop_token_ids |= self.eos_token_ids
         processor = _OutputProcessor(self.tokenizer, prompt_ids, sampling.stop or [])
         input_ids = torch.tensor([prompt_ids], dtype=torch.long, device=self.model.device)
         cache = self.model.new_cache(
@@ -318,20 +375,30 @@ class NanoLlamaEngine:
         Raises InvalidRequestError before any response bytes are sent, so the
         server can still answer 400 for streaming requests.
         """
-        if not self.initialized or self.model is None or self.tokenizer is None:
+        if not self.initialized or self.tokenizer is None:
             raise RuntimeError("nano-vLLM engine is not initialized")
         prompt_ids = self._encode(prompt)
-        kv_capacity = self.config.num_kvcache_blocks * self.config.kvcache_block_size
+        self._ensure_batching_state()
         max_tokens = self._resolve_max_tokens(
-            len(prompt_ids), sampling.max_tokens, kv_capacity=kv_capacity
+            len(prompt_ids), sampling.max_tokens, kv_capacity=self.kv_capacity
         )
         seq = Sequence(
             prompt_token_ids=prompt_ids,
             sampling=replace(sampling, max_tokens=max_tokens),
             eos_token_id=self.eos_token_ids,
+            ignore_eos=sampling.ignore_eos,
         )
         seq.events = asyncio.Queue()
         return seq
+
+    @property
+    def kv_capacity(self) -> int:
+        """KV slots in the core's cache."""
+        if self.core is not None:
+            return self.core.block_manager.num_blocks * self.core.block_manager.block_size
+        if self._core_process is not None:
+            return self._core_process.num_blocks * self.config.kvcache_block_size
+        return self.config.num_kvcache_blocks * self.config.kvcache_block_size
 
     async def stream_request(self, seq: Sequence) -> AsyncIterator[StreamOutput]:
         """Submit a prepared sequence and yield its outputs.
@@ -350,11 +417,12 @@ class NanoLlamaEngine:
                 if event.error is not None:
                     raise event.error
                 new_token_ids = []
-                if event.token_id is not None:
-                    processor.add_token(event.token_id)
-                    new_token_ids.append(event.token_id)
-                if event.finished:
-                    processor.finish(event.finish_reason)
+                with nvtx_range("detokenize"):
+                    if event.token_id is not None:
+                        processor.add_token(event.token_id)
+                        new_token_ids.append(event.token_id)
+                    if event.finished:
+                        processor.finish(event.finish_reason)
                 yield StreamOutput(
                     text=processor.take_delta(),
                     token_ids=new_token_ids,
@@ -400,15 +468,38 @@ class NanoLlamaEngine:
             async for output in outputs:
                 yield output
 
+    def start_profile(self) -> None:
+        """Open the cudaProfilerApi capture range in the core (nsys/ncu)."""
+        if self._core_process is not None:
+            self._core_process.utility("start_profile")
+        else:
+            EngineCore.start_profile()
+
+    def stop_profile(self) -> None:
+        if self._core_process is not None:
+            self._core_process.utility("stop_profile")
+        else:
+            EngineCore.stop_profile()
+
+    def stats(self) -> dict:
+        """KV block usage, prefix-cache counters and queue lengths (see EngineCore)."""
+        if self._core_process is not None:
+            return dict(self._core_process.stats)
+        return self.core.stats() if self.core is not None else {}
+
     def abort(self, seq: Sequence, finish_reason: str = "abort") -> None:
-        """Stop generating for ``seq`` and release its KV blocks."""
+        """Stop generating for ``seq``; the core frees its KV blocks."""
         if seq.is_finished:
             return
-        if seq.seq_id in self._inflight_seq_ids or self.scheduler is None:
-            seq.status = SequenceStatus.FINISHED
-            seq.finish_reason = seq.finish_reason or finish_reason
+        seq.status = SequenceStatus.FINISHED
+        seq.finish_reason = seq.finish_reason or finish_reason
+        if self._requests.pop(seq.seq_id, None) is None:
             return
-        self.scheduler.abort(seq, finish_reason)
+        if self._core_process is not None:
+            self._core_process.send(("abort", [seq.seq_id]))
+        elif self.core is not None:
+            self.core.abort_requests([seq.seq_id])
+            self._wake()
 
     def _encode(self, prompt: str) -> list[int]:
         encoded = self.tokenizer(prompt, return_tensors="pt", add_special_tokens=True)
@@ -465,237 +556,169 @@ class NanoLlamaEngine:
     def _initialize_batching_state(self) -> None:
         if self.model is None:
             return
-        Sequence.block_size = self.config.kvcache_block_size
-        self.block_manager = BlockManager(
-            num_blocks=self.config.num_kvcache_blocks,
-            block_size=self.config.kvcache_block_size,
-            enable_prefix_cache=self.config.enable_prefix_cache,
-        )
-        self.scheduler = Scheduler(
-            block_manager=self.block_manager,
-            max_num_seqs=self.config.max_num_seqs,
-            max_num_batched_tokens=self.config.max_num_batched_tokens,
-        )
-        self.paged_cache = self.model.new_paged_cache(
-            num_blocks=self.config.num_kvcache_blocks,
-            block_size=self.config.kvcache_block_size,
-        )
+        self.core = EngineCore(self.config, self.model)
 
     def _ensure_batching_state(self) -> None:
-        if (
-            self.scheduler is None
-            or self.block_manager is None
-            or self.paged_cache is None
-        ):
+        if self.core is None and self._core_process is None:
             self._initialize_batching_state()
-        if (
-            self.scheduler is None
-            or self.block_manager is None
-            or self.paged_cache is None
-        ):
+        if self.core is None and self._core_process is None:
             raise RuntimeError("nano-vLLM batching state is not initialized")
         if self._scheduler_event is None:
             self._scheduler_event = asyncio.Event()
-        if self._scheduler_lock is None:
-            self._scheduler_lock = asyncio.Lock()
 
     def _submit_sequence(self, seq: Sequence) -> None:
         self._ensure_batching_state()
-        self.scheduler.add(seq)
-        self._scheduler_event.set()
+        self._requests[seq.seq_id] = seq
+        request = request_from_sequence(seq)
+        if self._core_process is not None:
+            self._core_process.send(("add", request))
+        else:
+            self.core.add_request(request)
+            self._wake()
+
+    def _wake(self) -> None:
+        if self._scheduler_event is not None:
+            self._scheduler_event.set()
 
     async def _scheduler_loop(self) -> None:
+        """Step the in-process core in a worker thread while it has work."""
         self._ensure_batching_state()
+        loop = asyncio.get_running_loop()
         while not self._stopping:
-            if self.scheduler.is_finished():
+            if not self.core.has_work():
                 self._scheduler_event.clear()
                 await self._scheduler_event.wait()
                 continue
+            self._step_future = loop.run_in_executor(None, self.core.step)
             try:
-                await self._step()
+                outputs = await asyncio.shield(self._step_future)
             except asyncio.CancelledError:
                 raise
-            except Exception:  # pragma: no cover - _step already fails requests
-                logger.exception("nano-vLLM scheduler step failed")
+            except Exception:  # pragma: no cover - EngineCore.step reports failures
+                logger.exception("nano-vLLM engine step failed")
                 await asyncio.sleep(0)
+                continue
+            self._step_future = None
+            self._dispatch(outputs)
 
-    async def _step(self) -> None:
-        """Run one schedule -> model -> postprocess round.
+    def _on_core_message(self, message: tuple) -> None:
+        """A message from the core process (runs on the event loop)."""
+        kind = message[0]
+        if kind == "outputs":
+            if message[2] is not None:
+                self._core_process.stats = message[2]
+            self._dispatch(message[1])
+        elif kind == "dead" and not self._stopping:
+            logger.error("nano-vLLM engine core died:\n%s", message[1])
+            self.initialized = False
+            self._fail_frontend_requests(RuntimeError("nano-vLLM engine core died"))
 
-        Exceptions fail the affected requests instead of escaping: a dead
-        scheduler task would leave every current and future request hanging.
-        """
-        async with self._scheduler_lock:
-            try:
-                seqs, is_prefill = self.scheduler.schedule()
-            except Exception as exc:
-                # Scheduler state for queued requests can't be trusted anymore.
-                logger.exception("nano-vLLM schedule() failed; failing queued requests")
-                self._fail_sequences(
-                    [*self.scheduler.running, *self.scheduler.waiting], exc
-                )
-                return
-            if not seqs:
-                stuck = self.scheduler.unschedulable_head()
-                if stuck is not None:
-                    self._fail_sequences(
-                        [stuck],
-                        RuntimeError(
-                            "Request cannot be scheduled: it needs more KV blocks "
-                            "than are free with nothing left to release"
-                        ),
-                    )
-            else:
-                self._inflight_seq_ids = {seq.seq_id for seq in seqs}
-        if not seqs:
-            await asyncio.sleep(0)
-            return
-
-        try:
-            token_ids = await asyncio.to_thread(
-                self._run_scheduled_batch,
-                seqs,
-                is_prefill,
-            )
-            async with self._scheduler_lock:
-                emitted = self.scheduler.postprocess(seqs, token_ids, is_prefill)
-        except Exception as exc:
-            self._fail_sequences(seqs, exc)
-            return
-        finally:
-            self._inflight_seq_ids = set()
-        self._publish_events(emitted)
-
-    def _run_scheduled_batch(self, seqs: list[Sequence], is_prefill: bool) -> list[int]:
-        if self.model is None or self.paged_cache is None or self.block_manager is None:
-            raise RuntimeError("nano-vLLM engine is not initialized")
-        input_ids, positions, slot_mapping, block_tables, context_lens, query_lens = (
-            self._prepare_prefill(seqs) if is_prefill else self._prepare_decode(seqs)
-        )
-        logits = self.model.forward_paged(
-            input_ids=input_ids,
-            positions=positions,
-            cache=self.paged_cache,
-            slot_mapping=slot_mapping,
-            block_tables=block_tables,
-            context_lens=context_lens,
-            query_lens=query_lens,
-            is_prefill=is_prefill,
-        )
-        token_ids = []
-        offset = 0
-        for seq, query_len in zip(seqs, query_lens):
-            sample_index = offset + query_len - 1
-            token_ids.append(
-                sample_next_token(
-                    logits[sample_index],
-                    temperature=seq.sampling.temperature,
-                    top_p=seq.sampling.top_p,
-                    top_k=seq.sampling.top_k,
-                )
-            )
-            offset += query_len
-        return token_ids
-
-    def _prepare_prefill(
-        self,
-        seqs: list[Sequence],
-    ) -> tuple[
-        torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, list[int]
-    ]:
-        input_ids: list[int] = []
-        positions: list[int] = []
-        slots: list[int] = []
-        context_lens: list[int] = []
-        query_lens: list[int] = []
-        for seq in seqs:
-            start = seq.num_cached_tokens
-            end = start + seq.num_scheduled_tokens
-            query_lens.append(seq.num_scheduled_tokens)
-            context_lens.append(end)
-            input_ids.extend(seq[start:end])
-            positions.extend(range(start, end))
-            slots.extend(
-                self.block_manager.slot_for_position(seq, pos)
-                for pos in range(start, end)
-            )
-        return self._to_runner_tensors(
-            input_ids, positions, slots, seqs, context_lens, query_lens
-        )
-
-    def _prepare_decode(
-        self,
-        seqs: list[Sequence],
-    ) -> tuple[
-        torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, list[int]
-    ]:
-        input_ids: list[int] = []
-        positions: list[int] = []
-        slots: list[int] = []
-        context_lens: list[int] = []
-        query_lens: list[int] = []
-        for seq in seqs:
-            position = len(seq) - 1
-            input_ids.append(seq.last_token)
-            positions.append(position)
-            slots.append(self.block_manager.slot_for_position(seq, position))
-            context_lens.append(len(seq))
-            query_lens.append(1)
-        return self._to_runner_tensors(
-            input_ids, positions, slots, seqs, context_lens, query_lens
-        )
-
-    def _to_runner_tensors(
-        self,
-        input_ids: list[int],
-        positions: list[int],
-        slots: list[int],
-        seqs: list[Sequence],
-        context_lens: list[int],
-        query_lens: list[int],
-    ) -> tuple[
-        torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, list[int]
-    ]:
-        device = self.model.device
-        max_blocks = max(len(seq.block_table) for seq in seqs)
-        padded_block_tables = [
-            seq.block_table + [-1] * (max_blocks - len(seq.block_table)) for seq in seqs
-        ]
-        return (
-            torch.tensor(input_ids, dtype=torch.long, device=device),
-            torch.tensor(positions, dtype=torch.long, device=device),
-            torch.tensor(slots, dtype=torch.long, device=device),
-            torch.tensor(padded_block_tables, dtype=torch.long, device=device),
-            torch.tensor(context_lens, dtype=torch.long, device=device),
-            query_lens,
-        )
-
-    def _publish_events(self, emitted: list[tuple[Sequence, int]]) -> None:
-        for seq, token_id in emitted:
-            if seq.events is not None:
+    def _dispatch(self, outputs: list[RequestOutput]) -> None:
+        """Hand a step's outputs to the waiting requests."""
+        with nvtx_range("publish"):
+            for output in outputs:
+                seq = self._requests.get(output.req_id)
+                if seq is None:  # aborted by the frontend meanwhile
+                    continue
+                if output.error is not None:
+                    self._requests.pop(output.req_id)
+                    seq.status = SequenceStatus.FINISHED
+                    seq.finish_reason = seq.finish_reason or "error"
+                    seq.events.put_nowait(GenerationEvent(finished=True, error=output.error))
+                    continue
+                if output.token_id is not None:
+                    seq.append_token(output.token_id)
+                if output.finish_reason is not None:
+                    self._requests.pop(output.req_id)
+                    seq.status = SequenceStatus.FINISHED
+                    seq.finish_reason = output.finish_reason
                 seq.events.put_nowait(
                     GenerationEvent(
-                        token_id=token_id,
-                        finished=seq.is_finished,
-                        finish_reason=seq.finish_reason if seq.is_finished else None,
+                        token_id=output.token_id,
+                        finished=output.finish_reason is not None,
+                        finish_reason=output.finish_reason,
                     )
                 )
 
-    def _fail_sequences(
-        self,
-        seqs: list[Sequence],
-        exc: BaseException,
-    ) -> None:
-        for seq in seqs:
-            try:
-                if self.scheduler is not None:
-                    self.scheduler.abort(seq, finish_reason="error")
-                else:
-                    seq.status = SequenceStatus.FINISHED
-            except Exception:  # still notify the waiting request below
-                logger.exception("Failed to release nano-vLLM sequence %s", seq.seq_id)
-            if seq.events is not None:
-                seq.events.put_nowait(GenerationEvent(finished=True, error=exc))
+    def _fail_frontend_requests(self, exc: BaseException) -> None:
+        for seq in list(self._requests.values()):
+            seq.status = SequenceStatus.FINISHED
+            seq.finish_reason = seq.finish_reason or "error"
+            seq.events.put_nowait(GenerationEvent(finished=True, error=exc))
+        self._requests.clear()
+
+
+class _CoreProcess:
+    """The engine core in a spawned process, connected by two one-way pipes."""
+
+    def __init__(self, config: NanoVLLMConfig):
+        context = multiprocessing.get_context("spawn")
+        core_inbox, self._to_core = context.Pipe(duplex=False)
+        self._from_core, core_outbox = context.Pipe(duplex=False)
+        self.process = context.Process(
+            target=run_core_process,
+            args=(config, core_inbox, core_outbox),
+            name="nano-vllm-core",
+            daemon=True,
+        )
+        self._child_ends = (core_inbox, core_outbox)
+        self._send_lock = threading.Lock()
+        self._reader: Optional[threading.Thread] = None
+        self.num_blocks = 0
+        self.stats: dict = {}
+
+    def start(self, timeout_s: float = 1800.0) -> None:
+        """Start the core and wait until it has loaded the model."""
+        self.process.start()
+        for end in self._child_ends:
+            end.close()  # EOF reaches the core when this process goes away
+        if not self._from_core.poll(timeout_s):
+            self.process.kill()
+            raise RuntimeError("nano-vLLM engine core did not start in time")
+        message = self._from_core.recv()
+        if message[0] != "ready":
+            self.process.join(5)
+            detail = message[1] if message[0] == "dead" else message
+            raise RuntimeError(f"nano-vLLM engine core failed to start:\n{detail}")
+        self.num_blocks = message[1]["num_blocks"]
+
+    def send(self, message: tuple) -> None:
+        with self._send_lock:
+            self._to_core.send(message)
+
+    def utility(self, name: str) -> None:
+        self.send(("utility", 0, name))
+
+    def start_reader(self, loop: asyncio.AbstractEventLoop, on_message) -> None:
+        if self._reader is not None:
+            return
+
+        def read() -> None:
+            while True:
+                try:
+                    message = self._from_core.recv()
+                except (EOFError, OSError):
+                    message = ("dead", "the engine core process exited")
+                try:
+                    if message[0] != "utility":
+                        loop.call_soon_threadsafe(on_message, message)
+                except RuntimeError:  # the event loop is closed
+                    return
+                if message[0] == "dead":
+                    return
+
+        self._reader = threading.Thread(target=read, name="nano-vllm-core-reader", daemon=True)
+        self._reader.start()
+
+    def shutdown(self) -> None:
+        try:
+            self.send(("shutdown",))
+        except (BrokenPipeError, OSError):
+            pass
+        self.process.join(10)
+        if self.process.is_alive():
+            self.process.kill()
+            self.process.join(5)
 
 
 def _token_id_list(value) -> list[int]:

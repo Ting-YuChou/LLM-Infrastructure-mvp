@@ -1,0 +1,15 @@
+[
+  {
+    "engine": "nano_vllm",
+    "path": "static",
+    "batch": 1,
+    "input_len": 128,
+    "output_len": 4,
+    "prefill_s": 0.24010614700000588,
+    "decode_steps_measured": 3,
+    "decode_ms_per_step": 139278.9243106666,
+    "decode_ms_p50": 234.08311000002868,
+    "decode_tok_per_s": 0.007179837186058849,
+    "load_s": 9.416784843000642
+  }
+]

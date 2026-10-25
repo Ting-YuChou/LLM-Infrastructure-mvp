@@ -4,24 +4,48 @@ from __future__ import annotations
 
 from contextlib import suppress
 from collections import deque
+from dataclasses import dataclass
 from typing import Optional
 
 from .block_manager import BlockManager
 from .sequence import Sequence, SequenceStatus
 
 
+SCHEDULING_POLICIES = ("prefill_first", "mixed")
+
+
+@dataclass
+class Row:
+    """One sequence's part of a launched step."""
+
+    seq: Sequence
+    samples: bool  # the step samples a token for it (decode, or the last prompt chunk)
+    num_computed_tokens: int  # KV computed once the step finishes
+    epoch: int  # the block table it wrote into (see Sequence.epoch)
+
+
 class Scheduler:
-    """Prefill-first scheduler with decode batching and simple preemption."""
+    """Continuous batching with chunked prefill and recompute preemption.
+
+    ``prefill_first``: a step is either all prefill chunks or all decodes, so
+    every prefill stalls the running decodes. ``mixed`` (chunked prefill as in
+    vLLM v1 and Sarathi): every step decodes all running sequences first and
+    fills the rest of the max_num_batched_tokens budget with prefill chunks.
+    """
 
     def __init__(
         self,
         block_manager: BlockManager,
         max_num_seqs: int,
         max_num_batched_tokens: int,
+        policy: str = "prefill_first",
     ) -> None:
+        if policy not in SCHEDULING_POLICIES:
+            raise ValueError(f"scheduling policy must be one of {SCHEDULING_POLICIES}")
         self.block_manager = block_manager
         self.max_num_seqs = max(1, max_num_seqs)
         self.max_num_batched_tokens = max(1, max_num_batched_tokens)
+        self.policy = policy
         self.waiting: deque[Sequence] = deque()
         self.running: deque[Sequence] = deque()
 
@@ -53,32 +77,62 @@ class Scheduler:
             self.waiting.remove(seq)
 
     def schedule(self) -> tuple[list[Sequence], bool]:
+        """The next batch and whether it has prefill rows (decode rows come first)."""
+        if self.policy == "mixed":
+            decodes = self._schedule_decode()
+            prefills = self._schedule_prefill(
+                token_budget=self.max_num_batched_tokens - len(decodes),
+                seq_budget=self.max_num_seqs - len(decodes),
+            )
+            return decodes + prefills, bool(prefills)
         prefill_batch = self._schedule_prefill()
         if prefill_batch:
             return prefill_batch, True
         return self._schedule_decode(), False
 
     def postprocess(
-        self, seqs: list[Sequence], token_ids: list[int], is_prefill: bool
+        self, seqs: list[Sequence], token_ids: list[int], is_prefill: bool = False
     ) -> list[tuple[Sequence, int]]:
-        """Apply a finished model step; return the tokens actually appended.
+        """Apply a finished model step; return the tokens actually appended."""
+        del is_prefill  # each row knows from its own counters
+        return self.complete(self.launched(seqs), token_ids)
 
-        A prefill chunk that leaves prompt tokens unprocessed samples a logit
-        that is meaningless, so it appends (and returns) nothing.
+    def launched(self, seqs: list[Sequence]) -> list[Row]:
+        """Advance the scheduled sequences as their step launches.
+
+        The KV of the scheduled tokens counts as computed from now on (later
+        steps on the same stream see it), and a sampled token is in flight
+        until :meth:`complete` brings its value.
         """
+        rows = []
+        for seq in seqs:
+            end = seq.num_cached_tokens + seq.num_scheduled_tokens
+            # A prefill chunk that leaves prompt tokens unprocessed samples
+            # a meaningless logit.
+            samples = end >= seq.num_tokens
+            seq.num_cached_tokens = end
+            seq.num_scheduled_tokens = 0
+            if samples:
+                seq.num_inflight += 1
+            rows.append(Row(seq, samples, end, seq.epoch))
+        return rows
+
+    def complete(self, rows: list[Row], token_ids: list[int]) -> list[tuple[Sequence, int]]:
+        """Apply a finished step's sampled tokens; return the ones appended."""
         emitted: list[tuple[Sequence, int]] = []
-        for seq, token_id in zip(seqs, token_ids):
+        for row, token_id in zip(rows, token_ids):
+            seq = row.seq
             if seq.is_finished:
-                # Aborted while its batch was running: release it now.
+                # Finished or aborted while its step was running: release it.
                 self.abort(seq)
                 continue
-            self.block_manager.hash_blocks(seq)
-            seq.num_cached_tokens += seq.num_scheduled_tokens
-            seq.num_scheduled_tokens = 0
-
-            if is_prefill and seq.num_cached_tokens < seq.num_tokens:
+            if row.epoch == seq.epoch:  # still the blocks this step wrote
+                self.block_manager.commit(seq, row.num_computed_tokens)
+            if not row.samples:
                 continue
-
+            # A preempted sequence keeps the token: the step that sampled it
+            # read valid KV, and the recompute prefills it with the rest.
+            seq.num_inflight -= 1
             seq.append_token(token_id)
             emitted.append((seq, token_id))
             if seq.should_finish(token_id):
@@ -86,6 +140,8 @@ class Scheduler:
                 self.block_manager.deallocate(seq)
                 with suppress(ValueError):
                     self.running.remove(seq)
+                with suppress(ValueError):
+                    self.waiting.remove(seq)
         return emitted
 
     def preempt(self, seq: Sequence) -> None:
@@ -111,12 +167,21 @@ class Scheduler:
         # Running sequences plus admitted ones still mid chunked-prefill.
         return len(self.running) + sum(1 for seq in self.waiting if seq.block_table)
 
-    def _schedule_prefill(self) -> list[Sequence]:
+    def _schedule_prefill(
+        self, token_budget: Optional[int] = None, seq_budget: Optional[int] = None
+    ) -> list[Sequence]:
+        token_budget = self.max_num_batched_tokens if token_budget is None else token_budget
+        seq_budget = self.max_num_seqs if seq_budget is None else seq_budget
         scheduled: list[Sequence] = []
         num_batched_tokens = 0
-        while self.waiting and len(scheduled) < self.max_num_seqs:
-            seq = self.waiting[0]
-            remaining = self.max_num_batched_tokens - num_batched_tokens
+        for seq in list(self.waiting):
+            if len(scheduled) >= seq_budget:
+                break
+            if seq.num_inflight:
+                # Preempted with a token still in flight: it can prefill once
+                # that token's value is known.
+                continue
+            remaining = token_budget - num_batched_tokens
             if remaining <= 0:
                 break
 
@@ -144,7 +209,7 @@ class Scheduler:
             num_batched_tokens += seq.num_scheduled_tokens
             if seq.num_cached_tokens + seq.num_scheduled_tokens == seq.num_tokens:
                 seq.status = SequenceStatus.RUNNING
-                self.waiting.popleft()
+                self.waiting.remove(seq)
                 self.running.append(seq)
             scheduled.append(seq)
         return scheduled
@@ -156,14 +221,26 @@ class Scheduler:
         sequences skipped this step sit at the front and go first next step.
         """
         scheduled: list[Sequence] = []
+        done: list[Sequence] = []
         budget = min(self.max_num_seqs, self.max_num_batched_tokens)
         current: Optional[Sequence] = None
         try:
             while self.running and len(scheduled) < budget:
                 seq = current = self.running.popleft()
+                if seq.num_completion_tokens + seq.num_inflight >= seq.sampling.max_tokens:
+                    # Its last token is in flight; it finishes when it lands.
+                    done.append(seq)
+                    current = None
+                    continue
                 while not self.block_manager.can_append(seq):
-                    # Preempt the youngest request (vLLM's recompute policy); it
-                    # may be ``seq`` itself. Already scheduled ones are off-limits.
+                    # Free a partly prefilled request's blocks first (it has
+                    # produced nothing yet and stays queued), else preempt the
+                    # youngest running one (vLLM's recompute policy); it may be
+                    # ``seq`` itself. Already scheduled ones are off-limits.
+                    partial = [item for item in self.waiting if item.block_table]
+                    if partial:
+                        self.block_manager.deallocate(max(partial, key=lambda item: item.seq_id))
+                        continue
                     victim = max([seq, *self.running], key=lambda item: item.seq_id)
                     if victim is seq:
                         self.preempt(seq)
@@ -183,5 +260,6 @@ class Scheduler:
             # engine can still find (and fail) them.
             if current is not None:
                 self.running.appendleft(current)
+            self.running.extendleft(reversed(done))
             self.running.extend(scheduled)
         return scheduled

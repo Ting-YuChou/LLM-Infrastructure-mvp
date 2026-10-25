@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="1" failures="0" skipped="0" tests="1" time="2.843" timestamp="2026-10-22T20:38:32.726930+00:00" hostname="10599333354e"><testcase classname="" name="tests.unit.test_nano_vllm_w4a16" time="0.000"><error message="collection failure">import file mismatch:
+imported module 'test_nano_vllm_w4a16' has this __file__ attribute:
+  /content/p0repo/tests/gpu/test_nano_vllm_w4a16.py
+which is not the same as the test file we want to collect:
+  /content/p0repo/tests/unit/test_nano_vllm_w4a16.py
+HINT: remove __pycache__ / .pyc files and/or use a unique basename for your test file modules</error></testcase></testsuite></testsuites>

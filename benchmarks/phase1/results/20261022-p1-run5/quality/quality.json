@@ -1,0 +1,39 @@
+[
+  {
+    "label": "bf16_torch",
+    "attention_backend": "torch",
+    "linear_backend": "torch",
+    "weight_quant": "none",
+    "ppl": 7.232779445768724,
+    "tokens": 288627,
+    "weights_gib": 14.95850419998169,
+    "load_s": 5.6971597140000085,
+    "eval_s": 57.8370021869996
+  },
+  {
+    "label": "bf16_triton",
+    "attention_backend": "triton",
+    "linear_backend": "triton",
+    "weight_quant": "none",
+    "ppl": 7.232469374645179,
+    "tokens": 288627,
+    "weights_gib": 14.96643877029419,
+    "load_s": 5.428999990999728,
+    "eval_s": 20.679656665999573,
+    "top1_agreement_vs": "bf16_torch",
+    "top1_agreement": 0.988071084022522
+  },
+  {
+    "label": "w4a16_triton",
+    "attention_backend": "triton",
+    "linear_backend": "triton",
+    "weight_quant": "w4a16",
+    "ppl": 8.024027691288365,
+    "tokens": 288627,
+    "weights_gib": 5.3256916999816895,
+    "load_s": 6.253493196999443,
+    "eval_s": 22.328662026999154,
+    "top1_agreement_vs": "bf16_torch",
+    "top1_agreement": 0.8589702248573303
+  }
+]

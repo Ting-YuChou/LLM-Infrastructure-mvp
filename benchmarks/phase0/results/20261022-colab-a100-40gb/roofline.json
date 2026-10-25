@@ -1,0 +1,476 @@
+[
+  {
+    "gpu": "A100-SXM4-40GB (datasheet)",
+    "hbm_GBps": 1555.0,
+    "bf16_tflops": 312.0,
+    "model": {
+      "total_params": 8030261248,
+      "total_weight_bytes": 16060522496,
+      "decode_step_weight_bytes": 15009849344,
+      "matmul_params": 7504658432,
+      "kv_bytes_per_token": 131072,
+      "attn_flops_per_query_key": 524288,
+      "embed_row_bytes": 8192
+    },
+    "batch1_ms_per_token": 9.674219915112541,
+    "decode_latency_ctx": [
+      {
+        "batch": 1,
+        "ctx": 256,
+        "ms_per_step": 9.674219915112541,
+        "tok_per_s": 103.3675075380346,
+        "bound": "memory",
+        "mem_ms": 9.674219915112541,
+        "compute_ms": 0.04853696984615384
+      },
+      {
+        "batch": 2,
+        "ctx": 256,
+        "ms_per_step": 9.695803596141479,
+        "tok_per_s": 206.27480540095877,
+        "bound": "memory",
+        "mem_ms": 9.695803596141479,
+        "compute_ms": 0.09707393969230768
+      },
+      {
+        "batch": 4,
+        "ctx": 256,
+        "ms_per_step": 9.738970958199356,
+        "tok_per_s": 410.72101120009523,
+        "bound": "memory",
+        "mem_ms": 9.738970958199356,
+        "compute_ms": 0.19414787938461536
+      },
+      {
+        "batch": 8,
+        "ctx": 256,
+        "ms_per_step": 9.825305682315111,
+        "tok_per_s": 814.2240311565533,
+        "bound": "memory",
+        "mem_ms": 9.825305682315111,
+        "compute_ms": 0.3882957587692307
+      },
+      {
+        "batch": 16,
+        "ctx": 256,
+        "ms_per_step": 9.997975130546623,
+        "tok_per_s": 1600.3240447273672,
+        "bound": "memory",
+        "mem_ms": 9.997975130546623,
+        "compute_ms": 0.7765915175384615
+      },
+      {
+        "batch": 32,
+        "ctx": 256,
+        "ms_per_step": 10.343314027009646,
+        "tok_per_s": 3093.7859873961033,
+        "bound": "memory",
+        "mem_ms": 10.343314027009646,
+        "compute_ms": 1.553183035076923
+      },
+      {
+        "batch": 64,
+        "ctx": 256,
+        "ms_per_step": 11.033991819935691,
+        "tok_per_s": 5800.258061127783,
+        "bound": "memory",
+        "mem_ms": 11.033991819935691,
+        "compute_ms": 3.106366070153846
+      },
+      {
+        "batch": 128,
+        "ctx": 256,
+        "ms_per_step": 12.415347405787783,
+        "tok_per_s": 10309.820242350126,
+        "bound": "memory",
+        "mem_ms": 12.415347405787783,
+        "compute_ms": 6.212732140307692
+      },
+      {
+        "batch": 256,
+        "ctx": 256,
+        "ms_per_step": 15.178058577491962,
+        "tok_per_s": 16866.452233860182,
+        "bound": "memory",
+        "mem_ms": 15.178058577491962,
+        "compute_ms": 12.425464280615383
+      }
+    ],
+    "decode_sweep_ctx": [
+      {
+        "batch": 1,
+        "ctx": 1152,
+        "ms_per_step": 9.749744360128616,
+        "tok_per_s": 102.5667918114325,
+        "bound": "memory",
+        "mem_ms": 9.749744360128616,
+        "compute_ms": 0.050042617435897434
+      },
+      {
+        "batch": 2,
+        "ctx": 1152,
+        "ms_per_step": 9.846852486173635,
+        "tok_per_s": 203.11058816086472,
+        "bound": "memory",
+        "mem_ms": 9.846852486173635,
+        "compute_ms": 0.10008523487179487
+      },
+      {
+        "batch": 4,
+        "ctx": 1152,
+        "ms_per_step": 10.041068738263666,
+        "tok_per_s": 398.3639694405372,
+        "bound": "memory",
+        "mem_ms": 10.041068738263666,
+        "compute_ms": 0.20017046974358974
+      },
+      {
+        "batch": 8,
+        "ctx": 1152,
+        "ms_per_step": 10.429501242443731,
+        "tok_per_s": 767.054896876883,
+        "bound": "memory",
+        "mem_ms": 10.429501242443731,
+        "compute_ms": 0.40034093948717947
+      },
+      {
+        "batch": 16,
+        "ctx": 1152,
+        "ms_per_step": 11.206366250803859,
+        "tok_per_s": 1427.7598680885772,
+        "bound": "memory",
+        "mem_ms": 11.206366250803859,
+        "compute_ms": 0.8006818789743589
+      },
+      {
+        "batch": 32,
+        "ctx": 1152,
+        "ms_per_step": 12.760096267524116,
+        "tok_per_s": 2507.8180704203314,
+        "bound": "memory",
+        "mem_ms": 12.760096267524116,
+        "compute_ms": 1.6013637579487179
+      },
+      {
+        "batch": 64,
+        "ctx": 1152,
+        "ms_per_step": 15.86755630096463,
+        "tok_per_s": 4033.3872958187817,
+        "bound": "memory",
+        "mem_ms": 15.86755630096463,
+        "compute_ms": 3.2027275158974358
+      },
+      {
+        "batch": 128,
+        "ctx": 1152,
+        "ms_per_step": 22.08247636784566,
+        "tok_per_s": 5796.451352094779,
+        "bound": "memory",
+        "mem_ms": 22.08247636784566,
+        "compute_ms": 6.4054550317948715
+      },
+      {
+        "batch": 256,
+        "ctx": 1152,
+        "ms_per_step": 34.512316501607714,
+        "tok_per_s": 7417.641756619685,
+        "bound": "memory",
+        "mem_ms": 34.512316501607714,
+        "compute_ms": 12.810910063589743
+      }
+    ],
+    "serve_sweep": [
+      {
+        "concurrency": 1,
+        "output_tok_per_s": 102.5637437558929,
+        "total_tok_per_s": 512.8187187794645,
+        "bound": "memory"
+      },
+      {
+        "concurrency": 2,
+        "output_tok_per_s": 203.0986355767312,
+        "total_tok_per_s": 1015.493177883656,
+        "bound": "memory"
+      },
+      {
+        "concurrency": 4,
+        "output_tok_per_s": 398.3179933312664,
+        "total_tok_per_s": 1991.589966656332,
+        "bound": "memory"
+      },
+      {
+        "concurrency": 8,
+        "output_tok_per_s": 766.8844540923692,
+        "total_tok_per_s": 3834.422270461846,
+        "bound": "memory"
+      },
+      {
+        "concurrency": 16,
+        "output_tok_per_s": 1427.1694591095668,
+        "total_tok_per_s": 7135.847295547834,
+        "bound": "memory"
+      },
+      {
+        "concurrency": 32,
+        "output_tok_per_s": 2505.9971170106683,
+        "total_tok_per_s": 12529.985585053342,
+        "bound": "memory"
+      },
+      {
+        "concurrency": 64,
+        "output_tok_per_s": 4028.6790964914812,
+        "total_tok_per_s": 20143.395482457407,
+        "bound": "memory"
+      },
+      {
+        "concurrency": 128,
+        "output_tok_per_s": 4066.466268539683,
+        "total_tok_per_s": 20332.331342698413,
+        "bound": "compute"
+      },
+      {
+        "concurrency": 256,
+        "output_tok_per_s": 4066.466268539683,
+        "total_tok_per_s": 20332.331342698413,
+        "bound": "compute"
+      }
+    ]
+  },
+  {
+    "gpu": "A100-SXM4-40GB (measured on this pod)",
+    "hbm_GBps": 1380.2046915717576,
+    "bf16_tflops": 268.88102178066333,
+    "model": {
+      "total_params": 8030261248,
+      "total_weight_bytes": 16060522496,
+      "decode_step_weight_bytes": 15009849344,
+      "matmul_params": 7504658432,
+      "kv_bytes_per_token": 131072,
+      "attn_flops_per_query_key": 524288,
+      "embed_row_bytes": 8192
+    },
+    "batch1_ms_per_token": 10.89940648648917,
+    "decode_latency_ctx": [
+      {
+        "batch": 1,
+        "ctx": 256,
+        "ms_per_step": 10.89940648648917,
+        "tok_per_s": 91.74811502255588,
+        "bound": "memory",
+        "mem_ms": 10.89940648648917,
+        "compute_ms": 0.05632057811931839
+      },
+      {
+        "batch": 2,
+        "ctx": 256,
+        "ms_per_step": 10.92372362162496,
+        "tok_per_s": 183.0877518761766,
+        "bound": "memory",
+        "mem_ms": 10.92372362162496,
+        "compute_ms": 0.11264115623863678
+      },
+      {
+        "batch": 4,
+        "ctx": 256,
+        "ms_per_step": 10.972357891896538,
+        "tok_per_s": 364.5524543957992,
+        "bound": "memory",
+        "mem_ms": 10.972357891896538,
+        "compute_ms": 0.22528231247727357
+      },
+      {
+        "batch": 8,
+        "ctx": 256,
+        "ms_per_step": 11.069626432439692,
+        "tok_per_s": 722.6982815387419,
+        "bound": "memory",
+        "mem_ms": 11.069626432439692,
+        "compute_ms": 0.45056462495454713
+      },
+      {
+        "batch": 16,
+        "ctx": 256,
+        "ms_per_step": 11.264163513526002,
+        "tok_per_s": 1420.433925767076,
+        "bound": "memory",
+        "mem_ms": 11.264163513526002,
+        "compute_ms": 0.9011292499090943
+      },
+      {
+        "batch": 32,
+        "ctx": 256,
+        "ms_per_step": 11.653237675698621,
+        "tok_per_s": 2746.0179643235138,
+        "bound": "memory",
+        "mem_ms": 11.653237675698621,
+        "compute_ms": 1.8022584998181885
+      },
+      {
+        "batch": 64,
+        "ctx": 256,
+        "ms_per_step": 12.43138600004386,
+        "tok_per_s": 5148.259413694836,
+        "bound": "memory",
+        "mem_ms": 12.43138600004386,
+        "compute_ms": 3.604516999636377
+      },
+      {
+        "batch": 128,
+        "ctx": 256,
+        "ms_per_step": 13.987682648734337,
+        "tok_per_s": 9150.90821077371,
+        "bound": "memory",
+        "mem_ms": 13.987682648734337,
+        "compute_ms": 7.209033999272754
+      },
+      {
+        "batch": 256,
+        "ctx": 256,
+        "ms_per_step": 17.100275946115293,
+        "tok_per_s": 14970.518651668664,
+        "bound": "memory",
+        "mem_ms": 17.100275946115293,
+        "compute_ms": 14.418067998545508
+      }
+    ],
+    "decode_sweep_ctx": [
+      {
+        "batch": 1,
+        "ctx": 1152,
+        "ms_per_step": 10.984495685734148,
+        "tok_per_s": 91.03740659652917,
+        "bound": "memory",
+        "mem_ms": 10.984495685734148,
+        "compute_ms": 0.05806767817453613
+      },
+      {
+        "batch": 2,
+        "ctx": 1152,
+        "ms_per_step": 11.093902020114912,
+        "tok_per_s": 180.2792197347425,
+        "bound": "memory",
+        "mem_ms": 11.093902020114912,
+        "compute_ms": 0.11613535634907227
+      },
+      {
+        "batch": 4,
+        "ctx": 1152,
+        "ms_per_step": 11.312714688876442,
+        "tok_per_s": 353.58444988744543,
+        "bound": "memory",
+        "mem_ms": 11.312714688876442,
+        "compute_ms": 0.23227071269814453
+      },
+      {
+        "batch": 8,
+        "ctx": 1152,
+        "ms_per_step": 11.7503400263995,
+        "tok_per_s": 680.8313616479517,
+        "bound": "memory",
+        "mem_ms": 11.7503400263995,
+        "compute_ms": 0.46454142539628906
+      },
+      {
+        "batch": 16,
+        "ctx": 1152,
+        "ms_per_step": 12.625590701445617,
+        "tok_per_s": 1267.2674394686353,
+        "bound": "memory",
+        "mem_ms": 12.625590701445617,
+        "compute_ms": 0.9290828507925781
+      },
+      {
+        "batch": 32,
+        "ctx": 1152,
+        "ms_per_step": 14.376092051537855,
+        "tok_per_s": 2225.917856207443,
+        "bound": "memory",
+        "mem_ms": 14.376092051537855,
+        "compute_ms": 1.8581657015851563
+      },
+      {
+        "batch": 64,
+        "ctx": 1152,
+        "ms_per_step": 17.877094751722325,
+        "tok_per_s": 3580.0000441254065,
+        "bound": "memory",
+        "mem_ms": 17.877094751722325,
+        "compute_ms": 3.7163314031703125
+      },
+      {
+        "batch": 128,
+        "ctx": 1152,
+        "ms_per_step": 24.879100152091272,
+        "tok_per_s": 5144.880611336767,
+        "bound": "memory",
+        "mem_ms": 24.879100152091272,
+        "compute_ms": 7.432662806340625
+      },
+      {
+        "batch": 256,
+        "ctx": 1152,
+        "ms_per_step": 38.88311095282916,
+        "tok_per_s": 6583.835339475924,
+        "bound": "memory",
+        "mem_ms": 38.88311095282916,
+        "compute_ms": 14.86532561268125
+      }
+    ],
+    "serve_sweep": [
+      {
+        "concurrency": 1,
+        "output_tok_per_s": 91.03470116851892,
+        "total_tok_per_s": 455.17350584259464,
+        "bound": "memory"
+      },
+      {
+        "concurrency": 2,
+        "output_tok_per_s": 180.2686107233615,
+        "total_tok_per_s": 901.3430536168074,
+        "bound": "memory"
+      },
+      {
+        "concurrency": 4,
+        "output_tok_per_s": 353.54364188634213,
+        "total_tok_per_s": 1767.7182094317104,
+        "bound": "memory"
+      },
+      {
+        "concurrency": 8,
+        "output_tok_per_s": 680.6800780911474,
+        "total_tok_per_s": 3403.400390455737,
+        "bound": "memory"
+      },
+      {
+        "concurrency": 16,
+        "output_tok_per_s": 1266.743397511866,
+        "total_tok_per_s": 6333.71698755933,
+        "bound": "memory"
+      },
+      {
+        "concurrency": 32,
+        "output_tok_per_s": 2224.3015935456096,
+        "total_tok_per_s": 11121.507967728048,
+        "bound": "memory"
+      },
+      {
+        "concurrency": 64,
+        "output_tok_per_s": 3504.473093979331,
+        "total_tok_per_s": 17522.365469896657,
+        "bound": "compute"
+      },
+      {
+        "concurrency": 128,
+        "output_tok_per_s": 3504.473093979331,
+        "total_tok_per_s": 17522.365469896657,
+        "bound": "compute"
+      },
+      {
+        "concurrency": 256,
+        "output_tok_per_s": 3504.473093979331,
+        "total_tok_per_s": 17522.365469896657,
+        "bound": "compute"
+      }
+    ]
+  }
+]

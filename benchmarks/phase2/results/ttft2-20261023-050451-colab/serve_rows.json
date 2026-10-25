@@ -1,0 +1,42 @@
+[
+  {
+    "engine": "nano_w1c1c",
+    "run": "w1_c1_first",
+    "ok": true,
+    "completed": 10,
+    "req_s": 5.953,
+    "out_tok_s": 47.6,
+    "ttft_p50_ms": 76.64,
+    "ttft_p90_ms": 94.37,
+    "ttft_p99_ms": 111.8,
+    "tpot_p50_ms": 12.22,
+    "tpot_p90_ms": 12.28,
+    "tpot_p99_ms": 12.64,
+    "itl_p50_ms": 12.17,
+    "itl_p90_ms": 12.58,
+    "itl_p99_ms": 12.89,
+    "e2el_p50_ms": 162.16,
+    "e2el_p90_ms": 180.31,
+    "e2el_p99_ms": 200.27
+  },
+  {
+    "engine": "nano_w1c1c",
+    "run": "w1_c1",
+    "ok": true,
+    "completed": 10,
+    "req_s": 0.636,
+    "out_tok_s": 81.4,
+    "ttft_p50_ms": 22.64,
+    "ttft_p90_ms": 23.27,
+    "ttft_p99_ms": 24.29,
+    "tpot_p50_ms": 12.19,
+    "tpot_p90_ms": 12.2,
+    "tpot_p99_ms": 12.24,
+    "itl_p50_ms": 12.18,
+    "itl_p90_ms": 12.28,
+    "itl_p99_ms": 12.8,
+    "e2el_p50_ms": 1570.8,
+    "e2el_p90_ms": 1572.46,
+    "e2el_p99_ms": 1579.29
+  }
+]

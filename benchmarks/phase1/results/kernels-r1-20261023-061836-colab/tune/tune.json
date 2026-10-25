@@ -1,0 +1,5826 @@
+[
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "qkv",
+      "M": 1,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "gemv",
+        "rows_per_warp": 2,
+        "gemv_prefetch": 0
+      },
+      "us": 18.130356027174365
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 18.13829407211422
+    },
+    "speedup_vs_default": 1.0004378317186908,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 20.988031875255498
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 20.6466977910478
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 19.73383001578871
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 21.662760150524996
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 18.130356027174365
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 18.582820892333984
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 19.142449364181637
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 20.960248717966007
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 18.662201341732526
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 20.130728566369346
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 20.781642706819284
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 27.691659077193385
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 21.01184416186902
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 20.99596807198931
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 26.504930599715358
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 25.10784577953723
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 28.01314804905145
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 21.888992583104805
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 52.88285248039305
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 31.212156133134236
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 23.020154746003854
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 19.55919302711191
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 18.13829407211422
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "qkv",
+      "M": 2,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "wide",
+        "splits": 8
+      },
+      "us": 19.87274395403012
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 20.666542903397435
+    },
+    "speedup_vs_default": 1.0399441039045005,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 28.707721436670585
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 31.355037245639537
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 28.580712717632913
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 31.374883282092192
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 20.670511925867363
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 24.02431003807127
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 24.86970627954764
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 24.36167509980904
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 20.678449970807215
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 22.008061408996582
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 22.916962009991785
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 30.36279086918794
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 21.02772025174873
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 21.019782206808873
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 26.822448700897453
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 25.29041896494784
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 28.425922689511793
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 22.39305474037348
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 52.982077118038205
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 31.672559043233708
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 23.552000060562015
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 19.87274395403012
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 20.666542903397435
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "qkv",
+      "M": 4,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "wide",
+        "splits": 8
+      },
+      "us": 20.87293022362761
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 21.059472431508144
+    },
+    "speedup_vs_default": 1.0089370397870336,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 49.31869802548904
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 50.433985022611395
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 50.94598614892294
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 51.6286524691323
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 36.14958312160285
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 34.014261970224304
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 34.494510916776434
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 36.383752675019494
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 26.441426240196524
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 33.72452795043472
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 36.32024831550066
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 36.49488345597142
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 21.091224611267563
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 21.09916265620742
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 26.957395464874978
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 25.492837262708086
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 28.624371964802112
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 23.174946622331014
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 52.85904019377952
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 32.42269782132881
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 24.369613144748893
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 20.87293022362761
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 21.059472431508144
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "qkv",
+      "M": 8,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 21.24998366185861
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 21.24998366185861
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 102.22139654233473
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 96.03373579276625
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 97.02598216921784
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 102.37221754798594
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 56.24062146327292
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 55.75640257014785
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 61.07088392095048
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 67.11168806682261
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 46.13556603128596
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 49.32663422222285
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 51.01345675860264
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 65.62331665393918
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 21.273797796678174
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 21.257921706798466
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 27.679752009783606
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 26.41761210537696
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 29.497549515361932
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 24.695069290870844
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 53.51789237916932
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 33.736435941947526
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 26.159627493037732
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 23.147163465041523
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 21.24998366185861
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "qkv",
+      "M": 16,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "mma",
+        "splits": 0
+      },
+      "us": 22.01203043146651
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 22.01203043146651
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 199.19181794159172
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 190.22188999856166
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 193.1430683579556
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 199.50933973918592
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 110.79838479212088
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 110.06015215733255
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 118.92688366793847
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 128.50802813389504
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 87.92111670324044
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 93.55708425359208
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 96.910883289899
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 124.78115022644516
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 22.01203043146651
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 22.02393749887629
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 29.434047004049138
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 28.818852217622506
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 32.553672790527344
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 28.19175221199213
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 54.19262065443882
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 36.77668312723323
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 29.72775281861771
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 27.961550756942394
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 22.01203043146651
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "qkv",
+      "M": 32,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "mma",
+        "splits": 0
+      },
+      "us": 31.08117746752362
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 40.178108584973245
+    },
+    "speedup_vs_default": 1.292682963087705,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 393.24377488720324
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 378.4394375113554
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 385.3613683419634
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 394.0455118815104
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 219.95361091554628
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 218.6081243115802
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 234.48012595952943
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 250.70536413858102
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 171.25010675238084
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 181.73222209131995
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 188.42394037764203
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 243.18411923194117
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 31.08117746752362
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 31.09308361083038
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 37.12595340817474
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 42.337240174759266
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 52.918572758519375
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 40.17414048660633
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 68.54052876317223
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 49.953737924265305
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 41.55534921690475
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 51.962046660194105
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 40.178108584973245
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "qkv",
+      "M": 64,
+      "N": 6144,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "wide",
+        "splits": 4
+      },
+      "us": 63.74201663704805
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 65.22642179977062
+    },
+    "speedup_vs_default": 1.0232877031672043,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 73.52558402127997
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 73.50573798482733
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 87.21066630163858
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 97.91900575623032
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 115.26350272718327
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 65.23832424666531
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 89.298359183378
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 72.94610858887665
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 63.74201663704805
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 75.21240470945374
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 65.22642179977062
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "o_proj",
+      "M": 1,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "gemv",
+        "rows_per_warp": 1,
+        "gemv_prefetch": 0
+      },
+      "us": 13.09600006788969
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 13.539999723434448
+    },
+    "speedup_vs_default": 1.0339034555011501,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 13.09600006788969
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 14.45200014859438
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 14.287999831140041
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 17.896000295877457
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 13.535999692976475
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 13.704000040888786
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 13.968000188469887
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 15.056000091135502
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 15.891999937593937
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 16.908000223338604
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 16.819999553263187
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 17.75999926030636
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 16.660000197589397
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 19.420000724494457
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 16.66400022804737
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 18.28799955546856
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 21.487999707460403
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 16.791999340057373
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 51.98400095105171
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 29.944000765681267
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 21.068000234663486
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 16.220000572502613
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 13.539999723434448
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "o_proj",
+      "M": 2,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "gemv",
+        "rows_per_warp": 2,
+        "gemv_prefetch": 0
+      },
+      "us": 15.448000282049179
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 15.452000312507153
+    },
+    "speedup_vs_default": 1.0002589351621531,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 19.039999693632126
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 20.263999700546265
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 23.824000731110573
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 24.687999859452248
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 15.448000282049179
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 15.51199983805418
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 16.488000750541687
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 17.071999609470367
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 17.511999234557152
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 18.247999250888824
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 18.72399915009737
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 19.592000171542168
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 16.704000532627106
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 19.440000876784325
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 16.69600047171116
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 18.36800016462803
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 21.67999930679798
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 17.295999452471733
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 52.000001072883606
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 30.424000695347786
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 21.499999798834324
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 16.704000532627106
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 15.452000312507153
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "o_proj",
+      "M": 4,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "mma",
+        "splits": 0
+      },
+      "us": 16.779999248683453
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 16.807999461889267
+    },
+    "speedup_vs_default": 1.0016686659391842,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 37.035999819636345
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 40.49599915742874
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 37.87200152873993
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 36.291999742388725
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 22.199999541044235
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 22.659999318420887
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 22.8240005671978
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 29.600000008940697
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 22.096000611782074
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 22.739999927580357
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 23.93599972128868
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 32.68799930810928
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 16.779999248683453
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 19.47999931871891
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 16.779999248683453
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 18.479999154806137
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 21.74799982458353
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 18.224000930786133
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 51.816001534461975
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 31.132000498473644
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 22.2960002720356
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 17.59199984371662
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 16.807999461889267
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "o_proj",
+      "M": 8,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "mma",
+        "splits": 2
+      },
+      "us": 17.160000279545784
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 17.172000370919704
+    },
+    "speedup_vs_default": 1.0006993060127292,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 75.57199895381927
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 70.79999893903732
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 71.97599858045578
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 75.2279981970787
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 45.871999114751816
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 43.807998299598694
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 40.992001071572304
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 50.624001771211624
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 33.291999250650406
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 43.111998587846756
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 44.22399960458279
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 63.23599815368652
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 17.176000401377678
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 19.551999866962433
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 17.160000279545784
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 19.05599981546402
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 22.512000054121017
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 20.495999604463577
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 52.15599946677685
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 32.655999064445496
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 24.211999960243702
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 19.49199941009283
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 17.172000370919704
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "o_proj",
+      "M": 16,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 18.216000869870186
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 18.216000869870186
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 148.0560004711151
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 140.33599942922592
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 143.09599995613098
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 147.2640037536621
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 87.93599903583527
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 86.61600202322006
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 79.31599766016006
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 96.77200019359589
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 64.41599875688553
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 81.04399964213371
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 81.96400105953217
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 120.53200230002403
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 18.235999159514904
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 20.16800083220005
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 18.23199912905693
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 20.60400042682886
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 24.788000620901585
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 24.54400062561035
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 52.616000175476074
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 35.415999591350555
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 27.97600068151951
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 24.47200007736683
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 18.216000869870186
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "o_proj",
+      "M": 32,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "mma",
+        "splits": 1
+      },
+      "us": 29.803999699652195
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 35.920001566410065
+    },
+    "speedup_vs_default": 1.2052074194199258,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 292.71599650382996
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 279.18000519275665
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 285.2119952440262
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 291.15599393844604
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 172.1320003271103
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 172.19999432563782
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 155.7600051164627
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 187.97200173139572
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 126.54399871826172
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 156.37600421905518
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 156.8799987435341
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 235.2999970316887
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 35.599999129772186
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 29.803999699652195
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 35.599999129772186
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 32.7720008790493
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 37.08000108599663
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 35.93600168824196
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 66.81600213050842
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 48.475999385118484
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 39.423998445272446
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 37.039998918771744
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 35.920001566410065
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "o_proj",
+      "M": 64,
+      "N": 4096,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "wide",
+        "splits": 0
+      },
+      "us": 57.08399973809719
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 57.08800069987774
+    },
+    "speedup_vs_default": 1.0000700890231746,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 71.04799896478653
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 71.05600088834763
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 66.59600138664246
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 66.65199995040894
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 80.61599731445312
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 57.08399973809719
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 86.98400110006332
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 70.6000030040741
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 60.19599922001362
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 72.34399765729904
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 57.08800069987774
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "gate_up",
+      "M": 1,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 60.01664161682129
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 60.01664161682129
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 63.406078815460205
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 66.42175912857056
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 68.86912107467651
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 73.71263980865479
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 60.05760192871094
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 62.35136032104492
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 64.08192157745361
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 70.74816226959229
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 60.339200496673584
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 64.8857593536377
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 68.15743923187256
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 86.49215698242188
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 68.55168104171753
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 68.49024057388306
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 79.32928085327148
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 88.69888305664062
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 104.4480037689209
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 87.32160091400146
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 87.22432136535645
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 98.821120262146
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 81.74592018127441
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 79.12960052490234
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 60.01664161682129
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "gate_up",
+      "M": 2,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "mma",
+        "splits": 0
+      },
+      "us": 68.94591808319092
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 70.96832036972046
+    },
+    "speedup_vs_default": 1.02933316928334,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 108.3903980255127
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 109.64991569519043
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 110.84288120269775
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 114.01215553283691
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 70.98880052566528
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 74.90047931671143
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 79.44191932678223
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 82.16063976287842
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 71.36256217956543
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 80.33792018890381
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 80.50175666809082
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 98.76992225646973
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 68.94591808319092
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 69.05344009399414
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 81.02911949157715
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 89.82527732849121
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 105.98400115966797
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 87.29600429534912
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 87.55200386047363
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 100.84352016448975
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 83.23584079742432
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 79.63135957717896
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 70.96832036972046
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "gate_up",
+      "M": 4,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "mma",
+        "splits": 1
+      },
+      "us": 69.49888229370117
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 69.61663961410522
+    },
+    "speedup_vs_default": 1.0016943771830231,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 208.34304809570312
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 210.16064643859863
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 210.02239227294922
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 212.11135864257812
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 118.41023921966553
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 121.00607872009277
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 123.27936172485352
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 134.42560195922852
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 97.78176307678223
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 110.33599853515625
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 114.83136177062988
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 149.0227174758911
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 69.61152076721191
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 69.49888229370117
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 82.72383689880371
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 90.63424110412598
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 107.12575912475586
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 88.04863929748535
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 87.76191711425781
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 101.95456027984619
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 85.13535976409912
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 80.94207763671875
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 69.61663961410522
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "gate_up",
+      "M": 8,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 70.55359840393066
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 70.55359840393066
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 408.5708808898926
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 409.12384033203125
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 420.12672424316406
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 427.21792221069336
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 223.12959671020508
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 221.36320114135742
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 238.46400260925293
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 274.60607528686523
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 163.7171173095703
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 195.29727935791016
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 201.00607872009277
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 296.52480125427246
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 70.55871963500977
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 70.61503887176514
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 86.05184078216553
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 93.0508804321289
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 110.34624099731445
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 89.19551849365234
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 89.2416000366211
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 105.55391788482666
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 89.0060806274414
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 83.75296115875244
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 70.55359840393066
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "gate_up",
+      "M": 16,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "mma",
+        "splits": 1
+      },
+      "us": 73.88160228729248
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 73.96352052688599
+    },
+    "speedup_vs_default": 1.0011087772470737,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 816.9779205322266
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 818.0889892578125
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 840.0486755371094
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 854.4358062744141
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 446.2131118774414
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 442.7212905883789
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 476.8511962890625
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 549.166088104248
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 327.4137496948242
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 390.4972839355469
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 401.9046401977539
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 592.803840637207
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 74.00447845458984
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 73.88160228729248
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 93.55775833129883
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 99.55840110778809
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 121.05728149414062
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 92.2111988067627
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 92.07295894622803
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 110.57663917541504
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 97.50016212463379
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 92.92799949645996
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 73.96352052688599
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "gate_up",
+      "M": 32,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "wide",
+        "splits": 1
+      },
+      "us": 117.93407917022705
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 117.94943809509277
+    },
+    "speedup_vs_default": 1.000130233135102,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 1633.9813995361328
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 1636.2495422363281
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 1680.2661895751953
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 1708.5235595703125
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 892.3904037475586
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 885.2223968505859
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 953.6051177978516
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 1098.2400131225586
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 654.648323059082
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 780.8153533935547
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 803.6505508422852
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 1185.3823852539062
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 137.48223781585693
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 137.4720001220703
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 161.976318359375
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 174.0441608428955
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 218.8851261138916
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 118.04159641265869
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 117.93407917022705
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 132.44928359985352
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 118.60992431640625
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 128.60415935516357
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 117.94943809509277
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "gate_up",
+      "M": 64,
+      "N": 28672,
+      "K": 4096
+    },
+    "best": {
+      "config": {
+        "kernel": "wide",
+        "splits": 1
+      },
+      "us": 203.40736389160156
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 203.41760635375977
+    },
+    "speedup_vs_default": 1.0000503544314339,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 311.19359970092773
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 311.19359970092773
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 369.9814224243164
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 417.6588821411133
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 505.8969497680664
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 203.43807220458984
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 203.40736389160156
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 223.92319679260254
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 216.7910385131836
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 239.10400390625
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 203.41760635375977
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "down",
+      "M": 1,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "kernel": "gemv",
+        "rows_per_warp": 1,
+        "gemv_prefetch": 0
+      },
+      "us": 37.739789276792294
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 39.00631477958278
+    },
+    "speedup_vs_default": 1.0335594216889104,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 37.739789276792294
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 39.16351000467936
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 39.424001124867225
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 48.27621108607242
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 39.00631477958278
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 38.947929415786476
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 40.10666462413052
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 40.85221206932737
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 47.76421137023391
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 50.52182548924496
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 48.80617585098534
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 51.554807445459204
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 43.6053338803743
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 60.16898155212402
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 43.59185904787298
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 43.62329892944871
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 50.3107372083162
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 47.87649188125343
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 180.10723381711725
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 95.26343931231582
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 62.94905093678257
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 44.14877138639751
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 39.00631477958278
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "down",
+      "M": 2,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 43.717612300002784
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 43.717612300002784
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 59.07761423211349
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 60.23634944045753
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 75.37178825913814
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 73.78189605579041
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 43.74006965704132
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 43.97810551158169
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 46.96028274402284
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 46.726737106055545
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 52.80336789917527
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 54.27199915835732
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 54.339369138081864
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 58.78568323034989
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 43.811929853338945
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 60.254314489531936
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 43.79396480426453
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 44.09936854713841
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 50.620631167763165
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 48.397474121629145
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 180.1386632417378
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 95.64070116009628
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 63.443087694937724
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 44.638315836588546
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 43.717612300002784
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "down",
+      "M": 4,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "kernel": "mma",
+        "splits": 0
+      },
+      "us": 44.108351071675614
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 44.121825904176944
+    },
+    "speedup_vs_default": 1.0003054939070253,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 120.71972144277473
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 130.45670275102583
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 121.52814028555886
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 112.00224725823654
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 65.80996513366699
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 63.54638568142005
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 66.04799889681632
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 93.46694695322137
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 66.94624716775459
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 69.01221108018306
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 72.39410333466111
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 106.74301783243814
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 44.108351071675614
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 60.4159999312016
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 44.117333596212816
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 44.9482097960355
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 50.98442027443334
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 49.304702825713576
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 180.01740438896314
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 96.53894524825247
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 64.3413317830939
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 45.559017281783255
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 44.121825904176944
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "down",
+      "M": 8,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 45.23565058122601
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 45.23565058122601
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 253.75887385585852
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 232.66357288025972
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 227.65586250706724
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 241.430449904057
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 166.1484952558551
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 153.98176092850534
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 132.54961214567487
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 163.43129308600174
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 104.12013739870306
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 142.83452117652223
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 145.4574016102573
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 143.92590104487905
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 45.244631014372175
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 60.75284146426017
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 45.244633105763214
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 46.18778981660542
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 51.8647034962972
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 50.970947533323056
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 180.58779365138003
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 98.14680668345669
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 66.2860347513567
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 47.24322912985818
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 45.23565058122601
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "down",
+      "M": 16,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "kernel": "mma",
+        "splits": 2
+      },
+      "us": 47.665403600324666
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 47.68336864939907
+    },
+    "speedup_vs_default": 1.0003768991284547,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 506.6015343917044
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 460.37782702529637
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 445.76785438939146
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 480.3727802477385
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 325.54218225311814
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 297.21149645353614
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 263.0108030218827
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 322.6767757482696
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 206.24617526405734
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 290.4656728108724
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 290.29951597514906
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 290.1872333727385
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 47.678878432826
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 62.70652486566912
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 47.665403600324666
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 48.83312342459695
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 54.26301872521116
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 55.03101725327341
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 181.21656618620221
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 101.17838675515694
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 70.1035784001936
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 51.379647171288205
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 47.68336864939907
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "down",
+      "M": 32,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "kernel": "wide",
+        "splits": 8
+      },
+      "us": 68.4912267484163
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 74.70259750098512
+    },
+    "speedup_vs_default": 1.090688560381384,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "us": 1012.2329979612116
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "us": 906.7834218343099
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "us": 880.6939041405393
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "us": 956.9639574017441
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "us": 638.3472241853412
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "us": 581.9733602958813
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "us": 521.687574553908
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "us": 639.1017646120306
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "us": 409.6404125815943
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "us": 576.5075014348615
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "us": 573.4579855935615
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "us": 581.2322716963919
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 105.06329620093629
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 99.79059821680973
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 105.05431576779014
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 82.16701474106102
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 81.5786646123518
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 74.68014432672868
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 231.82820437247292
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 132.19480347215082
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 90.86652387652481
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 68.4912267484163
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 74.70259750098512
+      }
+    ]
+  },
+  {
+    "kernel": "w4a16",
+    "shape": {
+      "layer": "down",
+      "M": 64,
+      "N": 4096,
+      "K": 14336
+    },
+    "best": {
+      "config": {
+        "kernel": "wide",
+        "splits": 4
+      },
+      "us": 126.77389278746489
+    },
+    "default": {
+      "config": {
+        "kernel": "auto",
+        "auto_gemv_rows": 2,
+        "auto_mma_rows": 16,
+        "rows_per_warp": 2,
+        "splits": 0,
+        "gemv_prefetch": 0
+      },
+      "us": 132.51817435549015
+    },
+    "speedup_vs_default": 1.0453112343694888,
+    "all": [
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 0
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 1
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 2
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 1,
+          "gemv_prefetch": 4
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 0
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 1
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 2
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 2,
+          "gemv_prefetch": 4
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 0
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 1
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 2
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "gemv",
+          "rows_per_warp": 4,
+          "gemv_prefetch": 4
+        },
+        "error": "ValueError: outside the GEMV's row limit"
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 0
+        },
+        "us": 242.1131217688845
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 1
+        },
+        "us": 242.06820705480743
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 2
+        },
+        "us": 194.04350247299462
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 4
+        },
+        "us": 171.31789525349933
+      },
+      {
+        "config": {
+          "kernel": "mma",
+          "splits": 8
+        },
+        "us": 190.72898228963214
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 0
+        },
+        "us": 132.53165127938252
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 1
+        },
+        "us": 293.45234653405976
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 2
+        },
+        "us": 175.05009969075522
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 4
+        },
+        "us": 126.77389278746489
+      },
+      {
+        "config": {
+          "kernel": "wide",
+          "splits": 8
+        },
+        "us": 131.11242076806855
+      },
+      {
+        "config": {
+          "kernel": "auto",
+          "auto_gemv_rows": 2,
+          "auto_mma_rows": 16,
+          "rows_per_warp": 2,
+          "splits": 0,
+          "gemv_prefetch": 0
+        },
+        "us": 132.51817435549015
+      }
+    ]
+  }
+]

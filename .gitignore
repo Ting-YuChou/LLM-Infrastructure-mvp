@@ -115,3 +115,9 @@ SETUP.md
 *.h5
 models/
 workspace/
+
+# nsys/ncu captures: large binaries, kept locally (benchmarks/*/results)
+benchmarks/*/results/**/*.nsys-rep
+benchmarks/*/results/**/*.ncu-rep
+benchmarks/*/results/**/*.sqlite
+benchmarks/*/results/**/*_source.csv

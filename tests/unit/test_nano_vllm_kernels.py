@@ -123,10 +123,11 @@ def test_rope_matches_transformers_rotate_half_layout(rope_scaling):
     cos, sin = rotary(query, positions.view(1, -1))
     expected_query, expected_key = apply_rotary_pos_emb(query, key, cos, sin)
 
-    inv_freq = compute_inv_freq(head_dim, config.rope_theta, rope_scaling)
+    # 500000.0 as set in _hf_llama_config; transformers 5 has no config.rope_theta.
+    inv_freq = compute_inv_freq(head_dim, 500000.0, rope_scaling)
     torch.testing.assert_close(inv_freq, rotary.inv_freq, rtol=0, atol=0)
     actual_query, actual_key = apply_rope(
-        query, key, positions, theta=config.rope_theta, inv_freq=inv_freq
+        query, key, positions, theta=500000.0, inv_freq=inv_freq
     )
     torch.testing.assert_close(actual_query, expected_query, rtol=1e-5, atol=1e-6)
     torch.testing.assert_close(actual_key, expected_key, rtol=1e-5, atol=1e-6)
@@ -184,3 +185,27 @@ def test_triton_rms_norm_handles_large_fp16_inputs():
 
     assert torch.isfinite(actual).all()
     torch.testing.assert_close(actual, expected, rtol=2e-3, atol=2e-3)
+
+
+def test_fused_add_rms_norm_reference_adds_then_normalizes():
+    from serving.nano_vllm.kernels import fused_add_rms_norm
+
+    torch.manual_seed(0)
+    x, residual = torch.randn(3, 16), torch.randn(3, 16)
+    weight = torch.randn(16)
+
+    normed, new_residual = fused_add_rms_norm(x, residual, weight, eps=1e-5)
+
+    torch.testing.assert_close(new_residual, residual + x)
+    torch.testing.assert_close(normed, rms_norm_reference(residual + x, weight, eps=1e-5))
+
+
+def test_silu_and_mul_reference_splits_gate_and_up():
+    from serving.nano_vllm.kernels import silu_and_mul
+
+    torch.manual_seed(0)
+    gate_up = torch.randn(3, 2 * 8)
+
+    out = silu_and_mul(gate_up)
+
+    torch.testing.assert_close(out, silu_mul_reference(gate_up[:, :8], gate_up[:, 8:]))

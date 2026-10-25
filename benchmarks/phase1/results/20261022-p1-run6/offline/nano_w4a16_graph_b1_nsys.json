@@ -1,0 +1,21 @@
+[
+  {
+    "engine": "nano_vllm",
+    "path": "paged",
+    "batch": 1,
+    "input_len": 128,
+    "output_len": 64,
+    "prefill_s": 0.0493170720001217,
+    "decode_steps_measured": 63,
+    "decode_ms_per_step": 6.654216095248846,
+    "decode_ms_p50": 6.746136999936425,
+    "decode_tok_per_s": 150.28066201727452,
+    "decode_model_ms_per_step": 6.495075222191522,
+    "decode_engine_overhead_ms": 0.15914087305732466,
+    "load_s": 12.417415185999744,
+    "attention_backend": "triton",
+    "linear_backend": "triton",
+    "weight_quant": "w4a16",
+    "cuda_graphs": true
+  }
+]

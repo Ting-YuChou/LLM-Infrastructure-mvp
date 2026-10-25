@@ -45,12 +45,50 @@ class NanoVLLMConfig:
     max_model_len: int = 2048
     max_new_tokens: int = 256
     kvcache_block_size: int = 16
-    num_kvcache_blocks: int = 1024
+    # 0: as many blocks as fit in gpu_memory_utilization of the GPU after the
+    # weights and a profiled forward pass (CPU: 1024).
+    num_kvcache_blocks: int = 0
+    gpu_memory_utilization: float = 0.9
     max_num_seqs: int = 16
     max_num_batched_tokens: int = 512
+    # "mixed": each step decodes every running sequence and spends the rest
+    # of max_num_batched_tokens on prefill chunks; "prefill_first": prefill
+    # steps and decode steps alternate, and a prefill stalls the decodes.
+    scheduling: str = "mixed"
     enable_prefix_cache: bool = True
-    attention_backend: str = "torch"
+    # "python": block_manager.BlockManager; "cpp": the same radix tree and
+    # allocator in C++ (csrc/radix_tree.cpp, built with nanobind on first use).
+    prefix_cache_backend: str = "python"
+    # "triton": the paged decode/prefill attention and fused RoPE + KV write
+    # kernels (benchmarks/phase1); off CUDA they fall back to the PyTorch
+    # references, so it is a safe default.
+    attention_backend: str = "triton"
+    # "triton" / "cuda": a GEMV kernel for linear layers when a batch has at
+    # most 16 / 2 rows; "cuda" builds kernels/csrc/gemv_bf16.cu on first use.
+    linear_backend: str = "triton"
+    # "w4a16": quantize the decoder-layer projections to 4-bit integers at
+    # load (RTN, groups of 128 along K), in the tiled layout of the
+    # Marlin-style kernel; kernels/w4a16.py.
+    weight_quant: str = "none"
+    # "fp8": the paged KV cache holds e4m3 codes plus an fp32 scale per
+    # (token, kv head), about half the bytes of bf16 (kernels/fp8.py);
+    # "auto": the model dtype.
+    kv_cache_dtype: str = "auto"
     use_triton: bool = True
+    # Decode steps replay CUDA graphs (one per batch size up to
+    # cuda_graph_max_bs) unless enforce_eager; CPU always runs eagerly.
+    enforce_eager: bool = False
+    cuda_graph_max_bs: int = 64
+    # Other steps of up to this many tokens (prefill and mixed steps, decode
+    # batches past cuda_graph_max_bs) replay piecewise graphs: everything but
+    # the attention, which runs eagerly in between. 0 turns them off.
+    cuda_graph_max_tokens: int = 512
+    # Launch step N+1 before collecting step N, so scheduling and input
+    # preparation overlap the GPU; finish checks then lag one step.
+    async_scheduling: bool = True
+    # Run the engine core (scheduler + model) in its own process; the server
+    # process keeps tokenization, detokenization, stop strings and HTTP.
+    multiprocess: bool = False
     eager_load: bool = True
     host: str = "0.0.0.0"
     port: int = 8000
@@ -60,14 +98,32 @@ class NanoVLLMConfig:
     def __post_init__(self) -> None:
         if self.kvcache_block_size <= 0:
             raise ValueError("kvcache_block_size must be positive")
-        if self.num_kvcache_blocks <= 0:
-            raise ValueError("num_kvcache_blocks must be positive")
+        if self.num_kvcache_blocks < 0:
+            raise ValueError("num_kvcache_blocks must be positive, or 0 to size it from memory")
+        if not 0.0 < self.gpu_memory_utilization <= 1.0:
+            raise ValueError("gpu_memory_utilization must be in (0, 1]")
         if self.max_num_seqs <= 0:
             raise ValueError("max_num_seqs must be positive")
         if self.max_num_batched_tokens <= 0:
             raise ValueError("max_num_batched_tokens must be positive")
-        if self.attention_backend not in {"torch", "flash_attn"}:
-            raise ValueError("attention_backend must be one of: torch, flash_attn")
+        if self.prefix_cache_backend not in {"python", "cpp"}:
+            raise ValueError("prefix_cache_backend must be one of: python, cpp")
+        if self.scheduling not in {"mixed", "prefill_first"}:
+            raise ValueError("scheduling must be one of: mixed, prefill_first")
+        if self.cuda_graph_max_bs <= 0:
+            raise ValueError("cuda_graph_max_bs must be positive")
+        if self.cuda_graph_max_tokens < 0:
+            raise ValueError("cuda_graph_max_tokens must be 0 (off) or positive")
+        if self.attention_backend not in {"torch", "triton", "flash_attn"}:
+            raise ValueError("attention_backend must be one of: torch, triton, flash_attn")
+        if self.linear_backend not in {"torch", "triton", "cuda"}:
+            raise ValueError("linear_backend must be one of: torch, triton, cuda")
+        if self.weight_quant not in {"none", "w4a16"}:
+            raise ValueError("weight_quant must be one of: none, w4a16")
+        if self.kv_cache_dtype not in {"auto", "fp8"}:
+            raise ValueError("kv_cache_dtype must be one of: auto, fp8")
+        if self.kv_cache_dtype == "fp8" and self.attention_backend == "flash_attn":
+            raise ValueError("kv_cache_dtype fp8 needs the triton or torch attention backend")
 
     @classmethod
     def from_yaml(cls, config_path: str | None) -> "NanoVLLMConfig":
@@ -115,6 +171,12 @@ class NanoVLLMConfig:
                     engine.get("num_kvcache_blocks", cls.num_kvcache_blocks),
                 )
             ),
+            gpu_memory_utilization=float(
+                _env(
+                    "GPU_MEMORY_UTILIZATION",
+                    engine.get("gpu_memory_utilization", cls.gpu_memory_utilization),
+                )
+            ),
             max_num_seqs=int(
                 _env("MAX_NUM_SEQS", engine.get("max_num_seqs", cls.max_num_seqs))
             ),
@@ -127,9 +189,16 @@ class NanoVLLMConfig:
                     ),
                 )
             ),
+            scheduling=str(_env("SCHEDULING", engine.get("scheduling", cls.scheduling))),
             enable_prefix_cache=_bool_value(
                 _env("ENABLE_PREFIX_CACHE", engine.get("enable_prefix_cache")),
                 default=cls.enable_prefix_cache,
+            ),
+            prefix_cache_backend=str(
+                _env(
+                    "PREFIX_CACHE_BACKEND",
+                    engine.get("prefix_cache_backend", cls.prefix_cache_backend),
+                )
             ),
             attention_backend=str(
                 _env(
@@ -137,9 +206,42 @@ class NanoVLLMConfig:
                     engine.get("attention_backend", cls.attention_backend),
                 )
             ),
+            linear_backend=str(
+                _env("LINEAR_BACKEND", engine.get("linear_backend", cls.linear_backend))
+            ),
+            weight_quant=str(
+                _env("WEIGHT_QUANT", engine.get("weight_quant", cls.weight_quant))
+            ),
+            kv_cache_dtype=str(
+                _env("KV_CACHE_DTYPE", engine.get("kv_cache_dtype", cls.kv_cache_dtype))
+            ),
             use_triton=_bool_value(
                 _env("USE_TRITON", engine.get("use_triton")),
                 default=cls.use_triton,
+            ),
+            enforce_eager=_bool_value(
+                _env("ENFORCE_EAGER", engine.get("enforce_eager")),
+                default=cls.enforce_eager,
+            ),
+            cuda_graph_max_bs=int(
+                _env(
+                    "CUDA_GRAPH_MAX_BS",
+                    engine.get("cuda_graph_max_bs", cls.cuda_graph_max_bs),
+                )
+            ),
+            cuda_graph_max_tokens=int(
+                _env(
+                    "CUDA_GRAPH_MAX_TOKENS",
+                    engine.get("cuda_graph_max_tokens", cls.cuda_graph_max_tokens),
+                )
+            ),
+            async_scheduling=_bool_value(
+                _env("ASYNC_SCHEDULING", engine.get("async_scheduling")),
+                default=cls.async_scheduling,
+            ),
+            multiprocess=_bool_value(
+                _env("ENGINE_MULTIPROCESS", engine.get("multiprocess")),
+                default=cls.multiprocess,
             ),
             eager_load=_bool_value(
                 _env("EAGER_LOAD", engine.get("eager_load")),

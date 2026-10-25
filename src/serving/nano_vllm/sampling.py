@@ -20,6 +20,9 @@ class SamplingOptions:
     # Extra token ids that end generation (vLLM extension); always honored,
     # unlike the model's EOS ids which ignore_eos can disable.
     stop_token_ids: Optional[list[int]] = None
+    # Keep generating past the model's EOS ids (vLLM extension; benchmarks use
+    # it to get exactly max_tokens per request).
+    ignore_eos: bool = False
 
 
 def filter_logits(
@@ -69,3 +72,74 @@ def sample_next_token(
     if not torch.isfinite(probs).all() or probs.sum() <= 0:
         return int(torch.argmax(logits).item())
     return int(torch.multinomial(probs, num_samples=1, generator=generator).item())
+
+
+def sample_tokens(
+    logits: torch.Tensor,
+    options: list[SamplingOptions],
+) -> list[int]:
+    """Sample one token per row of [num_seqs, vocab] logits, with one host sync."""
+    return sample_tokens_device(logits, options).tolist()
+
+
+def sample_tokens_device(
+    logits: torch.Tensor,
+    options: list[SamplingOptions],
+) -> torch.Tensor:
+    """Sample one token per row of [num_seqs, vocab] logits, on the device.
+
+    Same rules as :func:`sample_next_token` per row: temperature <= 0 is
+    greedy; otherwise top-k, then top-p over what is left, then multinomial,
+    falling back to argmax when the filtered distribution is degenerate. No
+    host sync: the per-row settings go up through pinned memory, so the
+    result can stay on the GPU while the host schedules the next step.
+    """
+    if logits.ndim != 2 or logits.shape[0] != len(options):
+        raise ValueError("sample_tokens expects [num_seqs, vocab] logits, one row per option")
+    greedy = logits.argmax(dim=-1)
+    if all(option.temperature <= 0 for option in options):
+        return greedy
+
+    device = logits.device
+    vocab = logits.shape[-1]
+    pin = device.type == "cuda"
+
+    def upload(values, dtype):
+        return torch.tensor(values, dtype=dtype, pin_memory=pin).to(device, non_blocking=True)
+
+    temperature = upload(
+        [option.temperature if option.temperature > 0 else 1.0 for option in options], torch.float32
+    )
+    top_k = upload(
+        [
+            option.top_k if option.top_k is not None and 0 < option.top_k < vocab else vocab
+            for option in options
+        ],
+        torch.long,
+    )
+    top_p = upload(
+        [
+            option.top_p if option.top_p is not None and 0.0 < option.top_p < 1.0 else 1.0
+            for option in options
+        ],
+        torch.float32,
+    )
+    is_greedy = upload([option.temperature <= 0 for option in options], torch.bool)
+
+    scaled = logits.float() / temperature.view(-1, 1)
+    sorted_logits, sorted_indices = torch.sort(scaled, dim=-1, descending=True)
+    ranks = torch.arange(vocab, device=device).view(1, -1)
+    sorted_logits = sorted_logits.masked_fill(ranks >= top_k.view(-1, 1), float("-inf"))
+    probs = torch.softmax(sorted_logits, dim=-1)
+    # Drop a token once the mass before it already exceeds top_p (the first
+    # token always stays).
+    before = torch.cumsum(probs, dim=-1) - probs
+    probs = probs.masked_fill(before > top_p.view(-1, 1), 0.0)
+    total = probs.sum(dim=-1, keepdim=True)
+    degenerate = ~torch.isfinite(probs).all(dim=-1, keepdim=True) | (total <= 0)
+    # A degenerate row samples rank 0 (the argmax) instead of erroring out.
+    fallback = (ranks == 0).to(probs.dtype)
+    probs = torch.where(degenerate, fallback, probs)
+    choice = torch.multinomial(probs, num_samples=1)
+    sampled = sorted_indices.gather(-1, choice).squeeze(-1)
+    return torch.where(is_greedy, greedy, sampled)

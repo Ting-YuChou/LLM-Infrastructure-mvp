@@ -1,0 +1,458 @@
+{
+  "label": "vllm_graph_b1",
+  "kernels_profiled": 367,
+  "total_kernel_us": 13386.752,
+  "dram_GBps_over_kernel_time": 1147.2298788629237,
+  "time_by_category": {
+    "gemm": {
+      "us": 11859.68,
+      "frac": 0.8859266235753079
+    },
+    "attention": {
+      "us": 913.5039999999999,
+      "frac": 0.06823940564522298
+    },
+    "norm": {
+      "us": 287.424,
+      "frac": 0.021470779469134855
+    },
+    "elementwise/copy": {
+      "us": 166.208,
+      "frac": 0.012415857110074199
+    },
+    "activation": {
+      "us": 99.456,
+      "frac": 0.007429434712766771
+    },
+    "sampling": {
+      "us": 55.552,
+      "frac": 0.004149774344067926
+    },
+    "other": {
+      "us": 4.928,
+      "frac": 0.00036812514342538053
+    }
+  },
+  "kernels": [
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn",
+      "category": "gemm",
+      "launches": 33,
+      "time_us": 6292.448,
+      "time_frac": 0.47005039011703514,
+      "avg_us": 190.68024242424244,
+      "dram_pct": 87.9446206969697,
+      "mem_pct": 87.9446206969697,
+      "dram_GBps": 1375.1753339012098,
+      "sm_pct": 28.351271393939392,
+      "achieved_occ": 12.228686272727273,
+      "theoretical_occ": 12.5,
+      "regs": 146.0,
+      "l2_hit": 23.287137878787878,
+      "top_stalls": [
+        "long_scoreboard",
+        "wait"
+      ]
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn",
+      "category": "gemm",
+      "launches": 64,
+      "time_us": 4159.456,
+      "time_frac": 0.31071435401208597,
+      "avg_us": 64.9915,
+      "dram_pct": 74.794494921875,
+      "mem_pct": 74.794494921875,
+      "dram_GBps": 1197.772187832255,
+      "sm_pct": 24.5853604375,
+      "achieved_occ": 6.248859546875,
+      "theoretical_occ": 0.0,
+      "regs": 146.0,
+      "l2_hit": 14.605619203125,
+      "top_stalls": [
+        "long_scoreboard",
+        "wait"
+      ]
+    },
+    {
+      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_64x6_tn_align8>",
+      "category": "gemm",
+      "launches": 32,
+      "time_us": 1407.776,
+      "time_frac": 0.1051618794461868,
+      "avg_us": 43.993,
+      "dram_pct": 77.1204441875,
+      "mem_pct": 77.1204441875,
+      "dram_GBps": 1198.1528241765734,
+      "sm_pct": 25.5053173125,
+      "achieved_occ": 6.248488875,
+      "theoretical_occ": 6.25,
+      "regs": 97.0,
+      "l2_hit": 14.754459125,
+      "top_stalls": [
+        "long_scoreboard",
+        "wait"
+      ]
+    },
+    {
+      "name": "void flash::flash_fwd_splitkv_combine_kernel<Flash_fwd_kernel_traits<128, 64, 128, 4, 0, 0, cutlass:",
+      "category": "attention",
+      "launches": 32,
+      "time_us": 438.944,
+      "time_frac": 0.03278943241796068,
+      "avg_us": 13.717,
+      "dram_pct": 1.34586065625,
+      "mem_pct": 1.34586065625,
+      "dram_GBps": 20.86400998760662,
+      "sm_pct": 0.34695171874999997,
+      "achieved_occ": 6.20616375,
+      "theoretical_occ": 56.25,
+      "regs": 52.0,
+      "l2_hit": 44.2141689375,
+      "top_stalls": [
+        "long_scoreboard",
+        "wait"
+      ]
+    },
+    {
+      "name": "void flash::flash_fwd_splitkv_kernel<Flash_fwd_kernel_traits<128, 64, 128, 4, 0, 0, cutlass::bfloat1",
+      "category": "attention",
+      "launches": 32,
+      "time_us": 317.568,
+      "time_frac": 0.023722557943853743,
+      "avg_us": 9.924,
+      "dram_pct": 3.9715925625,
+      "mem_pct": 4.59133353125,
+      "dram_GBps": 61.49104212011286,
+      "sm_pct": 3.38320184375,
+      "achieved_occ": 7.1146158125,
+      "theoretical_occ": 12.5,
+      "regs": 252.0,
+      "l2_hit": 52.23660825,
+      "top_stalls": [
+        "imc_miss",
+        "long_scoreboard"
+      ]
+    },
+    {
+      "name": "void vllm::reshape_and_cache_flash_kernel<__nv_bfloat16, __nv_bfloat16, 0>",
+      "category": "attention",
+      "launches": 32,
+      "time_us": 156.992,
+      "time_frac": 0.011727415283408552,
+      "avg_us": 4.906,
+      "dram_pct": 0.37443015625,
+      "mem_pct": 0.7043554375,
+      "dram_GBps": 5.764350794944966,
+      "sm_pct": 0.08478371875,
+      "achieved_occ": 18.9122934375,
+      "theoretical_occ": 50.0,
+      "regs": 54.0,
+      "l2_hit": 76.2547515,
+      "top_stalls": [
+        "imc_miss",
+        "long_scoreboard"
+      ]
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2",
+      "category": "norm",
+      "launches": 32,
+      "time_us": 147.296,
+      "time_frac": 0.011003117111604068,
+      "avg_us": 4.603,
+      "dram_pct": 0.5498641875,
+      "mem_pct": 0.6033726875,
+      "dram_GBps": 8.474400173799696,
+      "sm_pct": 0.1506041875,
+      "achieved_occ": 23.7541375,
+      "theoretical_occ": 100.0,
+      "regs": 30.0,
+      "l2_hit": 69.37780090625,
+      "top_stalls": [
+        "long_scoreboard",
+        "imc_miss"
+      ]
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_0",
+      "category": "norm",
+      "launches": 32,
+      "time_us": 134.464,
+      "time_frac": 0.010044557484892526,
+      "avg_us": 4.202,
+      "dram_pct": 0.460930875,
+      "mem_pct": 0.54294571875,
+      "dram_GBps": 7.097733460257021,
+      "sm_pct": 0.12366584375,
+      "achieved_occ": 24.3190435625,
+      "theoretical_occ": 100.0,
+      "regs": 27.0,
+      "l2_hit": 76.10437365625,
+      "top_stalls": [
+        "long_scoreboard",
+        "imc_miss"
+      ]
+    },
+    {
+      "name": "triton_poi_fused_3",
+      "category": "elementwise/copy",
+      "launches": 31,
+      "time_us": 118.368,
+      "time_frac": 0.0088421747112369,
+      "avg_us": 3.818322580645161,
+      "dram_pct": 0.3912384516129032,
+      "mem_pct": 0.7157871612903226,
+      "dram_GBps": 6.006999188969993,
+      "sm_pct": 0.26500012903225806,
+      "achieved_occ": 6.234669032258065,
+      "theoretical_occ": 62.5,
+      "regs": 47.0,
+      "l2_hit": 77.22969970967742,
+      "top_stalls": [
+        "long_scoreboard",
+        "imc_miss"
+      ]
+    },
+    {
+      "name": "triton_poi_fused_mul_silu_slice_1",
+      "category": "activation",
+      "launches": 32,
+      "time_us": 99.456,
+      "time_frac": 0.007429434712766771,
+      "avg_us": 3.108,
+      "dram_pct": 1.3143026875000001,
+      "mem_pct": 1.3143026875000001,
+      "dram_GBps": 20.139036679536677,
+      "sm_pct": 0.55422440625,
+      "achieved_occ": 6.1953964062499995,
+      "theoretical_occ": 100.0,
+      "regs": 31.0,
+      "l2_hit": 63.60266390625,
+      "top_stalls": [
+        "imc_miss",
+        "long_scoreboard"
+      ]
+    },
+    {
+      "name": "void at::reduce_kernel<512, 1, at::ReduceOp<float, at::ArgMaxOps<float>, unsigned int, long, 4, 4>>",
+      "category": "sampling",
+      "launches": 1,
+      "time_us": 55.552,
+      "time_frac": 0.004149774344067926,
+      "avg_us": 55.552,
+      "dram_pct": 0.673691,
+      "mem_pct": 0.673691,
+      "dram_GBps": 10.463000000000003,
+      "sm_pct": 0.342391,
+      "achieved_occ": 24.552995,
+      "theoretical_occ": 100.0,
+      "regs": 32.0,
+      "l2_hit": 43.184417,
+      "top_stalls": [
+        "long_scoreboard",
+        "wait"
+      ]
+    },
+    {
+      "name": "void at::unrolled_elementwise_kernel<at::direct_copy_kernel_cuda",
+      "category": "elementwise/copy",
+      "launches": 4,
+      "time_us": 16.992,
+      "time_frac": 0.0012693146179147863,
+      "avg_us": 4.248,
+      "dram_pct": 1.18250975,
+      "mem_pct": 1.77359775,
+      "dram_GBps": 22.847301318267423,
+      "sm_pct": 1.3391427500000002,
+      "achieved_occ": 7.5510005,
+      "theoretical_occ": 100.0,
+      "regs": 32.0,
+      "l2_hit": 71.7550555,
+      "top_stalls": [
+        "imc_miss",
+        "no_instruction"
+      ]
+    },
+    {
+      "name": "void at::index_elementwise_kernel<128, 4, void at::gpu_index_kernel<void at::index_kernel_impl<at::O",
+      "category": "elementwise/copy",
+      "launches": 2,
+      "time_us": 12.864,
+      "time_frac": 0.0009609500497207986,
+      "avg_us": 6.432,
+      "dram_pct": 0.47998799999999997,
+      "mem_pct": 0.8083045,
+      "dram_GBps": 7.3032164179104475,
+      "sm_pct": 0.1247685,
+      "achieved_occ": 4.8592655,
+      "theoretical_occ": 75.0,
+      "regs": 36.0,
+      "l2_hit": 79.79819499999999,
+      "top_stalls": [
+        "imc_miss",
+        "long_scoreboard"
+      ]
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_embedding_mean_mul_pow_rsqrt_0",
+      "category": "norm",
+      "launches": 1,
+      "time_us": 5.664,
+      "time_frac": 0.00042310487263826205,
+      "avg_us": 5.664,
+      "dram_pct": 0.254532,
+      "mem_pct": 0.456292,
+      "dram_GBps": 3.91,
+      "sm_pct": 0.099061,
+      "achieved_occ": 24.664152,
+      "theoretical_occ": 100.0,
+      "regs": 32.0,
+      "l2_hit": 89.482571,
+      "top_stalls": [
+        "long_scoreboard",
+        "imc_miss"
+      ]
+    },
+    {
+      "name": "_compute_slot_mapping_kernel",
+      "category": "other",
+      "launches": 1,
+      "time_us": 4.928,
+      "time_frac": 0.00036812514342538053,
+      "avg_us": 4.928,
+      "dram_pct": 0.168192,
+      "mem_pct": 0.763899,
+      "dram_GBps": 2.597,
+      "sm_pct": 0.130144,
+      "achieved_occ": 6.052737,
+      "theoretical_occ": 50.0,
+      "regs": 64.0,
+      "l2_hit": 93.716887,
+      "top_stalls": [
+        "long_scoreboard",
+        "imc_miss"
+      ]
+    },
+    {
+      "name": "triton_poi_fused_1",
+      "category": "elementwise/copy",
+      "launches": 1,
+      "time_us": 3.84,
+      "time_frac": 0.00028685076111068615,
+      "avg_us": 3.84,
+      "dram_pct": 0.386309,
+      "mem_pct": 0.581003,
+      "dram_GBps": 5.9670000000000005,
+      "sm_pct": 0.26274,
+      "achieved_occ": 6.234378,
+      "theoretical_occ": 62.5,
+      "regs": 47.0,
+      "l2_hit": 81.2649,
+      "top_stalls": [
+        "long_scoreboard",
+        "imc_miss"
+      ]
+    },
+    {
+      "name": "void at::vectorized_elementwise_kernel<2, at::CUDAFunctor_add<long>, std::array<char *, 3>>",
+      "category": "elementwise/copy",
+      "launches": 1,
+      "time_us": 3.136,
+      "time_frac": 0.00023426145490706036,
+      "avg_us": 3.136,
+      "dram_pct": 0.135985,
+      "mem_pct": 0.435338,
+      "dram_GBps": 2.0820000000000003,
+      "sm_pct": 0.033972,
+      "achieved_occ": 5.50776,
+      "theoretical_occ": 75.0,
+      "regs": 40.0,
+      "l2_hit": 92.316514,
+      "top_stalls": [
+        "imc_miss",
+        "wait"
+      ]
+    },
+    {
+      "name": "void at::vectorized_elementwise_kernel<4, at::CUDAFunctor_add<int>, std::array<char *, 3>>",
+      "category": "elementwise/copy",
+      "launches": 1,
+      "time_us": 3.008,
+      "time_frac": 0.00022469976287003748,
+      "avg_us": 3.008,
+      "dram_pct": 0.11677,
+      "mem_pct": 0.44004,
+      "dram_GBps": 1.787,
+      "sm_pct": 0.026864,
+      "achieved_occ": 5.254608,
+      "theoretical_occ": 100.0,
+      "regs": 32.0,
+      "l2_hit": 92.756098,
+      "top_stalls": [
+        "imc_miss",
+        "wait"
+      ]
+    },
+    {
+      "name": "void at::unrolled_elementwise_kernel<at::CUDAFunctorOnSelf_add<int>, std::array<char *, 2>, 4, Trivi",
+      "category": "elementwise/copy",
+      "launches": 1,
+      "time_us": 2.912,
+      "time_frac": 0.0002175284938422703,
+      "avg_us": 2.912,
+      "dram_pct": 0.080128,
+      "mem_pct": 0.676564,
+      "dram_GBps": 1.231,
+      "sm_pct": 0.014652,
+      "achieved_occ": 5.191476,
+      "theoretical_occ": 100.0,
+      "regs": 20.0,
+      "l2_hit": 53.893346,
+      "top_stalls": [
+        "imc_miss",
+        "wait"
+      ]
+    },
+    {
+      "name": "void at::unrolled_elementwise_kernel<at::FillFunctor<int>, std::array<char *, 1>, 4, TrivialOffsetCa",
+      "category": "elementwise/copy",
+      "launches": 1,
+      "time_us": 2.688,
+      "time_frac": 0.00020079553277748031,
+      "avg_us": 2.688,
+      "dram_pct": 0.075,
+      "mem_pct": 0.535564,
+      "dram_GBps": 1.143,
+      "sm_pct": 0.011387,
+      "achieved_occ": 6.161876,
+      "theoretical_occ": 100.0,
+      "regs": 16.0,
+      "l2_hit": 95.907423,
+      "top_stalls": [
+        "imc_miss",
+        "no_instruction"
+      ]
+    },
+    {
+      "name": "void at::vectorized_elementwise_kernel<4, at::FillFunctor<int>, std::array<char *, 1>>",
+      "category": "elementwise/copy",
+      "launches": 1,
+      "time_us": 2.4,
+      "time_frac": 0.00017928172569417884,
+      "avg_us": 2.4,
+      "dram_pct": 0.109093,
+      "mem_pct": 0.76604,
+      "dram_GBps": 1.653,
+      "sm_pct": 0.013305,
+      "achieved_occ": 6.216644,
+      "theoretical_occ": 100.0,
+      "regs": 16.0,
+      "l2_hit": 94.766059,
+      "top_stalls": [
+        "imc_miss",
+        "wait"
+      ]
+    }
+  ]
+}

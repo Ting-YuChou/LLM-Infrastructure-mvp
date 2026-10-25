@@ -1,0 +1,276 @@
+track,start_us,dur_us,name,category
+CPU (CUDA API),-2.841,6.65,cudaLaunchKernel,api
+CPU (CUDA API),15.709,6.185,cudaLaunchKernel,api
+CPU (CUDA API),36.122,5.779,cudaLaunchKernel,api
+CPU (CUDA API),57.558,6.073,cudaLaunchKernel,api
+CPU (CUDA API),75.338,5.981,cudaLaunchKernel,api
+CPU (CUDA API),98.549,6.104,cudaLaunchKernel,api
+CPU (CUDA API),128.801,6.744,cudaLaunchKernel,api
+CPU (CUDA API),157.067,6.91,cudaLaunchKernel,api
+CPU (CUDA API),177.697,5.683,cudaLaunchKernel,api
+CPU (CUDA API),195.709,5.522,cudaLaunchKernel,api
+CPU (CUDA API),213.595,5.637,cudaLaunchKernel,api
+CPU (CUDA API),236.667,6.35,cudaLaunchKernel,api
+CPU (CUDA API),261.499,21.8,cudaLaunchKernel,api
+CPU (CUDA API),297.898,5.799,cudaLaunchKernel,api
+CPU (CUDA API),315.052,5.747,cudaLaunchKernel,api
+CPU (CUDA API),356.848,16.086,cudaMemcpyAsync,api
+CPU (CUDA API),391.543,9.559,cudaMemcpyAsync,api
+CPU (CUDA API),432.058,8.594,cudaLaunchKernel,api
+CPU (CUDA API),450.156,7.351,cudaMemcpyAsync,api
+CPU (CUDA API),458.072,11.724,cudaStreamSynchronize,api
+CPU (CUDA API),507.696,9.077,cudaLaunchKernel,api
+CPU (CUDA API),533.256,6.195,cudaLaunchKernel,api
+CPU (CUDA API),574.2,7.342,cudaMemcpyAsync,api
+CPU (CUDA API),582.042,10.238,cudaStreamSynchronize,api
+CPU (CUDA API),609.189,18.532,cudaMemcpyAsync,api
+CPU (CUDA API),628.09,3.53,cudaStreamSynchronize,api
+CPU (CUDA API),701.348,7.522,cudaMemcpyAsync,api
+CPU (CUDA API),709.217,8.801,cudaStreamSynchronize,api
+CPU (CUDA API),762.4,12.0,cudaLaunchKernel,api
+CPU (CUDA API),798.298,6.593,cudaLaunchKernel,api
+CPU (CUDA API),830.192,7.04,cudaLaunchKernel,api
+CPU (CUDA API),864.331,6.593,cudaLaunchKernel,api
+CPU (CUDA API),904.543,6.708,cudaLaunchKernel,api
+CPU (CUDA API),932.957,6.373,cudaLaunchKernel,api
+CPU (CUDA API),1003.536,1.293,cuKernelGetFunction,api
+CPU (CUDA API),1009.731,9.123,cuLaunchKernel,api
+CPU (CUDA API),1044.772,7.41,cudaLaunchKernel,api
+CPU (CUDA API),1076.274,6.493,cudaLaunchKernel,api
+CPU (CUDA API),1107.698,6.862,cudaLaunchKernel,api
+CPU (CUDA API),1131.477,5.663,cudaLaunchKernel,api
+CPU (CUDA API),1158.168,14.934,cudaMemcpyAsync,api
+CPU (CUDA API),1183.474,6.206,cudaLaunchKernel,api
+CPU (CUDA API),1210.53,6.906,cudaLaunchKernel,api
+CPU (CUDA API),1231.911,6.053,cudaLaunchKernel,api
+CPU (CUDA API),1253.448,5.925,cudaLaunchKernel,api
+CPU (CUDA API),1312.052,1.189,cuKernelGetFunction,api
+CPU (CUDA API),1317.522,8.376,cuLaunchKernel,api
+CPU (CUDA API),1368.731,14.606,cudaMemcpyAsync,api
+CPU (CUDA API),1427.9,8.857,cudaLaunchKernel,api
+CPU (CUDA API),1452.989,7.65,cudaLaunchKernel,api
+CPU (CUDA API),1538.376,7.888,cuLaunchKernelEx,api
+CPU (CUDA API),1592.989,8.872,cudaLaunchKernel,api
+CPU (CUDA API),1603.186,5.651,cudaLaunchKernel,api
+CPU (CUDA API),1635.567,6.828,cudaLaunchKernel,api
+CPU (CUDA API),1643.381,4.764,cudaLaunchKernel,api
+CPU (CUDA API),1711.564,8.613,cuLaunchKernelEx,api
+CPU (CUDA API),1758.079,8.021,cudaLaunchKernel,api
+CPU (CUDA API),1784.821,7.638,cudaLaunchKernel,api
+CPU (CUDA API),1863.872,8.965,cuLaunchKernelEx,api
+CPU (CUDA API),1917.319,8.104,cudaLaunchKernel,api
+CPU (CUDA API),1951.285,7.309,cudaLaunchKernel,api
+CPU (CUDA API),1980.934,6.538,cudaLaunchKernel,api
+CPU (CUDA API),2052.569,9.304,cudaLaunchKernel,api
+CPU (CUDA API),2084.32,7.08,cudaLaunchKernel,api
+CPU (CUDA API),2110.278,6.584,cudaLaunchKernel,api
+CPU (CUDA API),2128.423,5.726,cudaLaunchKernel,api
+CPU (CUDA API),2148.438,5.625,cudaLaunchKernel,api
+CPU (CUDA API),2170.237,6.434,cudaLaunchKernel,api
+CPU (CUDA API),2187.943,5.656,cudaLaunchKernel,api
+CPU (CUDA API),2211.064,6.329,cudaLaunchKernel,api
+CPU (CUDA API),2241.489,6.805,cudaLaunchKernel,api
+CPU (CUDA API),2285.26,8.254,cudaLaunchKernel,api
+CPU (CUDA API),2308.947,6.44,cudaLaunchKernel,api
+CPU (CUDA API),2328.969,5.904,cudaLaunchKernel,api
+CPU (CUDA API),2347.63,6.119,cudaLaunchKernel,api
+CPU (CUDA API),2372.959,6.194,cudaLaunchKernel,api
+CPU (CUDA API),2398.754,6.606,cudaLaunchKernel,api
+CPU (CUDA API),2417.481,5.392,cudaLaunchKernel,api
+CPU (CUDA API),2433.109,5.322,cudaLaunchKernel,api
+CPU (CUDA API),2472.73,16.475,cudaMemcpyAsync,api
+CPU (CUDA API),2507.103,9.71,cudaMemcpyAsync,api
+CPU (CUDA API),2547.694,8.686,cudaLaunchKernel,api
+CPU (CUDA API),2565.863,7.431,cudaMemcpyAsync,api
+CPU (CUDA API),2573.848,11.326,cudaStreamSynchronize,api
+CPU (CUDA API),2622.944,9.059,cudaLaunchKernel,api
+CPU (CUDA API),2648.863,6.26,cudaLaunchKernel,api
+CPU (CUDA API),2690.802,7.544,cudaMemcpyAsync,api
+CPU (CUDA API),2698.757,10.446,cudaStreamSynchronize,api
+CPU (CUDA API),2725.492,18.653,cudaMemcpyAsync,api
+CPU (CUDA API),2744.509,3.528,cudaStreamSynchronize,api
+CPU (CUDA API),2817.843,7.06,cudaMemcpyAsync,api
+CPU (CUDA API),2825.249,9.305,cudaStreamSynchronize,api
+CPU (CUDA API),2889.635,12.737,cudaLaunchKernel,api
+CPU (CUDA API),2927.225,6.58,cudaLaunchKernel,api
+CPU (CUDA API),2959.072,7.131,cudaLaunchKernel,api
+CPU (CUDA API),2984.06,5.579,cudaLaunchKernel,api
+CPU (CUDA API),3021.062,6.684,cudaLaunchKernel,api
+CPU (CUDA API),3049.154,6.182,cudaLaunchKernel,api
+CPU (CUDA API),3118.245,1.271,cuKernelGetFunction,api
+CPU (CUDA API),3124.357,9.065,cuLaunchKernel,api
+CPU (CUDA API),3158.674,6.903,cudaLaunchKernel,api
+CPU (CUDA API),3189.628,6.817,cudaLaunchKernel,api
+CPU (CUDA API),3221.48,6.484,cudaLaunchKernel,api
+CPU (CUDA API),3244.887,5.796,cudaLaunchKernel,api
+CPU (CUDA API),3286.534,16.782,cudaMemcpyAsync,api
+CPU (CUDA API),3314.283,6.021,cudaLaunchKernel,api
+CPU (CUDA API),3341.639,6.489,cudaLaunchKernel,api
+CPU (CUDA API),3362.872,5.471,cudaLaunchKernel,api
+CPU (CUDA API),3383.981,6.096,cudaLaunchKernel,api
+CPU (CUDA API),3427.829,1.096,cuKernelGetFunction,api
+CPU (CUDA API),3433.143,6.866,cuLaunchKernel,api
+CPU (CUDA API),3480.954,13.75,cudaMemcpyAsync,api
+CPU (CUDA API),3539.676,8.808,cudaLaunchKernel,api
+CPU (CUDA API),3565.074,7.492,cudaLaunchKernel,api
+CPU (CUDA API),3651.063,7.882,cuLaunchKernelEx,api
+CPU (CUDA API),3705.757,8.052,cudaLaunchKernel,api
+CPU (CUDA API),3715.19,5.872,cudaLaunchKernel,api
+CPU (CUDA API),3748.317,6.891,cudaLaunchKernel,api
+CPU (CUDA API),3756.191,4.269,cudaLaunchKernel,api
+CPU (CUDA API),3823.097,7.943,cuLaunchKernelEx,api
+CPU (CUDA API),3881.525,9.159,cudaLaunchKernel,api
+CPU (CUDA API),3910.818,7.233,cudaLaunchKernel,api
+CPU (CUDA API),3984.433,7.716,cuLaunchKernelEx,api
+CPU (CUDA API),4032.851,7.808,cudaLaunchKernel,api
+CPU (CUDA API),4066.04,6.406,cudaLaunchKernel,api
+CPU (CUDA API),4094.693,6.213,cudaLaunchKernel,api
+CPU (CUDA API),4164.898,9.218,cudaLaunchKernel,api
+CPU (CUDA API),4196.986,7.347,cudaLaunchKernel,api
+CPU (CUDA API),4223.414,6.713,cudaLaunchKernel,api
+CPU (CUDA API),4241.221,5.69,cudaLaunchKernel,api
+CPU (CUDA API),4261.138,20.343,cudaLaunchKernel,api
+CPU (CUDA API),4300.272,7.337,cudaLaunchKernel,api
+CPU (CUDA API),4319.635,5.383,cudaLaunchKernel,api
+CPU (CUDA API),4343.38,6.883,cudaLaunchKernel,api
+CPU (CUDA API),4376.166,6.557,cudaLaunchKernel,api
+CPU (CUDA API),4405.199,6.909,cudaLaunchKernel,api
+CPU (CUDA API),4425.305,6.09,cudaLaunchKernel,api
+CPU (CUDA API),4444.302,5.564,cudaLaunchKernel,api
+CPU (CUDA API),4462.663,6.091,cudaLaunchKernel,api
+CPU (CUDA API),4486.386,6.114,cudaLaunchKernel,api
+CPU (CUDA API),4511.053,6.417,cudaLaunchKernel,api
+CPU (CUDA API),4529.829,5.862,cudaLaunchKernel,api
+CPU (CUDA API),4546.302,5.4,cudaLaunchKernel,api
+CPU (CUDA API),4585.82,15.996,cudaMemcpyAsync,api
+CPU (CUDA API),4619.73,9.42,cudaMemcpyAsync,api
+CPU (CUDA API),4660.009,8.265,cudaLaunchKernel,api
+CPU (CUDA API),4677.715,7.38,cudaMemcpyAsync,api
+CPU (CUDA API),4685.62,11.496,cudaStreamSynchronize,api
+CPU (CUDA API),4735.585,9.074,cudaLaunchKernel,api
+CPU (CUDA API),4761.615,6.543,cudaLaunchKernel,api
+CPU (CUDA API),4802.867,7.446,cudaMemcpyAsync,api
+CPU (CUDA API),4810.776,10.93,cudaStreamSynchronize,api
+CPU (CUDA API),4838.573,27.533,cudaMemcpyAsync,api
+CPU (CUDA API),4866.603,3.975,cudaStreamSynchronize,api
+CPU (CUDA API),4942.993,7.524,cudaMemcpyAsync,api
+CPU (CUDA API),4950.898,9.226,cudaStreamSynchronize,api
+GPU,6.47,3.936,CatArrayBatchedCopy_vectorized,elementwise/copy
+GPU,24.55,4.16,vectorized_elementwise_kernel,elementwise/copy
+GPU,44.646,2.496,vectorized_elementwise_kernel,elementwise/copy
+GPU,66.374,3.68,vectorized_elementwise_kernel,elementwise/copy
+GPU,84.038,2.464,vectorized_elementwise_kernel,elementwise/copy
+GPU,107.142,5.088,elementwise_kernel,elementwise/copy
+GPU,138.182,4.64,elementwise_kernel,elementwise/copy
+GPU,166.918,7.552,CatArrayBatchedCopy,elementwise/copy
+GPU,186.118,4.768,elementwise_kernel,elementwise/copy
+GPU,203.941,2.688,vectorized_elementwise_kernel,elementwise/copy
+GPU,221.765,4.928,elementwise_kernel,elementwise/copy
+GPU,245.765,4.512,elementwise_kernel,elementwise/copy
+GPU,285.413,6.496,CatArrayBatchedCopy,elementwise/copy
+GPU,306.341,4.288,elementwise_kernel,elementwise/copy
+GPU,323.525,2.624,vectorized_elementwise_kernel,elementwise/copy
+GPU,442.981,5.472,reduce_kernel,other
+GPU,518.917,7.648,index_elementwise_kernel,elementwise/copy
+GPU,542.341,6.592,index_elementwise_kernel,elementwise/copy
+GPU,776.133,3.648,vectorized_gather_kernel,elementwise/copy
+GPU,807.333,3.584,vectorized_gather_kernel,elementwise/copy
+GPU,839.845,5.44,elementwise_kernel,elementwise/copy
+GPU,873.381,5.28,elementwise_kernel,elementwise/copy
+GPU,913.861,6.464,elementwise_kernel,elementwise/copy
+GPU,941.893,6.528,elementwise_kernel,elementwise/copy
+GPU,1021.508,5.952,Kernel2,gemm
+GPU,1054.564,2.592,vectorized_elementwise_kernel,elementwise/copy
+GPU,1085.412,2.304,elementwise_kernel_with_index,elementwise/copy
+GPU,1117.124,3.744,elementwise_kernel,elementwise/copy
+GPU,1139.908,2.912,vectorized_elementwise_kernel,elementwise/copy
+GPU,1192.356,4.224,elementwise_kernel,elementwise/copy
+GPU,1219.94,5.248,unrolled_elementwise_kernel,elementwise/copy
+GPU,1240.932,3.584,softmax_warp_forward,attention
+GPU,1262.084,2.56,vectorized_elementwise_kernel,elementwise/copy
+GPU,1328.196,6.72,Kernel2,gemm
+GPU,1439.012,35.104,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,1475.524,2.784,vectorized_elementwise_kernel,elementwise/copy
+GPU,1548.612,3.776,_rms_norm_kernel,norm
+GPU,1604.132,98.751,ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_64x4_tn,gemm
+GPU,1704.451,6.016,splitKreduce_kernel,gemm
+GPU,1712.163,98.432,ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_64x4_tn,gemm
+GPU,1811.939,5.632,splitKreduce_kernel,gemm
+GPU,1819.267,3.104,_silu_mul_kernel,activation
+GPU,1823.811,95.904,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,1921.219,3.104,vectorized_elementwise_kernel,elementwise/copy
+GPU,1925.699,3.936,_rms_norm_kernel,norm
+GPU,1931.235,30.848,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,1963.427,12.608,kernel,gemm
+GPU,1990.019,12.864,kernel,gemm
+GPU,2064.003,3.424,unrolled_elementwise_kernel,elementwise/copy
+GPU,2093.955,4.064,elementwise_kernel,elementwise/copy
+GPU,2119.651,3.936,CatArrayBatchedCopy_vectorized,elementwise/copy
+GPU,2136.867,4.128,vectorized_elementwise_kernel,elementwise/copy
+GPU,2156.803,2.528,vectorized_elementwise_kernel,elementwise/copy
+GPU,2179.299,3.712,vectorized_elementwise_kernel,elementwise/copy
+GPU,2196.483,2.464,vectorized_elementwise_kernel,elementwise/copy
+GPU,2219.779,5.184,elementwise_kernel,elementwise/copy
+GPU,2250.947,4.576,elementwise_kernel,elementwise/copy
+GPU,2296.067,7.584,CatArrayBatchedCopy,elementwise/copy
+GPU,2318.403,4.288,elementwise_kernel,elementwise/copy
+GPU,2337.667,2.656,vectorized_elementwise_kernel,elementwise/copy
+GPU,2356.483,4.352,elementwise_kernel,elementwise/copy
+GPU,2381.827,4.192,elementwise_kernel,elementwise/copy
+GPU,2408.259,6.432,CatArrayBatchedCopy,elementwise/copy
+GPU,2425.571,4.352,elementwise_kernel,elementwise/copy
+GPU,2441.187,2.624,vectorized_elementwise_kernel,elementwise/copy
+GPU,2558.85,5.28,reduce_kernel,other
+GPU,2634.178,7.68,index_elementwise_kernel,elementwise/copy
+GPU,2657.794,6.624,index_elementwise_kernel,elementwise/copy
+GPU,2904.002,3.776,vectorized_gather_kernel,elementwise/copy
+GPU,2936.13,3.648,vectorized_gather_kernel,elementwise/copy
+GPU,2968.706,5.472,elementwise_kernel,elementwise/copy
+GPU,2992.514,5.312,elementwise_kernel,elementwise/copy
+GPU,3030.306,6.464,elementwise_kernel,elementwise/copy
+GPU,3057.986,6.432,elementwise_kernel,elementwise/copy
+GPU,3136.002,5.952,Kernel2,gemm
+GPU,3168.29,2.56,vectorized_elementwise_kernel,elementwise/copy
+GPU,3199.074,2.368,elementwise_kernel_with_index,elementwise/copy
+GPU,3230.401,3.712,elementwise_kernel,elementwise/copy
+GPU,3253.313,2.88,vectorized_elementwise_kernel,elementwise/copy
+GPU,3322.785,4.32,elementwise_kernel,elementwise/copy
+GPU,3350.785,5.344,unrolled_elementwise_kernel,elementwise/copy
+GPU,3370.977,3.584,softmax_warp_forward,attention
+GPU,3392.993,2.592,vectorized_elementwise_kernel,elementwise/copy
+GPU,3442.465,6.816,Kernel2,gemm
+GPU,3550.529,35.616,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,3587.649,3.104,vectorized_elementwise_kernel,elementwise/copy
+GPU,3661.281,3.616,_rms_norm_kernel,norm
+GPU,3716.001,100.0,ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_64x4_tn,gemm
+GPU,3817.537,5.856,splitKreduce_kernel,gemm
+GPU,3824.801,100.192,ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_64x4_tn,gemm
+GPU,3926.433,5.632,splitKreduce_kernel,gemm
+GPU,3933.473,3.232,_silu_mul_kernel,activation
+GPU,3938.433,94.847,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,4034.688,3.232,vectorized_elementwise_kernel,elementwise/copy
+GPU,4039.648,3.936,_rms_norm_kernel,norm
+GPU,4045.216,30.784,ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn,gemm
+GPU,4077.6,12.448,kernel,gemm
+GPU,4103.712,12.416,kernel,gemm
+GPU,4176.416,3.296,unrolled_elementwise_kernel,elementwise/copy
+GPU,4206.912,3.808,elementwise_kernel,elementwise/copy
+GPU,4232.672,3.936,CatArrayBatchedCopy_vectorized,elementwise/copy
+GPU,4249.984,4.16,vectorized_elementwise_kernel,elementwise/copy
+GPU,4283.808,2.496,vectorized_elementwise_kernel,elementwise/copy
+GPU,4310.112,3.744,vectorized_elementwise_kernel,elementwise/copy
+GPU,4327.712,2.432,vectorized_elementwise_kernel,elementwise/copy
+GPU,4353.216,5.12,elementwise_kernel,elementwise/copy
+GPU,4385.376,4.864,elementwise_kernel,elementwise/copy
+GPU,4414.624,7.616,CatArrayBatchedCopy,elementwise/copy
+GPU,4434.016,4.704,elementwise_kernel,elementwise/copy
+GPU,4452.704,2.56,vectorized_elementwise_kernel,elementwise/copy
+GPU,4471.296,4.352,elementwise_kernel,elementwise/copy
+GPU,4495.136,4.096,elementwise_kernel,elementwise/copy
+GPU,4520.224,6.304,CatArrayBatchedCopy,elementwise/copy
+GPU,4538.432,4.352,elementwise_kernel,elementwise/copy
+GPU,4554.432,2.528,vectorized_elementwise_kernel,elementwise/copy
+GPU,4670.88,5.376,reduce_kernel,other
+GPU,4747.295,7.776,index_elementwise_kernel,elementwise/copy
+GPU,4770.751,6.624,index_elementwise_kernel,elementwise/copy
+NVTX,-34938.973,69877.947,engine_step_32,nvtx

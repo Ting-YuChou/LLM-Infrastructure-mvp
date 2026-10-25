@@ -1,0 +1,8 @@
+run_id: kernels-r1-20261023-061836-colab
+name, driver_version, memory.total [MiB], clocks.max.sm [MHz], clocks.max.memory [MHz], power.limit [W]
+NVIDIA A100-SXM4-40GB, 580.82.07, 40960 MiB, 1410 MHz, 1215 MHz, 400.00 W
+RmProfilingAdminOnly: 1
+vllm 0.19.1 | torch 2.10.0+cu128 cuda 12.8 | triton 3.6.0
+CUDA_HOME=/usr/local/cuda-12.8; nvcc: Build cuda_12.8.r12.8/compiler.35583870_0
+NVIDIA Nsight Systems version 2025.3.1.0
+Version 2025.3.1.0 (build 36398880) (public-release)

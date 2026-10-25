@@ -71,3 +71,50 @@ def test_paged_kv_cache_update_and_read_sequence():
     assert read_value.shape == (1, 1, 3, 2)
     torch.testing.assert_close(read_key[0, 0], key[:, 0])
     torch.testing.assert_close(read_value[0, 0], value[:, 0])
+
+
+def test_sample_tokens_is_argmax_for_greedy_rows():
+    from serving.nano_vllm.sampling import SamplingOptions, sample_tokens
+
+    logits = torch.tensor([[0.1, 4.0, 1.0], [3.0, 0.0, 2.0]])
+    options = [SamplingOptions(temperature=0.0)] * 2
+
+    assert sample_tokens(logits, options) == [1, 0]
+
+
+def test_sample_tokens_mixes_greedy_and_filtered_rows():
+    from serving.nano_vllm.sampling import SamplingOptions, sample_tokens
+
+    torch.manual_seed(0)
+    logits = torch.tensor(
+        [
+            [0.0, 1.0, 5.0, 2.0],  # greedy
+            [3.0, 1.0, 2.9, 0.0],  # top_k=1 always keeps the argmax
+            [0.0, 9.0, 0.0, 0.0],  # top_p keeps only the dominant token
+            [float("-inf")] * 4,  # degenerate row falls back instead of raising
+        ]
+    )
+    options = [
+        SamplingOptions(temperature=0.0),
+        SamplingOptions(temperature=1.0, top_k=1, top_p=1.0),
+        SamplingOptions(temperature=0.7, top_p=0.5),
+        SamplingOptions(temperature=1.0, top_p=1.0),
+    ]
+
+    for _ in range(20):
+        tokens = sample_tokens(logits, options)
+        assert tokens[:3] == [2, 0, 1]
+        assert 0 <= tokens[3] < 4
+
+
+def test_sample_tokens_samples_within_top_k():
+    from serving.nano_vllm.sampling import SamplingOptions, sample_tokens
+
+    torch.manual_seed(0)
+    logits = torch.tensor([[1.0, 1.1, 0.9, -5.0, -6.0]] * 64)
+    options = [SamplingOptions(temperature=1.0, top_k=3, top_p=1.0)] * 64
+
+    tokens = sample_tokens(logits, options)
+
+    assert set(tokens) <= {0, 1, 2}
+    assert len(set(tokens)) > 1

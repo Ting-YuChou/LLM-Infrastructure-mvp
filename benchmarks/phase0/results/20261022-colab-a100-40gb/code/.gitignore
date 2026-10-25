@@ -1,0 +1,4 @@
+# nsys reports and their SQLite exports are tens to hundreds of MB; they stay
+# in the HF dataset repo (runs/<run_id>/nsys/), see LOG.md.
+results/**/*.nsys-rep
+results/**/*.sqlite

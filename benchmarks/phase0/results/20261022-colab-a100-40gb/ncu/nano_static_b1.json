@@ -1,0 +1,634 @@
+{
+  "label": "nano_static_b1",
+  "kernels_profiled": 300,
+  "total_kernel_us": 3459.872,
+  "dram_GBps_over_kernel_time": 798.6268395686315,
+  "time_by_category": {
+    "gemm": {
+      "us": 2263.104,
+      "frac": 0.654100498515552
+    },
+    "elementwise/copy": {
+      "us": 850.7840000000001,
+      "frac": 0.24590042637415493
+    },
+    "other": {
+      "us": 256.544,
+      "frac": 0.07414840780236956
+    },
+    "norm": {
+      "us": 49.472,
+      "frac": 0.014298794868711906
+    },
+    "attention": {
+      "us": 22.144,
+      "frac": 0.006400236771764967
+    },
+    "activation": {
+      "us": 17.823999999999998,
+      "frac": 0.005151635667446657
+    }
+  },
+  "kernels": [
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_128x64_ldg8_f2f_stages_64x4_tn",
+      "category": "gemm",
+      "launches": 12,
+      "time_us": 1167.04,
+      "time_frac": 0.3373072761073242,
+      "avg_us": 97.25333333333333,
+      "dram_pct": 79.28951683333334,
+      "mem_pct": 79.28951683333334,
+      "dram_GBps": 1232.4096442555526,
+      "sm_pct": 25.779399416666667,
+      "achieved_occ": 6.248289416666666,
+      "theoretical_occ": 0.0,
+      "regs": 158.0,
+      "l2_hit": 20.822275166666667,
+      "top_stalls": [
+        "long_scoreboard",
+        "wait"
+      ]
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_64x64_sliced1x2_ldg8_f2f_stages_64x6_tn",
+      "category": "gemm",
+      "launches": 19,
+      "time_us": 1007.872,
+      "time_frac": 0.2913032620859963,
+      "avg_us": 53.0458947368421,
+      "dram_pct": 73.25650784210526,
+      "mem_pct": 73.25650784210526,
+      "dram_GBps": 1175.0785390208282,
+      "sm_pct": 24.098647315789474,
+      "achieved_occ": 6.248636263157895,
+      "theoretical_occ": 0.0,
+      "regs": 146.0,
+      "l2_hit": 12.233228421052631,
+      "top_stalls": [
+        "long_scoreboard",
+        "wait"
+      ]
+    },
+    {
+      "name": "std::enable_if<!T7, void>::type internal::kernel<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat",
+      "category": "other",
+      "launches": 20,
+      "time_us": 200.288,
+      "time_frac": 0.05788884675502447,
+      "avg_us": 10.0144,
+      "dram_pct": 35.92529915,
+      "mem_pct": 35.92529915,
+      "dram_GBps": 620.9005281993929,
+      "sm_pct": 13.346120350000001,
+      "achieved_occ": 11.3214264,
+      "theoretical_occ": 18.75,
+      "regs": 163.8,
+      "l2_hit": 14.536220449999998,
+      "top_stalls": [
+        "long_scoreboard",
+        "lg_throttle"
+      ]
+    },
+    {
+      "name": "void at::elementwise_kernel<128, 4, void at::gpu_kernel_impl_nocast<at::BinaryFunctor<c10::BFloat16,",
+      "category": "elementwise/copy",
+      "launches": 24,
+      "time_us": 128.928,
+      "time_frac": 0.03726380629109979,
+      "avg_us": 5.372,
+      "dram_pct": 0.3034860833333333,
+      "mem_pct": 0.5626939583333334,
+      "dram_GBps": 4.6730836435840155,
+      "sm_pct": 0.11976545833333334,
+      "achieved_occ": 6.235181166666667,
+      "theoretical_occ": 100.0,
+      "regs": 16.0,
+      "l2_hit": 78.41903058333334,
+      "top_stalls": [
+        "long_scoreboard",
+        "imc_miss"
+      ]
+    },
+    {
+      "name": "void at::index_elementwise_kernel<128, 4, void at::gpu_index_kernel<void at::index_put_kernel_impl<a",
+      "category": "elementwise/copy",
+      "launches": 12,
+      "time_us": 92.416,
+      "time_frac": 0.02671081473534281,
+      "avg_us": 7.701333333333333,
+      "dram_pct": 0.3769319166666667,
+      "mem_pct": 0.6526925,
+      "dram_GBps": 5.828165166204987,
+      "sm_pct": 0.06563308333333333,
+      "achieved_occ": 6.241084083333334,
+      "theoretical_occ": 75.0,
+      "regs": 36.0,
+      "l2_hit": 78.42802466666667,
+      "top_stalls": [
+        "imc_miss",
+        "long_scoreboard"
+      ]
+    },
+    {
+      "name": "void at::<unnamed>::CatArrayBatchedCopy<at::<unnamed>::OpaqueType<2>, unsigned int, 4, 64, 64>",
+      "category": "elementwise/copy",
+      "launches": 12,
+      "time_us": 76.544,
+      "time_frac": 0.02212336178910665,
+      "avg_us": 6.378666666666667,
+      "dram_pct": 0.12204,
+      "mem_pct": 0.7443098333333333,
+      "dram_GBps": 1.899729933110368,
+      "sm_pct": 3.7147014166666668,
+      "achieved_occ": 81.56973275,
+      "theoretical_occ": 100.0,
+      "regs": 23.0,
+      "l2_hit": 81.39168866666667,
+      "top_stalls": [
+        "imc_miss",
+        "no_instruction"
+      ]
+    },
+    {
+      "name": "void at::vectorized_elementwise_kernel<4, at::CUDAFunctor_add<c10::BFloat16>, std::array<char *, 3>>",
+      "category": "elementwise/copy",
+      "launches": 24,
+      "time_us": 70.688,
+      "time_frac": 0.020430813625475164,
+      "avg_us": 2.9453333333333336,
+      "dram_pct": 0.43542620833333334,
+      "mem_pct": 0.6186844166666666,
+      "dram_GBps": 6.649164327750112,
+      "sm_pct": 0.042684,
+      "achieved_occ": 6.212899375,
+      "theoretical_occ": 100.0,
+      "regs": 32.0,
+      "l2_hit": 80.32755991666666,
+      "top_stalls": [
+        "imc_miss",
+        "long_scoreboard"
+      ]
+    },
+    {
+      "name": "void at::elementwise_kernel<128, 4, void at::gpu_kernel_impl_nocast<at::direct_copy_kernel_cuda",
+      "category": "elementwise/copy",
+      "launches": 12,
+      "time_us": 68.288,
+      "time_frac": 0.019737146345298322,
+      "avg_us": 5.690666666666666,
+      "dram_pct": 3.211259416666667,
+      "mem_pct": 10.601261833333334,
+      "dram_GBps": 49.55184114339269,
+      "sm_pct": 22.51091,
+      "achieved_occ": 50.59189416666666,
+      "theoretical_occ": 100.0,
+      "regs": 16.0,
+      "l2_hit": 83.87002174999999,
+      "top_stalls": [
+        "long_scoreboard",
+        "imc_miss"
+      ]
+    },
+    {
+      "name": "void at::elementwise_kernel<128, 4, void at::gpu_kernel_impl_nocast<at::neg_kernel_cuda",
+      "category": "elementwise/copy",
+      "launches": 12,
+      "time_us": 63.232,
+      "time_frac": 0.01827582060839245,
+      "avg_us": 5.269333333333333,
+      "dram_pct": 0.25079775,
+      "mem_pct": 0.5232845,
+      "dram_GBps": 3.86216548582996,
+      "sm_pct": 0.050369083333333335,
+      "achieved_occ": 6.242125416666667,
+      "theoretical_occ": 100.0,
+      "regs": 16.0,
+      "l2_hit": 87.03164983333333,
+      "top_stalls": [
+        "long_scoreboard",
+        "imc_miss"
+      ]
+    },
+    {
+      "name": "void at::unrolled_elementwise_kernel<at::direct_copy_kernel_cuda",
+      "category": "elementwise/copy",
+      "launches": 12,
+      "time_us": 58.368,
+      "time_frac": 0.016869988253900722,
+      "avg_us": 4.864,
+      "dram_pct": 0.5133255833333333,
+      "mem_pct": 0.8697784999999999,
+      "dram_GBps": 7.462729166666667,
+      "sm_pct": 0.09418283333333333,
+      "achieved_occ": 5.8186715,
+      "theoretical_occ": 100.0,
+      "regs": 32.0,
+      "l2_hit": 78.49137991666667,
+      "top_stalls": [
+        "imc_miss",
+        "no_instruction"
+      ]
+    },
+    {
+      "name": "void cublasLt::splitKreduce_kernel<32, 16, int, __nv_bfloat16, __nv_bfloat16, float, __nv_bfloat16, ",
+      "category": "gemm",
+      "launches": 12,
+      "time_us": 58.176,
+      "time_frac": 0.016814494871486577,
+      "avg_us": 4.848,
+      "dram_pct": 1.2654439166666667,
+      "mem_pct": 4.3199415,
+      "dram_GBps": 19.48516886688669,
+      "sm_pct": 10.181636333333334,
+      "achieved_occ": 39.11898975,
+      "theoretical_occ": 100.0,
+      "regs": 32.0,
+      "l2_hit": 64.68651516666667,
+      "top_stalls": [
+        "imc_miss",
+        "no_instruction"
+      ]
+    },
+    {
+      "name": "void at::reduce_kernel<512, 1, at::ReduceOp<long, at::func_wrapper_t<long, at::MaxNanFunctor<long>>,",
+      "category": "other",
+      "launches": 12,
+      "time_us": 56.256,
+      "time_frac": 0.016259561047345106,
+      "avg_us": 4.688,
+      "dram_pct": 0.7476569999999999,
+      "mem_pct": 1.2731823333333334,
+      "dram_GBps": 11.510765073947669,
+      "sm_pct": 0.005443916666666666,
+      "achieved_occ": 1.5624709166666666,
+      "theoretical_occ": 50.0,
+      "regs": 32.0,
+      "l2_hit": 78.45771574999999,
+      "top_stalls": [
+        "imc_miss",
+        "no_instruction"
+      ]
+    },
+    {
+      "name": "void at::vectorized_elementwise_kernel<4, at::bfloat16_copy_kernel_cuda",
+      "category": "elementwise/copy",
+      "launches": 18,
+      "time_us": 50.272,
+      "time_frac": 0.01453001729543752,
+      "avg_us": 2.7928888888888888,
+      "dram_pct": 0.25218616666666666,
+      "mem_pct": 0.5859944444444445,
+      "dram_GBps": 3.903366645448759,
+      "sm_pct": 0.035167277777777776,
+      "achieved_occ": 6.133414166666666,
+      "theoretical_occ": 100.0,
+      "regs": 28.0,
+      "l2_hit": 87.03304872222222,
+      "top_stalls": [
+        "imc_miss",
+        "long_scoreboard"
+      ]
+    },
+    {
+      "name": "_rms_norm_kernel",
+      "category": "norm",
+      "launches": 13,
+      "time_us": 49.472,
+      "time_frac": 0.014298794868711906,
+      "avg_us": 3.8055384615384615,
+      "dram_pct": 0.4050782307692308,
+      "mem_pct": 0.5309497692307692,
+      "dram_GBps": 6.222465717981889,
+      "sm_pct": 0.055571538461538464,
+      "achieved_occ": 6.192772846153845,
+      "theoretical_occ": 50.0,
+      "regs": 61.0,
+      "l2_hit": 83.74836653846154,
+      "top_stalls": [
+        "imc_miss",
+        "long_scoreboard"
+      ]
+    },
+    {
+      "name": "void at::elementwise_kernel<128, 4, void at::gpu_kernel_impl_nocast<at::<unnamed>::masked_fill_kerne",
+      "category": "elementwise/copy",
+      "launches": 6,
+      "time_us": 30.752000000000002,
+      "time_frac": 0.008888190083332564,
+      "avg_us": 5.125333333333334,
+      "dram_pct": 0.3538833333333333,
+      "mem_pct": 0.6098953333333333,
+      "dram_GBps": 5.45263163371488,
+      "sm_pct": 0.1945056666666667,
+      "achieved_occ": 6.1069945,
+      "theoretical_occ": 100.0,
+      "regs": 16.0,
+      "l2_hit": 78.2308145,
+      "top_stalls": [
+        "long_scoreboard",
+        "imc_miss"
+      ]
+    },
+    {
+      "name": "void gemv2T_kernel_val<int, int, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, 128, 16, 2, 2, ",
+      "category": "gemm",
+      "launches": 6,
+      "time_us": 30.016,
+      "time_frac": 0.008675465450744999,
+      "avg_us": 5.002666666666666,
+      "dram_pct": 13.861804999999999,
+      "mem_pct": 13.861804999999999,
+      "dram_GBps": 214.26426439232412,
+      "sm_pct": 16.606049666666667,
+      "achieved_occ": 27.885644833333334,
+      "theoretical_occ": 62.5,
+      "regs": 47.0,
+      "l2_hit": 36.986373,
+      "top_stalls": [
+        "long_scoreboard",
+        "imc_miss"
+      ]
+    },
+    {
+      "name": "void at::elementwise_kernel<128, 4, void at::gpu_kernel_impl_nocast<at::<unnamed>::CompareFunctor<lo",
+      "category": "elementwise/copy",
+      "launches": 6,
+      "time_us": 24.224,
+      "time_frac": 0.0070014150812515615,
+      "avg_us": 4.037333333333334,
+      "dram_pct": 0.35372783333333335,
+      "mem_pct": 0.7089219999999999,
+      "dram_GBps": 5.431907529722588,
+      "sm_pct": 0.012877,
+      "achieved_occ": 5.431178166666666,
+      "theoretical_occ": 100.0,
+      "regs": 16.0,
+      "l2_hit": 79.63674216666666,
+      "top_stalls": [
+        "imc_miss",
+        "long_scoreboard"
+      ]
+    },
+    {
+      "name": "void at::vectorized_elementwise_kernel<4, at::cos_kernel_cuda",
+      "category": "elementwise/copy",
+      "launches": 6,
+      "time_us": 24.128,
+      "time_frac": 0.006973668390044488,
+      "avg_us": 4.021333333333334,
+      "dram_pct": 0.652012,
+      "mem_pct": 1.1121405,
+      "dram_GBps": 10.036998673740053,
+      "sm_pct": 0.025821333333333335,
+      "achieved_occ": 6.2387635,
+      "theoretical_occ": 100.0,
+      "regs": 30.0,
+      "l2_hit": 80.32903283333333,
+      "top_stalls": [
+        "imc_miss",
+        "no_instruction"
+      ]
+    },
+    {
+      "name": "void at::vectorized_elementwise_kernel<4, at::sin_kernel_cuda",
+      "category": "elementwise/copy",
+      "launches": 6,
+      "time_us": 24.0,
+      "time_frac": 0.006936672801768389,
+      "avg_us": 4.0,
+      "dram_pct": 0.65316,
+      "mem_pct": 1.114753,
+      "dram_GBps": 10.026672,
+      "sm_pct": 0.025638166666666667,
+      "achieved_occ": 6.2386555,
+      "theoretical_occ": 100.0,
+      "regs": 30.0,
+      "l2_hit": 83.833016,
+      "top_stalls": [
+        "imc_miss",
+        "no_instruction"
+      ]
+    },
+    {
+      "name": "void <unnamed>::softmax_warp_forward<float, float, float, 8, 0, 0>",
+      "category": "attention",
+      "launches": 6,
+      "time_us": 22.144,
+      "time_frac": 0.006400236771764967,
+      "avg_us": 3.6906666666666665,
+      "dram_pct": 0.4587275,
+      "mem_pct": 0.7175433333333333,
+      "dram_GBps": 7.075158959537574,
+      "sm_pct": 0.40078450000000004,
+      "achieved_occ": 6.235405166666666,
+      "theoretical_occ": 100.0,
+      "regs": 30.0,
+      "l2_hit": 80.4230635,
+      "top_stalls": [
+        "imc_miss",
+        "long_scoreboard"
+      ]
+    },
+    {
+      "name": "void at::<unnamed>::CatArrayBatchedCopy_vectorized<at::<unnamed>::OpaqueType<4>, unsigned int, 2, 12",
+      "category": "elementwise/copy",
+      "launches": 6,
+      "time_us": 22.080000000000002,
+      "time_frac": 0.006381738977626919,
+      "avg_us": 3.68,
+      "dram_pct": 0.07092,
+      "mem_pct": 0.3565948333333333,
+      "dram_GBps": 1.0898594202898548,
+      "sm_pct": 0.015875666666666666,
+      "achieved_occ": 3.6118721666666667,
+      "theoretical_occ": 100.0,
+      "regs": 19.0,
+      "l2_hit": 103.34877683333333,
+      "top_stalls": [
+        "imc_miss",
+        "short_scoreboard"
+      ]
+    },
+    {
+      "name": "void at::elementwise_kernel<128, 2, void at::gpu_kernel_impl_nocast<at::BinaryFunctor<float, float, ",
+      "category": "elementwise/copy",
+      "launches": 6,
+      "time_us": 20.096,
+      "time_frac": 0.005808307359347398,
+      "avg_us": 3.3493333333333335,
+      "dram_pct": 0.22117533333333336,
+      "mem_pct": 0.5523988333333333,
+      "dram_GBps": 3.3884140127388536,
+      "sm_pct": 0.0075316666666666665,
+      "achieved_occ": 4.370587666666666,
+      "theoretical_occ": 100.0,
+      "regs": 16.0,
+      "l2_hit": 86.96895966666666,
+      "top_stalls": [
+        "imc_miss",
+        "long_scoreboard"
+      ]
+    },
+    {
+      "name": "void at::vectorized_elementwise_kernel<4, at::bitwise_not_kernel_cuda",
+      "category": "elementwise/copy",
+      "launches": 6,
+      "time_us": 19.424,
+      "time_frac": 0.0056140805208978834,
+      "avg_us": 3.2373333333333334,
+      "dram_pct": 0.12658149999999999,
+      "mem_pct": 0.4793315,
+      "dram_GBps": 1.943962108731466,
+      "sm_pct": 0.030959333333333335,
+      "achieved_occ": 5.885555166666666,
+      "theoretical_occ": 100.0,
+      "regs": 22.0,
+      "l2_hit": 90.68925383333334,
+      "top_stalls": [
+        "imc_miss",
+        "long_scoreboard"
+      ]
+    },
+    {
+      "name": "_silu_mul_kernel",
+      "category": "activation",
+      "launches": 6,
+      "time_us": 17.823999999999998,
+      "time_frac": 0.005151635667446657,
+      "avg_us": 2.9706666666666663,
+      "dram_pct": 1.3286136666666666,
+      "mem_pct": 1.3286136666666666,
+      "dram_GBps": 20.380484739676845,
+      "sm_pct": 0.7541895,
+      "achieved_occ": 6.201978666666666,
+      "theoretical_occ": 100.0,
+      "regs": 16.0,
+      "l2_hit": 70.72965016666667,
+      "top_stalls": [
+        "imc_miss",
+        "long_scoreboard"
+      ]
+    },
+    {
+      "name": "void at::vectorized_elementwise_kernel<4, at::AUnaryFunctor<c10::BFloat16, c10::BFloat16, c10::BFloa",
+      "category": "elementwise/copy",
+      "launches": 6,
+      "time_us": 17.664,
+      "time_frac": 0.005105391182101535,
+      "avg_us": 2.9440000000000004,
+      "dram_pct": 0.30413616666666665,
+      "mem_pct": 0.6893891666666666,
+      "dram_GBps": 4.6666123188405795,
+      "sm_pct": 0.07247016666666667,
+      "achieved_occ": 5.9930026666666665,
+      "theoretical_occ": 100.0,
+      "regs": 28.0,
+      "l2_hit": 89.550551,
+      "top_stalls": [
+        "imc_miss",
+        "long_scoreboard"
+      ]
+    },
+    {
+      "name": "void at::vectorized_elementwise_kernel<2, at::CUDAFunctorOnSelf_add<long>, std::array<char *, 2>>",
+      "category": "elementwise/copy",
+      "launches": 6,
+      "time_us": 17.439999999999998,
+      "time_frac": 0.005040648902618362,
+      "avg_us": 2.9066666666666663,
+      "dram_pct": 0.13082083333333333,
+      "mem_pct": 0.6194221666666667,
+      "dram_GBps": 2.003550458715597,
+      "sm_pct": 0.025137000000000003,
+      "achieved_occ": 5.396581333333334,
+      "theoretical_occ": 75.0,
+      "regs": 36.0,
+      "l2_hit": 79.21460816666666,
+      "top_stalls": [
+        "imc_miss",
+        "wait"
+      ]
+    },
+    {
+      "name": "void <unnamed>::elementwise_kernel_with_index<int, at::arange_cuda_out",
+      "category": "elementwise/copy",
+      "launches": 7,
+      "time_us": 16.832,
+      "time_frac": 0.0048649198583068974,
+      "avg_us": 2.404571428571429,
+      "dram_pct": 0.0734727142857143,
+      "mem_pct": 0.4689368571428571,
+      "dram_GBps": 1.1181330798479086,
+      "sm_pct": 0.008345285714285713,
+      "achieved_occ": 3.016814,
+      "theoretical_occ": 100.0,
+      "regs": 16.0,
+      "l2_hit": 94.76038628571429,
+      "top_stalls": [
+        "imc_miss",
+        "no_instruction"
+      ]
+    },
+    {
+      "name": "void at::vectorized_elementwise_kernel<2, at::BinaryFunctor<long, long, long, at::maximum_kernel_cud",
+      "category": "elementwise/copy",
+      "launches": 3,
+      "time_us": 9.344,
+      "time_frac": 0.0027006779441551593,
+      "avg_us": 3.1146666666666665,
+      "dram_pct": 0.13554233333333335,
+      "mem_pct": 0.4788826666666666,
+      "dram_GBps": 2.05468493150685,
+      "sm_pct": 0.03336033333333333,
+      "achieved_occ": 5.428122666666667,
+      "theoretical_occ": 75.0,
+      "regs": 40.0,
+      "l2_hit": 90.20802299999998,
+      "top_stalls": [
+        "imc_miss",
+        "wait"
+      ]
+    },
+    {
+      "name": "void at::unrolled_elementwise_kernel<at::BinaryFunctor<long, long, long, at::maximum_kernel_cuda",
+      "category": "elementwise/copy",
+      "launches": 3,
+      "time_us": 8.192,
+      "time_frac": 0.002367717649670277,
+      "avg_us": 2.7306666666666666,
+      "dram_pct": 0.09999333333333332,
+      "mem_pct": 0.43836499999999995,
+      "dram_GBps": 1.5311601562499997,
+      "sm_pct": 0.019760333333333335,
+      "achieved_occ": 4.988771,
+      "theoretical_occ": 100.0,
+      "regs": 32.0,
+      "l2_hit": 93.03535666666666,
+      "top_stalls": [
+        "imc_miss",
+        "no_instruction"
+      ]
+    },
+    {
+      "name": "void at::index_elementwise_kernel<128, 4, void at::gpu_index_kernel<void at::index_kernel_impl<at::O",
+      "category": "elementwise/copy",
+      "launches": 1,
+      "time_us": 7.872,
+      "time_frac": 0.0022752286789800317,
+      "avg_us": 7.872,
+      "dram_pct": 0.420106,
+      "mem_pct": 0.69113,
+      "dram_GBps": 6.488,
+      "sm_pct": 0.232425,
+      "achieved_occ": 6.240745,
+      "theoretical_occ": 75.0,
+      "regs": 36.0,
+      "l2_hit": 72.271066,
+      "top_stalls": [
+        "long_scoreboard",
+        "imc_miss"
+      ]
+    }
+  ]
+}

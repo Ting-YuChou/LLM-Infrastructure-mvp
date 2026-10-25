@@ -1,0 +1,262 @@
+{
+  "label": "nano_w4a16_async_sampled_b1",
+  "window_ms": 388.634794,
+  "gpu_busy_frac": 0.980337666318163,
+  "per_step_source": "median of 63 NVTX step ranges",
+  "steps": 63,
+  "batch": 1,
+  "per_step": {
+    "wall_ms": 6.250513,
+    "gpu_busy_ms": 6.125628,
+    "gpu_idle_ms": 0.124885,
+    "kernels": 375,
+    "launch_calls": 47,
+    "launch_api_ms": 0.784188
+  },
+  "kernel_time_by_category": {
+    "gemm": {
+      "ms": 304.827146,
+      "frac": 0.8032871514747173
+    },
+    "attention": {
+      "ms": 29.805552,
+      "frac": 0.07854424147714051
+    },
+    "norm": {
+      "ms": 10.989681,
+      "frac": 0.028960247346559557
+    },
+    "sampling": {
+      "ms": 9.295967,
+      "frac": 0.02449693522909857
+    },
+    "elementwise/copy": {
+      "ms": 6.996019,
+      "frac": 0.018436062036853502
+    },
+    "other": {
+      "ms": 6.818524,
+      "frac": 0.01796832333699701
+    },
+    "rope": {
+      "ms": 6.357093,
+      "frac": 0.016752350289792974
+    },
+    "activation": {
+      "ms": 4.384712,
+      "frac": 0.011554688808840571
+    }
+  },
+  "top_kernels": [
+    {
+      "name": "gemv_w4a16_kernel",
+      "category": "gemm",
+      "count": 7936,
+      "total_ms": 260.717294,
+      "avg_us": 32.852481602822586,
+      "frac": 0.6870479062827837
+    },
+    {
+      "name": "_gemv_kernel",
+      "category": "gemm",
+      "count": 62,
+      "total_ms": 44.109852,
+      "avg_us": 711.4492258064516,
+      "frac": 0.11623924519193367
+    },
+    {
+      "name": "_paged_decode_split_kernel",
+      "category": "attention",
+      "count": 1984,
+      "total_ms": 20.642657,
+      "avg_us": 10.40456502016129,
+      "frac": 0.054397980488258856
+    },
+    {
+      "name": "reduce_kernel",
+      "category": "sampling",
+      "count": 434,
+      "total_ms": 11.754928,
+      "avg_us": 27.085087557603686,
+      "frac": 0.0309768429512193
+    },
+    {
+      "name": "_fused_add_rms_norm_kernel",
+      "category": "norm",
+      "count": 3968,
+      "total_ms": 10.835542,
+      "avg_us": 2.730731350806452,
+      "frac": 0.02855405688791464
+    },
+    {
+      "name": "_rope_cache_write_kernel",
+      "category": "rope",
+      "count": 1984,
+      "total_ms": 6.357093,
+      "avg_us": 3.2041799395161292,
+      "frac": 0.016752350289792974
+    },
+    {
+      "name": "_paged_decode_reduce_kernel",
+      "category": "attention",
+      "count": 1984,
+      "total_ms": 5.839973,
+      "avg_us": 2.9435347782258066,
+      "frac": 0.01538962437374019
+    },
+    {
+      "name": "_silu_and_mul_kernel",
+      "category": "activation",
+      "count": 1984,
+      "total_ms": 4.384712,
+      "avg_us": 2.2100362903225803,
+      "frac": 0.011554688808840571
+    },
+    {
+      "name": "cunn_SoftMaxForward",
+      "category": "attention",
+      "count": 62,
+      "total_ms": 3.322922,
+      "avg_us": 53.595516129032255,
+      "frac": 0.008756636615141457
+    },
+    {
+      "name": "vectorized_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 1178,
+      "total_ms": 2.856809,
+      "avg_us": 2.4251349745331066,
+      "frac": 0.00752832545929927
+    },
+    {
+      "name": "DeviceRadixSortOnesweepKernel",
+      "category": "sampling",
+      "count": 248,
+      "total_ms": 2.678248,
+      "avg_us": 10.799387096774193,
+      "frac": 0.007057777612965148
+    },
+    {
+      "name": "index_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 372,
+      "total_ms": 1.78212,
+      "avg_us": 4.790645161290323,
+      "frac": 0.004696281539132093
+    },
+    {
+      "name": "elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 248,
+      "total_ms": 0.958592,
+      "avg_us": 3.865290322580645,
+      "frac": 0.0025261025706235893
+    },
+    {
+      "name": "unrolled_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 248,
+      "total_ms": 0.820926,
+      "avg_us": 3.310185483870968,
+      "frac": 0.002163322121290122
+    },
+    {
+      "name": "_assert_async_cuda_kernel",
+      "category": "other",
+      "count": 124,
+      "total_ms": 0.47136,
+      "avg_us": 3.801290322580645,
+      "frac": 0.0012421381648179154
+    },
+    {
+      "name": "DeviceRadixSortHistogramKernel",
+      "category": "sampling",
+      "count": 62,
+      "total_ms": 0.341154,
+      "avg_us": 5.502483870967741,
+      "frac": 0.0008990164703841885
+    },
+    {
+      "name": "DeviceScanKernel",
+      "category": "other",
+      "count": 62,
+      "total_ms": 0.321056,
+      "avg_us": 5.178322580645161,
+      "frac": 0.0008460537819156921
+    },
+    {
+      "name": "distribution_elementwise_grid_stride_kernel",
+      "category": "sampling",
+      "count": 62,
+      "total_ms": 0.299777,
+      "avg_us": 4.835112903225807,
+      "frac": 0.0007899788964583763
+    },
+    {
+      "name": "_scatter_gather_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 62,
+      "total_ms": 0.203329,
+      "avg_us": 3.2795,
+      "frac": 0.0005358170207787295
+    },
+    {
+      "name": "elementwise_kernel_with_index",
+      "category": "elementwise/copy",
+      "count": 62,
+      "total_ms": 0.197474,
+      "avg_us": 3.185064516129032,
+      "frac": 0.0005203877969264533
+    }
+  ],
+  "cuda_api": {
+    "cudaEventSynchronize": {
+      "calls": 63,
+      "total_ms": 240.607963
+    },
+    "cudaGraphLaunch": {
+      "calls": 61,
+      "total_ms": 27.605575
+    },
+    "cudaLaunchKernel": {
+      "calls": 2852,
+      "total_ms": 20.915851
+    },
+    "cudaMemcpyAsync": {
+      "calls": 742,
+      "total_ms": 8.58054
+    },
+    "cudaMemsetAsync": {
+      "calls": 372,
+      "total_ms": 2.26326
+    },
+    "cudaEventQuery": {
+      "calls": 495,
+      "total_ms": 1.440589
+    },
+    "cudaEventRecordWithFlags": {
+      "calls": 310,
+      "total_ms": 0.730929
+    },
+    "cudaStreamIsCapturing": {
+      "calls": 495,
+      "total_ms": 0.474531
+    }
+  },
+  "timeline_slice_ns": [
+    202292863,
+    221044402
+  ],
+  "nvtx_phases": {
+    "cub::DeviceRadixSort": {
+      "count": 62,
+      "median_us": 88.037,
+      "total_ms": 5.63895
+    },
+    "cub::DeviceScan::InclusiveScan": {
+      "count": 62,
+      "median_us": 23.8535,
+      "total_ms": 1.534899
+    }
+  }
+}

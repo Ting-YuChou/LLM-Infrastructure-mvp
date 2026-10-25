@@ -38,10 +38,23 @@ class Sequence:
     ignore_eos: bool = False
     seq_id: int = field(default_factory=lambda: next(Sequence._counter))
     status: SequenceStatus = SequenceStatus.WAITING
+    # Tokens whose KV a launched step computes (advanced when it launches).
     num_cached_tokens: int = 0
     num_scheduled_tokens: int = 0
+    # Tokens sampled by launched steps whose values the host does not know
+    # yet (async scheduling: at most the previous step's one), and the row of
+    # that step's sampled-token buffer holding it.
+    num_inflight: int = 0
+    pending_row: int = -1
+    # Bumped whenever the block table is released, so a step that finishes
+    # afterwards does not commit blocks the sequence no longer owns.
+    epoch: int = 0
     is_prefill: bool = True
     block_table: list[int] = field(default_factory=list)
+    # Prefix cache: the first num_shared_blocks of block_table belong to the
+    # radix tree, on the path to radix_node that this sequence has locked.
+    num_shared_blocks: int = 0
+    radix_node: Optional[object] = field(default=None, repr=False)
     finish_reason: Optional[str] = None
     token_ids: list[int] = field(init=False)
     events: Optional[asyncio.Queue[GenerationEvent]] = None
@@ -99,6 +112,11 @@ class Sequence:
     @property
     def num_blocks(self) -> int:
         return (self.num_tokens + self.block_size - 1) // self.block_size
+
+    @property
+    def num_logical_tokens(self) -> int:
+        """Known tokens plus the ones in flight."""
+        return self.num_tokens + self.num_inflight
 
     @property
     def last_block_num_tokens(self) -> int:

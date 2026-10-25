@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+# Phase 0 on one A100: vLLM and SGLang serving baselines for Llama 3.1 8B
+# Instruct, nsys decode timelines, ncu metrics of the decode kernels,
+# achievable HBM bandwidth and cuBLAS floors, and where this repo's nano_vllm
+# starts. Every step logs to <run>/logs/<step>.log and appends to status.tsv; a
+# failed step does not stop the ones after it.
+#
+# On Colab, benchmarks/phase0/colab_phase0.sh uploads the code and runs this
+# with P0_ROOT=/content/p0 P0_REPO_DIR=<the uploaded repo> P0_IDLE_STOP=0.
+#
+# Env: P0_ROOT (default /workspace/p0), P0_RUN_ID (default: UTC timestamp),
+# P0_REPO_DIR (repo checkout for nano_vllm; default: clone the public repo),
+# P0_MODEL (default: meta-llama/Llama-3.1-8B-Instruct with HF_TOKEN, else the
+# ungated copy unsloth/Meta-Llama-3.1-8B-Instruct), P0_STEPS (subset of the
+# steps below), P0_CONCURRENCY (sweep levels), P0_VLLM_VERSION (default: the
+# requirements.txt pin), P0_SGLANG_SPEC, P0_REPO + HF_WRITE_TOKEN (also upload
+# the run to that private HF dataset repo after every step), P0_IDLE_STOP (keep
+# a pod up this long after the last step, then stop it with runpodctl; 0 exits).
+set -uo pipefail
+
+CODE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="${P0_ROOT:-/workspace/p0}"
+RUN_ID="${P0_RUN_ID:-$(date -u +%Y%m%d-%H%M%S)}"
+OUT="${ROOT}/results/${RUN_ID}"
+if [[ -n "${HF_TOKEN:-}" ]]; then
+  MODEL_ID="${P0_MODEL:-meta-llama/Llama-3.1-8B-Instruct}"
+else
+  MODEL_ID="${P0_MODEL:-unsloth/Meta-Llama-3.1-8B-Instruct}"  # same weights, not gated
+fi
+MODEL="${ROOT}/models/$(basename "${MODEL_ID}")"
+VENVS="${ROOT}/venvs"
+PY="${VENVS}/vllm/bin/python"
+VLLM_VERSION="${P0_VLLM_VERSION:-0.19.1}"
+SGLANG_SPEC="${P0_SGLANG_SPEC:-sglang[all]}"
+REPO_URL=https://github.com/Ting-YuChou/LLM-Infrastructure-mvp.git
+REPO_DIR="${P0_REPO_DIR:-${ROOT}/repo}"
+STEPS="${P0_STEPS:-installs bandwidth vllm_serve sglang_serve nsys_vllm nano ncu summarize}"
+read -r -a CONCURRENCY <<< "${P0_CONCURRENCY:-1 2 4 8 16 32 64 128 256}"
+
+export HF_HOME="${ROOT}/hf_cache" UV_CACHE_DIR="${ROOT}/uv_cache" UV_PYTHON_INSTALL_DIR="${ROOT}/uv_python"
+export PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false MPLBACKEND=Agg
+mkdir -p "${OUT}"/{logs,serve,nsys,ncu,offline}
+exec 3>&1  # console (pod logs); step output goes to ${OUT}/logs/<step>.log
+
+log() { echo "[p0 $(date -u +%H:%M:%S)] $*" >&3; }
+# run_step, want, install_vllm/nsys, download_model, serving, nsys_run, ncu_run
+# shellcheck source-path=SCRIPTDIR source=lib.sh
+source "${CODE_DIR}/lib.sh"
+
+upload() {  # everything under ${OUT} -> P0_REPO/runs/<run id>, when P0_REPO is set
+  [[ -n "${P0_REPO:-}" ]] || return 0
+  python3 - "${OUT}" "${RUN_ID}" >> "${OUT}/logs/upload.log" 2>&1 <<'EOF' || log "upload failed (logs/upload.log)"
+import os, sys
+from huggingface_hub import HfApi
+api = HfApi(token=os.environ["HF_WRITE_TOKEN"])
+api.create_repo(os.environ["P0_REPO"], repo_type="dataset", private=True, exist_ok=True)
+api.upload_folder(
+    folder_path=sys.argv[1], path_in_repo=f"runs/{sys.argv[2]}",
+    repo_id=os.environ["P0_REPO"], repo_type="dataset", commit_message=f"phase0 run {sys.argv[2]}")
+EOF
+}
+
+# --- installs (run in parallel; install_sglang: lib.sh) ----------------------
+clone_repo() {
+  if [[ -n "${P0_REPO_DIR:-}" ]]; then ls "${REPO_DIR}/src/serving/nano_vllm"; return; fi
+  rm -rf "${REPO_DIR}" && git clone --depth 1 "${REPO_URL}" "${REPO_DIR}" && git -C "${REPO_DIR}" log -1 --oneline
+}
+
+# --- serving benchmarks (wait_ready, stop_server, start_server, bench_serve: lib.sh)
+bench() {  # engine port label input_len output_len num_prompts concurrency
+  bench_serve "$1" "$2" "$3" "$6" "$5" --dataset-name random --random-input-len "$4" \
+    --random-output-len "$5" --random-range-ratio 0.0 --max-concurrency "$7"
+}
+
+sweep() {  # engine port
+  bench "$1" "$2" warmup 1024 64 32 16
+  rm -f "${OUT}/serve/$1_warmup.json"
+  bench "$1" "$2" latency_c1 128 256 10 1
+  local c n
+  for c in "${CONCURRENCY[@]}"; do
+    n=$(( c * 4 > 16 ? c * 4 : 16 )); (( c == 1 )) && n=10
+    bench "$1" "$2" "sweep_c${c}" 1024 256 "${n}" "${c}"
+  done
+}
+
+serve_engine() {  # engine port health_path command...
+  start_server "$@" || return 1
+  sweep "$1" "$2"
+  stop_server
+}
+
+vllm_serve() {
+  serve_engine vllm 8000 /health \
+    "${VENVS}/vllm/bin/vllm" serve "${MODEL}" --host 127.0.0.1 --port 8000 --max-model-len 8192 --seed 0
+}
+
+sglang_serve() {
+  local bin="${VENVS}/sglang/bin"
+  [[ -x "${bin}/ninja" ]] || uv pip install -p "${bin}/python" ninja
+  local cmd=(env "PATH=${bin}:${PATH}" "${bin}/python" -m sglang.launch_server --model-path "${MODEL}"
+    --host 127.0.0.1 --port 30000 --context-length 8192 --random-seed 0)
+  serve_engine sglang 30000 /health_generate "${cmd[@]}" && return 0
+  # flashinfer's JIT needs an nvcc that matches torch's CUDA; Triton kernels need none.
+  log "sglang failed with its default flashinfer backends; retrying with triton attention"
+  mv "${OUT}/logs/sglang_server.log" "${OUT}/logs/sglang_server_flashinfer.log"
+  serve_engine sglang 30000 /health_generate "${cmd[@]}" --attention-backend triton --sampling-backend pytorch
+}
+
+nsys_vllm() {
+  local rc=0
+  nsys_run vllm_graph_b1 "${PY}" "${CODE_DIR}/vllm_offline.py" --model "${MODEL}" \
+    --batch 1 --input-len 128 --output-len 256 --out "${OUT}/offline/vllm_graph_b1.json" || rc=1
+  nsys_run vllm_eager_b1 "${PY}" "${CODE_DIR}/vllm_offline.py" --model "${MODEL}" --eager \
+    --batch 1 --input-len 128 --output-len 256 --out "${OUT}/offline/vllm_eager_b1.json" || rc=1
+  nsys_run vllm_graph_b64 "${PY}" "${CODE_DIR}/vllm_offline.py" --model "${MODEL}" \
+    --batch 64 --input-len 1024 --output-len 256 --out "${OUT}/offline/vllm_graph_b64.json" || rc=1
+  grep -h VLLM_OFFLINE "${OUT}"/logs/nsys_vllm.log >&3
+  return "${rc}"
+}
+
+nano() {
+  local rc=0
+  export PYTHONPATH="${REPO_DIR}"
+  "${PY}" "${CODE_DIR}/nano_bench.py" --model "${MODEL}" --out "${OUT}/offline/nano.json" || rc=1
+  grep -h NANO_BENCH "${OUT}/logs/nano.log" >&3
+  nsys_run nano_static_b1 "${PY}" "${CODE_DIR}/nano_bench.py" --model "${MODEL}" \
+    --runs static:1:128:64 --out "${OUT}/offline/nano_static_b1_nsys.json" || rc=1
+  nsys_run nano_paged_b1 "${PY}" "${CODE_DIR}/nano_bench.py" --model "${MODEL}" \
+    --runs paged:1:128:64 --out "${OUT}/offline/nano_paged_b1_nsys.json" || rc=1
+  nsys_run nano_paged_b16 "${PY}" "${CODE_DIR}/nano_bench.py" --model "${MODEL}" \
+    --runs paged:16:1024:64 --out "${OUT}/offline/nano_paged_b16_nsys.json" || rc=1
+  return "${rc}"
+}
+
+ncu_kernels() {
+  local rc=0
+  # ncu backs up the memory a kernel may write before each of its ~13 passes; with
+  # vLLM's default 0.85 of a 40 GB GPU taken the backup goes to the host and one
+  # kernel takes ~20 s. At 0.45 (weights + a small KV cache) it stays on the GPU.
+  # b=64 needs a bigger KV cache, so its breakdown comes from nsys only.
+  ncu_run vllm_graph_b1 400 "${PY}" "${CODE_DIR}/vllm_offline.py" --model "${MODEL}" \
+    --batch 1 --input-len 128 --output-len 32 --profile-steps 1 --gpu-memory-utilization 0.45 \
+    --out "${OUT}/offline/vllm_graph_b1_ncu.json" || rc=1
+  # nano launches ~30 kernels per layer; 300 covers ~10 identical layers of one step.
+  export PYTHONPATH="${REPO_DIR}"
+  ncu_run nano_static_b1 300 "${PY}" "${CODE_DIR}/nano_bench.py" \
+    --model "${MODEL}" --runs static:1:128:4 --out "${OUT}/offline/nano_static_b1_ncu.json" || rc=1
+  return "${rc}"
+}
+
+environment() {
+  {
+    echo "run_id: ${RUN_ID}"
+    nvidia-smi --query-gpu=name,driver_version,memory.total,clocks.max.sm,clocks.max.mem,power.limit --format=csv
+    nvidia-smi topo -m | head -5
+    grep RmProfilingAdminOnly /proc/driver/nvidia/params
+    lscpu | grep -E 'Model name|^CPU\(s\)'
+    free -g | head -2
+    "${PY}" -c "import vllm, torch, transformers; print('vllm', vllm.__version__, '| torch', torch.__version__, 'cuda', torch.version.cuda, '| transformers', transformers.__version__)"
+    "${VENVS}/sglang/bin/python" -c "import sglang, torch; print('sglang', sglang.__version__, '| torch', torch.__version__)
+try:
+    import flashinfer; print('flashinfer', flashinfer.__version__)
+except Exception as e: print('flashinfer', e)"
+    "$(find_nsys)" --version
+    git -C "${REPO_DIR}" log -1 --format='repo %h %s' 2>/dev/null || echo "repo: uploaded working tree"
+    "$(find_ncu)" --version | tail -1
+  } > "${OUT}/environment.txt" 2>&1
+  cat "${OUT}/environment.txt" >&3
+}
+
+summarize() {
+  local gpu=A100-SXM4-40GB
+  nvidia-smi --query-gpu=name --format=csv,noheader | grep -q 80GB && gpu=A100-SXM4-80GB
+  "${PY}" "${CODE_DIR}/roofline.py" --gpu "${gpu}" --bandwidth-json "${OUT}/bandwidth.json" \
+    --out "${OUT}/roofline.json" > "${OUT}/roofline.md"
+  "${PY}" "${CODE_DIR}/summarize.py" "${OUT}" >&3
+}
+
+# --- main ------------------------------------------------------------------
+log "phase0 run ${RUN_ID} -> ${OUT} (steps: ${STEPS})"
+nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader >&3
+rm -rf "${OUT}/code" && cp -r "${CODE_DIR}" "${OUT}/code"
+
+if want installs; then
+  python3 -m pip install -q uv > "${OUT}/logs/install_uv.log" 2>&1 || log "pip install uv failed"
+  run_step install_sglang install_sglang & sglang_pid=$!
+  run_step install_nsys install_nsys & nsys_pid=$!
+  run_step download_model download_model & model_pid=$!
+  run_step clone_repo clone_repo
+  run_step install_vllm install_vllm
+  wait "${model_pid}"
+  upload
+fi
+want bandwidth && { run_step bandwidth "${PY}" "${CODE_DIR}/bandwidth.py" --out "${OUT}/bandwidth.json"; grep -h -A3 copy: "${OUT}/logs/bandwidth.log" >&3; upload; }
+want vllm_serve && { run_step vllm_serve vllm_serve; upload; }
+if want installs; then wait "${sglang_pid}" "${nsys_pid}"; fi
+want sglang_serve && { run_step sglang_serve sglang_serve; upload; }
+want nsys_vllm && { run_step nsys_vllm nsys_vllm; upload; }
+want nano && { run_step nano nano; upload; }
+want ncu && { run_step ncu ncu_kernels; upload; }
+run_step environment environment
+want summarize && run_step summarize summarize
+upload
+log "P0_DONE ${RUN_ID}; status:"
+cat "${OUT}/status.tsv" >&3
+
+idle="${P0_IDLE_STOP:-20m}"
+[[ "${idle}" == "0" ]] && exit 0
+log "idle for ${idle}, then stop the pod"
+sleep "${idle}"
+if command -v runpodctl >/dev/null 2>&1 && [[ -n "${RUNPOD_POD_ID:-}" ]]; then
+  runpodctl stop pod "${RUNPOD_POD_ID}"
+fi
+sleep infinity

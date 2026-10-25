@@ -1,0 +1,378 @@
+{
+  "label": "kbench_w4a16_linear",
+  "kernels_profiled": 300,
+  "total_kernel_us": 11824.768,
+  "dram_GBps_over_kernel_time": 281.8244660471715,
+  "time_by_category": {
+    "gemm": {
+      "us": 11073.28,
+      "frac": 0.9364479709031078
+    },
+    "other": {
+      "us": 751.4879999999999,
+      "frac": 0.06355202909689221
+    }
+  },
+  "kernels": [
+    {
+      "name": "void <unnamed>::gemv_w4a16_kernel<__nv_bfloat16, 8, 2, 4>",
+      "category": "gemm",
+      "launches": 42,
+      "time_us": 2728.64,
+      "time_frac": 0.2307563243524101,
+      "avg_us": 64.96761904761904,
+      "dram_pct": 10.773849,
+      "mem_pct": 56.28034295238095,
+      "dram_GBps": 168.97792893402135,
+      "sm_pct": 30.935222738095234,
+      "achieved_occ": 11.54414507142857,
+      "theoretical_occ": 12.5,
+      "regs": 179.0,
+      "l2_hit": 36.85446114285714,
+      "top_stalls": [
+        "long_scoreboard",
+        "selected"
+      ]
+    },
+    {
+      "name": "void <unnamed>::gemv_w4a16_kernel<__nv_bfloat16, 8, 2, 2>",
+      "category": "gemm",
+      "launches": 42,
+      "time_us": 2210.3360000000002,
+      "time_frac": 0.18692425931739212,
+      "avg_us": 52.62704761904762,
+      "dram_pct": 13.384875785714287,
+      "mem_pct": 70.17847878571429,
+      "dram_GBps": 208.35996699287708,
+      "sm_pct": 38.477686976190476,
+      "achieved_occ": 16.092933833333333,
+      "theoretical_occ": 18.75,
+      "regs": 148.0,
+      "l2_hit": 37.183434642857144,
+      "top_stalls": [
+        "long_scoreboard",
+        "selected"
+      ]
+    },
+    {
+      "name": "void <unnamed>::gemv_w4a16_kernel<__nv_bfloat16, 8, 2, 0>",
+      "category": "gemm",
+      "launches": 42,
+      "time_us": 2196.128,
+      "time_frac": 0.18572271354499303,
+      "avg_us": 52.288761904761905,
+      "dram_pct": 13.336850880952381,
+      "mem_pct": 70.13867845238094,
+      "dram_GBps": 209.1601508638622,
+      "sm_pct": 38.60981342857143,
+      "achieved_occ": 22.25269311904762,
+      "theoretical_occ": 25.0,
+      "regs": 108.0,
+      "l2_hit": 37.15026992857143,
+      "top_stalls": [
+        "long_scoreboard",
+        "selected"
+      ]
+    },
+    {
+      "name": "void <unnamed>::gemm_w4a16_mma_kernel<__nv_bfloat16, 1, 4>",
+      "category": "gemm",
+      "launches": 42,
+      "time_us": 853.728,
+      "time_frac": 0.07219828752665591,
+      "avg_us": 20.326857142857143,
+      "dram_pct": 34.51260797619047,
+      "mem_pct": 34.5142759047619,
+      "dram_GBps": 540.2102028016793,
+      "sm_pct": 26.11803871428571,
+      "achieved_occ": 12.855419309523809,
+      "theoretical_occ": 18.75,
+      "regs": 130.0,
+      "l2_hit": 33.56716747619048,
+      "top_stalls": [
+        "long_scoreboard",
+        "wait"
+      ]
+    },
+    {
+      "name": "void <unnamed>::gemm_w4a16_wide_kernel<__nv_bfloat16, 1>",
+      "category": "gemm",
+      "launches": 24,
+      "time_us": 563.52,
+      "time_frac": 0.047655903270152955,
+      "avg_us": 23.48,
+      "dram_pct": 30.303350833333337,
+      "mem_pct": 30.303350833333337,
+      "dram_GBps": 470.5599091199887,
+      "sm_pct": 23.201102791666667,
+      "achieved_occ": 12.642806416666666,
+      "theoretical_occ": 25.0,
+      "regs": 124.0,
+      "l2_hit": 36.41552525,
+      "top_stalls": [
+        "long_scoreboard",
+        "wait"
+      ]
+    },
+    {
+      "name": "void <unnamed>::gemm_w4a16_wide_kernel<__nv_bfloat16, 2>",
+      "category": "gemm",
+      "launches": 12,
+      "time_us": 475.36,
+      "time_frac": 0.04020036587610006,
+      "avg_us": 39.61333333333334,
+      "dram_pct": 18.98736425,
+      "mem_pct": 23.464395,
+      "dram_GBps": 297.22436886624035,
+      "sm_pct": 20.753272916666667,
+      "achieved_occ": 12.448504833333333,
+      "theoretical_occ": 18.75,
+      "regs": 144.0,
+      "l2_hit": 68.29536025,
+      "top_stalls": [
+        "long_scoreboard",
+        "wait"
+      ]
+    },
+    {
+      "name": "void <unnamed>::gemm_w4a16_mma_kernel<__nv_bfloat16, 4, 2>",
+      "category": "gemm",
+      "launches": 6,
+      "time_us": 440.0,
+      "time_frac": 0.037210032365962695,
+      "avg_us": 73.33333333333333,
+      "dram_pct": 10.10824,
+      "mem_pct": 51.49939916666667,
+      "dram_GBps": 157.62152711796367,
+      "sm_pct": 19.971790666666667,
+      "achieved_occ": 12.374997333333333,
+      "theoretical_occ": 12.5,
+      "regs": 188.0,
+      "l2_hit": 84.69012199999999,
+      "top_stalls": [
+        "long_scoreboard",
+        "wait"
+      ]
+    },
+    {
+      "name": "void marlin::Marlin<1125899906909960, 1125899907892224, 1125899906909960, 1125899906909960, 256, 1, ",
+      "category": "other",
+      "launches": 24,
+      "time_us": 413.312,
+      "time_frac": 0.03495307476645631,
+      "avg_us": 17.221333333333334,
+      "dram_pct": 40.546610333333334,
+      "mem_pct": 40.546610333333334,
+      "dram_GBps": 633.5280272976928,
+      "sm_pct": 21.829261791666667,
+      "achieved_occ": 12.326395624999998,
+      "theoretical_occ": 12.5,
+      "regs": 133.0,
+      "l2_hit": 21.720670458333334,
+      "top_stalls": [
+        "wait",
+        "long_scoreboard"
+      ]
+    },
+    {
+      "name": "void <unnamed>::gemm_w4a16_wide_kernel<__nv_bfloat16, 4>",
+      "category": "gemm",
+      "launches": 6,
+      "time_us": 396.64,
+      "time_frac": 0.03354315281280783,
+      "avg_us": 66.10666666666667,
+      "dram_pct": 14.752705666666666,
+      "mem_pct": 25.517163666666665,
+      "dram_GBps": 229.24566354554258,
+      "sm_pct": 20.156822166666668,
+      "achieved_occ": 11.374152833333333,
+      "theoretical_occ": 12.5,
+      "regs": 190.0,
+      "l2_hit": 78.4527495,
+      "top_stalls": [
+        "long_scoreboard",
+        "wait"
+      ]
+    },
+    {
+      "name": "void marlin::Marlin<1125899906909960, 1125899907892224, 1125899906909960, 1125899906909960, 128, 4, ",
+      "category": "other",
+      "launches": 6,
+      "time_us": 212.352,
+      "time_frac": 0.017958238165856615,
+      "avg_us": 35.392,
+      "dram_pct": 20.85266066666667,
+      "mem_pct": 22.694201000000003,
+      "dram_GBps": 326.9915609873418,
+      "sm_pct": 24.292357666666664,
+      "achieved_occ": 6.2009541666666665,
+      "theoretical_occ": 6.25,
+      "regs": 255.0,
+      "l2_hit": 74.01722233333334,
+      "top_stalls": [
+        "wait",
+        "selected"
+      ]
+    },
+    {
+      "name": "void <unnamed>::gemv_w4a16_kernel<__nv_bfloat16, 4, 2, 4>",
+      "category": "gemm",
+      "launches": 6,
+      "time_us": 210.048,
+      "time_frac": 0.017763392905467575,
+      "avg_us": 35.008,
+      "dram_pct": 19.922044166666666,
+      "mem_pct": 53.72405666666666,
+      "dram_GBps": 312.25898840524064,
+      "sm_pct": 36.803818166666666,
+      "achieved_occ": 21.5373115,
+      "theoretical_occ": 25.0,
+      "regs": 128.0,
+      "l2_hit": 25.236034666666665,
+      "top_stalls": [
+        "long_scoreboard",
+        "selected"
+      ]
+    },
+    {
+      "name": "void <unnamed>::gemm_w4a16_mma_kernel<__nv_bfloat16, 2, 4>",
+      "category": "gemm",
+      "launches": 6,
+      "time_us": 209.47199999999998,
+      "time_frac": 0.01771468159037031,
+      "avg_us": 34.912,
+      "dram_pct": 21.50619783333333,
+      "mem_pct": 34.47110733333333,
+      "dram_GBps": 328.4356860586618,
+      "sm_pct": 22.93789716666667,
+      "achieved_occ": 11.293293,
+      "theoretical_occ": 12.5,
+      "regs": 174.0,
+      "l2_hit": 67.85597283333334,
+      "top_stalls": [
+        "long_scoreboard",
+        "wait"
+      ]
+    },
+    {
+      "name": "void <unnamed>::gemv_w4a16_kernel<__nv_bfloat16, 1, 2, 0>",
+      "category": "gemm",
+      "launches": 12,
+      "time_us": 204.224,
+      "time_frac": 0.017270867386150832,
+      "avg_us": 17.018666666666665,
+      "dram_pct": 40.707380083333334,
+      "mem_pct": 40.707380083333334,
+      "dram_GBps": 636.963961113444,
+      "sm_pct": 45.16038699999999,
+      "achieved_occ": 29.537080916666667,
+      "theoretical_occ": 62.5,
+      "regs": 48.0,
+      "l2_hit": 10.965481416666668,
+      "top_stalls": [
+        "long_scoreboard",
+        "not_selected"
+      ]
+    },
+    {
+      "name": "void <unnamed>::gemv_w4a16_kernel<__nv_bfloat16, 4, 2, 0>",
+      "category": "gemm",
+      "launches": 6,
+      "time_us": 181.92,
+      "time_frac": 0.01538465701821803,
+      "avg_us": 30.319999999999997,
+      "dram_pct": 23.269985833333333,
+      "mem_pct": 63.69445416666667,
+      "dram_GBps": 359.4328936040458,
+      "sm_pct": 41.66580316666667,
+      "achieved_occ": 34.452363,
+      "theoretical_occ": 43.75,
+      "regs": 72.0,
+      "l2_hit": 34.825404166666665,
+      "top_stalls": [
+        "long_scoreboard",
+        "selected"
+      ]
+    },
+    {
+      "name": "void <unnamed>::gemv_w4a16_kernel<__nv_bfloat16, 4, 2, 2>",
+      "category": "gemm",
+      "launches": 6,
+      "time_us": 180.64000000000001,
+      "time_frac": 0.015276409651335232,
+      "avg_us": 30.10666666666667,
+      "dram_pct": 23.273593666666667,
+      "mem_pct": 62.858612666666666,
+      "dram_GBps": 362.2944196717449,
+      "sm_pct": 42.457990833333334,
+      "achieved_occ": 26.618345333333334,
+      "theoretical_occ": 31.25,
+      "regs": 96.0,
+      "l2_hit": 28.1228685,
+      "top_stalls": [
+        "long_scoreboard",
+        "selected"
+      ]
+    },
+    {
+      "name": "void marlin::Marlin<1125899906909960, 1125899907892224, 1125899906909960, 1125899906909960, 128, 2, ",
+      "category": "other",
+      "launches": 6,
+      "time_us": 125.824,
+      "time_frac": 0.010640716164579296,
+      "avg_us": 20.970666666666666,
+      "dram_pct": 33.862180333333335,
+      "mem_pct": 33.862180333333335,
+      "dram_GBps": 530.7650051770091,
+      "sm_pct": 20.549094333333333,
+      "achieved_occ": 6.224450833333333,
+      "theoretical_occ": 6.25,
+      "regs": 208.0,
+      "l2_hit": 59.066662,
+      "top_stalls": [
+        "wait",
+        "selected"
+      ]
+    },
+    {
+      "name": "void <unnamed>::gemv_w4a16_kernel<__nv_bfloat16, 1, 2, 4>",
+      "category": "gemm",
+      "launches": 6,
+      "time_us": 116.544,
+      "time_frac": 0.009855922754678993,
+      "avg_us": 19.424,
+      "dram_pct": 35.824364333333335,
+      "mem_pct": 35.824364333333335,
+      "dram_GBps": 559.2246020667217,
+      "sm_pct": 41.33430516666667,
+      "achieved_occ": 24.734553833333333,
+      "theoretical_occ": 31.25,
+      "regs": 95.0,
+      "l2_hit": 11.689484833333333,
+      "top_stalls": [
+        "long_scoreboard",
+        "not_selected"
+      ]
+    },
+    {
+      "name": "void <unnamed>::gemv_w4a16_kernel<__nv_bfloat16, 1, 2, 2>",
+      "category": "gemm",
+      "launches": 6,
+      "time_us": 106.08,
+      "time_frac": 0.008971000530412098,
+      "avg_us": 17.68,
+      "dram_pct": 39.224919,
+      "mem_pct": 39.224919,
+      "dram_GBps": 613.3622926950227,
+      "sm_pct": 44.490420666666665,
+      "achieved_occ": 29.771124,
+      "theoretical_occ": 56.25,
+      "regs": 56.0,
+      "l2_hit": 19.954809166666667,
+      "top_stalls": [
+        "long_scoreboard",
+        "not_selected"
+      ]
+    }
+  ]
+}

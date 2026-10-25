@@ -371,3 +371,73 @@ def test_stream_with_real_engine_reports_length_and_frees_blocks():
     assert content == " t12 t13 t14"
     assert payloads[-1]["choices"][0]["finish_reason"] == "length"
     assert engine.block_manager.num_free_blocks == engine.config.num_kvcache_blocks
+
+
+def test_ignore_eos_and_usage_chunk_for_benchmark_clients():
+    """vllm bench serve sends ignore_eos and stream_options.include_usage."""
+    from test_nano_vllm_engine_batching import ListTokenizer, _engine, successor_model
+
+    class EosTokenizer(ListTokenizer):
+        eos_token_id = 13  # the successor model reaches it after two tokens
+
+    engine = _engine(EosTokenizer({"go": [10, 11]}), successor_model())
+    server = _server_with_engine(engine, eager_load=False)
+    body = {"prompt": "go", "max_tokens": 4, "temperature": 0.0, "stream": True}
+    with TestClient(server.app) as client:
+        stopped = _sse_payloads(client.post("/v1/completions", json=body).text)
+        ignored = _sse_payloads(
+            client.post(
+                "/v1/completions",
+                json={**body, "ignore_eos": True, "stream_options": {"include_usage": True}},
+            ).text
+        )
+
+    # Without ignore_eos: no usage chunk, generation stops at EOS (13; this
+    # fake tokenizer does not skip it when decoding).
+    assert all("usage" not in p for p in stopped)
+    assert "".join(p["choices"][0]["text"] for p in stopped) == " t12 t13"
+    assert stopped[-1]["choices"][0]["finish_reason"] == "stop"
+    # With it: all four tokens, then a usage chunk with empty choices.
+    usage = ignored[-1]
+    assert usage["choices"] == []
+    assert usage["usage"] == {"prompt_tokens": 2, "completion_tokens": 4, "total_tokens": 6}
+    assert ignored[-2]["choices"][0]["finish_reason"] == "length"
+    text = "".join(p["choices"][0]["text"] for p in ignored[:-1])
+    assert text == " t12 t13 t14 t15"
+
+
+def test_models_and_profile_routes():
+    from test_nano_vllm_engine_batching import ListTokenizer, _engine, successor_model
+
+    with TestClient(_server().app) as client:
+        models = client.get("/v1/models").json()
+        assert [m["id"] for m in models["data"]] == ["nano-test"]
+        assert client.post("/start_profile").status_code == 501  # engine has none
+
+    engine = _engine(ListTokenizer({"go": [10, 11]}), successor_model())
+    with TestClient(_server_with_engine(engine, eager_load=False).app) as client:
+        assert client.post("/start_profile").status_code == 200  # no-op on CPU
+        assert client.post("/stop_profile").status_code == 200
+
+
+def test_stats_route_and_metrics_report_prefix_cache_hits():
+    from test_nano_vllm_engine_batching import ListTokenizer, _engine, successor_model
+
+    prompt = list(range(10, 19))  # two full 4-token blocks + 1
+    engine = _engine(
+        ListTokenizer({"p": prompt}), successor_model(), enable_prefix_cache=True
+    )
+    config = NanoVLLMConfig(served_model_name="nano-test", model_name="/tmp/not-used",
+                            eager_load=False, enable_metrics=True)
+    server = NanoVLLMServer(config, engine=engine)
+    body = {"prompt": "p", "max_tokens": 2, "temperature": 0.0}
+    with TestClient(server.app) as client:
+        client.post("/v1/completions", json=body)
+        client.post("/v1/completions", json=body)  # same prompt: 2 blocks hit
+        stats = client.get("/stats").json()
+        metrics = client.get("/metrics").text
+
+    assert stats["prefix_query_tokens"] == 18
+    assert stats["prefix_hit_tokens"] == 8
+    assert stats["kv_blocks_used"] == 0 and stats["num_running"] == 0
+    assert 'llm_engine_prefix_hit_tokens{model="nano-test"} 8.0' in metrics

@@ -1,0 +1,536 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="11" skipped="0" tests="209" time="50.201" timestamp="2026-10-22T19:39:08.016152+00:00" hostname="10599333354e"><testcase classname="tests.gpu.test_nano_vllm_cuda_graph" name="test_graph_replay_matches_eager[triton-1-8]" time="6.258" /><testcase classname="tests.gpu.test_nano_vllm_cuda_graph" name="test_graph_replay_matches_eager[triton-3-8]" time="0.822" /><testcase classname="tests.gpu.test_nano_vllm_cuda_graph" name="test_graph_replay_matches_eager[triton-8-8]" time="0.084" /><testcase classname="tests.gpu.test_nano_vllm_cuda_graph" name="test_graph_replay_matches_eager[triton-3-2]" time="0.101" /><testcase classname="tests.gpu.test_nano_vllm_cuda_graph" name="test_graph_replay_matches_eager[torch-3-8]" time="0.265" /><testcase classname="tests.gpu.test_nano_vllm_forward_gpu" name="test_decode_step_never_syncs_with_the_host[torch]" time="0.055" /><testcase classname="tests.gpu.test_nano_vllm_forward_gpu" name="test_decode_step_never_syncs_with_the_host[triton]" time="0.020" /><testcase classname="tests.gpu.test_nano_vllm_forward_gpu" name="test_cuda_fp32_matches_cpu" time="0.054" /><testcase classname="tests.gpu.test_nano_vllm_forward_gpu" name="test_cuda_bf16_with_triton_tracks_fp32" time="0.043" /><testcase classname="tests.gpu.test_nano_vllm_forward_gpu" name="test_triton_attention_backend_matches_torch_backend" time="2.146" /><testcase classname="tests.gpu.test_nano_vllm_forward_gpu" name="test_all_triton_paths_track_fp32" time="1.020" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[qkv-1]" time="0.554" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[qkv-2]" time="0.209" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[qkv-5]" time="0.002" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[qkv-16]" time="0.226" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[o_proj-1]" time="0.002" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[o_proj-2]" time="0.002" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[o_proj-5]" time="0.002" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[o_proj-16]" time="0.002" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[gate_up-1]" time="0.217" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[gate_up-2]" time="0.005" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[gate_up-5]" time="0.005" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[gate_up-16]" time="0.212" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[down-1]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[down-2]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[down-5]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[down-16]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[ragged-1]" time="0.330" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[ragged-2]" time="0.285" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[ragged-5]" time="0.002" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_matches_fp32_matmul[ragged-16]" time="0.345" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_split_k_variants_agree[1]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_split_k_variants_agree[2]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_gemv_split_k_variants_agree[8]" time="0.331" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_lm_head_shape" time="0.015" /><testcase classname="tests.gpu.test_nano_vllm_gemv" name="test_more_than_16_rows_falls_back_to_f_linear" time="0.001" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-1-s1-llama8b]" time="0.453" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-1-s1-tiny]" time="0.334" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-1-s4-llama8b]" time="0.651" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-1-s4-tiny]" time="0.488" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-1-s32-llama8b]" time="0.661" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-1-s32-tiny]" time="0.495" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-1-auto-llama8b]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-1-auto-tiny]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-3-s1-llama8b]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-3-s1-tiny]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-3-s4-llama8b]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-3-s4-tiny]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-3-s32-llama8b]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-3-s32-tiny]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-3-auto-llama8b]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-3-auto-tiny]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-16-s1-llama8b]" time="0.008" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-16-s1-tiny]" time="0.005" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-16-s4-llama8b]" time="0.008" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-16-s4-tiny]" time="0.005" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-16-s32-llama8b]" time="0.008" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-16-s32-tiny]" time="0.005" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-16-auto-llama8b]" time="0.008" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-16-auto-tiny]" time="0.523" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-64-s1-llama8b]" time="0.026" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-64-s1-tiny]" time="0.011" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-64-s4-llama8b]" time="0.025" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-64-s4-tiny]" time="0.011" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-64-s32-llama8b]" time="0.025" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-64-s32-tiny]" time="0.011" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-64-auto-llama8b]" time="0.025" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[4-64-auto-tiny]" time="0.011" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-1-s1-llama8b]" time="0.422" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-1-s1-tiny]" time="0.326" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-1-s4-llama8b]" time="0.501" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-1-s4-tiny]" time="0.368" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-1-s32-llama8b]" time="0.464" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-1-s32-tiny]" time="0.400" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-1-auto-llama8b]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-1-auto-tiny]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-3-s1-llama8b]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-3-s1-tiny]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-3-s4-llama8b]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-3-s4-tiny]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-3-s32-llama8b]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-3-s32-tiny]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-3-auto-llama8b]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-3-auto-tiny]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-16-s1-llama8b]" time="0.006" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-16-s1-tiny]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-16-s4-llama8b]" time="0.006" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-16-s4-tiny]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-16-s32-llama8b]" time="0.006" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-16-s32-tiny]" time="0.004" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-16-auto-llama8b]" time="0.006" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-16-auto-tiny]" time="0.373" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-64-s1-llama8b]" time="0.020" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-64-s1-tiny]" time="0.005" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-64-s4-llama8b]" time="0.019" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-64-s4-tiny]" time="0.005" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-64-s32-llama8b]" time="0.019" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-64-s32-tiny]" time="0.005" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-64-auto-llama8b]" time="0.019" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_matches_reference[16-64-auto-tiny]" time="0.005" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_fp32_is_exact_to_tolerance" time="1.587" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_returns_zero_for_an_empty_context[1]" time="0.002" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_decode_kernel_returns_zero_for_an_empty_context[8]" time="0.653" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_prefill_kernel_matches_reference[4-llama8b-bf16]" time="0.791" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_prefill_kernel_matches_reference[4-llama8b-fp32]" time="6.236" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_prefill_kernel_matches_reference[4-tiny-bf16]" time="0.399" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_prefill_kernel_matches_reference[4-tiny-fp32]" time="0.890" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_prefill_kernel_matches_reference[16-llama8b-bf16]" time="0.847" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_prefill_kernel_matches_reference[16-llama8b-fp32]" time="6.199" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_prefill_kernel_matches_reference[16-tiny-bf16]" time="0.395" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_prefill_kernel_matches_reference[16-tiny-fp32]" time="1.046" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_rope_cache_write_matches_reference[1-llama8b]" time="0.184" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_rope_cache_write_matches_reference[1-tiny]" time="0.149" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_rope_cache_write_matches_reference[7-llama8b]" time="0.004" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_rope_cache_write_matches_reference[7-tiny]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_rope_cache_write_matches_reference[64-llama8b]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_attention" name="test_rope_cache_write_matches_reference[64-tiny]" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_triton_norms" name="test_rms_norm_matches_hf_rounding_in_bf16[1]" time="0.173" /><testcase classname="tests.gpu.test_nano_vllm_triton_norms" name="test_rms_norm_matches_hf_rounding_in_bf16[7]" time="0.002" /><testcase classname="tests.gpu.test_nano_vllm_triton_norms" name="test_rms_norm_matches_hf_rounding_in_bf16[64]" time="0.002" /><testcase classname="tests.gpu.test_nano_vllm_triton_norms" name="test_fused_add_rms_norm_matches_reference[1]" time="0.194" /><testcase classname="tests.gpu.test_nano_vllm_triton_norms" name="test_fused_add_rms_norm_matches_reference[7]" time="0.002" /><testcase classname="tests.gpu.test_nano_vllm_triton_norms" name="test_fused_add_rms_norm_matches_reference[64]" time="0.002" /><testcase classname="tests.gpu.test_nano_vllm_triton_norms" name="test_silu_and_mul_matches_reference[1]" time="0.002" /><testcase classname="tests.gpu.test_nano_vllm_triton_norms" name="test_silu_and_mul_matches_reference[7]" time="0.002" /><testcase classname="tests.gpu.test_nano_vllm_triton_norms" name="test_silu_and_mul_matches_reference[64]" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_engine_batching" name="test_engine_batches_concurrent_prefill_requests" time="0.005" /><testcase classname="tests.unit.test_nano_vllm_engine_batching" name="test_chunked_prefill_leaving_one_token_streams_only_appended_tokens" time="0.004" /><testcase classname="tests.unit.test_nano_vllm_engine_batching" name="test_schedule_exception_fails_requests_but_keeps_loop_alive" time="0.005" /><testcase classname="tests.unit.test_nano_vllm_engine_batching" name="test_background_loop_restarts_if_scheduler_task_died" time="0.003" /><testcase classname="tests.unit.test_nano_vllm_engine_batching" name="test_requests_that_cannot_fit_are_rejected_not_truncated_or_clamped" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_engine_batching" name="test_prompt_plus_max_tokens_beyond_max_model_len_is_rejected" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_engine_batching" name="test_eos_ids_from_generation_config_list_and_stop_token_ids" time="0.006" /><testcase classname="tests.unit.test_nano_vllm_engine_batching" name="test_stop_string_halts_streaming_generation" time="0.010" /><testcase classname="tests.unit.test_nano_vllm_engine_batching" name="test_streaming_detokenizes_multibyte_utf8_incrementally" time="0.013" /><testcase classname="tests.unit.test_nano_vllm_engine_batching" name="test_closing_stream_aborts_sequence_and_frees_kv_blocks" time="0.075" /><testcase classname="tests.unit.test_nano_vllm_engine_batching" name="test_cancelled_consumer_aborts_sequence_and_frees_kv_blocks" time="0.025" /><testcase classname="tests.unit.test_nano_vllm_engine_batching" name="test_paged_engine_matches_transformers_greedy_decode" time="5.379" /><testcase classname="tests.unit.test_nano_vllm_kernels" name="test_rms_norm_pytorch_fallback_matches_reference" time="0.002" /><testcase classname="tests.unit.test_nano_vllm_kernels" name="test_silu_mul_pytorch_fallback_matches_reference" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_kernels" name="test_rope_preserves_shape_and_changes_positions" time="0.002" /><testcase classname="tests.unit.test_nano_vllm_kernels" name="test_causal_attention_masks_future_keys" time="0.002" /><testcase classname="tests.unit.test_nano_vllm_kernels" name="test_triton_rms_norm_matches_pytorch_reference" time="0.132" /><testcase classname="tests.unit.test_nano_vllm_kernels" name="test_rope_matches_transformers_rotate_half_layout[None]" time="0.003"><failure message="AttributeError: 'LlamaConfig' object has no attribute 'rope_theta'">rope_scaling = None
+
+    @pytest.mark.parametrize(
+        "rope_scaling",
+        [
+            None,
+            {"rope_type": "linear", "factor": 4.0},
+            {
+                "rope_type": "llama3",
+                "factor": 8.0,
+                "low_freq_factor": 1.0,
+                "high_freq_factor": 4.0,
+                "original_max_position_embeddings": 8,
+            },
+        ],
+    )
+    def test_rope_matches_transformers_rotate_half_layout(rope_scaling):
+        from transformers.models.llama.modeling_llama import (
+            LlamaRotaryEmbedding,
+            apply_rotary_pos_emb,
+        )
+    
+        from serving.nano_vllm.kernels.rotary import compute_inv_freq
+    
+        config = _hf_llama_config(rope_scaling=rope_scaling)
+        head_dim = config.hidden_size // config.num_attention_heads
+        torch.manual_seed(0)
+        query = torch.randn(1, 4, 6, head_dim)
+        key = torch.randn(1, 2, 6, head_dim)
+        positions = torch.tensor([0, 1, 2, 7, 30, 100])
+    
+        rotary = LlamaRotaryEmbedding(config)
+        cos, sin = rotary(query, positions.view(1, -1))
+        expected_query, expected_key = apply_rotary_pos_emb(query, key, cos, sin)
+    
+&gt;       inv_freq = compute_inv_freq(head_dim, config.rope_theta, rope_scaling)
+                                              ^^^^^^^^^^^^^^^^^
+
+tests/unit/test_nano_vllm_kernels.py:126: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../p0/venvs/vllm/lib/python3.12/site-packages/transformers/configuration_utils.py:652: in __getattribute__
+    return super().__getattribute__(key)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = LlamaConfig {
+  "attention_bias": false,
+  "attention_dropout": 0.0,
+  "bos_token_id": 1,
+  "eos_token_id": 2,
+  "head...lt"
+  },
+  "tie_word_embeddings": false,
+  "transformers_version": "5.20.2",
+  "use_cache": true,
+  "vocab_size": 32
+}
+
+key = 'rope_theta'
+
+    def __getattribute__(self, key: str) -&gt; Any:
+        # In heterogeneous configs, per-layer attributes are ambiguous on the global config.
+        # Callers must read them from a concrete layer unless they explicitly opt into the global value.
+        heterogeneity_spec = super().__getattribute__("__dict__").get("_heterogeneity_spec")
+        if heterogeneity_spec is not None:
+            if key in heterogeneity_spec.per_layer_attributes:
+                if not super().__getattribute__("allow_global_per_layer_attribute_access"):
+                    raise AmbiguousGlobalPerLayerAttributeError(
+                        f"'{key}' is a per-layer attribute and may vary across layers. Access it via the individual layer "
+                        f"configs instead (e.g. config.per_layer_config[i].{key}). To read the global config value from "
+                        f"config.{key} anyway, set `allow_global_per_layer_attribute_access` to `True` on the config. "
+                        f"Warning: only do this if the caller can safely handle heterogeneous configs; code that assumes "
+                        f"a homogeneous model may use the global value incorrectly."
+                    )
+    
+                logger.warning_once(
+                    f"Reading global config value for per-layer attribute `{key}` on a heterogeneous config. "
+                    "Only do this if the caller can safely handle heterogeneous configs; code that assumes a homogeneous "
+                    "model may use the global value incorrectly."
+                )
+    
+&gt;       return super().__getattribute__(key)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'LlamaConfig' object has no attribute 'rope_theta'
+
+../p0/venvs/vllm/lib/python3.12/site-packages/transformers/integrations/heterogeneity/configuration_utils.py:312: AttributeError</failure></testcase><testcase classname="tests.unit.test_nano_vllm_kernels" name="test_rope_matches_transformers_rotate_half_layout[rope_scaling1]" time="0.003"><failure message="AttributeError: 'LlamaConfig' object has no attribute 'rope_theta'">rope_scaling = {'rope_type': 'linear', 'factor': 4.0, 'rope_theta': 500000.0}
+
+    @pytest.mark.parametrize(
+        "rope_scaling",
+        [
+            None,
+            {"rope_type": "linear", "factor": 4.0},
+            {
+                "rope_type": "llama3",
+                "factor": 8.0,
+                "low_freq_factor": 1.0,
+                "high_freq_factor": 4.0,
+                "original_max_position_embeddings": 8,
+            },
+        ],
+    )
+    def test_rope_matches_transformers_rotate_half_layout(rope_scaling):
+        from transformers.models.llama.modeling_llama import (
+            LlamaRotaryEmbedding,
+            apply_rotary_pos_emb,
+        )
+    
+        from serving.nano_vllm.kernels.rotary import compute_inv_freq
+    
+        config = _hf_llama_config(rope_scaling=rope_scaling)
+        head_dim = config.hidden_size // config.num_attention_heads
+        torch.manual_seed(0)
+        query = torch.randn(1, 4, 6, head_dim)
+        key = torch.randn(1, 2, 6, head_dim)
+        positions = torch.tensor([0, 1, 2, 7, 30, 100])
+    
+        rotary = LlamaRotaryEmbedding(config)
+        cos, sin = rotary(query, positions.view(1, -1))
+        expected_query, expected_key = apply_rotary_pos_emb(query, key, cos, sin)
+    
+&gt;       inv_freq = compute_inv_freq(head_dim, config.rope_theta, rope_scaling)
+                                              ^^^^^^^^^^^^^^^^^
+
+tests/unit/test_nano_vllm_kernels.py:126: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../p0/venvs/vllm/lib/python3.12/site-packages/transformers/configuration_utils.py:652: in __getattribute__
+    return super().__getattribute__(key)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = LlamaConfig {
+  "attention_bias": false,
+  "attention_dropout": 0.0,
+  "bos_token_id": 1,
+  "eos_token_id": 2,
+  "head...ar"
+  },
+  "tie_word_embeddings": false,
+  "transformers_version": "5.20.2",
+  "use_cache": true,
+  "vocab_size": 32
+}
+
+key = 'rope_theta'
+
+    def __getattribute__(self, key: str) -&gt; Any:
+        # In heterogeneous configs, per-layer attributes are ambiguous on the global config.
+        # Callers must read them from a concrete layer unless they explicitly opt into the global value.
+        heterogeneity_spec = super().__getattribute__("__dict__").get("_heterogeneity_spec")
+        if heterogeneity_spec is not None:
+            if key in heterogeneity_spec.per_layer_attributes:
+                if not super().__getattribute__("allow_global_per_layer_attribute_access"):
+                    raise AmbiguousGlobalPerLayerAttributeError(
+                        f"'{key}' is a per-layer attribute and may vary across layers. Access it via the individual layer "
+                        f"configs instead (e.g. config.per_layer_config[i].{key}). To read the global config value from "
+                        f"config.{key} anyway, set `allow_global_per_layer_attribute_access` to `True` on the config. "
+                        f"Warning: only do this if the caller can safely handle heterogeneous configs; code that assumes "
+                        f"a homogeneous model may use the global value incorrectly."
+                    )
+    
+                logger.warning_once(
+                    f"Reading global config value for per-layer attribute `{key}` on a heterogeneous config. "
+                    "Only do this if the caller can safely handle heterogeneous configs; code that assumes a homogeneous "
+                    "model may use the global value incorrectly."
+                )
+    
+&gt;       return super().__getattribute__(key)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'LlamaConfig' object has no attribute 'rope_theta'
+
+../p0/venvs/vllm/lib/python3.12/site-packages/transformers/integrations/heterogeneity/configuration_utils.py:312: AttributeError</failure></testcase><testcase classname="tests.unit.test_nano_vllm_kernels" name="test_rope_matches_transformers_rotate_half_layout[rope_scaling2]" time="0.003"><failure message="AttributeError: 'LlamaConfig' object has no attribute 'rope_theta'">rope_scaling = {'rope_type': 'llama3', 'factor': 8.0, 'low_freq_factor': 1.0, 'high_freq_factor': 4.0, ...}
+
+    @pytest.mark.parametrize(
+        "rope_scaling",
+        [
+            None,
+            {"rope_type": "linear", "factor": 4.0},
+            {
+                "rope_type": "llama3",
+                "factor": 8.0,
+                "low_freq_factor": 1.0,
+                "high_freq_factor": 4.0,
+                "original_max_position_embeddings": 8,
+            },
+        ],
+    )
+    def test_rope_matches_transformers_rotate_half_layout(rope_scaling):
+        from transformers.models.llama.modeling_llama import (
+            LlamaRotaryEmbedding,
+            apply_rotary_pos_emb,
+        )
+    
+        from serving.nano_vllm.kernels.rotary import compute_inv_freq
+    
+        config = _hf_llama_config(rope_scaling=rope_scaling)
+        head_dim = config.hidden_size // config.num_attention_heads
+        torch.manual_seed(0)
+        query = torch.randn(1, 4, 6, head_dim)
+        key = torch.randn(1, 2, 6, head_dim)
+        positions = torch.tensor([0, 1, 2, 7, 30, 100])
+    
+        rotary = LlamaRotaryEmbedding(config)
+        cos, sin = rotary(query, positions.view(1, -1))
+        expected_query, expected_key = apply_rotary_pos_emb(query, key, cos, sin)
+    
+&gt;       inv_freq = compute_inv_freq(head_dim, config.rope_theta, rope_scaling)
+                                              ^^^^^^^^^^^^^^^^^
+
+tests/unit/test_nano_vllm_kernels.py:126: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../p0/venvs/vllm/lib/python3.12/site-packages/transformers/configuration_utils.py:652: in __getattribute__
+    return super().__getattribute__(key)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = LlamaConfig {
+  "attention_bias": false,
+  "attention_dropout": 0.0,
+  "bos_token_id": 1,
+  "eos_token_id": 2,
+  "head...a3"
+  },
+  "tie_word_embeddings": false,
+  "transformers_version": "5.20.2",
+  "use_cache": true,
+  "vocab_size": 32
+}
+
+key = 'rope_theta'
+
+    def __getattribute__(self, key: str) -&gt; Any:
+        # In heterogeneous configs, per-layer attributes are ambiguous on the global config.
+        # Callers must read them from a concrete layer unless they explicitly opt into the global value.
+        heterogeneity_spec = super().__getattribute__("__dict__").get("_heterogeneity_spec")
+        if heterogeneity_spec is not None:
+            if key in heterogeneity_spec.per_layer_attributes:
+                if not super().__getattribute__("allow_global_per_layer_attribute_access"):
+                    raise AmbiguousGlobalPerLayerAttributeError(
+                        f"'{key}' is a per-layer attribute and may vary across layers. Access it via the individual layer "
+                        f"configs instead (e.g. config.per_layer_config[i].{key}). To read the global config value from "
+                        f"config.{key} anyway, set `allow_global_per_layer_attribute_access` to `True` on the config. "
+                        f"Warning: only do this if the caller can safely handle heterogeneous configs; code that assumes "
+                        f"a homogeneous model may use the global value incorrectly."
+                    )
+    
+                logger.warning_once(
+                    f"Reading global config value for per-layer attribute `{key}` on a heterogeneous config. "
+                    "Only do this if the caller can safely handle heterogeneous configs; code that assumes a homogeneous "
+                    "model may use the global value incorrectly."
+                )
+    
+&gt;       return super().__getattribute__(key)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'LlamaConfig' object has no attribute 'rope_theta'
+
+../p0/venvs/vllm/lib/python3.12/site-packages/transformers/integrations/heterogeneity/configuration_utils.py:312: AttributeError</failure></testcase><testcase classname="tests.unit.test_nano_vllm_kernels" name="test_llama3_rope_scaling_changes_frequencies" time="0.002" /><testcase classname="tests.unit.test_nano_vllm_kernels" name="test_unsupported_rope_scaling_raises_clear_error" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_kernels" name="test_rms_norm_reference_handles_large_fp16_inputs" time="0.002" /><testcase classname="tests.unit.test_nano_vllm_kernels" name="test_triton_rms_norm_handles_large_fp16_inputs" time="0.002" /><testcase classname="tests.unit.test_nano_vllm_kernels" name="test_fused_add_rms_norm_reference_adds_then_normalizes" time="0.002" /><testcase classname="tests.unit.test_nano_vllm_kernels" name="test_silu_and_mul_reference_splits_gate_and_up" time="0.002" /><testcase classname="tests.unit.test_nano_vllm_model" name="test_toy_nano_llama_forward_prefill_and_decode" time="0.004" /><testcase classname="tests.unit.test_nano_vllm_model" name="test_toy_nano_llama_forward_paged_prefill_and_decode" time="0.004" /><testcase classname="tests.unit.test_nano_vllm_model" name="test_static_forward_matches_transformers_llama[plain]" time="0.022"><failure message="AssertionError: Tensor-likes are not close!&#10;&#10;Mismatched elements: 926 / 1056 (87.7%)&#10;Greatest absolute difference: 0.0015759468078613281 at index (8, 92) (up to 1e-05 allowed)&#10;Greatest relative difference: 0.2527855932712555 at index (10, 45) (up to 1e-05 allowed)">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_static_forward_matches_tr0')
+overrides = {}
+
+    @pytest.mark.parametrize("overrides", HF_PARITY_CASES.values(), ids=HF_PARITY_CASES)
+    def test_static_forward_matches_transformers_llama(tmp_path, overrides):
+        hf_model, path = _save_tiny_hf_llama(tmp_path, **overrides)
+        model = _load_nano(path)
+        prompt = [5, 17, 3, 88, 42, 9, 61, 2, 33, 70, 11]
+        next_token = 25
+    
+        cache = model.new_cache(batch_size=1, max_seq_len=len(prompt) + 1)
+        prefill = model.forward(torch.tensor([prompt]), cache=cache, start_pos=0)
+        decode = model.forward(
+            torch.tensor([[next_token]]), cache=cache, start_pos=len(prompt)
+        )
+    
+        expected = _hf_logits(hf_model, prompt + [next_token])
+&gt;       torch.testing.assert_close(prefill[0], expected[:-1], rtol=1e-5, atol=1e-5)
+E       AssertionError: Tensor-likes are not close!
+E       
+E       Mismatched elements: 926 / 1056 (87.7%)
+E       Greatest absolute difference: 0.0015759468078613281 at index (8, 92) (up to 1e-05 allowed)
+E       Greatest relative difference: 0.2527855932712555 at index (10, 45) (up to 1e-05 allowed)
+
+tests/unit/test_nano_vllm_model.py:208: AssertionError</failure></testcase><testcase classname="tests.unit.test_nano_vllm_model" name="test_static_forward_matches_transformers_llama[llama3_rope_scaling]" time="0.020"><failure message="AssertionError: Tensor-likes are not close!&#10;&#10;Mismatched elements: 949 / 1056 (89.9%)&#10;Greatest absolute difference: 0.003752483054995537 at index (6, 11) (up to 1e-05 allowed)&#10;Greatest relative difference: 5.534799098968506 at index (10, 45) (up to 1e-05 allowed)">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_static_forward_matches_tr1')
+overrides = {'rope_scaling': {'rope_type': 'llama3', 'factor': 8.0, 'low_freq_factor': 1.0, 'high_freq_factor': 4.0, ...}}
+
+    @pytest.mark.parametrize("overrides", HF_PARITY_CASES.values(), ids=HF_PARITY_CASES)
+    def test_static_forward_matches_transformers_llama(tmp_path, overrides):
+        hf_model, path = _save_tiny_hf_llama(tmp_path, **overrides)
+        model = _load_nano(path)
+        prompt = [5, 17, 3, 88, 42, 9, 61, 2, 33, 70, 11]
+        next_token = 25
+    
+        cache = model.new_cache(batch_size=1, max_seq_len=len(prompt) + 1)
+        prefill = model.forward(torch.tensor([prompt]), cache=cache, start_pos=0)
+        decode = model.forward(
+            torch.tensor([[next_token]]), cache=cache, start_pos=len(prompt)
+        )
+    
+        expected = _hf_logits(hf_model, prompt + [next_token])
+&gt;       torch.testing.assert_close(prefill[0], expected[:-1], rtol=1e-5, atol=1e-5)
+E       AssertionError: Tensor-likes are not close!
+E       
+E       Mismatched elements: 949 / 1056 (89.9%)
+E       Greatest absolute difference: 0.003752483054995537 at index (6, 11) (up to 1e-05 allowed)
+E       Greatest relative difference: 5.534799098968506 at index (10, 45) (up to 1e-05 allowed)
+
+tests/unit/test_nano_vllm_model.py:208: AssertionError</failure></testcase><testcase classname="tests.unit.test_nano_vllm_model" name="test_static_forward_matches_transformers_llama[tied_embeddings]" time="0.020"><failure message="AssertionError: Tensor-likes are not close!&#10;&#10;Mismatched elements: 923 / 1056 (87.4%)&#10;Greatest absolute difference: 0.001352936029434204 at index (8, 53) (up to 1e-05 allowed)&#10;Greatest relative difference: 0.6991076469421387 at index (8, 65) (up to 1e-05 allowed)">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_static_forward_matches_tr2')
+overrides = {'tie_word_embeddings': True}
+
+    @pytest.mark.parametrize("overrides", HF_PARITY_CASES.values(), ids=HF_PARITY_CASES)
+    def test_static_forward_matches_transformers_llama(tmp_path, overrides):
+        hf_model, path = _save_tiny_hf_llama(tmp_path, **overrides)
+        model = _load_nano(path)
+        prompt = [5, 17, 3, 88, 42, 9, 61, 2, 33, 70, 11]
+        next_token = 25
+    
+        cache = model.new_cache(batch_size=1, max_seq_len=len(prompt) + 1)
+        prefill = model.forward(torch.tensor([prompt]), cache=cache, start_pos=0)
+        decode = model.forward(
+            torch.tensor([[next_token]]), cache=cache, start_pos=len(prompt)
+        )
+    
+        expected = _hf_logits(hf_model, prompt + [next_token])
+&gt;       torch.testing.assert_close(prefill[0], expected[:-1], rtol=1e-5, atol=1e-5)
+E       AssertionError: Tensor-likes are not close!
+E       
+E       Mismatched elements: 923 / 1056 (87.4%)
+E       Greatest absolute difference: 0.001352936029434204 at index (8, 53) (up to 1e-05 allowed)
+E       Greatest relative difference: 0.6991076469421387 at index (8, 65) (up to 1e-05 allowed)
+
+tests/unit/test_nano_vllm_model.py:208: AssertionError</failure></testcase><testcase classname="tests.unit.test_nano_vllm_model" name="test_paged_forward_matches_transformers_llama[plain]" time="0.026"><failure message="AssertionError: Tensor-likes are not close!&#10;&#10;Mismatched elements: 361 / 480 (75.2%)&#10;Greatest absolute difference: 0.0006644725799560547 at index (4, 51) (up to 1e-05 allowed)&#10;Greatest relative difference: 0.1716008484363556 at index (4, 17) (up to 1e-05 allowed)">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_paged_forward_matches_tra0')
+overrides = {}
+
+    @pytest.mark.parametrize("overrides", HF_PARITY_CASES.values(), ids=HF_PARITY_CASES)
+    def test_paged_forward_matches_transformers_llama(tmp_path, overrides):
+        hf_model, path = _save_tiny_hf_llama(tmp_path, **overrides)
+        model = _load_nano(path)
+        block_size = 4
+        cache = model.new_paged_cache(num_blocks=8, block_size=block_size)
+        seq_a = [5, 17, 3, 88, 42, 9, 61, 2, 33, 70, 11]  # blocks 0, 1, 2
+        seq_b = [7, 7, 50, 1, 95]  # blocks 3, 4
+        tables = {"a": [0, 1, 2], "b": [3, 4]}
+    
+        def slots(table, positions):
+            return [table[p // block_size] * block_size + p % block_size for p in positions]
+    
+        def run(segments):
+            """segments: list of (name, tokens, start_position)."""
+            input_ids, positions, slot_mapping, context_lens, query_lens = [], [], [], [], []
+            for name, tokens, start in segments:
+                pos = list(range(start, start + len(tokens)))
+                input_ids += tokens
+                positions += pos
+                slot_mapping += slots(tables[name], pos)
+                context_lens.append(start + len(tokens))
+                query_lens.append(len(tokens))
+            max_blocks = max(len(tables[name]) for name, _, _ in segments)
+            block_tables = [
+                tables[name] + [-1] * (max_blocks - len(tables[name]))
+                for name, _, _ in segments
+            ]
+            return model.forward_paged(
+                input_ids=torch.tensor(input_ids),
+                positions=torch.tensor(positions),
+                cache=cache,
+                slot_mapping=torch.tensor(slot_mapping),
+                block_tables=torch.tensor(block_tables),
+                context_lens=torch.tensor(context_lens),
+                query_lens=query_lens,
+                is_prefill=True,
+            )
+    
+        # Chunked prefill of A (5 tokens) batched with all of B, then A's rest.
+        first = run([("a", seq_a[:5], 0), ("b", seq_b, 0)])
+        second = run([("a", seq_a[5:], 5)])
+        # One decode step for both sequences in the same batch.
+        decode = run([("a", [25], len(seq_a)), ("b", [60], len(seq_b))])
+    
+        expected_a = _hf_logits(hf_model, seq_a + [25])
+        expected_b = _hf_logits(hf_model, seq_b + [60])
+        tol = dict(rtol=1e-5, atol=1e-5)
+&gt;       torch.testing.assert_close(first[:5], expected_a[:5], **tol)
+E       AssertionError: Tensor-likes are not close!
+E       
+E       Mismatched elements: 361 / 480 (75.2%)
+E       Greatest absolute difference: 0.0006644725799560547 at index (4, 51) (up to 1e-05 allowed)
+E       Greatest relative difference: 0.1716008484363556 at index (4, 17) (up to 1e-05 allowed)
+
+tests/unit/test_nano_vllm_model.py:260: AssertionError</failure></testcase><testcase classname="tests.unit.test_nano_vllm_model" name="test_paged_forward_matches_transformers_llama[llama3_rope_scaling]" time="0.026"><failure message="AssertionError: Tensor-likes are not close!&#10;&#10;Mismatched elements: 379 / 480 (79.0%)&#10;Greatest absolute difference: 0.0024208351969718933 at index (2, 40) (up to 1e-05 allowed)&#10;Greatest relative difference: 0.5712031722068787 at index (4, 17) (up to 1e-05 allowed)">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_paged_forward_matches_tra1')
+overrides = {'rope_scaling': {'rope_type': 'llama3', 'factor': 8.0, 'low_freq_factor': 1.0, 'high_freq_factor': 4.0, ...}}
+
+    @pytest.mark.parametrize("overrides", HF_PARITY_CASES.values(), ids=HF_PARITY_CASES)
+    def test_paged_forward_matches_transformers_llama(tmp_path, overrides):
+        hf_model, path = _save_tiny_hf_llama(tmp_path, **overrides)
+        model = _load_nano(path)
+        block_size = 4
+        cache = model.new_paged_cache(num_blocks=8, block_size=block_size)
+        seq_a = [5, 17, 3, 88, 42, 9, 61, 2, 33, 70, 11]  # blocks 0, 1, 2
+        seq_b = [7, 7, 50, 1, 95]  # blocks 3, 4
+        tables = {"a": [0, 1, 2], "b": [3, 4]}
+    
+        def slots(table, positions):
+            return [table[p // block_size] * block_size + p % block_size for p in positions]
+    
+        def run(segments):
+            """segments: list of (name, tokens, start_position)."""
+            input_ids, positions, slot_mapping, context_lens, query_lens = [], [], [], [], []
+            for name, tokens, start in segments:
+                pos = list(range(start, start + len(tokens)))
+                input_ids += tokens
+                positions += pos
+                slot_mapping += slots(tables[name], pos)
+                context_lens.append(start + len(tokens))
+                query_lens.append(len(tokens))
+            max_blocks = max(len(tables[name]) for name, _, _ in segments)
+            block_tables = [
+                tables[name] + [-1] * (max_blocks - len(tables[name]))
+                for name, _, _ in segments
+            ]
+            return model.forward_paged(
+                input_ids=torch.tensor(input_ids),
+                positions=torch.tensor(positions),
+                cache=cache,
+                slot_mapping=torch.tensor(slot_mapping),
+                block_tables=torch.tensor(block_tables),
+                context_lens=torch.tensor(context_lens),
+                query_lens=query_lens,
+                is_prefill=True,
+            )
+    
+        # Chunked prefill of A (5 tokens) batched with all of B, then A's rest.
+        first = run([("a", seq_a[:5], 0), ("b", seq_b, 0)])
+        second = run([("a", seq_a[5:], 5)])
+        # One decode step for both sequences in the same batch.
+        decode = run([("a", [25], len(seq_a)), ("b", [60], len(seq_b))])
+    
+        expected_a = _hf_logits(hf_model, seq_a + [25])
+        expected_b = _hf_logits(hf_model, seq_b + [60])
+        tol = dict(rtol=1e-5, atol=1e-5)
+&gt;       torch.testing.assert_close(first[:5], expected_a[:5], **tol)
+E       AssertionError: Tensor-likes are not close!
+E       
+E       Mismatched elements: 379 / 480 (79.0%)
+E       Greatest absolute difference: 0.0024208351969718933 at index (2, 40) (up to 1e-05 allowed)
+E       Greatest relative difference: 0.5712031722068787 at index (4, 17) (up to 1e-05 allowed)
+
+tests/unit/test_nano_vllm_model.py:260: AssertionError</failure></testcase><testcase classname="tests.unit.test_nano_vllm_model" name="test_paged_forward_matches_transformers_llama[tied_embeddings]" time="0.025"><failure message="AssertionError: Tensor-likes are not close!&#10;&#10;Mismatched elements: 362 / 480 (75.4%)&#10;Greatest absolute difference: 0.0006058895960450172 at index (4, 74) (up to 1e-05 allowed)&#10;Greatest relative difference: 0.5195499062538147 at index (3, 43) (up to 1e-05 allowed)">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_paged_forward_matches_tra2')
+overrides = {'tie_word_embeddings': True}
+
+    @pytest.mark.parametrize("overrides", HF_PARITY_CASES.values(), ids=HF_PARITY_CASES)
+    def test_paged_forward_matches_transformers_llama(tmp_path, overrides):
+        hf_model, path = _save_tiny_hf_llama(tmp_path, **overrides)
+        model = _load_nano(path)
+        block_size = 4
+        cache = model.new_paged_cache(num_blocks=8, block_size=block_size)
+        seq_a = [5, 17, 3, 88, 42, 9, 61, 2, 33, 70, 11]  # blocks 0, 1, 2
+        seq_b = [7, 7, 50, 1, 95]  # blocks 3, 4
+        tables = {"a": [0, 1, 2], "b": [3, 4]}
+    
+        def slots(table, positions):
+            return [table[p // block_size] * block_size + p % block_size for p in positions]
+    
+        def run(segments):
+            """segments: list of (name, tokens, start_position)."""
+            input_ids, positions, slot_mapping, context_lens, query_lens = [], [], [], [], []
+            for name, tokens, start in segments:
+                pos = list(range(start, start + len(tokens)))
+                input_ids += tokens
+                positions += pos
+                slot_mapping += slots(tables[name], pos)
+                context_lens.append(start + len(tokens))
+                query_lens.append(len(tokens))
+            max_blocks = max(len(tables[name]) for name, _, _ in segments)
+            block_tables = [
+                tables[name] + [-1] * (max_blocks - len(tables[name]))
+                for name, _, _ in segments
+            ]
+            return model.forward_paged(
+                input_ids=torch.tensor(input_ids),
+                positions=torch.tensor(positions),
+                cache=cache,
+                slot_mapping=torch.tensor(slot_mapping),
+                block_tables=torch.tensor(block_tables),
+                context_lens=torch.tensor(context_lens),
+                query_lens=query_lens,
+                is_prefill=True,
+            )
+    
+        # Chunked prefill of A (5 tokens) batched with all of B, then A's rest.
+        first = run([("a", seq_a[:5], 0), ("b", seq_b, 0)])
+        second = run([("a", seq_a[5:], 5)])
+        # One decode step for both sequences in the same batch.
+        decode = run([("a", [25], len(seq_a)), ("b", [60], len(seq_b))])
+    
+        expected_a = _hf_logits(hf_model, seq_a + [25])
+        expected_b = _hf_logits(hf_model, seq_b + [60])
+        tol = dict(rtol=1e-5, atol=1e-5)
+&gt;       torch.testing.assert_close(first[:5], expected_a[:5], **tol)
+E       AssertionError: Tensor-likes are not close!
+E       
+E       Mismatched elements: 362 / 480 (75.4%)
+E       Greatest absolute difference: 0.0006058895960450172 at index (4, 74) (up to 1e-05 allowed)
+E       Greatest relative difference: 0.5195499062538147 at index (3, 43) (up to 1e-05 allowed)
+
+tests/unit/test_nano_vllm_model.py:260: AssertionError</failure></testcase><testcase classname="tests.unit.test_nano_vllm_model" name="test_forward_batch_returns_logits_for_last_token_of_each_sequence" time="0.018"><failure message="AssertionError: Tensor-likes are not close!&#10;&#10;Mismatched elements: 95 / 96 (99.0%)&#10;Greatest absolute difference: 0.0009628273546695709 at index (79,) (up to 1e-05 allowed)&#10;Greatest relative difference: 0.2058113068342209 at index (34,) (up to 1e-05 allowed)">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_forward_batch_returns_log0')
+
+    def test_forward_batch_returns_logits_for_last_token_of_each_sequence(tmp_path):
+        hf_model, path = _save_tiny_hf_llama(tmp_path)
+        model = _load_nano(path)
+        cache = model.new_paged_cache(num_blocks=8, block_size=4)
+    
+        prefill = _prefill_two_sequences(model, cache)
+    
+        assert prefill.shape == (2, model.config.vocab_size)
+        tol = dict(rtol=1e-5, atol=1e-5)
+&gt;       torch.testing.assert_close(prefill[0], _hf_logits(hf_model, [5, 17, 3, 88, 42, 9])[-1], **tol)
+E       AssertionError: Tensor-likes are not close!
+E       
+E       Mismatched elements: 95 / 96 (99.0%)
+E       Greatest absolute difference: 0.0009628273546695709 at index (79,) (up to 1e-05 allowed)
+E       Greatest relative difference: 0.2058113068342209 at index (34,) (up to 1e-05 allowed)
+
+tests/unit/test_nano_vllm_model.py:312: AssertionError</failure></testcase><testcase classname="tests.unit.test_nano_vllm_model" name="test_padding_rows_into_the_null_block_leave_real_rows_unchanged" time="0.022" /><testcase classname="tests.unit.test_nano_vllm_model" name="test_triton_backend_falls_back_to_the_references_on_cpu" time="0.025" /><testcase classname="tests.unit.test_nano_vllm_model" name="test_projections_are_fused_at_load" time="0.013" /><testcase classname="tests.unit.test_nano_vllm_model" name="test_fuse_projections_rejects_a_partial_bias" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_model" name="test_config_reads_dtype_tying_and_rope_scaling" time="0.012"><failure message="TypeError: 'NoneType' object is not subscriptable">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_config_reads_dtype_tying_0')
+
+    def test_config_reads_dtype_tying_and_rope_scaling(tmp_path):
+        _save_tiny_hf_llama(
+            tmp_path,
+            torch_dtype="bfloat16",
+            tie_word_embeddings=True,
+            rope_scaling=LLAMA3_SCALING,
+        )
+        config = NanoLlamaConfig.from_pretrained(tmp_path)
+    
+        assert config.tie_word_embeddings is True
+&gt;       assert config.rope_scaling["rope_type"] == "llama3"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/unit/test_nano_vllm_model.py:399: TypeError</failure></testcase><testcase classname="tests.unit.test_nano_vllm_model" name="test_auto_dtype_follows_checkpoint_torch_dtype" time="0.012" /><testcase classname="tests.unit.test_nano_vllm_model" name="test_untied_checkpoint_without_lm_head_is_rejected" time="0.002" /><testcase classname="tests.unit.test_nano_vllm_model" name="test_unsupported_rope_scaling_config_is_rejected" time="0.012" /><testcase classname="tests.unit.test_nano_vllm_paged_attention" name="test_decode_reference_matches_read_sequence_path" time="0.005" /><testcase classname="tests.unit.test_nano_vllm_paged_attention" name="test_decode_reference_ignores_non_finite_values_past_the_context" time="0.003" /><testcase classname="tests.unit.test_nano_vllm_paged_attention" name="test_prefill_reference_matches_causal_attention_with_cached_prefix" time="0.004" /><testcase classname="tests.unit.test_nano_vllm_paged_attention" name="test_build_batch_pads_tables_and_points_logits_at_last_tokens" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_paged_attention" name="test_build_batch_rejects_slots_outside_the_cache" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_routing" name="test_nano_routing_manifest_targets_nano_backend" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_routing" name="test_nano_config_loads_yaml_defaults_and_env_overrides" time="0.003" /><testcase classname="tests.unit.test_nano_vllm_routing" name="test_cuda_graph_settings_come_from_yaml_and_env" time="0.003" /><testcase classname="tests.unit.test_nano_vllm_sampling_cache" name="test_sample_next_token_uses_argmax_when_temperature_zero" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_sampling_cache" name="test_filter_logits_keeps_top_k_only" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_sampling_cache" name="test_static_kv_cache_update_and_read" time="0.002" /><testcase classname="tests.unit.test_nano_vllm_sampling_cache" name="test_paged_kv_cache_update_and_read_sequence" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_sampling_cache" name="test_sample_tokens_is_argmax_for_greedy_rows" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_sampling_cache" name="test_sample_tokens_mixes_greedy_and_filtered_rows" time="0.008" /><testcase classname="tests.unit.test_nano_vllm_sampling_cache" name="test_sample_tokens_samples_within_top_k" time="0.002" /><testcase classname="tests.unit.test_nano_vllm_scheduler" name="test_block_manager_allocates_releases_and_reuses_prefix_cache" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_scheduler" name="test_scheduler_chunked_prefill_and_decode_batching" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_scheduler" name="test_scheduler_rejects_sequence_that_can_never_fit_in_kv_cache" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_scheduler" name="test_scheduler_preempts_youngest_when_decode_needs_block_without_capacity" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_scheduler" name="test_can_allocate_counts_free_listed_prefix_hits" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_scheduler" name="test_allocate_failure_leaves_block_manager_unchanged" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_scheduler" name="test_scheduler_enforces_max_num_seqs_across_steps" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_scheduler" name="test_decode_scheduling_is_round_robin_under_token_budget" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_scheduler" name="test_decode_allocates_a_block_per_token_when_block_size_is_one" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_scheduler" name="test_postprocess_reports_only_appended_tokens" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_scheduler" name="test_scheduler_abort_frees_blocks_and_dequeues" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_scheduler" name="test_sequence_finish_reasons_cover_eos_lists_stop_ids_and_length" time="0.001" /><testcase classname="tests.unit.test_nano_vllm_scheduler" name="test_prefix_hash_chain_never_overflows" time="0.002" /><testcase classname="tests.unit.test_nano_vllm_server" name="test_nano_server_health_ready_and_completion_contract" time="0.130" /><testcase classname="tests.unit.test_nano_vllm_server" name="test_nano_server_chat_completion_contract" time="0.008" /><testcase classname="tests.unit.test_nano_vllm_server" name="test_nano_server_reports_not_ready_when_engine_not_loaded" time="0.009" /><testcase classname="tests.unit.test_nano_vllm_server" name="test_nano_server_uses_async_batch_generation_for_prompt_lists" time="0.017" /><testcase classname="tests.unit.test_nano_vllm_server" name="test_nano_server_streams_from_async_engine" time="0.009" /><testcase classname="tests.unit.test_nano_vllm_server" name="test_finish_reason_length_is_reported_for_all_endpoints" time="0.016" /><testcase classname="tests.unit.test_nano_vllm_server" name="test_finish_reason_stop_is_reported_when_engine_stops" time="0.007" /><testcase classname="tests.unit.test_nano_vllm_server" name="test_invalid_requests_return_400_for_stream_and_non_stream" time="0.011" /><testcase classname="tests.unit.test_nano_vllm_server" name="test_failed_prompt_cancels_sibling_generations" time="0.007" /><testcase classname="tests.unit.test_nano_vllm_server" name="test_stream_closed_by_client_finishes_tracking_and_closes_engine_stream" time="0.005" /><testcase classname="tests.unit.test_nano_vllm_server" name="test_cancelled_stream_finishes_tracking_and_closes_engine_stream" time="0.023" /><testcase classname="tests.unit.test_nano_vllm_server" name="test_stream_with_real_engine_reports_length_and_frees_blocks" time="0.012" /></testsuite></testsuites>
