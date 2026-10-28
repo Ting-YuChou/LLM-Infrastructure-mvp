@@ -151,7 +151,7 @@ At the end of Phase 1 the roadmap doc's "Kernel list" had 12 items. Re-evaluated
 |---|---|---|
 | 10 | async scheduling as the default | Done. Also saves 0.23 / 0.42 / 1.01 ms for W4A16 (b=1/16/64) |
 | 12 | sync guard extended to sampled, eager, mixed | Done. No syncs caught on the GPU |
-| 5 | measuring the sampling path | Measured. At b=64 nano's sampling costs 0.96 ms more than vLLM's; a sort-free sampler is listed for the next round |
+| 5 | measuring the sampling path | Measured. At b=64 nano's sampling costs 0.96 ms more than vLLM's. Round 5's sort-free sampler brings it to 0.13 ms against vLLM's 1.74 |
 | 1 | W4A16 GEMV register prefetch | Negative result, reverted. The deeper the prefetch, the slower |
 | 3 | FP8 KV cache | Done, opt-in (`kv_cache_dtype: fp8`). 1.7 ms faster at b=64, perplexity +0.2% |
 | 2, 6, 7 | Marlin-style W4A16 and its epilogue/prologue fusion | Next round. W4A16 is still 44% behind AWQ at b=64 (#2 is done in round 2, see the next section) |
@@ -207,7 +207,7 @@ Every benchmark so far was greedy, but the server defaults to temperature 0.7, t
 | nano | 0.42 | 1.02 | 2.62 |
 | vLLM | 0.25 | 1.33 | 1.66 |
 
-nsys (b=16, per step): the innermost scan of `torch.cumsum` along the 128k vocab takes 231 µs, radix sort about 265 µs, two argmaxes 96 µs together (the greedy bf16 argmax is computed every step, with one block per row). Online W1s (c=1/16/64): nano 78 / 855 / 1,711 tok/s, vLLM 75 / 609 / 1,693; ITL p50 at c=64 is 25.31 against 25.03 ms, nano 1.1% slower. Next round switches to a sort-free sampler (FlashInfer's rejection sampling, or DeepInfer's radix select).
+nsys (b=16, per step): the innermost scan of `torch.cumsum` along the 128k vocab takes 231 µs, radix sort about 265 µs, two argmaxes 96 µs together (the greedy bf16 argmax is computed every step, with one block per row). Online W1s (c=1/16/64): nano 78 / 855 / 1,711 tok/s, vLLM 75 / 609 / 1,693; ITL p50 at c=64 is 25.31 against 25.03 ms, nano 1.1% slower. Round 5 replaces this path with a sort-free sampler (below).
 
 ## Kernel list, round 2: Marlin-style W4A16 (runs `marlin-t1` to `marlin-t2`)
 
@@ -487,6 +487,125 @@ None of the three changes the summation order: output up to 64 rows is bitwise i
 - The slice end is still about 25% of the critical path at M=64: 128x128 at MT 3–4 sums 4 warps in order (about 2.3–4.6 µs). A pairwise sum needs one more fp32 tile, and only 29 KB of shared memory is left, so it would cost one stage.
 - Each tile is still 40–55% above the tensor core floor: dequant and HMMA are not interleaved (ptxas schedules all of a row's dequant before the HMMA), and there is a barrier every two k16 rows.
 - nano's default `cuda_graph_max_bs` is 64; switching to a full graph for large batches is about 1% faster.
+
+## Kernel list, round 5: sort-free sampler (runs `sampler-s1`, `sampler-s2`, `sampler-serve`)
+
+Round 1 measured the sampling path (item 5). With the server's default temperature 0.7 and top-p 0.9, nano BF16 paid 0.42 / 1.02 / 2.62 ms per step for sampling at b=1/16/64, against vLLM's 0.25 / 1.33 / 1.66. This round replaces that path with CUDA kernels that never sort. Sampling now costs nano 0.02 / 0.06 / 0.13 ms, against vLLM's 0.26 / 1.33 / 1.74 in the same run. Branch `claude/fast-sampler`, local only.
+
+### How vLLM 0.19.1 samples
+
+Read from v0.19.1's source, default settings, on the A100:
+
+- The logits are converted to fp32 and divided by the temperature in place.
+- `apply_top_k_top_p`: for B ≥ 8, a Triton pivot search with one program per row (grid min(SMs, B), up to 18 passes over the row); for B < 8, a full sort and a cumsum in PyTorch.
+- Softmax, then `random_sample`: `exponential_()`, a division and an argmax.
+- Greedy rows take the argmax of the fp32 copy. FlashInfer's sampler is off unless `VLLM_USE_FLASHINFER_SAMPLER=1`.
+
+Neither engine splits a row across blocks, and both write full-vocabulary fp32 intermediates several times per step.
+
+### Design (`src/serving/nano_vllm/kernels/csrc/sampler.cu`)
+
+- **No sort**: bf16 and fp16 logits have a 16-bit key with the same order, and dividing by a positive temperature keeps that order, so any top-k or top-p cutoff is one key value. A histogram over the key's high 10 bits finds the bin holding the cutoff; a second histogram over that bin's low 6 bits finds the exact key.
+- **Every batch size fills the GPU**: each row is split into chunks of 2,048, 4,096 or 8,192 tokens (fewer rows, smaller chunks), on a (chunks, rows) grid. The chunks of a row meet in a per-row workspace through global atomics. The row's last block to finish (a ticket, as in `w4a16.cu`) completes the row and re-zeroes the workspace, so one workspace serves every call and every CUDA graph.
+- **Five kernels**, each launched only when some row needs it:
+  - stats: max and argmax. Greedy rows end here; an all-greedy batch launches nothing else.
+  - hist: 1,024 bins of counts (top-k) and probability mass (top-p). Masses are 2^37 fixed point, so their sums are exact integers in any order.
+  - refine: 64 bins inside the boundary bin, which give the exact cutoff key. A second refine runs only for rows with both top-k and top-p whose top-p cutoff lies in a higher bin than top-k's.
+  - draw: an exponential race over the kept tokens, the argmax of v − log E with E ~ Exp(1). E comes from Philox4x32-10 keyed by (engine seed, sequence id, position, token index), so a request's tokens do not depend on the batch it runs in.
+- **Ties stay with the cutoff**: top-k keeps a token when fewer than k tokens are larger, and top-p keeps one when the mass of the larger tokens is below p of the total, so the kept set depends only on the values. `sampling.keep_mask`, the CPU and no-nvcc path, uses the same rule.
+- **No host sync**: each step uploads the rows' settings in one copy from pinned staging with two slots, like the decode graph's inputs.
+
+### S1: shared u64 atomics are CAS loops on sm_80
+
+In `sampler-s1` sampling already cost less than vLLM's at every b, but `sample_hist_kernel` took 1,382 µs per step at b=64. The SASS showed why: on sm_80 only 32-bit integer shared-memory atomics (add, min, max) are native. u64 `atomicAdd` and `atomicMax`, and f32 `atomicAdd`, compile to compare-and-swap loops (`ATOMS.CAST.SPIN`). The key's high 8 bits are the sign and 7 exponent bits, so each of the 256 bins spans a factor of 4 and a row's tokens crowd a few of them; the loops serialized. The fix (a926db2):
+
+- masses go into shared memory as two u32 halves, split at bit 19, and into global memory as u64, where `RED.E.ADD.64` is native;
+- 1,024 first-level bins instead of 256;
+- with top-p alone, tokens more than ln(V / (1 − p)) nats below the max are never kept (all of them together hold under 1 − p of the max token's mass), so they add to the total from a register instead of the histogram;
+- the draw became a kernel of its own, so no shared u64 max is left.
+
+Sampler kernels per decode step (nsys, W4A16 sampled, µs):
+
+| b | `sampler-s1` | `sampler-s2` | hist alone |
+|---:|---:|---:|---:|
+| 1 | 96 | 26 | 72 → 10 |
+| 16 | 385 | 67 | 323 → 26 |
+| 64 | 1,548 | 172 | 1,382 → 68 |
+
+In `sampler-s1` every sampled kbench row errored as well. The PyTorch impl uploaded pinned tensors inside the timed call, which a CUDA graph cannot capture, and the failed capture left the CUDA RNG in capture mode for every later call. The settings are now uploaded once, outside the timed call.
+
+### kernel (kbench, run `sampler-s2`, µs, nano / vLLM)
+
+Logits [B, 128,256] bf16, "peaked" (randn × 4 plus a few spikes), except the flat column (randn × 1, the largest nuclei):
+
+| B | greedy | T 0.7, p 0.9 | T 0.7, p 0.9, flat | T 1 (vLLM default) | T 0.7, p 0.9, k 50 |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 15.7 / 41.1 | 32.8 / 269.0 | 35.0 / 270.8 | 21.1 / 103.5 | 39.9 / 304.8 |
+| 16 | 19.6 / 51.0 | 51.9 / 550.9 | 62.8 / 1,456.7 | 36.9 / 136.7 | 62.9 / 426.2 |
+| 64 | 30.5 / 105.8 | 104.5 / 882.2 | 149.1 / 2,064.3 | 90.2 / 362.9 | 128.0 / 719.0 |
+| 256 | 79.0 / 296.3 | 301.1 / 2,577.1 | 459.5 / 7,154.4 | 273.7 / 1,296.0 | 382.4 / 2,292.5 |
+
+- nano is faster at all 8 batch sizes from 1 to 256, in every setting and both distributions (the flat rows of T 1 and k 50 are in the summary): 2.6–3.8× for greedy, 3.5–30× when sampling.
+- Every drawn token passed the check: it is in the kept set of a float64 reference (at p + 1e-4), and greedy rows equal the argmax.
+- The PyTorch path (`sample_rows`, the same rule with a sort) takes 0.3 ms at B=1 and 10.7 ms at B=256.
+
+### End-to-end decode (run `sampler-s2`, ms/step)
+
+| config | b=1 | b=16 | b=64 |
+|---|---:|---:|---:|
+| nano W4A16, sampled | **5.11** | **7.11** | **15.13** |
+| vLLM AWQ, sampled | 5.81 | 9.33 | 18.11 |
+| nano BF16, sampled | **12.03** | **14.14** | **22.68** |
+| vLLM BF16, sampled | 12.87 | 16.15 | 24.76 |
+| nano W4A16, greedy | **5.09** | **7.06** | **15.00** |
+| vLLM AWQ, greedy | 5.54 | 7.84 | 16.20 |
+| nano BF16, greedy | **12.01** | **14.08** | **22.55** |
+| vLLM BF16, greedy | 12.61 | 14.82 | 23.02 |
+
+Sampled minus greedy:
+
+| ms/step | b=1 | b=16 | b=64 |
+|---|---:|---:|---:|
+| nano W4A16 | **0.02** | **0.05** | **0.13** |
+| vLLM AWQ | 0.27 | 1.49 | 1.91 |
+| nano BF16 | **0.02** | **0.06** | **0.13** |
+| vLLM BF16 | 0.26 | 1.33 | 1.74 |
+| nano BF16 before this round (`kernels-r1`) | 0.42 | 1.02 | 2.62 |
+
+nano's sampled decode is 12% / 24% / 16% faster than vLLM AWQ's at b=1/16/64, and 7% / 12% / 8% faster than vLLM BF16's. Greedy also uses the stats kernel instead of PyTorch's bf16 argmax (kbench B=1: 15.7 against 52.0 µs). Against vLLM on the same VM, greedy W4A16 went from 0.94 / 0.91 / 0.93 of vLLM's time (`chunk-c7`, fullgraph) to 0.92 / 0.90 / 0.93 (piecewise graph here).
+
+### Online (run `sampler-serve`, Phase 2's harness, BF16)
+
+`vllm bench serve`, random 1024-token prompts, 256 output tokens. nano runs as in `kernels-serve`: core process, async scheduling, 2,048-token chunks, KV sized from 0.9 of GPU memory.
+
+| | c=1 | c=16 | c=64 |
+|---|---:|---:|---:|
+| W1s output tok/s, nano / vLLM | **81** / 75 | **904** / 612 | **1,833** / 1,692 |
+| W1s ITL p50 (ms), nano / vLLM | **12.05** / 13.05 | **14.16** / 16.27 | **22.73** / 25.00 |
+| W1 (greedy) ITL p50 (ms), nano / vLLM | **12.03** / 12.78 | **14.08** / 14.83 | **22.62** / 23.22 |
+
+- Sampling adds 0.02 / 0.08 / 0.11 ms to nano's ITL p50 and 0.27 / 1.44 / 1.78 ms to vLLM's.
+- In `kernels-serve`, nano's W1s ITL p50 at c=64 was 25.31 ms, 1.1% behind vLLM. It is now 22.73 ms, 9% ahead.
+- vLLM's sampled throughput at c=16 is again far below its greedy one (612 against 937 tok/s, TTFT p50 498 ms), as in `kernels-serve`. This was not investigated.
+
+### Gates
+
+- **G1, correctness**: passed. 777 tests passed with no skips. They cover:
+  - kept sets between a float64 reference's at p − 1e-4 and at p + 1e-4, for every setting × distribution (peaked, flat, ties, −inf), 1 to 256 rows, vocabularies of 128,256 and 1,000, and fp16;
+  - both top-k + top-p branches;
+  - greedy equal to `torch.argmax`, first index on ties;
+  - a chi-square test of the drawn distribution;
+  - determinism, CUDA graph replay, and the sync guard on the sampled path.
+- **G2, kernel**: faster than vLLM at every B, setting and distribution, passed. Greedy faster than nano's old argmax, passed. **Missed**: b=64 at (0.7, 0.9) in ≤ 60 µs; measured 104.5 µs peaked and 149.1 flat.
+- **G3, end to end**: sampled minus greedy below vLLM's at b=1/16/64, and nano sampled faster than vLLM sampled in BF16 and W4A16, both passed. **Missed**: the ≤ 0.1 ms target at b=64, measured 0.13 (b=1 and 16 are 0.02–0.06). There is no same-VM greedy baseline with the old sampler. Greedy's ratio to vLLM did not get worse (above).
+- **G4, online**: passed. W1s ITL p50 is at or below vLLM's, and throughput at or above, at c=1, 16 and 64.
+
+### Not done yet
+
+At b=64 the four kernels take 172 µs per step, while a pass that only reads the logits (stats) takes 23. The benchmarks' prompts are random tokens, which likely gives high-entropy rows (the kernels take longer here than on kbench's flat rows), and two kernels pay for that:
+
+- **hist (68 µs)**: many of a row's tokens land in the same few bins, so lanes of a warp still collide on shared u32 atomics, which replay. Warp-aggregated atomics (`__match_any_sync`, then `__reduce_add_sync`) would issue one atomic per distinct bin per warp.
+- **draw (52 µs)**: with a large nucleus, almost every warp step has a kept token, so all lanes pay for Philox (two calls per 8 tokens), `log1pf` and `__logf`, about 50 instructions per token. An inverse-CDF draw would replace that with one exp per token: one random number per row, then a search over per-chunk kept masses.
 
 ## Files
 

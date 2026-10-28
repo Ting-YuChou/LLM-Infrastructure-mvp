@@ -1,0 +1,247 @@
+{
+  "label": "vllmw4_b64",
+  "window_ms": 511.26256,
+  "gpu_busy_frac": 0.9580413457226361,
+  "per_step_source": "median of 32 NVTX step ranges",
+  "steps": 32,
+  "batch": 1,
+  "per_step": {
+    "wall_ms": 15.772355,
+    "gpu_busy_ms": 15.6881925,
+    "gpu_idle_ms": 0.0841625,
+    "kernels": 428.0,
+    "launch_calls": 15.0,
+    "launch_api_ms": 0.871176
+  },
+  "kernel_time_by_category": {
+    "other": {
+      "ms": 219.574182,
+      "frac": 0.4485560300957489
+    },
+    "attention": {
+      "ms": 216.792653,
+      "frac": 0.4428737973556711
+    },
+    "gemm": {
+      "ms": 24.436446,
+      "frac": 0.04991987267159279
+    },
+    "elementwise/copy": {
+      "ms": 15.693748,
+      "frac": 0.032059895366947554
+    },
+    "norm": {
+      "ms": 7.276624,
+      "frac": 0.014865015295557147
+    },
+    "activation": {
+      "ms": 3.773466,
+      "frac": 0.007708606327228786
+    },
+    "sampling": {
+      "ms": 1.966269,
+      "frac": 0.004016782887253739
+    }
+  },
+  "top_kernels": [
+    {
+      "name": "Marlin",
+      "category": "other",
+      "count": 3977,
+      "total_ms": 219.444006,
+      "avg_us": 55.17827659039477,
+      "frac": 0.44829010069894143
+    },
+    {
+      "name": "flash_fwd_splitkv_kernel",
+      "category": "attention",
+      "count": 995,
+      "total_ms": 213.50591,
+      "avg_us": 214.5788040201005,
+      "frac": 0.436159490698138
+    },
+    {
+      "name": "ampere_fp16_s16816gemm_fp16_128x64_ldg8_f2f_stages_64x3_tn",
+      "category": "gemm",
+      "count": 31,
+      "total_ms": 24.436446,
+      "avg_us": 788.2724516129033,
+      "frac": 0.04991987267159279
+    },
+    {
+      "name": "elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 2983,
+      "total_ms": 10.418042,
+      "avg_us": 3.4924713375796177,
+      "frac": 0.02128244549666944
+    },
+    {
+      "name": "triton_poi_fused_marlin_gemm_mul_silu_slice_1",
+      "category": "activation",
+      "count": 994,
+      "total_ms": 3.773466,
+      "avg_us": 3.7962434607645874,
+      "frac": 0.007708606327228786
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2",
+      "category": "norm",
+      "count": 963,
+      "total_ms": 3.721149,
+      "avg_us": 3.864121495327103,
+      "frac": 0.007601730802917284
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0",
+      "category": "norm",
+      "count": 994,
+      "total_ms": 3.29058,
+      "avg_us": 3.310442655935614,
+      "frac": 0.006722145053977563
+    },
+    {
+      "name": "reshape_and_cache_flash_kernel",
+      "category": "attention",
+      "count": 995,
+      "total_ms": 3.286743,
+      "avg_us": 3.303259296482412,
+      "frac": 0.006714306657533134
+    },
+    {
+      "name": "triton_poi_fused_3",
+      "category": "elementwise/copy",
+      "count": 963,
+      "total_ms": 2.984479,
+      "avg_us": 3.099147455867082,
+      "frac": 0.006096828142318347
+    },
+    {
+      "name": "reduce_kernel",
+      "category": "sampling",
+      "count": 31,
+      "total_ms": 1.966269,
+      "avg_us": 63.42803225806451,
+      "frac": 0.004016782887253739
+    },
+    {
+      "name": "unrolled_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 157,
+      "total_ms": 1.707871,
+      "avg_us": 10.878159235668791,
+      "frac": 0.0034889158128602604
+    },
+    {
+      "name": "vectorized_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 128,
+      "total_ms": 0.25939,
+      "avg_us": 2.026484375,
+      "frac": 0.0005298935766798681
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_embedding_marlin_gemm_mean_mul_pow_rsqrt_0",
+      "category": "norm",
+      "count": 32,
+      "total_ms": 0.151615,
+      "avg_us": 4.73796875,
+      "frac": 0.00030972595176498015
+    },
+    {
+      "name": "index_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 32,
+      "total_ms": 0.137311,
+      "avg_us": 4.29096875,
+      "frac": 0.00028050509621608145
+    },
+    {
+      "name": "_compute_slot_mapping_kernel",
+      "category": "other",
+      "count": 32,
+      "total_ms": 0.130176,
+      "avg_us": 4.068,
+      "frac": 0.00026592939680742707
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2",
+      "category": "norm",
+      "count": 31,
+      "total_ms": 0.11328,
+      "avg_us": 3.6541935483870964,
+      "frac": 0.00023141348689731853
+    },
+    {
+      "name": "triton_poi_fused_1",
+      "category": "elementwise/copy",
+      "count": 32,
+      "total_ms": 0.09856,
+      "avg_us": 3.08,
+      "frac": 0.0002013428078089664
+    },
+    {
+      "name": "vectorized_gather_kernel",
+      "category": "elementwise/copy",
+      "count": 31,
+      "total_ms": 0.088095,
+      "avg_us": 2.841774193548387,
+      "frac": 0.00017996443439459106
+    }
+  ],
+  "cuda_api": {
+    "cudaEventSynchronize": {
+      "calls": 63,
+      "total_ms": 435.44325
+    },
+    "cudaGraphLaunch": {
+      "calls": 32,
+      "total_ms": 23.170891
+    },
+    "cudaLaunchKernel": {
+      "calls": 416,
+      "total_ms": 5.740438
+    },
+    "cudaMemcpyAsync": {
+      "calls": 352,
+      "total_ms": 5.059115
+    },
+    "cuLaunchKernelEx": {
+      "calls": 32,
+      "total_ms": 0.370593
+    },
+    "cudaEventQuery": {
+      "calls": 60,
+      "total_ms": 0.367806
+    },
+    "cudaEventRecord": {
+      "calls": 64,
+      "total_ms": 0.366266
+    },
+    "cudaEventRecordWithFlags": {
+      "calls": 64,
+      "total_ms": 0.303617
+    },
+    "cudaEventCreateWithFlags": {
+      "calls": 64,
+      "total_ms": 0.205955
+    },
+    "cudaStreamIsCapturing": {
+      "calls": 128,
+      "total_ms": 0.19021
+    },
+    "cudaEventDestroy": {
+      "calls": 63,
+      "total_ms": 0.160051
+    },
+    "cudaStreamWaitEvent": {
+      "calls": 32,
+      "total_ms": 0.130674
+    }
+  },
+  "timeline_slice_ns": [
+    284399679,
+    289399679
+  ],
+  "nvtx_phases": {}
+}
