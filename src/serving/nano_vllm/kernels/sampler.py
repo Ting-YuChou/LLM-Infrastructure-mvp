@@ -1,9 +1,9 @@
 """Sort-free sampling kernels (csrc/sampler.cu): one token per row of 16-bit logits.
 
 K1 finds each row's max and argmax (greedy rows end there); for the others,
-256-bin histograms over the high and then the low byte of the logits' 16-bit
-keys locate the top-k / top-p cutoff exactly (K2, K3, and K4 for rows with
-both filters), and the tokens at or above it race with v - log(E), E ~ Exp(1)
+histograms over the high 10 and then the low 6 bits of the logits' 16-bit keys
+locate the top-k / top-p cutoff exactly (K2, K3, and K4 for rows with both
+filters), and K5 races the tokens at or above it with v - log(E), E ~ Exp(1)
 from Philox. The chunks of a row meet in a per-row workspace that each
 kernel's last block re-zeroes, so one workspace per device serves every call.
 sampling.keep_mask is the same cutoff rule in PyTorch.

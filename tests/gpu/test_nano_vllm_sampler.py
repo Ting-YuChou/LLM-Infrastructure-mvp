@@ -136,16 +136,20 @@ def test_fp16_logits():
 
 
 def test_top_k_and_top_p_cutoffs_in_both_branches():
-    # A top-p cutoff in a higher key byte than the top-k one needs the second
-    # refine pass (K4); one inside the top-k byte is resolved by the first.
+    # A top-p cutoff in a higher histogram bin (the key's high bits) than the
+    # top-k one needs the second refine pass (K4); one inside the top-k bin is
+    # resolved by the first. The first rows have one dominant token (40.0) far
+    # above their 1000th, the others a flat top 50 inside one bin.
     logits = torch.cat([_logits("peaked", 32, seed=1), _logits("flat", 32, seed=2)])
+    logits[:32, 0] = 40.0
     options = [SamplingOptions(temperature=1.0, top_p=0.5, top_k=1000)] * 32 + [
         SamplingOptions(temperature=0.7, top_p=0.99, top_k=50)
     ] * 32
     _, cut = _check_rows(logits, options)
     keys = _keys(logits)
     kth = keys.sort(dim=-1, descending=True).values[:, [999] * 32 + [49] * 32].diagonal()
-    above = (cut >> 8) > (kth >> 8)
+    low_bits = sampler_extension().KEY_LOW_BITS
+    above = (cut >> low_bits) > (kth >> low_bits)
     assert above[:32].all() and not above[32:].any()
 
 

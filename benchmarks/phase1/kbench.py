@@ -80,8 +80,9 @@ from src.serving.nano_vllm.kernels.sampler import sampler_extension  # noqa: E40
 from src.serving.nano_vllm.sampling import (  # noqa: E402
     Sampler,
     SamplingOptions,
+    encode_options,
     keep_mask,
-    sample_tokens_device,
+    sample_rows,
 )
 from src.serving.nano_vllm.kernels.w4a16 import (  # noqa: E402
     W4A16_CONFIG,
@@ -1013,8 +1014,18 @@ def _vllm_sampler(i: dict):
 
 
 def _nano_sampler_torch(i: dict):
-    logits, options = i["logits"], _sampler_options(i)
-    return lambda: sample_tokens_device(logits, options)
+    """sampling.sample_rows with the settings uploaded once, as Sampler does (a
+    pinned upload per call cannot be captured in the timing graph)."""
+    logits, rows = i["logits"], i["logits"].shape[0]
+    if i["temperature"] <= 0:
+        return lambda: logits.argmax(dim=-1)
+    temperature, top_p, top_k = (
+        torch.tensor(values, dtype=dtype, device=logits.device)
+        for values, dtype in zip(
+            encode_options(_sampler_options(i), SAMPLER_VOCAB), (torch.float32, torch.float32, torch.int32)
+        )
+    )
+    return lambda: sample_rows(logits, temperature, top_p, top_k)
 
 
 def _nano_sampler_cuda(i: dict):
