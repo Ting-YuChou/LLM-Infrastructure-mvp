@@ -16,7 +16,7 @@ from .block_manager import BlockManager
 from .kv_cache import PagedKVCache
 from .metadata import BatchMetadata, build_batch
 from .nvtx import nvtx_range
-from .sampling import sample_tokens_device
+from .sampling import Sampler
 from .sequence import Sequence
 
 logger = logging.getLogger(__name__)
@@ -132,7 +132,12 @@ class ModelRunner:
     """
 
     def __init__(
-        self, model, cache: PagedKVCache, block_manager: BlockManager, max_rows: int = 256
+        self,
+        model,
+        cache: PagedKVCache,
+        block_manager: BlockManager,
+        max_rows: int = 256,
+        seed: int = 0,
     ):
         self.model = model
         self.cache = cache
@@ -144,6 +149,7 @@ class ModelRunner:
         self.max_rows = max_rows
         self.sampled = torch.zeros(max_rows, dtype=torch.long, device=device)
         self.host_out = torch.zeros(2, max_rows, dtype=torch.long, pin_memory=cuda)
+        self.sampler = Sampler(max_rows, device, seed=seed)
         self._events = [torch.cuda.Event() for _ in range(2)] if cuda else [None, None]
         self._slot = 0
 
@@ -165,9 +171,17 @@ class ModelRunner:
         self._slot ^= 1
         logits = self.forward(seqs, is_prefill, gather_rows=gather_rows, slot=slot)
         with nvtx_range("sample"):
-            tokens = sample_tokens_device(logits, [seq.sampling for seq in seqs])
-            self.sampled[:rows].copy_(tokens)
-            self.host_out[slot, :rows].copy_(tokens, non_blocking=True)
+            # A row samples the token at position num_tokens + num_inflight
+            # (the scheduler counts this step's token as in flight after launch).
+            self.sampler.sample(
+                logits,
+                [seq.sampling for seq in seqs],
+                [seq.seq_id for seq in seqs],
+                [seq.num_tokens + seq.num_inflight for seq in seqs],
+                self.sampled,
+                slot=slot,
+            )
+            self.host_out[slot, :rows].copy_(self.sampled[:rows], non_blocking=True)
             event = self._events[slot]
             if event is not None:
                 event.record()

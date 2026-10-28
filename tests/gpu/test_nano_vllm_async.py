@@ -98,6 +98,16 @@ def test_async_scheduling_matches_sync(scheduling, weight_quant, layout, monkeyp
     assert _generate(True, graphs=False, **settings) == expected
 
 
+def test_sampled_tokens_match_between_sync_and_async():
+    # A draw comes from (seed, sequence id, position) through the CUDA sampler,
+    # so a request samples the same tokens however its steps are scheduled.
+    settings = dict(sampling=SAMPLED, late_request=True)
+    expected = _generate(False, graphs=True, **settings)
+    assert all(len(t) == 40 for t in expected)
+    assert _generate(True, graphs=True, **settings) == expected
+    assert _generate(True, graphs=False, **settings) == expected
+
+
 @pytest.mark.parametrize("sampling", [GREEDY, SAMPLED], ids=["greedy", "sampled"])
 @pytest.mark.parametrize("graphs", [True, False], ids=["graphs", "eager"])
 @pytest.mark.parametrize("late_request", [False, True], ids=["decode", "mixed"])

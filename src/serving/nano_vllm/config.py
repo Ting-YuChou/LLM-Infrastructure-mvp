@@ -86,6 +86,9 @@ class NanoVLLMConfig:
     # Launch step N+1 before collecting step N, so scheduling and input
     # preparation overlap the GPU; finish checks then lag one step.
     async_scheduling: bool = True
+    # Seeds the sampler's random draws (each comes from this seed, the
+    # sequence id and the token's position), like vLLM's --seed.
+    seed: int = 0
     # Run the engine core (scheduler + model) in its own process; the server
     # process keeps tokenization, detokenization, stop strings and HTTP.
     multiprocess: bool = False
@@ -239,6 +242,7 @@ class NanoVLLMConfig:
                 _env("ASYNC_SCHEDULING", engine.get("async_scheduling")),
                 default=cls.async_scheduling,
             ),
+            seed=int(_env("SEED", engine.get("seed", cls.seed))),
             multiprocess=_bool_value(
                 _env("ENGINE_MULTIPROCESS", engine.get("multiprocess")),
                 default=cls.multiprocess,
