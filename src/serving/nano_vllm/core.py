@@ -44,7 +44,8 @@ logger = logging.getLogger(__name__)
 # num_kvcache_blocks: 0 on CPU (nothing to profile).
 CPU_KV_BLOCKS = 1024
 # GPU memory kept out of the KV budget for the decode CUDA graphs' pool, the
-# sampler's fp32 logits/sort buffers and cuBLAS/Triton workspaces.
+# sampler's buffers (fp32 logits and a sort on its PyTorch path) and
+# cuBLAS/Triton workspaces.
 KV_RESERVE_BYTES = 512 * 1024**2
 
 
@@ -99,7 +100,11 @@ class EngineCore:
             num_blocks=config.num_kvcache_blocks, block_size=config.kvcache_block_size
         )
         self.model_runner = ModelRunner(
-            model, self.paged_cache, self.block_manager, max_rows=config.max_num_seqs
+            model,
+            self.paged_cache,
+            self.block_manager,
+            max_rows=config.max_num_seqs,
+            seed=config.seed,
         )
         self.async_scheduling = config.async_scheduling
         self.requests: dict[int, Sequence] = {}

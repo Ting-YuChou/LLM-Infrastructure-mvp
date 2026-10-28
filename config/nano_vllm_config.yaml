@@ -37,6 +37,8 @@ engine:
   # Launch step N+1 before collecting step N: scheduling overlaps the GPU,
   # finish checks lag one step.
   async_scheduling: true
+  # Seeds the sampler: each draw comes from (seed, sequence id, position).
+  seed: 0
   # Engine core (scheduler + model) in its own process; this one keeps
   # tokenization, detokenization and HTTP off the model steps' GIL.
   multiprocess: false

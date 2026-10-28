@@ -3,7 +3,7 @@
 An LLM inference engine written from scratch, with its own Triton and CUDA
 kernels. It serves Llama 3.1 8B Instruct behind an OpenAI-compatible API, and
 on one A100 it decodes faster than vLLM 0.19.1 in BF16, with an FP8 KV cache,
-and with 4-bit weights.
+and with 4-bit weights, greedy or sampled.
 
 All numbers below come from a Google Colab A100-SXM4-40GB with Llama 3.1 8B
 Instruct. Each comparison was measured in a single run on a single VM. Nothing
@@ -42,6 +42,28 @@ perplexity by only 0.22%. The A100 has no FP8 instructions, and Triton 3.6
 rejects `float8e4nv` on sm80 (as does vLLM's Triton backend), so the kernels
 decode e4m3 with integer ops. Under shared-prefix load that overflows the BF16
 cache, nano's TTFT p50 is 160 ms against vLLM FP8's 259 ms.
+
+### Sampling (temperature 0.7, top-p 0.9)
+
+The server's default sampling, offline decode, ms per step:
+
+| | b=1 | b=16 | b=64 |
+|---|---:|---:|---:|
+| nano W4A16 | **5.11** | **7.11** | **15.13** |
+| vLLM AWQ | 5.81 | 9.33 | 18.11 |
+| nano BF16 | **12.03** | **14.14** | **22.68** |
+| vLLM BF16 | 12.87 | 16.15 | 24.76 |
+
+Sampling adds 0.02–0.13 ms to nano's decode step and 0.26–1.91 ms to vLLM's.
+nano's sampler never sorts. It finds the exact top-k and top-p cutoffs with
+radix histograms over the logits' 16-bit keys, splits each row across many
+blocks, and draws with an exponential race from Philox, so a request's tokens
+do not depend on the batch it runs in. On its own it runs 3.5–30× faster than
+vLLM's sampling path at every batch size from 1 to 256.
+
+Online with the same sampling (`vllm bench serve`, random 1024-token prompts,
+BF16), nano's ITL p50 is 12.05 / 14.16 / 22.73 ms at c=1/16/64 against vLLM's
+13.05 / 16.27 / 25.00, and nano serves 1,833 tok/s at c=64 against 1,692.
 
 ### Online serving vs vLLM and SGLang (BF16)
 
@@ -88,6 +110,9 @@ Kernels (`kernels/`):
   - Results are reduced deterministically, with no spin locks.
   - One launch handles up to 256 rows: the rows are split into chunks that
     share weight tiles through L2.
+- `csrc/sampler.cu`: sort-free sampling. Top-k / top-p cutoffs come from
+  radix histograms over 16-bit logit keys, and tokens are drawn with an
+  exponential race keyed by (seed, sequence, position).
 - `paged_attention.py`: paged decode attention (split-KV) and prefill attention, in Triton
 - `fp8.py`: the FP8 (e4m3) KV cache codec for A100
 - `rope_cache.py`, `rmsnorm.py`, `silu_mul.py`: fused RoPE + KV write, fused
@@ -119,6 +144,8 @@ needs a GPU.
 | result | data | write-up |
 |---|---|---|
 | W4A16 decode and per-layer GEMMs | [chunk-c7 summary](../../../benchmarks/phase1/results/chunk-c7-20261024-052230-colab/summary.md) | [phase1 README](../../../benchmarks/phase1/README.md), round 4 |
+| Sampling: kernel and offline decode | [sampler-s2 summary](../../../benchmarks/phase1/results/sampler-s2-20261028-120816-colab/summary.md) | [phase1 README](../../../benchmarks/phase1/README.md), round 5 |
+| Sampling online (W1s) | [sampler-serve summary](../../../benchmarks/phase2/results/sampler-serve-20261028-124708-colab/summary.md) | same |
 | BF16 / FP8 KV offline decode | [kernels-r4 summary](../../../benchmarks/phase1/results/kernels-r4-20261023-072114-colab/summary.md) | [phase1 README](../../../benchmarks/phase1/README.md), round 1 |
 | FP8 KV quality | [kernels-r2 quality](../../../benchmarks/phase1/results/kernels-r2-20261023-065546-colab/quality/quality.md) | same |
 | FP8 KV online (capacity, shared prefixes) | [kernels-serve summary](../../../benchmarks/phase2/results/kernels-serve-20261023-075342-colab/summary.md) | same |

@@ -1,0 +1,1 @@
+{"engine": "vllm", "startup_s": 60, "args": "/content/p0/venvs/vllm/bin/vllm serve /content/p0/models/Meta-Llama-3.1-8B-Instruct --host 127.0.0.1 --port 8000 --max-model-len 8192 --seed 0"}

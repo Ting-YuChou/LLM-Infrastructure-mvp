@@ -20,6 +20,7 @@ services:
       CUDA_GRAPH_MAX_TOKENS: "512"
       ENGINE_MULTIPROCESS: "false"
       ASYNC_SCHEDULING: "true"
+      SEED: "0"
       MAX_MODEL_LEN: "2048"
       MAX_NEW_TOKENS: "256"
       KVCACHE_BLOCK_SIZE: "16"

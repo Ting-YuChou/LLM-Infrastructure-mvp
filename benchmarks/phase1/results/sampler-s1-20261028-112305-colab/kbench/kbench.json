@@ -1,0 +1,2205 @@
+{
+  "env": {
+    "device_type": "cuda",
+    "torch": "2.10.0+cu128",
+    "triton": "3.6.0",
+    "device": "NVIDIA A100-SXM4-40GB",
+    "l2_bytes": 41943040,
+    "peak_GBps": 1555.0,
+    "peak_TFLOPs": 312.0,
+    "copy_GBps": 1378.616849900796
+  },
+  "rows": [
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 1
+      },
+      "label": "peaked greedy B=1",
+      "ok": true,
+      "us": 41.114847226058586,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 6.238914098102808,
+      "pct_peak": 0.40121634071400697,
+      "pct_copy": 0.45254880633090727,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 1
+      },
+      "label": "peaked greedy B=1",
+      "ok": true,
+      "us": 51.977419135562556,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 4.935066116518595,
+      "pct_peak": 0.3173675959175945,
+      "pct_copy": 0.3579722761167265,
+      "x_base": 0.7910136345713271
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 1
+      },
+      "label": "peaked greedy B=1",
+      "ok": true,
+      "us": 15.626397021239416,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 16.415300318515435,
+      "pct_peak": 1.0556463227341115,
+      "pct_copy": 1.1907079417821322,
+      "x_base": 2.6311149761634267
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 4
+      },
+      "label": "peaked greedy B=4",
+      "ok": true,
+      "us": 43.382227875804176,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 23.65134411578396,
+      "pct_peak": 1.5209867598574893,
+      "pct_copy": 1.7155850167859101,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 4
+      },
+      "label": "peaked greedy B=4",
+      "ok": true,
+      "us": 53.213802002768475,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 19.281614193750325,
+      "pct_peak": 1.2399751893087025,
+      "pct_copy": 1.3986202326729005,
+      "x_base": 0.8152439074649692
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 4
+      },
+      "label": "peaked greedy B=4",
+      "ok": true,
+      "us": 16.13190883898553,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 63.603632418277655,
+      "pct_peak": 4.090265750371554,
+      "pct_copy": 4.613582985211193,
+      "x_base": 2.6892185115107745
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 8
+      },
+      "label": "peaked greedy B=8",
+      "ok": true,
+      "us": 46.59004611823395,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 44.04580314842983,
+      "pct_peak": 2.8325275336610822,
+      "pct_copy": 3.1949270859121826,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 8
+      },
+      "label": "peaked greedy B=8",
+      "ok": true,
+      "us": 53.595848665892625,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 38.288338576228476,
+      "pct_peak": 2.46227257724942,
+      "pct_copy": 2.7773009287521524,
+      "x_base": 0.8692846046466836
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 8
+      },
+      "label": "peaked greedy B=8",
+      "ok": true,
+      "us": 17.427541827427522,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 117.75016926198994,
+      "pct_peak": 7.572358151896459,
+      "pct_copy": 8.541181639442687,
+      "x_base": 2.6733572972930917
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 16
+      },
+      "label": "peaked greedy B=16",
+      "ok": true,
+      "us": 51.04757265280222,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 80.39935665334136,
+      "pct_peak": 5.170376633655392,
+      "pct_copy": 5.831885535065585,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 16
+      },
+      "label": "peaked greedy B=16",
+      "ok": true,
+      "us": 54.26809077954474,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 75.62808901224497,
+      "pct_peak": 4.863542701752088,
+      "pct_copy": 5.485794622174181,
+      "x_base": 0.9406554002456922
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 16
+      },
+      "label": "peaked greedy B=16",
+      "ok": true,
+      "us": 20.40964956501968,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 201.09076282398397,
+      "pct_peak": 12.93188185363241,
+      "pct_copy": 14.586414117777123,
+      "x_base": 2.5011489045991855
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 32
+      },
+      "label": "peaked greedy B=32",
+      "ok": true,
+      "us": 66.14109241601193,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 124.10414917811146,
+      "pct_peak": 7.980974223672763,
+      "pct_copy": 9.00207691404917,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 32
+      },
+      "label": "peaked greedy B=32",
+      "ok": true,
+      "us": 54.77236437075066,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 149.86360538387515,
+      "pct_peak": 9.637530892853707,
+      "pct_copy": 10.870576940551626,
+      "x_base": 1.2075632150605564
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 32
+      },
+      "label": "peaked greedy B=32",
+      "ok": true,
+      "us": 23.226181666056316,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 353.41082395803636,
+      "pct_peak": 22.727384177365682,
+      "pct_copy": 25.635173687559924,
+      "x_base": 2.8476954743135074
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 64
+      },
+      "label": "peaked greedy B=64",
+      "ok": true,
+      "us": 105.96848617900501,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 154.9212279230669,
+      "pct_peak": 9.962779930743853,
+      "pct_copy": 11.237439026964953,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 64
+      },
+      "label": "peaked greedy B=64",
+      "ok": true,
+      "us": 55.338666294560284,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 296.65998657459056,
+      "pct_peak": 19.07781264145277,
+      "pct_copy": 21.518668264930746,
+      "x_base": 1.9149085670939194
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 64
+      },
+      "label": "peaked greedy B=64",
+      "ok": true,
+      "us": 34.85090985442653,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 471.0570848386287,
+      "pct_peak": 30.29306011823979,
+      "pct_copy": 34.16881817979561,
+      "x_base": 3.040623232553729
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 128
+      },
+      "label": "peaked greedy B=128",
+      "ok": true,
+      "us": 168.84455026364793,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 194.46014661847826,
+      "pct_peak": 12.505475666783168,
+      "pct_copy": 14.105452623219527,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 128
+      },
+      "label": "peaked greedy B=128",
+      "ok": true,
+      "us": 68.18133241990033,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 481.5619588920905,
+      "pct_peak": 30.968614719748583,
+      "pct_copy": 34.93080466314794,
+      "x_base": 2.476404380363307
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 128
+      },
+      "label": "peaked greedy B=128",
+      "ok": true,
+      "us": 50.216155893662396,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 653.8440749930802,
+      "pct_peak": 42.04785048187011,
+      "pct_copy": 47.427541237446086,
+      "x_base": 3.362355147637998
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 256
+      },
+      "label": "peaked greedy B=256",
+      "ok": true,
+      "us": 297.11643854777014,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 221.01460397467068,
+      "pct_peak": 14.213157811875927,
+      "pct_copy": 16.031619226950163,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 256
+      },
+      "label": "peaked greedy B=256",
+      "ok": true,
+      "us": 92.93747831273961,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 706.5725603079821,
+      "pct_peak": 45.438749859034225,
+      "pct_copy": 51.25227943926744,
+      "x_base": 3.196949647675584
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 256
+      },
+      "label": "peaked greedy B=256",
+      "ok": true,
+      "us": 78.88118426005045,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 832.4808078883932,
+      "pct_peak": 53.535743272565476,
+      "pct_copy": 60.38521928324739,
+      "x_base": 3.7666325795547855
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 1
+      },
+      "label": "peaked t0.7p0.9 B=1",
+      "ok": true,
+      "us": 268.8254526341525,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 0.954195361661271,
+      "pct_peak": 0.061363045765998124,
+      "pct_copy": 0.0692139633814815,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 1
+      },
+      "label": "peaked t0.7p0.9 B=1",
+      "ok": false,
+      "error": "RuntimeError: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 1
+      },
+      "label": "peaked t0.7p0.9 B=1",
+      "ok": false,
+      "error": "RuntimeError: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 4
+      },
+      "label": "peaked t0.7p0.9 B=4",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 4
+      },
+      "label": "peaked t0.7p0.9 B=4",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 4
+      },
+      "label": "peaked t0.7p0.9 B=4",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 8
+      },
+      "label": "peaked t0.7p0.9 B=8",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 8
+      },
+      "label": "peaked t0.7p0.9 B=8",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 8
+      },
+      "label": "peaked t0.7p0.9 B=8",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 16
+      },
+      "label": "peaked t0.7p0.9 B=16",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 16
+      },
+      "label": "peaked t0.7p0.9 B=16",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 16
+      },
+      "label": "peaked t0.7p0.9 B=16",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 32
+      },
+      "label": "peaked t0.7p0.9 B=32",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 32
+      },
+      "label": "peaked t0.7p0.9 B=32",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 32
+      },
+      "label": "peaked t0.7p0.9 B=32",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 64
+      },
+      "label": "peaked t0.7p0.9 B=64",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 64
+      },
+      "label": "peaked t0.7p0.9 B=64",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 64
+      },
+      "label": "peaked t0.7p0.9 B=64",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 128
+      },
+      "label": "peaked t0.7p0.9 B=128",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 128
+      },
+      "label": "peaked t0.7p0.9 B=128",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 128
+      },
+      "label": "peaked t0.7p0.9 B=128",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 256
+      },
+      "label": "peaked t0.7p0.9 B=256",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 256
+      },
+      "label": "peaked t0.7p0.9 B=256",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 256
+      },
+      "label": "peaked t0.7p0.9 B=256",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 1
+      },
+      "label": "peaked t1 B=1",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 1
+      },
+      "label": "peaked t1 B=1",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 1
+      },
+      "label": "peaked t1 B=1",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 4
+      },
+      "label": "peaked t1 B=4",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 4
+      },
+      "label": "peaked t1 B=4",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 4
+      },
+      "label": "peaked t1 B=4",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 8
+      },
+      "label": "peaked t1 B=8",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 8
+      },
+      "label": "peaked t1 B=8",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 8
+      },
+      "label": "peaked t1 B=8",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 16
+      },
+      "label": "peaked t1 B=16",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 16
+      },
+      "label": "peaked t1 B=16",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 16
+      },
+      "label": "peaked t1 B=16",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 32
+      },
+      "label": "peaked t1 B=32",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 32
+      },
+      "label": "peaked t1 B=32",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 32
+      },
+      "label": "peaked t1 B=32",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 64
+      },
+      "label": "peaked t1 B=64",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 64
+      },
+      "label": "peaked t1 B=64",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 64
+      },
+      "label": "peaked t1 B=64",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 128
+      },
+      "label": "peaked t1 B=128",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 128
+      },
+      "label": "peaked t1 B=128",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 128
+      },
+      "label": "peaked t1 B=128",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 256
+      },
+      "label": "peaked t1 B=256",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 256
+      },
+      "label": "peaked t1 B=256",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 256
+      },
+      "label": "peaked t1 B=256",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 1
+      },
+      "label": "peaked t0.7p0.9k50 B=1",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 1
+      },
+      "label": "peaked t0.7p0.9k50 B=1",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 1
+      },
+      "label": "peaked t0.7p0.9k50 B=1",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 4
+      },
+      "label": "peaked t0.7p0.9k50 B=4",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 4
+      },
+      "label": "peaked t0.7p0.9k50 B=4",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 4
+      },
+      "label": "peaked t0.7p0.9k50 B=4",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 8
+      },
+      "label": "peaked t0.7p0.9k50 B=8",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 8
+      },
+      "label": "peaked t0.7p0.9k50 B=8",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 8
+      },
+      "label": "peaked t0.7p0.9k50 B=8",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 16
+      },
+      "label": "peaked t0.7p0.9k50 B=16",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 16
+      },
+      "label": "peaked t0.7p0.9k50 B=16",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 16
+      },
+      "label": "peaked t0.7p0.9k50 B=16",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 32
+      },
+      "label": "peaked t0.7p0.9k50 B=32",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 32
+      },
+      "label": "peaked t0.7p0.9k50 B=32",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 32
+      },
+      "label": "peaked t0.7p0.9k50 B=32",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 64
+      },
+      "label": "peaked t0.7p0.9k50 B=64",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 64
+      },
+      "label": "peaked t0.7p0.9k50 B=64",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 64
+      },
+      "label": "peaked t0.7p0.9k50 B=64",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 128
+      },
+      "label": "peaked t0.7p0.9k50 B=128",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 128
+      },
+      "label": "peaked t0.7p0.9k50 B=128",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 128
+      },
+      "label": "peaked t0.7p0.9k50 B=128",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 256
+      },
+      "label": "peaked t0.7p0.9k50 B=256",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 256
+      },
+      "label": "peaked t0.7p0.9k50 B=256",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 256
+      },
+      "label": "peaked t0.7p0.9k50 B=256",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 1
+      },
+      "label": "flat t0.7p0.9 B=1",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 1
+      },
+      "label": "flat t0.7p0.9 B=1",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 1
+      },
+      "label": "flat t0.7p0.9 B=1",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 4
+      },
+      "label": "flat t0.7p0.9 B=4",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 4
+      },
+      "label": "flat t0.7p0.9 B=4",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 4
+      },
+      "label": "flat t0.7p0.9 B=4",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 8
+      },
+      "label": "flat t0.7p0.9 B=8",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 8
+      },
+      "label": "flat t0.7p0.9 B=8",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 8
+      },
+      "label": "flat t0.7p0.9 B=8",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 16
+      },
+      "label": "flat t0.7p0.9 B=16",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 16
+      },
+      "label": "flat t0.7p0.9 B=16",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 16
+      },
+      "label": "flat t0.7p0.9 B=16",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 32
+      },
+      "label": "flat t0.7p0.9 B=32",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 32
+      },
+      "label": "flat t0.7p0.9 B=32",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 32
+      },
+      "label": "flat t0.7p0.9 B=32",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 64
+      },
+      "label": "flat t0.7p0.9 B=64",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 64
+      },
+      "label": "flat t0.7p0.9 B=64",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 64
+      },
+      "label": "flat t0.7p0.9 B=64",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 128
+      },
+      "label": "flat t0.7p0.9 B=128",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 128
+      },
+      "label": "flat t0.7p0.9 B=128",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 128
+      },
+      "label": "flat t0.7p0.9 B=128",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 256
+      },
+      "label": "flat t0.7p0.9 B=256",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 256
+      },
+      "label": "flat t0.7p0.9 B=256",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 256
+      },
+      "label": "flat t0.7p0.9 B=256",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 1
+      },
+      "label": "flat t1 B=1",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 1
+      },
+      "label": "flat t1 B=1",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 1
+      },
+      "label": "flat t1 B=1",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 4
+      },
+      "label": "flat t1 B=4",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 4
+      },
+      "label": "flat t1 B=4",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 4
+      },
+      "label": "flat t1 B=4",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 8
+      },
+      "label": "flat t1 B=8",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 8
+      },
+      "label": "flat t1 B=8",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 8
+      },
+      "label": "flat t1 B=8",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 16
+      },
+      "label": "flat t1 B=16",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 16
+      },
+      "label": "flat t1 B=16",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 16
+      },
+      "label": "flat t1 B=16",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 32
+      },
+      "label": "flat t1 B=32",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 32
+      },
+      "label": "flat t1 B=32",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 32
+      },
+      "label": "flat t1 B=32",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 64
+      },
+      "label": "flat t1 B=64",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 64
+      },
+      "label": "flat t1 B=64",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 64
+      },
+      "label": "flat t1 B=64",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 128
+      },
+      "label": "flat t1 B=128",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 128
+      },
+      "label": "flat t1 B=128",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 128
+      },
+      "label": "flat t1 B=128",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 256
+      },
+      "label": "flat t1 B=256",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 256
+      },
+      "label": "flat t1 B=256",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 256
+      },
+      "label": "flat t1 B=256",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 1
+      },
+      "label": "flat t0.7p0.9k50 B=1",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 1
+      },
+      "label": "flat t0.7p0.9k50 B=1",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 1
+      },
+      "label": "flat t0.7p0.9k50 B=1",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 4
+      },
+      "label": "flat t0.7p0.9k50 B=4",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 4
+      },
+      "label": "flat t0.7p0.9k50 B=4",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 4
+      },
+      "label": "flat t0.7p0.9k50 B=4",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 8
+      },
+      "label": "flat t0.7p0.9k50 B=8",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 8
+      },
+      "label": "flat t0.7p0.9k50 B=8",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 8
+      },
+      "label": "flat t0.7p0.9k50 B=8",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 16
+      },
+      "label": "flat t0.7p0.9k50 B=16",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 16
+      },
+      "label": "flat t0.7p0.9k50 B=16",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 16
+      },
+      "label": "flat t0.7p0.9k50 B=16",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 32
+      },
+      "label": "flat t0.7p0.9k50 B=32",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 32
+      },
+      "label": "flat t0.7p0.9k50 B=32",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 32
+      },
+      "label": "flat t0.7p0.9k50 B=32",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 64
+      },
+      "label": "flat t0.7p0.9k50 B=64",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 64
+      },
+      "label": "flat t0.7p0.9k50 B=64",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 64
+      },
+      "label": "flat t0.7p0.9k50 B=64",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 128
+      },
+      "label": "flat t0.7p0.9k50 B=128",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 128
+      },
+      "label": "flat t0.7p0.9k50 B=128",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 128
+      },
+      "label": "flat t0.7p0.9k50 B=128",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 256
+      },
+      "label": "flat t0.7p0.9k50 B=256",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 256
+      },
+      "label": "flat t0.7p0.9k50 B=256",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 256
+      },
+      "label": "flat t0.7p0.9k50 B=256",
+      "ok": false,
+      "error": "RuntimeError: reference failed: Offset increment outside graph capture encountered unexpectedly."
+    }
+  ]
+}

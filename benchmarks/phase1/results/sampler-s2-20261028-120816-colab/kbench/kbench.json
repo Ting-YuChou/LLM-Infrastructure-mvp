@@ -1,0 +1,3206 @@
+{
+  "env": {
+    "device_type": "cuda",
+    "torch": "2.10.0+cu128",
+    "triton": "3.6.0",
+    "device": "NVIDIA A100-SXM4-40GB",
+    "l2_bytes": 41943040,
+    "peak_GBps": 1555.0,
+    "peak_TFLOPs": 312.0,
+    "copy_GBps": 1379.7506373398542
+  },
+  "rows": [
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 1
+      },
+      "label": "peaked greedy B=1",
+      "ok": true,
+      "us": 41.11166679283904,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 6.239396745759773,
+      "pct_peak": 0.4012473791485384,
+      "pct_copy": 0.4522119125662641,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 1
+      },
+      "label": "peaked greedy B=1",
+      "ok": true,
+      "us": 51.988916082696605,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 4.93397476477442,
+      "pct_peak": 0.31729741252568616,
+      "pct_copy": 0.35759902052207604,
+      "x_base": 0.7907775328003458
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 1
+      },
+      "label": "peaked greedy B=1",
+      "ok": true,
+      "us": 15.691467409092901,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 16.347228293725816,
+      "pct_peak": 1.0512687005611456,
+      "pct_copy": 1.1847958501576135,
+      "x_base": 2.6200014135717877
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 4
+      },
+      "label": "peaked greedy B=4",
+      "ok": true,
+      "us": 43.416427291986594,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 23.632713790555922,
+      "pct_peak": 1.519788668202953,
+      "pct_copy": 1.7128249954005867,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 4
+      },
+      "label": "peaked greedy B=4",
+      "ok": true,
+      "us": 53.23236589213364,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 19.27489005615704,
+      "pct_peak": 1.2395427688846972,
+      "pct_copy": 1.3969835950443077,
+      "x_base": 0.815602060219578
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 4
+      },
+      "label": "peaked greedy B=4",
+      "ok": true,
+      "us": 16.324396351821548,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 62.85365644687432,
+      "pct_peak": 4.042035784364908,
+      "pct_copy": 4.555435942255157,
+      "x_base": 2.6596038442268033
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 8
+      },
+      "label": "peaked greedy B=8",
+      "ok": true,
+      "us": 46.61935704355022,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 44.01811029017414,
+      "pct_peak": 2.830746642454929,
+      "pct_copy": 3.1902946154850587,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 8
+      },
+      "label": "peaked greedy B=8",
+      "ok": true,
+      "us": 53.57044161731051,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 38.306497726106016,
+      "pct_peak": 2.463440368238329,
+      "pct_copy": 2.7763348455457555,
+      "x_base": 0.8702440307769621
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 8
+      },
+      "label": "peaked greedy B=8",
+      "ok": true,
+      "us": 17.363053241758855,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 118.18750835046828,
+      "pct_peak": 7.600482852120146,
+      "pct_copy": 8.565860029485664,
+      "x_base": 2.6849746063917346
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 16
+      },
+      "label": "peaked greedy B=16",
+      "ok": true,
+      "us": 51.01239590244439,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 80.45479784656297,
+      "pct_peak": 5.173941983701798,
+      "pct_copy": 5.831111482700892,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 16
+      },
+      "label": "peaked greedy B=16",
+      "ok": true,
+      "us": 54.24464203929173,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 75.66078133628676,
+      "pct_peak": 4.86564510201201,
+      "pct_copy": 5.483656197627131,
+      "x_base": 0.9404135410368071
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 16
+      },
+      "label": "peaked greedy B=16",
+      "ok": true,
+      "us": 19.631878110288664,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 209.05753269979184,
+      "pct_peak": 13.444214321530023,
+      "pct_copy": 15.151834472267593,
+      "x_base": 2.5984470571722755
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 32
+      },
+      "label": "peaked greedy B=32",
+      "ok": true,
+      "us": 66.24581597068092,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 123.90796127611846,
+      "pct_peak": 7.9683576383355925,
+      "pct_copy": 8.980460521113569,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 32
+      },
+      "label": "peaked greedy B=32",
+      "ok": true,
+      "us": 54.77624228506377,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 149.8529957071962,
+      "pct_peak": 9.636848598533517,
+      "pct_copy": 10.86087526628082,
+      "x_base": 1.209389567577998
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 32
+      },
+      "label": "peaked greedy B=32",
+      "ok": true,
+      "us": 22.946908618464615,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 357.7119749104237,
+      "pct_peak": 23.00398552478609,
+      "pct_copy": 25.92584233916999,
+      "x_base": 2.8869167987785125
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 64
+      },
+      "label": "peaked greedy B=64",
+      "ok": true,
+      "us": 105.81720959056508,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 155.1427037579316,
+      "pct_peak": 9.977022749706212,
+      "pct_copy": 11.244256719971169,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 64
+      },
+      "label": "peaked greedy B=64",
+      "ok": true,
+      "us": 55.29987812042236,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 296.8680683933959,
+      "pct_peak": 19.09119410890006,
+      "pct_copy": 21.516066770279206,
+      "x_base": 1.9135161448301017
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 64
+      },
+      "label": "peaked greedy B=64",
+      "ok": true,
+      "us": 30.526061852773033,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 537.795149573435,
+      "pct_peak": 34.58489707867749,
+      "pct_copy": 38.97770618974301,
+      "x_base": 3.4664546675205172
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 128
+      },
+      "label": "peaked greedy B=128",
+      "ok": true,
+      "us": 168.58854480818206,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 194.75543867679497,
+      "pct_peak": 12.524465509761736,
+      "pct_copy": 14.115263541554262,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 128
+      },
+      "label": "peaked greedy B=128",
+      "ok": true,
+      "us": 68.17631394255395,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 481.5974068012224,
+      "pct_peak": 30.970894328052886,
+      "pct_copy": 34.90467000107625,
+      "x_base": 2.4728316193544355
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 128
+      },
+      "label": "peaked greedy B=128",
+      "ok": true,
+      "us": 49.26243015364105,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 666.5025638726684,
+      "pct_peak": 42.861901213676425,
+      "pct_copy": 48.30601601733476,
+      "x_base": 3.422253922154944
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 256
+      },
+      "label": "peaked greedy B=256",
+      "ok": true,
+      "us": 296.3342313413267,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 221.597996636314,
+      "pct_peak": 14.250675024843344,
+      "pct_copy": 16.060727977886845,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 256
+      },
+      "label": "peaked greedy B=256",
+      "ok": true,
+      "us": 92.89481463255706,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 706.8970669648713,
+      "pct_peak": 45.45961845433256,
+      "pct_copy": 51.23368294489517,
+      "x_base": 3.189997552753281
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "greedy",
+        "B": 256
+      },
+      "label": "peaked greedy B=256",
+      "ok": true,
+      "us": 78.96177857010453,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 831.6311155744662,
+      "pct_peak": 53.48110068002998,
+      "pct_copy": 60.274015685750506,
+      "x_base": 3.7528819222104106
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 1
+      },
+      "label": "peaked t0.7p0.9 B=1",
+      "ok": true,
+      "us": 268.98053383861384,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 0.9536452186309704,
+      "pct_peak": 0.06132766679298845,
+      "pct_copy": 0.06911721530128002,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 1
+      },
+      "label": "peaked t0.7p0.9 B=1",
+      "ok": true,
+      "us": 303.280614861107,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 0.8457909521103895,
+      "pct_peak": 0.05439170110034659,
+      "pct_copy": 0.06130027623984768,
+      "x_base": 0.8869031539051663
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 1
+      },
+      "label": "peaked t0.7p0.9 B=1",
+      "ok": true,
+      "us": 32.835027673742275,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 7.812145083255988,
+      "pct_peak": 0.5023887513347902,
+      "pct_copy": 0.5661997807312289,
+      "x_base": 8.19187778707779
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 4
+      },
+      "label": "peaked t0.7p0.9 B=4",
+      "ok": true,
+      "us": 575.0131097458701,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 1.7843906210303047,
+      "pct_peak": 0.11475180842638615,
+      "pct_copy": 0.12932703727324182,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 4
+      },
+      "label": "peaked t0.7p0.9 B=4",
+      "ok": true,
+      "us": 628.8933207970539,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 1.6315135907304528,
+      "pct_peak": 0.10492048814986835,
+      "pct_copy": 0.11824698946151568,
+      "x_base": 0.9143253565121403
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 4
+      },
+      "label": "peaked t0.7p0.9 B=4",
+      "ok": true,
+      "us": 36.314871474986774,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 28.254209868448218,
+      "pct_peak": 1.8169909883246445,
+      "pct_copy": 2.0477765404712596,
+      "x_base": 15.834094584141154
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 8
+      },
+      "label": "peaked t0.7p0.9 B=8",
+      "ok": true,
+      "us": 490.19116117754055,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 4.186317833782317,
+      "pct_peak": 0.2692165809506313,
+      "pct_copy": 0.3034111904346351,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 8
+      },
+      "label": "peaked t0.7p0.9 B=8",
+      "ok": true,
+      "us": 725.7052996686397,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 2.827726352469792,
+      "pct_peak": 0.1818473538565783,
+      "pct_copy": 0.20494473971917282,
+      "x_base": 0.6754686253515911
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 8
+      },
+      "label": "peaked t0.7p0.9 B=8",
+      "ok": true,
+      "us": 41.19254978558489,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 49.81716379980246,
+      "pct_peak": 3.2036761286046596,
+      "pct_copy": 3.610591830988349,
+      "x_base": 11.89999559942464
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 16
+      },
+      "label": "peaked t0.7p0.9 B=16",
+      "ok": true,
+      "us": 550.8533798101294,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 7.450606913612207,
+      "pct_peak": 0.4791387082708815,
+      "pct_copy": 0.5399966277947807,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 16
+      },
+      "label": "peaked t0.7p0.9 B=16",
+      "ok": true,
+      "us": 962.4740076429061,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 4.264210739624175,
+      "pct_peak": 0.2742257710369244,
+      "pct_copy": 0.30905662401762185,
+      "x_base": 0.5723306556186036
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 16
+      },
+      "label": "peaked t0.7p0.9 B=16",
+      "ok": true,
+      "us": 51.919145438507314,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 79.04968322063347,
+      "pct_peak": 5.083580914510191,
+      "pct_copy": 5.729273180336448,
+      "x_base": 10.60983140530609
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 32
+      },
+      "label": "peaked t0.7p0.9 B=32",
+      "ok": true,
+      "us": 633.2858114531546,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 12.961578881997724,
+      "pct_peak": 0.8335420502892428,
+      "pct_copy": 0.9394145964655993,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 32
+      },
+      "label": "peaked t0.7p0.9 B=32",
+      "ok": true,
+      "us": 1530.5037642970228,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 5.363190990758655,
+      "pct_peak": 0.34489974217097463,
+      "pct_copy": 0.38870726677820827,
+      "x_base": 0.413776056110538
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 32
+      },
+      "label": "peaked t0.7p0.9 B=32",
+      "ok": true,
+      "us": 71.00121180216472,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 115.60906907999757,
+      "pct_peak": 7.434666821864796,
+      "pct_copy": 8.378982835832621,
+      "x_base": 8.919366238673783
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 64
+      },
+      "label": "peaked t0.7p0.9 B=64",
+      "ok": true,
+      "us": 882.218649893096,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 18.608502554314992,
+      "pct_peak": 1.1966882671585204,
+      "pct_copy": 1.3486859183621762,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 64
+      },
+      "label": "peaked t0.7p0.9 B=64",
+      "ok": true,
+      "us": 2760.8164007013493,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 5.946345434571287,
+      "pct_peak": 0.3824016356637484,
+      "pct_copy": 0.43097247239079256,
+      "x_base": 0.3195499163468385
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 64
+      },
+      "label": "peaked t0.7p0.9 B=64",
+      "ok": true,
+      "us": 104.5216972177679,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 157.06564700911952,
+      "pct_peak": 10.100684695120226,
+      "pct_copy": 11.383625617447843,
+      "x_base": 8.440531233003414
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 128
+      },
+      "label": "peaked t0.7p0.9 B=128",
+      "ok": true,
+      "us": 1513.7631285424327,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 21.690009077982136,
+      "pct_peak": 1.3948558892593013,
+      "pct_copy": 1.5720238491645318,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 128
+      },
+      "label": "peaked t0.7p0.9 B=128",
+      "ok": true,
+      "us": 5884.752161362592,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 5.5794254540700186,
+      "pct_peak": 0.35880549543858636,
+      "pct_copy": 0.404379262678008,
+      "x_base": 0.25723481414923793
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 128
+      },
+      "label": "peaked t0.7p0.9 B=128",
+      "ok": true,
+      "us": 172.98071057188747,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 189.81038921305054,
+      "pct_peak": 12.206455897945373,
+      "pct_copy": 13.756861861575446,
+      "x_base": 8.751051626148465
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 256
+      },
+      "label": "peaked t0.7p0.9 B=256",
+      "ok": true,
+      "us": 2577.066633436415,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 25.481324831882823,
+      "pct_peak": 1.6386704071950366,
+      "pct_copy": 1.846806527374437,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 256
+      },
+      "label": "peaked t0.7p0.9 B=256",
+      "ok": true,
+      "us": 10748.994050202546,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 6.10913651019861,
+      "pct_peak": 0.3928705151253125,
+      "pct_copy": 0.4427710591224633,
+      "x_base": 0.23974956367083064
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9",
+        "B": 256
+      },
+      "label": "peaked t0.7p0.9 B=256",
+      "ok": true,
+      "us": 301.09866460164386,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 218.0915418103169,
+      "pct_peak": 14.025179537640957,
+      "pct_copy": 15.806591126552785,
+      "x_base": 8.558877658411062
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 1
+      },
+      "label": "peaked t1 B=1",
+      "ok": true,
+      "us": 103.52356059096729,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 2.4778127658640576,
+      "pct_peak": 0.1593448724028333,
+      "pct_copy": 0.17958410011255777,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 1
+      },
+      "label": "peaked t1 B=1",
+      "ok": true,
+      "us": 302.18909747054914,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 0.8488459780551788,
+      "pct_peak": 0.05458816579132983,
+      "pct_copy": 0.06152169494132256,
+      "x_base": 0.3425787411177418
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 1
+      },
+      "label": "peaked t1 B=1",
+      "ok": true,
+      "us": 21.111132480058153,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 12.150556122098354,
+      "pct_peak": 0.7813862457941064,
+      "pct_copy": 0.8806342097818857,
+      "x_base": 4.903742643307126
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 4
+      },
+      "label": "peaked t1 B=4",
+      "ok": true,
+      "us": 110.24903887100803,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 9.306638955832366,
+      "pct_peak": 0.5984976820470975,
+      "pct_copy": 0.6745160106449,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 4
+      },
+      "label": "peaked t1 B=4",
+      "ok": true,
+      "us": 629.3427853183891,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 1.630348395081569,
+      "pct_peak": 0.10484555595379864,
+      "pct_copy": 0.11816253973434394,
+      "x_base": 0.17518122308374795
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 4
+      },
+      "label": "peaked t1 B=4",
+      "ok": true,
+      "us": 24.89551151071796,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 41.214176280662805,
+      "pct_peak": 2.6504293428078975,
+      "pct_copy": 2.98707427018286,
+      "x_base": 4.428470522629907
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 8
+      },
+      "label": "peaked t1 B=8",
+      "ok": true,
+      "us": 119.41911610028217,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 17.18398248967739,
+      "pct_peak": 1.1050792597863275,
+      "pct_copy": 1.2454411706457293,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 8
+      },
+      "label": "peaked t1 B=8",
+      "ok": true,
+      "us": 725.7619377310949,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 2.8275056782604806,
+      "pct_peak": 0.18183316258909843,
+      "pct_copy": 0.2049287459444037,
+      "x_base": 0.16454309587192575
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 8
+      },
+      "label": "peaked t1 B=8",
+      "ok": true,
+      "us": 26.29569468607429,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 78.03923891338576,
+      "pct_peak": 5.018600573208087,
+      "pct_copy": 5.656039345185204,
+      "x_base": 4.541394229205296
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 16
+      },
+      "label": "peaked t1 B=16",
+      "ok": true,
+      "us": 136.65709604743785,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 30.03277633365859,
+      "pct_peak": 1.931368252968398,
+      "pct_copy": 2.176681461192255,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 16
+      },
+      "label": "peaked t1 B=16",
+      "ok": true,
+      "us": 964.0842466863967,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 4.257088541905237,
+      "pct_peak": 0.273767751891012,
+      "pct_copy": 0.3085404294585333,
+      "x_base": 0.1417480853121859
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 16
+      },
+      "label": "peaked t1 B=16",
+      "ok": true,
+      "us": 36.86399860236481,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 111.33333755434545,
+      "pct_peak": 7.159700164266589,
+      "pct_copy": 8.069091221367003,
+      "x_base": 3.707061122736462
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 32
+      },
+      "label": "peaked t1 B=32",
+      "ok": true,
+      "us": 194.52896985140714,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 42.196203507734886,
+      "pct_peak": 2.713582219146938,
+      "pct_copy": 3.058248524464447,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 32
+      },
+      "label": "peaked t1 B=32",
+      "ok": true,
+      "us": 1536.1706126819956,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 5.343406475970145,
+      "pct_peak": 0.3436274261074048,
+      "pct_copy": 0.3872733471804862,
+      "x_base": 0.12663239893111847
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 32
+      },
+      "label": "peaked t1 B=32",
+      "ok": true,
+      "us": 55.41624264283614,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 148.12234840431083,
+      "pct_peak": 9.525552952045713,
+      "pct_copy": 10.735443376195084,
+      "x_base": 3.5103240597737386
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 64
+      },
+      "label": "peaked t1 B=64",
+      "ok": true,
+      "us": 362.9149090160023,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 45.235859955469955,
+      "pct_peak": 2.9090585180366535,
+      "pct_copy": 3.278553292983742,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 64
+      },
+      "label": "peaked t1 B=64",
+      "ok": true,
+      "us": 2776.4789696895714,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 5.912801133817161,
+      "pct_peak": 0.38024444590464057,
+      "pct_copy": 0.42854128664995467,
+      "x_base": 0.13071048366578428
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 64
+      },
+      "label": "peaked t1 B=64",
+      "ok": true,
+      "us": 90.20508780623928,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 181.9938143097123,
+      "pct_peak": 11.703782270721048,
+      "pct_copy": 13.19034102137431,
+      "x_base": 4.023219951800771
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 128
+      },
+      "label": "peaked t1 B=128",
+      "ok": true,
+      "us": 674.565034754136,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 48.67364050668161,
+      "pct_peak": 3.1301376531628042,
+      "pct_copy": 3.5277128482088553,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 128
+      },
+      "label": "peaked t1 B=128",
+      "ok": true,
+      "us": 5856.908461626838,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 5.605950001629362,
+      "pct_peak": 0.36051125412407475,
+      "pct_copy": 0.4063016787176543,
+      "x_base": 0.1151742492090727
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 128
+      },
+      "label": "peaked t1 B=128",
+      "ok": true,
+      "us": 151.02493996713676,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 217.40472803461884,
+      "pct_peak": 13.98101144917163,
+      "pct_copy": 15.75681301758795,
+      "x_base": 4.466580386662774
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 256
+      },
+      "label": "peaked t1 B=256",
+      "ok": true,
+      "us": 1296.0237573694299,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 50.66810822456374,
+      "pct_peak": 3.258399242737218,
+      "pct_copy": 3.672265614767271,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 256
+      },
+      "label": "peaked t1 B=256",
+      "ok": true,
+      "us": 10645.32357675058,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 6.168630904129311,
+      "pct_peak": 0.3966965211658721,
+      "pct_copy": 0.4470830262504804,
+      "x_base": 0.12174583027236015
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t1",
+        "B": 256
+      },
+      "label": "peaked t1 B=256",
+      "ok": true,
+      "us": 273.67822329203284,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 239.9426275503436,
+      "pct_peak": 15.430394054684475,
+      "pct_copy": 17.390289307128036,
+      "x_base": 4.73557501864694
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 1
+      },
+      "label": "peaked t0.7p0.9k50 B=1",
+      "ok": true,
+      "us": 304.7977890401039,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 0.841580907813768,
+      "pct_peak": 0.05412095870185003,
+      "pct_copy": 0.060995145429780545,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 1
+      },
+      "label": "peaked t0.7p0.9k50 B=1",
+      "ok": true,
+      "us": 303.26227223651006,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 0.8458421092352361,
+      "pct_peak": 0.054394990947603604,
+      "pct_copy": 0.06130398394785389,
+      "x_base": 1.0050633294813418
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 1
+      },
+      "label": "peaked t0.7p0.9k50 B=1",
+      "ok": true,
+      "us": 39.92034576751374,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 6.425595647238697,
+      "pct_peak": 0.4132215850314275,
+      "pct_copy": 0.46570702512065393,
+      "x_base": 7.635149024388996
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 4
+      },
+      "label": "peaked t0.7p0.9k50 B=4",
+      "ok": true,
+      "us": 613.0945919124224,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 1.6735557832918644,
+      "pct_peak": 0.10762416612809418,
+      "pct_copy": 0.12129407575549041,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 4
+      },
+      "label": "peaked t0.7p0.9k50 B=4",
+      "ok": true,
+      "us": 630.497706755427,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 1.6273619856289328,
+      "pct_peak": 0.10465350389896673,
+      "pct_copy": 0.11794609414107399,
+      "x_base": 0.9723978142084578
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 4
+      },
+      "label": "peaked t0.7p0.9k50 B=4",
+      "ok": true,
+      "us": 44.56549564390692,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 23.02337234614114,
+      "pct_peak": 1.4806027232245107,
+      "pct_copy": 1.6686618380934384,
+      "x_base": 13.757158605645303
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 8
+      },
+      "label": "peaked t0.7p0.9k50 B=8",
+      "ok": true,
+      "us": 386.09881801459625,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 5.314950225831621,
+      "pct_peak": 0.34179744217566693,
+      "pct_copy": 0.3852109273947351,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 8
+      },
+      "label": "peaked t0.7p0.9k50 B=8",
+      "ok": true,
+      "us": 726.0140280687172,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 2.8265238971467497,
+      "pct_peak": 0.18177002553998392,
+      "pct_copy": 0.2048575895276454,
+      "x_base": 0.5318062779608606
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 8
+      },
+      "label": "peaked t0.7p0.9k50 B=8",
+      "ok": true,
+      "us": 50.85996999085405,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 40.34795931592214,
+      "pct_peak": 2.5947240717634816,
+      "pct_copy": 2.924293580593129,
+      "x_base": 7.591408687107501
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 16
+      },
+      "label": "peaked t0.7p0.9k50 B=16",
+      "ok": true,
+      "us": 426.1950427339277,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 9.629844527690189,
+      "pct_peak": 0.6192826062823272,
+      "pct_copy": 0.6979409370853008,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 16
+      },
+      "label": "peaked t0.7p0.9k50 B=16",
+      "ok": true,
+      "us": 963.908392054434,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 4.257865201539015,
+      "pct_peak": 0.2738176978481681,
+      "pct_copy": 0.308596719313581,
+      "x_base": 0.44215305753854206
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 16
+      },
+      "label": "peaked t0.7p0.9k50 B=16",
+      "ok": true,
+      "us": 62.901740765753594,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 65.24766961989228,
+      "pct_peak": 4.195991615427156,
+      "pct_copy": 4.728946510631019,
+      "x_base": 6.775568331583703
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 32
+      },
+      "label": "peaked t0.7p0.9k50 B=32",
+      "ok": true,
+      "us": 498.40484965931284,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 16.46931005107772,
+      "pct_peak": 1.059119617432651,
+      "pct_copy": 1.1936439531443443,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 32
+      },
+      "label": "peaked t0.7p0.9k50 B=32",
+      "ok": true,
+      "us": 1530.391230727687,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 5.363585359867091,
+      "pct_peak": 0.3449251035284303,
+      "pct_copy": 0.3887358494146473,
+      "x_base": 0.32567152741872807
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 32
+      },
+      "label": "peaked t0.7p0.9k50 B=32",
+      "ok": true,
+      "us": 87.65284942858148,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 93.64651638265447,
+      "pct_peak": 6.022284011746268,
+      "pct_copy": 6.7872058796946115,
+      "x_base": 5.686122617900828
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 64
+      },
+      "label": "peaked t0.7p0.9k50 B=64",
+      "ok": true,
+      "us": 718.9682469223485,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 22.83378726428384,
+      "pct_peak": 1.4684107565455844,
+      "pct_copy": 1.6549213058025585,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 64
+      },
+      "label": "peaked t0.7p0.9k50 B=64",
+      "ok": true,
+      "us": 2762.2399763627486,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 5.94328086642827,
+      "pct_peak": 0.3822045573265768,
+      "pct_copy": 0.43075036210070955,
+      "x_base": 0.2602844984775974
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 64
+      },
+      "label": "peaked t0.7p0.9k50 B=64",
+      "ok": true,
+      "us": 128.02327762950551,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 128.2326800561184,
+      "pct_peak": 8.24647460167964,
+      "pct_copy": 9.293902578175269,
+      "x_base": 5.615918137973433
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 128
+      },
+      "label": "peaked t0.7p0.9k50 B=128",
+      "ok": true,
+      "us": 1326.7225377699908,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 24.74785425382759,
+      "pct_peak": 1.5915018812750863,
+      "pct_copy": 1.793646879666692,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 128
+      },
+      "label": "peaked t0.7p0.9k50 B=128",
+      "ok": true,
+      "us": 5883.296592562807,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 5.5808058430209915,
+      "pct_peak": 0.3588942664322181,
+      "pct_copy": 0.4044793089409787,
+      "x_base": 0.22550665547732668
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 128
+      },
+      "label": "peaked t0.7p0.9k50 B=128",
+      "ok": true,
+      "us": 216.5559226391362,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 151.61689230136204,
+      "pct_peak": 9.7502824631101,
+      "pct_copy": 10.988716960745743,
+      "x_base": 6.12646618758523
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 256
+      },
+      "label": "peaked t0.7p0.9k50 B=256",
+      "ok": true,
+      "us": 2292.470508151584,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 28.644674715116523,
+      "pct_peak": 1.8421012678531525,
+      "pct_copy": 2.076076208259137,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 256
+      },
+      "label": "peaked t0.7p0.9k50 B=256",
+      "ok": true,
+      "us": 10702.146176938657,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 6.135878814802737,
+      "pct_peak": 0.3945902774792757,
+      "pct_copy": 0.4447092575099405,
+      "x_base": 0.21420661521998982
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "peaked",
+        "mode": "t0.7p0.9k50",
+        "B": 256
+      },
+      "label": "peaked t0.7p0.9k50 B=256",
+      "ok": true,
+      "us": 382.4023670620388,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 171.72245167966375,
+      "pct_peak": 11.043244481007315,
+      "pct_copy": 12.445904863703703,
+      "x_base": 5.994917149086754
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 1
+      },
+      "label": "flat t0.7p0.9 B=1",
+      "ok": true,
+      "us": 270.81546701430364,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 0.9471837145344872,
+      "pct_peak": 0.060912135982925227,
+      "pct_copy": 0.06864890574434872,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 1
+      },
+      "label": "flat t0.7p0.9 B=1",
+      "ok": true,
+      "us": 302.6685573470347,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 0.8475013138080532,
+      "pct_peak": 0.05450169220630567,
+      "pct_copy": 0.061424237892872255,
+      "x_base": 0.8947591695287699
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 1
+      },
+      "label": "flat t0.7p0.9 B=1",
+      "ok": true,
+      "us": 34.95421320755289,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 7.338514486847983,
+      "pct_peak": 0.47193019208025616,
+      "pct_copy": 0.5318725201675985,
+      "x_base": 7.747720293580688
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 4
+      },
+      "label": "flat t0.7p0.9 B=4",
+      "ok": true,
+      "us": 577.4861692472268,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 1.7767490455009323,
+      "pct_peak": 0.114260388778195,
+      "pct_copy": 0.12877319983895694,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 4
+      },
+      "label": "flat t0.7p0.9 B=4",
+      "ok": true,
+      "us": 629.0330377243857,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 1.6311512090237281,
+      "pct_peak": 0.10489718386004682,
+      "pct_copy": 0.11822072517165651,
+      "x_base": 0.9180537978360614
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 4
+      },
+      "label": "flat t0.7p0.9 B=4",
+      "ok": true,
+      "us": 40.724519554895295,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 25.194846034142195,
+      "pct_peak": 1.6202473333853502,
+      "pct_copy": 1.8260434423656158,
+      "x_base": 14.180306497386537
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 8
+      },
+      "label": "flat t0.7p0.9 B=8",
+      "ok": true,
+      "us": 1400.8006903961414,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 1.4649450232778476,
+      "pct_peak": 0.09420868316899342,
+      "pct_copy": 0.10617462196663649,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 8
+      },
+      "label": "flat t0.7p0.9 B=8",
+      "ok": true,
+      "us": 727.0907918915493,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 2.8223380393271222,
+      "pct_peak": 0.18150083854193713,
+      "pct_copy": 0.20455421167759436,
+      "x_base": 1.9265829054882058
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 8
+      },
+      "label": "flat t0.7p0.9 B=8",
+      "ok": true,
+      "us": 46.746381366525895,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 43.89849952042412,
+      "pct_peak": 2.8230546315385285,
+      "pct_copy": 3.181625601931955,
+      "x_base": 29.965970615197723
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 16
+      },
+      "label": "flat t0.7p0.9 B=16",
+      "ok": true,
+      "us": 1456.6946830458314,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 2.8174689231503645,
+      "pct_peak": 0.18118771209970191,
+      "pct_copy": 0.20420131340416825,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 16
+      },
+      "label": "flat t0.7p0.9 B=16",
+      "ok": true,
+      "us": 958.4249248941436,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 4.282225861825642,
+      "pct_peak": 0.2753842997958612,
+      "pct_copy": 0.3103623035885479,
+      "x_base": 1.5198839733917822
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 16
+      },
+      "label": "flat t0.7p0.9 B=16",
+      "ok": true,
+      "us": 62.764946741002205,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 65.38987465305807,
+      "pct_peak": 4.205136633637175,
+      "pct_copy": 4.739253085552409,
+      "x_base": 23.208729692018082
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 32
+      },
+      "label": "flat t0.7p0.9 B=32",
+      "ok": true,
+      "us": 1554.1682387843275,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 5.281528598487259,
+      "pct_peak": 0.33964814138181726,
+      "pct_copy": 0.3827886326379957,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 32
+      },
+      "label": "flat t0.7p0.9 B=32",
+      "ok": true,
+      "us": 1528.5332997639975,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 5.370104793443073,
+      "pct_peak": 0.34534435970695,
+      "pct_copy": 0.38920835751861527,
+      "x_base": 1.0167709391900641
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 32
+      },
+      "label": "flat t0.7p0.9 B=32",
+      "ok": true,
+      "us": 93.6494559952707,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 87.65009804664025,
+      "pct_peak": 5.636662253803231,
+      "pct_copy": 6.35260428041032,
+      "x_base": 16.595592812229608
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 64
+      },
+      "label": "flat t0.7p0.9 B=64",
+      "ok": true,
+      "us": 2064.259847005208,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 7.952859240960948,
+      "pct_peak": 0.5114378933093857,
+      "pct_copy": 0.5763983016738433,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 64
+      },
+      "label": "flat t0.7p0.9 B=64",
+      "ok": true,
+      "us": 2760.688434947621,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 5.946621064579307,
+      "pct_peak": 0.3824193610661934,
+      "pct_copy": 0.43099244918953866,
+      "x_base": 0.7477337249918148
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 64
+      },
+      "label": "flat t0.7p0.9 B=64",
+      "ok": true,
+      "us": 149.07345627293444,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 110.12535974173026,
+      "pct_peak": 7.082016703648248,
+      "pct_copy": 7.981540777111064,
+      "x_base": 13.847266298205444
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 128
+      },
+      "label": "flat t0.7p0.9 B=128",
+      "ok": true,
+      "us": 4249.258602366728,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 7.72688581055353,
+      "pct_peak": 0.4969058399069794,
+      "pct_copy": 0.5600204559753559,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 128
+      },
+      "label": "flat t0.7p0.9 B=128",
+      "ok": true,
+      "us": 5885.590497185202,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 5.578630727996234,
+      "pct_peak": 0.35875438765249096,
+      "pct_copy": 0.4043216634240358,
+      "x_base": 0.7219765976581188
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 128
+      },
+      "label": "flat t0.7p0.9 B=128",
+      "ok": true,
+      "us": 256.3513774497836,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 128.08020119350334,
+      "pct_peak": 8.236668887042015,
+      "pct_copy": 9.282851388308885,
+      "x_base": 16.575914842506005
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 256
+      },
+      "label": "flat t0.7p0.9 B=256",
+      "ok": true,
+      "us": 7154.389275444879,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 9.178571289848728,
+      "pct_peak": 0.5902618192828764,
+      "pct_copy": 0.6652340677692982,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 256
+      },
+      "label": "flat t0.7p0.9 B=256",
+      "ok": true,
+      "us": 10721.332126193576,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 6.1248985878878806,
+      "pct_peak": 0.3938841535619216,
+      "pct_copy": 0.4439134450915439,
+      "x_base": 0.6673041363923236
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9",
+        "B": 256
+      },
+      "label": "flat t0.7p0.9 B=256",
+      "ok": true,
+      "us": 459.54370498657227,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 142.89624966556505,
+      "pct_peak": 9.189469431869135,
+      "pct_copy": 10.356672125991377,
+      "x_base": 15.568463233880939
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 1
+      },
+      "label": "flat t1 B=1",
+      "ok": true,
+      "us": 103.54141840454044,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 2.477385416894691,
+      "pct_peak": 0.15931739015399943,
+      "pct_copy": 0.17955312719920652,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 1
+      },
+      "label": "flat t1 B=1",
+      "ok": true,
+      "us": 302.51102657108515,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 0.8479426449591709,
+      "pct_peak": 0.05453007363081485,
+      "pct_copy": 0.061456224190915835,
+      "x_base": 0.34227320431313235
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 1
+      },
+      "label": "flat t1 B=1",
+      "ok": true,
+      "us": 21.254971901082104,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 12.068329292260358,
+      "pct_peak": 0.776098346769155,
+      "pct_copy": 0.8746746669766343,
+      "x_base": 4.8713975669508685
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 4
+      },
+      "label": "flat t1 B=4",
+      "ok": true,
+      "us": 110.62912904579221,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 9.274663995368641,
+      "pct_peak": 0.5964414144931602,
+      "pct_copy": 0.6721985657676596,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 4
+      },
+      "label": "flat t1 B=4",
+      "ok": true,
+      "us": 631.0536916019353,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 1.6259282112673619,
+      "pct_peak": 0.10456129975995897,
+      "pct_copy": 0.11784217867093258,
+      "x_base": 0.17530858390980839
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 4
+      },
+      "label": "flat t1 B=4",
+      "ok": true,
+      "us": 24.989312841692044,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 41.05947236324749,
+      "pct_peak": 2.6404805378294203,
+      "pct_copy": 2.975861815321191,
+      "x_base": 4.427057668477347
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 8
+      },
+      "label": "flat t1 B=8",
+      "ok": true,
+      "us": 119.58912856706226,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 17.15955308470403,
+      "pct_peak": 1.1035082369584586,
+      "pct_copy": 1.2436706039714163,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 8
+      },
+      "label": "flat t1 B=8",
+      "ok": true,
+      "us": 727.5598249362625,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 2.820518574097701,
+      "pct_peak": 0.18138383113168494,
+      "pct_copy": 0.204422342542681,
+      "x_base": 0.1643701651304603
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 8
+      },
+      "label": "flat t1 B=8",
+      "ok": true,
+      "us": 26.579053347347347,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 77.20726442669954,
+      "pct_peak": 4.965097390784536,
+      "pct_copy": 5.59574044303791,
+      "x_base": 4.499375015513769
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 16
+      },
+      "label": "flat t1 B=16",
+      "ok": true,
+      "us": 136.99712826095464,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 29.95823381189612,
+      "pct_peak": 1.9265745216653452,
+      "pct_copy": 2.171278852942246,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 16
+      },
+      "label": "flat t1 B=16",
+      "ok": true,
+      "us": 967.2109880520187,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 4.243326482741806,
+      "pct_peak": 0.27288273200911933,
+      "pct_copy": 0.3075429985611674,
+      "x_base": 0.14164141015071535
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 16
+      },
+      "label": "flat t1 B=16",
+      "ok": true,
+      "us": 37.043786230888074,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 110.7929943882955,
+      "pct_peak": 7.124951407607428,
+      "pct_copy": 8.029928842932323,
+      "x_base": 3.69824853774593
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 32
+      },
+      "label": "flat t1 B=32",
+      "ok": true,
+      "us": 197.16654401836973,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 41.63172834857438,
+      "pct_peak": 2.677281565824719,
+      "pct_copy": 3.017337134834737,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 32
+      },
+      "label": "flat t1 B=32",
+      "ok": true,
+      "us": 1535.6625643643465,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 5.345174252781033,
+      "pct_peak": 0.34374110950360337,
+      "pct_copy": 0.38740147010089276,
+      "x_base": 0.12839184114641908
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 32
+      },
+      "label": "flat t1 B=32",
+      "ok": true,
+      "us": 56.63418227976019,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 144.9369209473604,
+      "pct_peak": 9.320702311727356,
+      "pct_copy": 10.504573581991407,
+      "x_base": 3.481405329460062
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 64
+      },
+      "label": "flat t1 B=64",
+      "ok": true,
+      "us": 364.31514855587125,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 45.06199663965477,
+      "pct_peak": 2.8978775974054516,
+      "pct_copy": 3.265952225000154,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 64
+      },
+      "label": "flat t1 B=64",
+      "ok": true,
+      "us": 2775.2262462269177,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 5.915470143135017,
+      "pct_peak": 0.3804160863752422,
+      "pct_copy": 0.4287347280766607,
+      "x_base": 0.13127403542366284
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 64
+      },
+      "label": "flat t1 B=64",
+      "ok": true,
+      "us": 90.69382060657848,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 181.01308215048564,
+      "pct_peak": 11.640712678487823,
+      "pct_copy": 13.119260629549489,
+      "x_base": 4.016978732611091
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 128
+      },
+      "label": "flat t1 B=128",
+      "ok": true,
+      "us": 675.0971102247051,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 48.63527854395852,
+      "pct_peak": 3.127670645913731,
+      "pct_copy": 3.5249324934342385,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 128
+      },
+      "label": "flat t1 B=128",
+      "ok": true,
+      "us": 5859.413296568628,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 5.6035535194671935,
+      "pct_peak": 0.36035713951557513,
+      "pct_copy": 0.4061279892046863,
+      "x_base": 0.11521582043377168
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 128
+      },
+      "label": "flat t1 B=128",
+      "ok": true,
+      "us": 151.42148616267184,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 216.8353833532382,
+      "pct_peak": 13.944397643295062,
+      "pct_copy": 15.715548700256065,
+      "x_base": 4.4583970698811495
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 256
+      },
+      "label": "flat t1 B=256",
+      "ok": true,
+      "us": 1298.5030986644604,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 50.57136333947917,
+      "pct_peak": 3.2521777067189173,
+      "pct_copy": 3.665253848838966,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 256
+      },
+      "label": "flat t1 B=256",
+      "ok": true,
+      "us": 10638.87193467882,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 6.1723716953438865,
+      "pct_peak": 0.3969370865172917,
+      "pct_copy": 0.4473541470684992,
+      "x_base": 0.12205270508349823
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t1",
+        "B": 256
+      },
+      "label": "flat t1 B=256",
+      "ok": true,
+      "us": 273.5312603138111,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 240.07154401534538,
+      "pct_peak": 15.438684502594558,
+      "pct_copy": 17.399632768295074,
+      "x_base": 4.747183547411515
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 1
+      },
+      "label": "flat t0.7p0.9k50 B=1",
+      "ok": true,
+      "us": 304.92229434330955,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 0.8412372750652177,
+      "pct_peak": 0.05409886013281143,
+      "pct_copy": 0.060970240005622685,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 1
+      },
+      "label": "flat t0.7p0.9k50 B=1",
+      "ok": true,
+      "us": 303.0631424876075,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 0.8463978756852263,
+      "pct_peak": 0.05443073155532002,
+      "pct_copy": 0.061344264157549025,
+      "x_base": 1.0061345363228327
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 1
+      },
+      "label": "flat t0.7p0.9k50 B=1",
+      "ok": true,
+      "us": 36.7392418319622,
+      "timing": "graph",
+      "copies": 2093,
+      "calls": 2093,
+      "GBps": 6.981962261857053,
+      "pct_peak": 0.44900078854386194,
+      "pct_copy": 0.5060307328662089,
+      "x_base": 8.299634917289856
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 4
+      },
+      "label": "flat t0.7p0.9k50 B=4",
+      "ok": true,
+      "us": 612.288496876491,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 1.6757590665744149,
+      "pct_peak": 0.10776585637134502,
+      "pct_copy": 0.12145376281943686,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 4
+      },
+      "label": "flat t0.7p0.9k50 B=4",
+      "ok": true,
+      "us": 630.4722851469317,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 1.6274276033575041,
+      "pct_peak": 0.10465772368858547,
+      "pct_copy": 0.1179508499082971,
+      "x_base": 0.9711584653301565
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 4
+      },
+      "label": "flat t0.7p0.9k50 B=4",
+      "ok": true,
+      "us": 40.830044346001316,
+      "timing": "graph",
+      "copies": 524,
+      "calls": 524,
+      "GBps": 25.12973023749571,
+      "pct_peak": 1.616059822346991,
+      "pct_copy": 1.821324053594611,
+      "x_base": 14.996028211183056
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 8
+      },
+      "label": "flat t0.7p0.9k50 B=8",
+      "ok": true,
+      "us": 459.2640126934488,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 4.468227301253278,
+      "pct_peak": 0.2873458071545516,
+      "pct_copy": 0.3238431047126006,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 8
+      },
+      "label": "flat t0.7p0.9k50 B=8",
+      "ok": true,
+      "us": 727.1982731709954,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 2.8219208924296555,
+      "pct_peak": 0.18147401237489746,
+      "pct_copy": 0.20452397817842588,
+      "x_base": 0.6315526722729939
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 8
+      },
+      "label": "flat t0.7p0.9k50 B=8",
+      "ok": true,
+      "us": 45.93538873978244,
+      "timing": "graph",
+      "copies": 262,
+      "calls": 262,
+      "GBps": 44.67353071996053,
+      "pct_peak": 2.872895866235404,
+      "pct_copy": 3.237797433171741,
+      "x_base": 9.998043453928632
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 16
+      },
+      "label": "flat t0.7p0.9k50 B=16",
+      "ok": true,
+      "us": 494.07999752132037,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 8.306735792968217,
+      "pct_peak": 0.5341952278436153,
+      "pct_copy": 0.602046164586923,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 16
+      },
+      "label": "flat t0.7p0.9k50 B=16",
+      "ok": true,
+      "us": 958.4288269508886,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 4.282208427575087,
+      "pct_peak": 0.2753831786221921,
+      "pct_copy": 0.31036104000873255,
+      "x_base": 0.5155103682483851
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 16
+      },
+      "label": "flat t0.7p0.9k50 B=16",
+      "ok": true,
+      "us": 57.2189301934861,
+      "timing": "graph",
+      "copies": 131,
+      "calls": 131,
+      "GBps": 71.7278702366796,
+      "pct_peak": 4.612724774062998,
+      "pct_copy": 5.198611132731219,
+      "x_base": 8.634904494903807
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 32
+      },
+      "label": "flat t0.7p0.9k50 B=32",
+      "ok": true,
+      "us": 547.6848717891809,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 14.987421458593136,
+      "pct_peak": 0.9638213156651535,
+      "pct_copy": 1.0862413144079963,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 32
+      },
+      "label": "flat t0.7p0.9k50 B=32",
+      "ok": true,
+      "us": 1528.1415997129498,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 5.371481282586565,
+      "pct_peak": 0.3454328799091038,
+      "pct_copy": 0.38930812113576757,
+      "x_base": 0.35839929486381333
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 32
+      },
+      "label": "flat t0.7p0.9k50 B=32",
+      "ok": true,
+      "us": 80.49260847496265,
+      "timing": "graph",
+      "copies": 66,
+      "calls": 132,
+      "GBps": 101.97686664053421,
+      "pct_peak": 6.557997854696733,
+      "pct_copy": 7.390963546655403,
+      "x_base": 6.80416353955704
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 64
+      },
+      "label": "flat t0.7p0.9k50 B=64",
+      "ok": true,
+      "us": 744.3549127289743,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 22.055027405962026,
+      "pct_peak": 1.4183297367178154,
+      "pct_copy": 1.5984792330651796,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 64
+      },
+      "label": "flat t0.7p0.9k50 B=64",
+      "ok": true,
+      "us": 2760.7969804243608,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 5.9463872629549845,
+      "pct_peak": 0.3824043255919604,
+      "pct_copy": 0.43097550398089046,
+      "x_base": 0.26961595438088315
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 64
+      },
+      "label": "flat t0.7p0.9k50 B=64",
+      "ok": true,
+      "us": 116.99200037753943,
+      "timing": "graph",
+      "copies": 33,
+      "calls": 132,
+      "GBps": 140.32385075066856,
+      "pct_peak": 9.024041848917593,
+      "pct_copy": 10.170232718370878,
+      "x_base": 6.362442819397065
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 128
+      },
+      "label": "flat t0.7p0.9k50 B=128",
+      "ok": true,
+      "us": 1415.3687720205269,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 23.1978666260441,
+      "pct_peak": 1.4918242203243794,
+      "pct_copy": 1.6813086363757268,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 128
+      },
+      "label": "flat t0.7p0.9k50 B=128",
+      "ok": true,
+      "us": 5885.962093577666,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 5.578278534247709,
+      "pct_peak": 0.3587317385368302,
+      "pct_copy": 0.40429613752544274,
+      "x_base": 0.24046515242850008
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 128
+      },
+      "label": "flat t0.7p0.9k50 B=128",
+      "ok": true,
+      "us": 193.94760505825866,
+      "timing": "graph",
+      "copies": 17,
+      "calls": 102,
+      "GBps": 169.29075246965462,
+      "pct_peak": 10.88686511058872,
+      "pct_copy": 12.269662929530915,
+      "x_base": 7.297686257045419
+    },
+    {
+      "kernel": "sampler",
+      "impl": "vllm",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 256
+      },
+      "label": "flat t0.7p0.9k50 B=256",
+      "ok": true,
+      "us": 2413.5112056025755,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 27.208107361409603,
+      "pct_peak": 1.7497175152031899,
+      "pct_copy": 1.9719583108051009,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_torch",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 256
+      },
+      "label": "flat t0.7p0.9k50 B=256",
+      "ok": true,
+      "us": 10716.11249005353,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 6.12788192182107,
+      "pct_peak": 0.39407600783415236,
+      "pct_copy": 0.4441296677808076,
+      "x_base": 0.2252226456042474
+    },
+    {
+      "kernel": "sampler",
+      "impl": "nano_cuda",
+      "shape": {
+        "dist": "flat",
+        "mode": "t0.7p0.9k50",
+        "B": 256
+      },
+      "label": "flat t0.7p0.9k50 B=256",
+      "ok": true,
+      "us": 338.9819109881366,
+      "timing": "graph",
+      "copies": 9,
+      "calls": 108,
+      "GBps": 193.71851379496815,
+      "pct_peak": 12.45778223761853,
+      "pct_copy": 14.040110477387099,
+      "x_base": 7.119881997735985
+    }
+  ]
+}

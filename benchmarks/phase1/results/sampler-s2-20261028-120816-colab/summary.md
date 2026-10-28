@@ -1,0 +1,236 @@
+# Phase 1 results: run sampler-s2-20261028-120816-colab
+
+## Steps
+
+| step | rc | seconds |
+|---|---:|---:|
+| tests | ok | 291 |
+| kbench | ok | 794 |
+| e2e | ok | 897 |
+| environment | ok | 2 |
+
+## Environment
+
+```
+run_id: sampler-s2-20261028-120816-colab
+name, driver_version, memory.total [MiB], clocks.max.sm [MHz], clocks.max.memory [MHz], power.limit [W]
+NVIDIA A100-SXM4-40GB, 580.82.07, 40960 MiB, 1410 MHz, 1215 MHz, 400.00 W
+RmProfilingAdminOnly: 1
+vllm 0.19.1 | torch 2.10.0+cu128 cuda 12.8 | triton 3.6.0
+CUDA_HOME=/usr/local/cuda-12.8; nvcc: Build cuda_12.8.r12.8/compiler.35583870_0
+NVIDIA Nsight Systems version 2025.3.1.0
+Version 2025.3.1.0 (build 36398880) (public-release)
+```
+
+## Tests
+
+```
+777 passed, 1 warning in 289.62s (0:04:49)
+```
+
+## Kernels (kbench)
+
+Peak 1,555 GB/s HBM and 312 TFLOPs bf16; measured copy 1,380 GB/s. Time per call from CUDA-graph replay, inputs rotated past L2. x base: speed relative to the first impl.
+
+### sampler
+
+| shape | impl | check | us | GB/s | % peak | % copy | x base |
+|---|---|---|---:|---:|---:|---:|---:|
+| peaked greedy B=1 | vllm | ok (None) | 41.1 | 6 | 0 | 0 | 1.00 |
+| peaked greedy B=1 | nano_torch | ok (None) | 52.0 | 5 | 0 | 0 | 0.79 |
+| peaked greedy B=1 | nano_cuda | ok (None) | 15.7 | 16 | 1 | 1 | 2.62 |
+| peaked greedy B=4 | vllm | ok (None) | 43.4 | 24 | 2 | 2 | 1.00 |
+| peaked greedy B=4 | nano_torch | ok (None) | 53.2 | 19 | 1 | 1 | 0.82 |
+| peaked greedy B=4 | nano_cuda | ok (None) | 16.3 | 63 | 4 | 5 | 2.66 |
+| peaked greedy B=8 | vllm | ok (None) | 46.6 | 44 | 3 | 3 | 1.00 |
+| peaked greedy B=8 | nano_torch | ok (None) | 53.6 | 38 | 2 | 3 | 0.87 |
+| peaked greedy B=8 | nano_cuda | ok (None) | 17.4 | 118 | 8 | 9 | 2.68 |
+| peaked greedy B=16 | vllm | ok (None) | 51.0 | 80 | 5 | 6 | 1.00 |
+| peaked greedy B=16 | nano_torch | ok (None) | 54.2 | 76 | 5 | 5 | 0.94 |
+| peaked greedy B=16 | nano_cuda | ok (None) | 19.6 | 209 | 13 | 15 | 2.60 |
+| peaked greedy B=32 | vllm | ok (None) | 66.2 | 124 | 8 | 9 | 1.00 |
+| peaked greedy B=32 | nano_torch | ok (None) | 54.8 | 150 | 10 | 11 | 1.21 |
+| peaked greedy B=32 | nano_cuda | ok (None) | 22.9 | 358 | 23 | 26 | 2.89 |
+| peaked greedy B=64 | vllm | ok (None) | 105.8 | 155 | 10 | 11 | 1.00 |
+| peaked greedy B=64 | nano_torch | ok (None) | 55.3 | 297 | 19 | 22 | 1.91 |
+| peaked greedy B=64 | nano_cuda | ok (None) | 30.5 | 538 | 35 | 39 | 3.47 |
+| peaked greedy B=128 | vllm | ok (None) | 168.6 | 195 | 13 | 14 | 1.00 |
+| peaked greedy B=128 | nano_torch | ok (None) | 68.2 | 482 | 31 | 35 | 2.47 |
+| peaked greedy B=128 | nano_cuda | ok (None) | 49.3 | 667 | 43 | 48 | 3.42 |
+| peaked greedy B=256 | vllm | ok (None) | 296.3 | 222 | 14 | 16 | 1.00 |
+| peaked greedy B=256 | nano_torch | ok (None) | 92.9 | 707 | 45 | 51 | 3.19 |
+| peaked greedy B=256 | nano_cuda | ok (None) | 79.0 | 832 | 53 | 60 | 3.75 |
+| peaked t0.7p0.9 B=1 | vllm | ok (None) | 269.0 | 1 | 0 | 0 | 1.00 |
+| peaked t0.7p0.9 B=1 | nano_torch | ok (None) | 303.3 | 1 | 0 | 0 | 0.89 |
+| peaked t0.7p0.9 B=1 | nano_cuda | ok (None) | 32.8 | 8 | 1 | 1 | 8.19 |
+| peaked t0.7p0.9 B=4 | vllm | ok (None) | 575.0 | 2 | 0 | 0 | 1.00 |
+| peaked t0.7p0.9 B=4 | nano_torch | ok (None) | 628.9 | 2 | 0 | 0 | 0.91 |
+| peaked t0.7p0.9 B=4 | nano_cuda | ok (None) | 36.3 | 28 | 2 | 2 | 15.83 |
+| peaked t0.7p0.9 B=8 | vllm | ok (None) | 490.2 | 4 | 0 | 0 | 1.00 |
+| peaked t0.7p0.9 B=8 | nano_torch | ok (None) | 725.7 | 3 | 0 | 0 | 0.68 |
+| peaked t0.7p0.9 B=8 | nano_cuda | ok (None) | 41.2 | 50 | 3 | 4 | 11.90 |
+| peaked t0.7p0.9 B=16 | vllm | ok (None) | 550.9 | 7 | 0 | 1 | 1.00 |
+| peaked t0.7p0.9 B=16 | nano_torch | ok (None) | 962.5 | 4 | 0 | 0 | 0.57 |
+| peaked t0.7p0.9 B=16 | nano_cuda | ok (None) | 51.9 | 79 | 5 | 6 | 10.61 |
+| peaked t0.7p0.9 B=32 | vllm | ok (None) | 633.3 | 13 | 1 | 1 | 1.00 |
+| peaked t0.7p0.9 B=32 | nano_torch | ok (None) | 1530.5 | 5 | 0 | 0 | 0.41 |
+| peaked t0.7p0.9 B=32 | nano_cuda | ok (None) | 71.0 | 116 | 7 | 8 | 8.92 |
+| peaked t0.7p0.9 B=64 | vllm | ok (None) | 882.2 | 19 | 1 | 1 | 1.00 |
+| peaked t0.7p0.9 B=64 | nano_torch | ok (None) | 2760.8 | 6 | 0 | 0 | 0.32 |
+| peaked t0.7p0.9 B=64 | nano_cuda | ok (None) | 104.5 | 157 | 10 | 11 | 8.44 |
+| peaked t0.7p0.9 B=128 | vllm | ok (None) | 1513.8 | 22 | 1 | 2 | 1.00 |
+| peaked t0.7p0.9 B=128 | nano_torch | ok (None) | 5884.8 | 6 | 0 | 0 | 0.26 |
+| peaked t0.7p0.9 B=128 | nano_cuda | ok (None) | 173.0 | 190 | 12 | 14 | 8.75 |
+| peaked t0.7p0.9 B=256 | vllm | ok (None) | 2577.1 | 25 | 2 | 2 | 1.00 |
+| peaked t0.7p0.9 B=256 | nano_torch | ok (None) | 10749.0 | 6 | 0 | 0 | 0.24 |
+| peaked t0.7p0.9 B=256 | nano_cuda | ok (None) | 301.1 | 218 | 14 | 16 | 8.56 |
+| peaked t1 B=1 | vllm | ok (None) | 103.5 | 2 | 0 | 0 | 1.00 |
+| peaked t1 B=1 | nano_torch | ok (None) | 302.2 | 1 | 0 | 0 | 0.34 |
+| peaked t1 B=1 | nano_cuda | ok (None) | 21.1 | 12 | 1 | 1 | 4.90 |
+| peaked t1 B=4 | vllm | ok (None) | 110.2 | 9 | 1 | 1 | 1.00 |
+| peaked t1 B=4 | nano_torch | ok (None) | 629.3 | 2 | 0 | 0 | 0.18 |
+| peaked t1 B=4 | nano_cuda | ok (None) | 24.9 | 41 | 3 | 3 | 4.43 |
+| peaked t1 B=8 | vllm | ok (None) | 119.4 | 17 | 1 | 1 | 1.00 |
+| peaked t1 B=8 | nano_torch | ok (None) | 725.8 | 3 | 0 | 0 | 0.16 |
+| peaked t1 B=8 | nano_cuda | ok (None) | 26.3 | 78 | 5 | 6 | 4.54 |
+| peaked t1 B=16 | vllm | ok (None) | 136.7 | 30 | 2 | 2 | 1.00 |
+| peaked t1 B=16 | nano_torch | ok (None) | 964.1 | 4 | 0 | 0 | 0.14 |
+| peaked t1 B=16 | nano_cuda | ok (None) | 36.9 | 111 | 7 | 8 | 3.71 |
+| peaked t1 B=32 | vllm | ok (None) | 194.5 | 42 | 3 | 3 | 1.00 |
+| peaked t1 B=32 | nano_torch | ok (None) | 1536.2 | 5 | 0 | 0 | 0.13 |
+| peaked t1 B=32 | nano_cuda | ok (None) | 55.4 | 148 | 10 | 11 | 3.51 |
+| peaked t1 B=64 | vllm | ok (None) | 362.9 | 45 | 3 | 3 | 1.00 |
+| peaked t1 B=64 | nano_torch | ok (None) | 2776.5 | 6 | 0 | 0 | 0.13 |
+| peaked t1 B=64 | nano_cuda | ok (None) | 90.2 | 182 | 12 | 13 | 4.02 |
+| peaked t1 B=128 | vllm | ok (None) | 674.6 | 49 | 3 | 4 | 1.00 |
+| peaked t1 B=128 | nano_torch | ok (None) | 5856.9 | 6 | 0 | 0 | 0.12 |
+| peaked t1 B=128 | nano_cuda | ok (None) | 151.0 | 217 | 14 | 16 | 4.47 |
+| peaked t1 B=256 | vllm | ok (None) | 1296.0 | 51 | 3 | 4 | 1.00 |
+| peaked t1 B=256 | nano_torch | ok (None) | 10645.3 | 6 | 0 | 0 | 0.12 |
+| peaked t1 B=256 | nano_cuda | ok (None) | 273.7 | 240 | 15 | 17 | 4.74 |
+| peaked t0.7p0.9k50 B=1 | vllm | ok (None) | 304.8 | 1 | 0 | 0 | 1.00 |
+| peaked t0.7p0.9k50 B=1 | nano_torch | ok (None) | 303.3 | 1 | 0 | 0 | 1.01 |
+| peaked t0.7p0.9k50 B=1 | nano_cuda | ok (None) | 39.9 | 6 | 0 | 0 | 7.64 |
+| peaked t0.7p0.9k50 B=4 | vllm | ok (None) | 613.1 | 2 | 0 | 0 | 1.00 |
+| peaked t0.7p0.9k50 B=4 | nano_torch | ok (None) | 630.5 | 2 | 0 | 0 | 0.97 |
+| peaked t0.7p0.9k50 B=4 | nano_cuda | ok (None) | 44.6 | 23 | 1 | 2 | 13.76 |
+| peaked t0.7p0.9k50 B=8 | vllm | ok (None) | 386.1 | 5 | 0 | 0 | 1.00 |
+| peaked t0.7p0.9k50 B=8 | nano_torch | ok (None) | 726.0 | 3 | 0 | 0 | 0.53 |
+| peaked t0.7p0.9k50 B=8 | nano_cuda | ok (None) | 50.9 | 40 | 3 | 3 | 7.59 |
+| peaked t0.7p0.9k50 B=16 | vllm | ok (None) | 426.2 | 10 | 1 | 1 | 1.00 |
+| peaked t0.7p0.9k50 B=16 | nano_torch | ok (None) | 963.9 | 4 | 0 | 0 | 0.44 |
+| peaked t0.7p0.9k50 B=16 | nano_cuda | ok (None) | 62.9 | 65 | 4 | 5 | 6.78 |
+| peaked t0.7p0.9k50 B=32 | vllm | ok (None) | 498.4 | 16 | 1 | 1 | 1.00 |
+| peaked t0.7p0.9k50 B=32 | nano_torch | ok (None) | 1530.4 | 5 | 0 | 0 | 0.33 |
+| peaked t0.7p0.9k50 B=32 | nano_cuda | ok (None) | 87.7 | 94 | 6 | 7 | 5.69 |
+| peaked t0.7p0.9k50 B=64 | vllm | ok (None) | 719.0 | 23 | 1 | 2 | 1.00 |
+| peaked t0.7p0.9k50 B=64 | nano_torch | ok (None) | 2762.2 | 6 | 0 | 0 | 0.26 |
+| peaked t0.7p0.9k50 B=64 | nano_cuda | ok (None) | 128.0 | 128 | 8 | 9 | 5.62 |
+| peaked t0.7p0.9k50 B=128 | vllm | ok (None) | 1326.7 | 25 | 2 | 2 | 1.00 |
+| peaked t0.7p0.9k50 B=128 | nano_torch | ok (None) | 5883.3 | 6 | 0 | 0 | 0.23 |
+| peaked t0.7p0.9k50 B=128 | nano_cuda | ok (None) | 216.6 | 152 | 10 | 11 | 6.13 |
+| peaked t0.7p0.9k50 B=256 | vllm | ok (None) | 2292.5 | 29 | 2 | 2 | 1.00 |
+| peaked t0.7p0.9k50 B=256 | nano_torch | ok (None) | 10702.1 | 6 | 0 | 0 | 0.21 |
+| peaked t0.7p0.9k50 B=256 | nano_cuda | ok (None) | 382.4 | 172 | 11 | 12 | 5.99 |
+| flat t0.7p0.9 B=1 | vllm | ok (None) | 270.8 | 1 | 0 | 0 | 1.00 |
+| flat t0.7p0.9 B=1 | nano_torch | ok (None) | 302.7 | 1 | 0 | 0 | 0.89 |
+| flat t0.7p0.9 B=1 | nano_cuda | ok (None) | 35.0 | 7 | 0 | 1 | 7.75 |
+| flat t0.7p0.9 B=4 | vllm | ok (None) | 577.5 | 2 | 0 | 0 | 1.00 |
+| flat t0.7p0.9 B=4 | nano_torch | ok (None) | 629.0 | 2 | 0 | 0 | 0.92 |
+| flat t0.7p0.9 B=4 | nano_cuda | ok (None) | 40.7 | 25 | 2 | 2 | 14.18 |
+| flat t0.7p0.9 B=8 | vllm | ok (None) | 1400.8 | 1 | 0 | 0 | 1.00 |
+| flat t0.7p0.9 B=8 | nano_torch | ok (None) | 727.1 | 3 | 0 | 0 | 1.93 |
+| flat t0.7p0.9 B=8 | nano_cuda | ok (None) | 46.7 | 44 | 3 | 3 | 29.97 |
+| flat t0.7p0.9 B=16 | vllm | ok (None) | 1456.7 | 3 | 0 | 0 | 1.00 |
+| flat t0.7p0.9 B=16 | nano_torch | ok (None) | 958.4 | 4 | 0 | 0 | 1.52 |
+| flat t0.7p0.9 B=16 | nano_cuda | ok (None) | 62.8 | 65 | 4 | 5 | 23.21 |
+| flat t0.7p0.9 B=32 | vllm | ok (None) | 1554.2 | 5 | 0 | 0 | 1.00 |
+| flat t0.7p0.9 B=32 | nano_torch | ok (None) | 1528.5 | 5 | 0 | 0 | 1.02 |
+| flat t0.7p0.9 B=32 | nano_cuda | ok (None) | 93.6 | 88 | 6 | 6 | 16.60 |
+| flat t0.7p0.9 B=64 | vllm | ok (None) | 2064.3 | 8 | 1 | 1 | 1.00 |
+| flat t0.7p0.9 B=64 | nano_torch | ok (None) | 2760.7 | 6 | 0 | 0 | 0.75 |
+| flat t0.7p0.9 B=64 | nano_cuda | ok (None) | 149.1 | 110 | 7 | 8 | 13.85 |
+| flat t0.7p0.9 B=128 | vllm | ok (None) | 4249.3 | 8 | 0 | 1 | 1.00 |
+| flat t0.7p0.9 B=128 | nano_torch | ok (None) | 5885.6 | 6 | 0 | 0 | 0.72 |
+| flat t0.7p0.9 B=128 | nano_cuda | ok (None) | 256.4 | 128 | 8 | 9 | 16.58 |
+| flat t0.7p0.9 B=256 | vllm | ok (None) | 7154.4 | 9 | 1 | 1 | 1.00 |
+| flat t0.7p0.9 B=256 | nano_torch | ok (None) | 10721.3 | 6 | 0 | 0 | 0.67 |
+| flat t0.7p0.9 B=256 | nano_cuda | ok (None) | 459.5 | 143 | 9 | 10 | 15.57 |
+| flat t1 B=1 | vllm | ok (None) | 103.5 | 2 | 0 | 0 | 1.00 |
+| flat t1 B=1 | nano_torch | ok (None) | 302.5 | 1 | 0 | 0 | 0.34 |
+| flat t1 B=1 | nano_cuda | ok (None) | 21.3 | 12 | 1 | 1 | 4.87 |
+| flat t1 B=4 | vllm | ok (None) | 110.6 | 9 | 1 | 1 | 1.00 |
+| flat t1 B=4 | nano_torch | ok (None) | 631.1 | 2 | 0 | 0 | 0.18 |
+| flat t1 B=4 | nano_cuda | ok (None) | 25.0 | 41 | 3 | 3 | 4.43 |
+| flat t1 B=8 | vllm | ok (None) | 119.6 | 17 | 1 | 1 | 1.00 |
+| flat t1 B=8 | nano_torch | ok (None) | 727.6 | 3 | 0 | 0 | 0.16 |
+| flat t1 B=8 | nano_cuda | ok (None) | 26.6 | 77 | 5 | 6 | 4.50 |
+| flat t1 B=16 | vllm | ok (None) | 137.0 | 30 | 2 | 2 | 1.00 |
+| flat t1 B=16 | nano_torch | ok (None) | 967.2 | 4 | 0 | 0 | 0.14 |
+| flat t1 B=16 | nano_cuda | ok (None) | 37.0 | 111 | 7 | 8 | 3.70 |
+| flat t1 B=32 | vllm | ok (None) | 197.2 | 42 | 3 | 3 | 1.00 |
+| flat t1 B=32 | nano_torch | ok (None) | 1535.7 | 5 | 0 | 0 | 0.13 |
+| flat t1 B=32 | nano_cuda | ok (None) | 56.6 | 145 | 9 | 11 | 3.48 |
+| flat t1 B=64 | vllm | ok (None) | 364.3 | 45 | 3 | 3 | 1.00 |
+| flat t1 B=64 | nano_torch | ok (None) | 2775.2 | 6 | 0 | 0 | 0.13 |
+| flat t1 B=64 | nano_cuda | ok (None) | 90.7 | 181 | 12 | 13 | 4.02 |
+| flat t1 B=128 | vllm | ok (None) | 675.1 | 49 | 3 | 4 | 1.00 |
+| flat t1 B=128 | nano_torch | ok (None) | 5859.4 | 6 | 0 | 0 | 0.12 |
+| flat t1 B=128 | nano_cuda | ok (None) | 151.4 | 217 | 14 | 16 | 4.46 |
+| flat t1 B=256 | vllm | ok (None) | 1298.5 | 51 | 3 | 4 | 1.00 |
+| flat t1 B=256 | nano_torch | ok (None) | 10638.9 | 6 | 0 | 0 | 0.12 |
+| flat t1 B=256 | nano_cuda | ok (None) | 273.5 | 240 | 15 | 17 | 4.75 |
+| flat t0.7p0.9k50 B=1 | vllm | ok (None) | 304.9 | 1 | 0 | 0 | 1.00 |
+| flat t0.7p0.9k50 B=1 | nano_torch | ok (None) | 303.1 | 1 | 0 | 0 | 1.01 |
+| flat t0.7p0.9k50 B=1 | nano_cuda | ok (None) | 36.7 | 7 | 0 | 1 | 8.30 |
+| flat t0.7p0.9k50 B=4 | vllm | ok (None) | 612.3 | 2 | 0 | 0 | 1.00 |
+| flat t0.7p0.9k50 B=4 | nano_torch | ok (None) | 630.5 | 2 | 0 | 0 | 0.97 |
+| flat t0.7p0.9k50 B=4 | nano_cuda | ok (None) | 40.8 | 25 | 2 | 2 | 15.00 |
+| flat t0.7p0.9k50 B=8 | vllm | ok (None) | 459.3 | 4 | 0 | 0 | 1.00 |
+| flat t0.7p0.9k50 B=8 | nano_torch | ok (None) | 727.2 | 3 | 0 | 0 | 0.63 |
+| flat t0.7p0.9k50 B=8 | nano_cuda | ok (None) | 45.9 | 45 | 3 | 3 | 10.00 |
+| flat t0.7p0.9k50 B=16 | vllm | ok (None) | 494.1 | 8 | 1 | 1 | 1.00 |
+| flat t0.7p0.9k50 B=16 | nano_torch | ok (None) | 958.4 | 4 | 0 | 0 | 0.52 |
+| flat t0.7p0.9k50 B=16 | nano_cuda | ok (None) | 57.2 | 72 | 5 | 5 | 8.63 |
+| flat t0.7p0.9k50 B=32 | vllm | ok (None) | 547.7 | 15 | 1 | 1 | 1.00 |
+| flat t0.7p0.9k50 B=32 | nano_torch | ok (None) | 1528.1 | 5 | 0 | 0 | 0.36 |
+| flat t0.7p0.9k50 B=32 | nano_cuda | ok (None) | 80.5 | 102 | 7 | 7 | 6.80 |
+| flat t0.7p0.9k50 B=64 | vllm | ok (None) | 744.4 | 22 | 1 | 2 | 1.00 |
+| flat t0.7p0.9k50 B=64 | nano_torch | ok (None) | 2760.8 | 6 | 0 | 0 | 0.27 |
+| flat t0.7p0.9k50 B=64 | nano_cuda | ok (None) | 117.0 | 140 | 9 | 10 | 6.36 |
+| flat t0.7p0.9k50 B=128 | vllm | ok (None) | 1415.4 | 23 | 1 | 2 | 1.00 |
+| flat t0.7p0.9k50 B=128 | nano_torch | ok (None) | 5886.0 | 6 | 0 | 0 | 0.24 |
+| flat t0.7p0.9k50 B=128 | nano_cuda | ok (None) | 193.9 | 169 | 11 | 12 | 7.30 |
+| flat t0.7p0.9k50 B=256 | vllm | ok (None) | 2413.5 | 27 | 2 | 2 | 1.00 |
+| flat t0.7p0.9k50 B=256 | nano_torch | ok (None) | 10716.1 | 6 | 0 | 0 | 0.23 |
+| flat t0.7p0.9k50 B=256 | nano_cuda | ok (None) | 339.0 | 194 | 12 | 14 | 7.12 |
+
+
+## End to end decode (nano_vllm vs vLLM CUDA graph)
+
+| nano config | path | batch | in | out | nano ms/step | nano tok/s | vLLM | vLLM ms/step | vLLM tok/s | nano / vLLM time |
+|---|---|---:|---:|---:|---:|---:|---|---:|---:|---:|
+| bf16 | paged | 1 | 128 | 256 | 12.01 | 83 | bf16 | 12.61 | 79 | 0.95x |
+| bf16 | paged | 16 | 1024 | 256 | 14.08 | 1,136 | bf16 | 14.82 | 1,080 | 0.95x |
+| bf16 | paged | 64 | 1024 | 256 | 22.55 | 2,838 | bf16 | 23.02 | 2,780 | 0.98x |
+| bf16_sampled | paged | 1 | 128 | 256 | 12.03 | 83 | bf16 | 12.87 | 78 | 0.93x |
+| bf16_sampled | paged | 16 | 1024 | 256 | 14.14 | 1,131 | bf16 | 16.15 | 991 | 0.88x |
+| bf16_sampled | paged | 64 | 1024 | 256 | 22.68 | 2,822 | bf16 | 24.76 | 2,585 | 0.92x |
+| w4a16 | paged | 1 | 128 | 256 | 5.09 | 196 | awq_marlin | 5.54 | 181 | 0.92x |
+| w4a16 | paged | 16 | 1024 | 256 | 7.06 | 2,266 | awq_marlin | 7.84 | 2,040 | 0.90x |
+| w4a16 | paged | 64 | 1024 | 256 | 15.00 | 4,267 | awq_marlin | 16.20 | 3,950 | 0.93x |
+| w4a16_sampled | paged | 1 | 128 | 256 | 5.11 | 196 | awq_marlin | 5.81 | 172 | 0.88x |
+| w4a16_sampled | paged | 16 | 1024 | 256 | 7.11 | 2,249 | awq_marlin | 9.33 | 1,716 | 0.76x |
+| w4a16_sampled | paged | 64 | 1024 | 256 | 15.13 | 4,230 | awq_marlin | 18.11 | 3,534 | 0.84x |
+
+## Where a nano decode step goes (nsys)
+
+| capture | ms/step | GPU busy ms | GPU idle ms | kernels/step | launch calls/step | top kernel categories |
+|---|---:|---:|---:|---:|---:|---|
+| nano_w4a16_sampled_b1 | 5.20 | 5.14 | 0.06 | 333 | 5 | gemm 83%, attention 8%, norm 4%, rope 2% |
+| nano_w4a16_sampled_b16 | 7.03 | 6.97 | 0.05 | 335 | 5 | gemm 65%, attention 29%, norm 3%, rope 1% |
+| nano_w4a16_sampled_b64 | 14.63 | 14.58 | 0.05 | 303 | 5 | gemm 49%, attention 47%, norm 1%, sampling 1% |
+| vllmw4_b1 | 5.64 | 5.57 | 0.07 | 367 | 15 | other 68%, gemm 13%, attention 11%, norm 4% |
+| vllmw4_b16 | 7.80 | 7.71 | 0.09 | 431 | 15 | other 52%, attention 29%, gemm 10%, elementwise/copy 4% |
+| vllmw4_b64 | 15.77 | 15.69 | 0.08 | 431 | 15 | other 45%, attention 44%, gemm 5%, elementwise/copy 3% |
+

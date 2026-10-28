@@ -831,3 +831,101 @@ nano 只跑 `w4a16_tiled_full`（fullgraph），其他和 `concur-c1` 相同。
 - **e2e**（ms/step，nano / vLLM AWQ）：b=1 5.24 / 5.55，b=16 7.11 / 7.85，b=64 15.03 / 16.18，b=128/1k 25.83 / 27.48，b=128/512 19.86 / 21.43，b=256/512 36.14 / 39.05。
 - **decode 裡的 GEMM**（每層 µs）：b=1 112.4 / 117.6，b=16 118.5 / 126.0，b=64 198.2 / 220.5，b=128 320.4 / 351.0，b=256 571.4 / 625.5。
 - **VM**：跑完把 Colab VM（`chunk`）關掉了。
+
+## 2026-10-28 11:21 — 採樣器：本機實作（1cb75e3、e98f015）
+
+到目前為止的 benchmark 都是 greedy，但 nano server 的預設是 temperature 0.7、top-p 0.9。第一輪（`kernels-r1`）量到 nano BF16 採樣的成本是 0.42 / 1.02 / 2.62 ms（b=1/16/64），vLLM 是 0.25 / 1.33 / 1.66。這一輪的目標是做一個不排序的採樣器，在每個 batch size 都比 vLLM 快。分支是從 `claude/inference-kernels`（96bb209）開的本機分支 `claude/fast-sampler`。
+
+### 做了什麼
+
+- **vLLM 0.19.1 的採樣路徑**（讀 v0.19.1 的原始碼）：
+  - logits 轉成 fp32，就地除以 temperature；
+  - `apply_top_k_top_p`：B ≥ 8 時走 Triton 的 pivot 搜尋，一個 program 處理一列，grid 是 min(SM 數, B)，最多 18 次；B < 8 時走 PyTorch，整列 sort 加 cumsum；
+  - softmax 之後 `random_sample`（`exponential_`、除法、argmax）；
+  - greedy 是 fp32 副本的 argmax；FlashInfer 的 sampler 要設 `VLLM_USE_FLASHINFER_SAMPLER=1` 才會開。
+- **`kernels/csrc/sampler.cu`**：
+  - bf16/fp16 的 logits 有保序的 16-bit key，除以正的 temperature 不改變順序，所以 top-k 和 top-p 的截斷點都是一個 key 值，用兩層 histogram（高 8 位 256 bin，再加邊界 bin 的低 8 位）就能精確找到，不用排序；
+  - grid 是 (chunks, rows)，每列切成 2048·G 個 token（列數 ≤ 8 時 G=1，≤ 32 時 G=2，其他 G=4）；同一列的 chunk 透過 global atomics 在每列的 workspace 匯合，最後到的 block（ticket，沿用 `w4a16.cu` 的做法）收尾並把 workspace 歸零；
+  - 四個 kernel：stats（max、argmax，greedy 列在這裡結束）、hist（count 和質量，質量是 2^45 的 u64 定點）、refine 兼抽樣、只給 top-k + top-p 列的第二次 refine；
+  - 抽樣是 exponential race，在保留的 token 中取 v − log E 的 argmax，E 由 Philox4x32-10 產生，key 是 engine seed，counter 是（token index / 4、position、seq id 的低 32 位和高 32 位），所以同一個 request 的結果和它所在的 batch 無關。
+- **`sampling.py`**：
+  - PyTorch 路徑（CPU、nvcc 不可用時）改成同值保留的規則：top-k 保留比它大的 token 少於 k 個的 token，top-p 保留比它大的 token 質量和小於 p 倍總和的 token（`keep_mask`），抽樣也改成 exponential race（`sample_rows`）；
+  - `Sampler`：每列的設定用 pinned staging 兩個 slot 輪流一次上傳，和 decode graph 的輸入一樣。
+- **`model_runner.py`**：`launch` 改用 `Sampler`，position 用 `num_tokens + num_inflight`；`config.py` 加 `engine.seed`（`SEED`，預設 0，和 vLLM 相同）。
+- **kbench `sampler`**（e98f015）：
+  - `Kernel` 加可選的 `check`：抽到的 token 要在 float64 reference 的保留集合內（p 加 1e-4 的容差），greedy 列要等於 argmax；
+  - impls 是 vLLM（fp32 副本、temperature、`apply_top_k_top_p`、softmax、`random_sample`）、`nano_torch`（`sample_rows`）、`nano_cuda`（`Sampler`）；
+  - shapes 是 peaked 和 flat 兩種分布 × greedy、(T 0.7, p 0.9)、(T 1)、(T 0.7, p 0.9, k 50) × B = 1–256。
+- **測試**：
+  - CPU：同值規則、top-p 在 top-k 之內、逐 token 的規則（隨機）、`sample_rows` 的分布、`Sampler` 的 staging；
+  - GPU 新檔 `tests/gpu/test_nano_vllm_sampler.py`：保留集合（peaked、flat、ties、−inf）、列數和 vocab 大小、fp16、top-k + top-p 的兩種分支、greedy 取第一個最大值、degenerate 列、deterministic、chi-square、graph replay、fp32 走 PyTorch 路徑；
+  - `test_nano_vllm_async.py` 加上 sampled 的 token 在 sync 和 async 之間相同。
+- **編譯**：本機 docker 裡的 nvcc 編過，0 spill。
+
+## 2026-10-28 11:23 — run `sampler-s1-20261028-112305-colab`：第一版（新 VM `sampler`）
+
+`P1_STEPS="installs cuda129 tests kbench e2e summarize" P1_KERNELS=sampler`；e2e 的 nano 跑 bf16 和 W4A16 tiled，greedy 和 sampled，b=1/16/64；vLLM 跑 bf16 和 AWQ，greedy 和 sampled；nsys 錄 W4A16 sampled 的 b=1/16/64。
+
+- **tests**：776 passed、1 failed，沒有 skip。失敗的是 `test_top_k_and_top_p_cutoffs_in_both_branches`：測試假設每個 peaked 列的 top-p 截斷點都在 top-k 之上的 bin，不成立。改成給前 32 列一個很大的 token（`logits[:32, 0] = 40`），並比較 `key >> KEY_LOW_BITS`。保留集合的測試全過。
+- **kbench**：sampled 的列全部出錯（`Offset increment outside graph capture encountered unexpectedly`）。`nano_torch` 在計時的 lambda 裡做 pinned 上傳，graph capture 不了；capture 失敗後 CUDA 的 RNG generator 停在 capture 狀態，之後每一列都失敗。改成在 factory 裡上傳設定。greedy 的列正常（µs，`nano_cuda` / vLLM）：B=1 15.6 / 41.1，B=16 20.4 / 51.0，B=64 34.9 / 106.0，B=256 78.9 / 297.1。
+- **e2e**（ms/step，nano / vLLM）：
+
+  | | b=1 | b=16 | b=64 |
+  |---|---:|---:|---:|
+  | bf16 greedy | 12.01 / 12.62 | 14.08 / 14.82 | 22.55 / 23.02 |
+  | bf16 sampled | 12.10 / 12.87 | 14.44 / 16.14 | 23.64 / 24.76 |
+  | W4A16 / AWQ greedy | 5.09 / 5.54 | 7.06 / 7.85 | 15.00 / 16.21 |
+  | W4A16 / AWQ sampled | 5.16 / 5.81 | 7.41 / 9.33 | 16.22 / 18.11 |
+
+  - 採樣的成本（sampled 減 greedy，W4A16 / AWQ）：0.07 / 0.27、0.35 / 1.48、1.22 / 1.90 ms。已經在每個 b 都比 vLLM 低，但 b=64 遠高於設計的幾十 µs。
+- **nsys**（每步的 sampler kernel，µs）：hist 72 / 323 / 1,382，refine 20 / 51 / 143，stats 5 / 11 / 23（b=1/16/64）。
+- **原因**（看 SASS）：sm_80 上 shared memory 的 u64 `atomicAdd`、`atomicMax` 和 f32 `atomicAdd` 都編成 compare-and-swap 迴圈（`ATOMS.CAST.SPIN`），只有 32-bit 整數的 add、min、max 是原生指令（`ATOMS.ADD`、`ATOMS.MIN.S32`、`ATOMS.MAX`）；global 的 u64 add、max 是原生的（`RED.E.ADD.64`、`RED.E.MAX.64`）。key 的高 8 位只有 sign 和 7 個 exponent bit，每個 bin 涵蓋 4 倍的數值範圍，所以一列的 logits 集中在少數幾個 bin，CAS 迴圈互相衝突。
+
+## 2026-10-28 12:08 — run `sampler-s2-20261028-120816-colab`：原生 32-bit shared atomics、更細的 bin、top-p 的界、獨立的 draw（a926db2，同一台 VM）
+
+### 改了什麼
+
+- 質量的定點 scale 改成 2^37，加進 shared memory 時拆成兩個 u32（在 bit 19 切開），進 global memory 時合成 u64；一個 block 最多 8192 個 token，兩半都不會溢位。
+- 第一層 bin 從 256 改成 1024（key 的高 10 位），第二層是 64。
+- 只有 top-p 的列：比 max 低超過 ln(V / (1 − p)) nats 的 token 一定不會保留（它們全部加起來不到 max token 質量的 1 − p），只用 register 加進總和，不進 histogram。
+- 抽樣拆成自己的 kernel（draw），不再需要 shared 的 u64 max；draw 加 `__launch_bounds__(256, 2)`，G=4 的版本才不會 spill。
+- 本機用 Python 逐行模擬新的截斷邏輯，3,600 個案例和 reference 沒有差異（包含 top-k + top-p 的兩種分支）。
+
+### 結果
+
+`P1_STEPS="tests kbench e2e summarize"`，其他和 S1 相同。
+
+- **tests**：777 passed，沒有 skip。
+- **kbench**（µs，`nano_cuda` / vLLM，每一列的 check 都過）：
+  - greedy：B=1 15.7 / 41.1，B=16 19.6 / 51.0，B=64 30.5 / 105.8，B=256 79.0 / 296.3；
+  - (T 0.7, p 0.9) peaked：32.8 / 269.0、51.9 / 550.9、104.5 / 882.2、301.1 / 2,577.1；
+  - (T 0.7, p 0.9) flat：35.0 / 270.8、62.8 / 1,456.7、149.1 / 2,064.3、459.5 / 7,154.4；
+  - (T 1) peaked：21.1 / 103.5、36.9 / 136.7、90.2 / 362.9、273.7 / 1,296.0；
+  - (T 0.7, p 0.9, k 50) peaked：39.9 / 304.8、62.9 / 426.2、128.0 / 719.0、382.4 / 2,292.5；
+  - 8 個 B、全部設定和兩種分布都比 vLLM 快：greedy 2.6–3.8 倍，採樣 3.5–30 倍。`nano_torch`（PyTorch 路徑）0.3 ms（B=1）到 10.7 ms（B=256）。
+- **e2e**（ms/step，nano / vLLM）：
+
+  | | b=1 | b=16 | b=64 |
+  |---|---:|---:|---:|
+  | bf16 greedy | 12.01 / 12.61 | 14.08 / 14.82 | 22.55 / 23.02 |
+  | bf16 sampled | 12.03 / 12.87 | 14.14 / 16.15 | 22.68 / 24.76 |
+  | W4A16 / AWQ greedy | 5.09 / 5.54 | 7.06 / 7.84 | 15.00 / 16.20 |
+  | W4A16 / AWQ sampled | 5.11 / 5.81 | 7.11 / 9.33 | 15.13 / 18.11 |
+
+  - 採樣的成本（sampled 減 greedy）：W4A16 0.02 / 0.05 / 0.13 ms，AWQ 0.27 / 1.49 / 1.91；bf16 0.02 / 0.06 / 0.13，vLLM bf16 0.26 / 1.33 / 1.74。
+  - nano sampled 比 vLLM sampled 快：W4A16 12% / 24% / 16%，bf16 7% / 12% / 8%。
+- **nsys**（每步的 sampler kernel，µs，b=1/16/64）：hist 9.5 / 25.8 / 67.8，draw 5.1 / 17.4 / 51.7，refine 6.1 / 12.9 / 29.7，stats 5.1 / 10.4 / 22.9；合計 26 / 67 / 172（S1 是 96 / 385 / 1,548）。
+- **門檻**：G1 過；G2 的「每個 B 都比 vLLM 快」和「greedy 比原本的 argmax 快」過，「b=64 (0.7, 0.9) ≤ 60 µs」沒過（peaked 104.5、flat 149.1）；G3 的「sampled 減 greedy 低於 vLLM」和「sampled 比 vLLM 快」過，「≤ 0.1 ms」在 b=64 沒過（0.13）。
+- **b=64 剩下的時間**：只讀 logits 的 stats 是 23 µs，四個 kernel 合計 172 µs。benchmark 的 prompt 是隨機 token，推測每列的分布很平（e2e 的 kernel 時間比 kbench 的 flat 還長）：hist 裡很多 token 落在同幾個 bin，同一個 warp 的 lane 在 u32 atomics 上仍然衝突重播；draw 的 nucleus 很大，幾乎每個 warp step 都有保留的 token，每個 token 付 Philox、`log1pf`、`__logf` 約 50 個指令。改善方向：warp-aggregated atomics（`__match_any_sync` 加 `__reduce_add_sync`），以及每列只用一個亂數的 inverse-CDF 抽樣。這次沒做。
+
+## 2026-10-28 12:47 — run `sampler-serve-20261028-124708-colab`：線上，greedy 和 sampled（同一台 VM，Phase 2 的 harness）
+
+`BENCH_PHASE=phase2 P2_STEPS="serve summarize" P2_CONCURRENCY="1 16 64"`，`P2_RUNS="vllm:vllm:w1,w1s nano:nano:w1,w1s:ENGINE_MULTIPROCESS=true,MAX_NUM_BATCHED_TOKENS=2048,NUM_KVCACHE_BLOCKS=0"`，和 `kernels-serve` 的設定相同；tests 已經在 S2 跑過，這次不跑。程式在 a926db2。
+
+- **W1**（greedy，output tok/s · ITL p50 ms）：nano 83 · 12.03、979 · 14.08、1,840 · 22.62；vLLM 78 · 12.78、937 · 14.83、1,780 · 23.22（c=1/16/64）。
+- **W1s**（temperature 0.7、top-p 0.9）：nano 81 · 12.05、904 · 14.16、1,833 · 22.73；vLLM 75 · 13.05、612 · 16.27、1,692 · 25.00。
+  - 採樣讓 ITL p50 多 nano 0.02 / 0.08 / 0.11 ms，vLLM 0.27 / 1.44 / 1.78 ms。
+  - `kernels-serve` 時 nano 的 W1s 是 78 / 855 / 1,711 tok/s，ITL p50 12.50 / 15.17 / 25.31 ms；c=64 的 ITL p50 從落後 vLLM 1.1% 變成領先 9%。
+  - vLLM 在 c=16 sampled 又只有 612 tok/s（greedy 937），TTFT p50 498 ms，和 `kernels-serve` 一樣，原因沒查。
+- **G4**：過。W1s 在 c=1/16/64，nano 的 ITL p50 都比 vLLM 低，throughput 都比 vLLM 高。
+- **VM**：跑完把 Colab VM（`sampler`）關掉了。
