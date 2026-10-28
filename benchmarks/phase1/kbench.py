@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import functools
 import json
 import math
 import re
@@ -74,6 +75,13 @@ from src.serving.nano_vllm.kernels.silu_mul import (  # noqa: E402
     silu_and_mul_reference,
     silu_mul,
     silu_mul_reference,
+)
+from src.serving.nano_vllm.kernels.sampler import sampler_extension  # noqa: E402
+from src.serving.nano_vllm.sampling import (  # noqa: E402
+    Sampler,
+    SamplingOptions,
+    keep_mask,
+    sample_tokens_device,
 )
 from src.serving.nano_vllm.kernels.w4a16 import (  # noqa: E402
     W4A16_CONFIG,
@@ -121,6 +129,8 @@ class Kernel:
                size of `inputs` (W4A16: the 4-bit weight, not the bf16 one it is
                quantized from). Sets how many copies the timing rotates through.
     ncu        regex for ncu --kernel-name: the kernels the ncu step profiles.
+    check      (outputs, reference outputs) -> {"ok": ...}, for outputs that the
+               atol/rtol comparison cannot judge (sampled tokens); default compare.
     """
 
     name: str
@@ -134,6 +144,7 @@ class Kernel:
     ncu: str = "."
     atol: float = 2e-2
     rtol: float = 2e-2
+    check: Callable[[tuple, tuple], dict] | None = None
 
 
 KERNELS: dict[str, Kernel] = {}
@@ -262,7 +273,12 @@ def bench_kernel(kernel: Kernel, device: str, env: dict) -> list[dict]:
                 if isinstance(expected, Exception):
                     raise RuntimeError(f"reference failed: {expected}")
                 inputs = make_inputs(kernel, shape, device, seed=0)
-                row.update(compare(as_tuple(factory(inputs)()), expected, kernel.atol, kernel.rtol))
+                outs = as_tuple(factory(inputs)())
+                if kernel.check is not None:
+                    row.update(kernel.check(outs, expected))
+                else:
+                    row.update(compare(outs, expected, kernel.atol, kernel.rtol))
+                outs = None
                 input_bytes = sum(t.nbytes for t in tensors(inputs))
                 inputs = None
                 if device == "cuda" and row["ok"]:
@@ -912,6 +928,129 @@ register(
         bytes=lambda s: s["N"] * s["K"] // 2 + 2 * s["N"] * s["K"] // 128 + 2 * s["N"] * s["K"],
         rotate_bytes=_w4a16_weight_bytes,
         ncu="dequantize_w4a16",
+    )
+)
+
+
+# Sampling one token per row of [B, 128256] bf16 logits, as after Llama 3's
+# lm_head. "peaked" rows look like a model's (N(0, 2.5) plus a few tokens 10-14
+# higher: top-p 0.9 keeps a handful), "flat" ones are N(0, 1) (it keeps tens of
+# thousands, the worst case for a cutoff search). Each impl is checked by
+# membership: every token it draws must be one the float64 keep_mask keeps
+# (greedy: the argmax). vLLM's impl is its v0.19.1 sampler path for these
+# settings: fp32 copy, temperature, apply_top_k_top_p (Triton from 8 rows,
+# else a full sort), softmax, random_sample; greedy is argmax of the fp32 copy.
+SAMPLER_VOCAB = 128256
+SAMPLER_SETTINGS = {  # mode -> (temperature, top_p, top_k)
+    "greedy": (0.0, 1.0, 0),
+    "t0.7p0.9": (0.7, 0.9, 0),  # the nano server's default
+    "t1": (1.0, 1.0, 0),  # vLLM's default: a plain draw
+    "t0.7p0.9k50": (0.7, 0.9, 50),
+}
+
+
+def _sampler_inputs(s: dict, dev: str) -> dict:
+    temperature, top_p, top_k = SAMPLER_SETTINGS[s["mode"]]
+    rows = s["B"]
+    if s["dist"] == "flat":
+        logits = torch.randn(rows, SAMPLER_VOCAB, device=dev)
+    else:
+        logits = 2.5 * torch.randn(rows, SAMPLER_VOCAB, device=dev)
+        spikes = torch.randint(0, SAMPLER_VOCAB, (rows, 8), device=dev)
+        logits.scatter_add_(1, spikes, 10 + 4 * torch.rand(rows, 8, device=dev))
+    return {"logits": logits.to(BF16), "temperature": temperature, "top_p": top_p, "top_k": top_k}
+
+
+def _sampler_reference(i: dict) -> torch.Tensor:
+    logits = i["logits"]
+    rows = logits.shape[0]
+    if i["temperature"] <= 0:
+        return torch.zeros_like(logits, dtype=torch.bool).scatter_(1, logits.argmax(-1, keepdim=True), True)
+    full = functools.partial(torch.full, (rows,), device=logits.device)
+    # A hair of slack on top_p: fp32 masses may keep a token whose float64 mass
+    # above it is just past the cutoff.
+    top_p = min(1.0, i["top_p"] * (1 + 1e-4)) if i["top_p"] < 1 else 1.0
+    return keep_mask(
+        logits.double(),
+        full(i["temperature"], dtype=torch.float64),
+        full(top_p, dtype=torch.float64),
+        full(i["top_k"], dtype=torch.int32),
+    )
+
+
+def _sampled_in_mask(outs: tuple, expected: tuple) -> dict:
+    tokens, mask = outs[0].long().view(-1), expected[0].to(outs[0].device)
+    if tokens.numel() != mask.shape[0]:
+        return {"ok": False, "error": f"{tokens.numel()} tokens for {mask.shape[0]} rows"}
+    return {"ok": bool(mask.gather(1, tokens.view(-1, 1)).all())}
+
+
+def _sampler_options(i: dict) -> list[SamplingOptions]:
+    option = SamplingOptions(temperature=i["temperature"], top_p=i["top_p"], top_k=i["top_k"] or -1)
+    return [option] * i["logits"].shape[0]
+
+
+def _vllm_sampler(i: dict):
+    logits = i["logits"]
+    if not logits.is_cuda:
+        raise Unavailable("needs a GPU")
+    from vllm.v1.sample.ops.topk_topp_sampler import apply_top_k_top_p, random_sample
+
+    if i["temperature"] <= 0:
+        return lambda: logits.to(torch.float32).argmax(dim=-1)
+    rows = logits.shape[0]
+    temperature = torch.full((rows,), i["temperature"], device=logits.device)
+    top_p = torch.full((rows,), i["top_p"], device=logits.device) if i["top_p"] < 1 else None
+    top_k = torch.full((rows,), i["top_k"], dtype=torch.int32, device=logits.device) if i["top_k"] else None
+
+    def run():
+        x = logits.to(torch.float32)
+        x.div_(temperature.unsqueeze(1))
+        x = apply_top_k_top_p(x, top_k, top_p)
+        return random_sample(x.softmax(dim=-1, dtype=torch.float32), {})
+
+    return run
+
+
+def _nano_sampler_torch(i: dict):
+    logits, options = i["logits"], _sampler_options(i)
+    return lambda: sample_tokens_device(logits, options)
+
+
+def _nano_sampler_cuda(i: dict):
+    logits = i["logits"]
+    if not logits.is_cuda:
+        raise Unavailable("needs a GPU")
+    if sampler_extension() is None:
+        raise RuntimeError("building kernels/csrc/sampler.cu failed (see the log)")
+    rows = logits.shape[0]
+    sampler = Sampler(rows, logits.device)
+    options, seq_ids, positions = _sampler_options(i), list(range(rows)), [0] * rows
+    out = torch.empty(rows, dtype=torch.long, device=logits.device)
+
+    def run():
+        sampler.sample(logits, options, seq_ids, positions, out)
+        return out
+
+    return run
+
+
+register(
+    Kernel(
+        name="sampler",
+        shapes=[
+            {"dist": dist, "mode": mode, "B": rows}
+            for dist in ("peaked", "flat")
+            for mode in SAMPLER_SETTINGS
+            if not (mode == "greedy" and dist == "flat")
+            for rows in (1, 4, 8, 16, 32, 64, 128, 256)
+        ],
+        inputs=_sampler_inputs,
+        impls={"vllm": _vllm_sampler, "nano_torch": _nano_sampler_torch, "nano_cuda": _nano_sampler_cuda},
+        reference=_sampler_reference,
+        bytes=lambda s: 2 * s["B"] * SAMPLER_VOCAB,
+        check=_sampled_in_mask,
+        ncu="sample_(stats|hist|refine)_kernel|top_k_top_p",
     )
 )
 
