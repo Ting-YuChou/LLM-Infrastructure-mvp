@@ -356,3 +356,52 @@ The GPU suite caught one more capture hazard: a garbage collection during
 a capture can destroy an earlier engine's graphs and free their pool with
 `cudaFree`, which invalidates the capture (LOG.md). Captures now collect
 first and keep the collector off, as vLLM does.
+
+### W4A16 online (run `w4serve-20261029-211009-colab`)
+
+Phase 2's workloads with 4-bit weights on both sides, on one VM:
+
+- **vLLM 0.19.1**: the `hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4` checkpoint (`awq_marlin`), served under the BF16 model's name so that `vllm bench serve` sends the same tokens to both servers (engine `vllmw4` in `run_phase2.sh`).
+- **nano**: `WEIGHT_QUANT=w4a16` (round-to-nearest, groups of 128, quantized at load), core process, async scheduling, 2,048-token chunks, KV sized from 0.9 of GPU memory (227,824 tokens; vLLM 237,824).
+- The two quantizations differ, so the generated text differs too. `--ignore-eos` keeps the output lengths equal.
+
+The run was meant to check one suspicion. A step with more than 256 rows (`tiled_max_rows`), which means any prefill chunk past 256 tokens, dequantizes each weight to BF16 and calls cuBLAS, while vLLM's Marlin handles every M directly. That costs time, but nano is still ahead of vLLM.
+
+| | c=1 | c=16 | c=64 |
+|---|---:|---:|---:|
+| W1 output tok/s, nano / vLLM | **192** / 167 | **1,629** / 1,502 | **2,101** / 1,949 |
+| W1 TTFT p50 (ms) | **15.0** / 21.1 | **109.1** / 140.2 | **283.1** / 568.9 |
+| W1 ITL p50 (ms) | **5.16** / 5.76 | **7.11** / 7.90 | **15.09** / 16.39 |
+| W1 ITL p99 (ms) | **5.50** / 6.19 | 86.42 / **76.10** | **92.72** / 183.64 |
+| W1u (uncached) TTFT p50 (ms) | **89.1** / 95.1 | **347.5** / 654.1 | - |
+| W1s (T 0.7, top-p 0.9) output tok/s | **181** / 156 | **1,385** / 796 | **2,102** / 1,839 |
+| W1s ITL p50 (ms) | **5.18** / 6.03 | **7.16** / 9.47 | **15.21** / 18.33 |
+
+W3 (4096-token prompts arriving on top of 32 decodes):
+
+| | nano | vLLM |
+|---|---:|---:|
+| background ITL p50 / p99 / p99.9 (ms) | **8.33** / 12.1 / **128.9** | 9.20 / **11.9** / 160.3 |
+| background tok/s | **3,538** | 3,209 |
+| long-prompt TTFT p50 (ms) | **356.6** | 416.2 |
+
+The only metric where nano is behind is W1's ITL p99 at c=16. Every request completed with the full output.
+
+**What the dequantization costs** (nsys of the same server in a single process, w1c16 and w1c64):
+- A step past 256 rows launches 128 dequantizations, one per projection. They take 14.0 ms per step, 109 µs per launch on average.
+- The same steps spend 63 ms in cuBLAS's BF16 GEMMs.
+- The 14 ms reads 3.6 GB and writes 14 GB, so the kernel runs at about 81% of peak bandwidth. Only a W4A16 kernel that handles large M directly would remove it.
+- An uncached 1024-token prompt at c=1 is one such step, so dequantization is about 14 of its 89 ms of TTFT. It is also inside the ~90 ms steps that set ITL p99 at c=16 and 64.
+
+**256-token chunks** (`nano_w4_c256`) keep every step within the tiled kernel, with no dequantization, but need four times as many steps:
+
+| | c=1 | c=16 | c=64 |
+|---|---:|---:|---:|
+| W1 ITL p99 (ms), 256 / 2,048 chunks | 5.52 / 5.50 | **25.14** / 86.42 | **31.12** / 92.72 |
+| W1 ITL p50 (ms) | 5.14 / 5.16 | 7.10 / 7.11 | 27.32 / **15.09** |
+| W1 TTFT p50 (ms) | 14.8 / 15.0 | 175.7 / **109.1** | 1,877.3 / **283.1** |
+| W1u TTFT p50 (ms) | 95.5 / **89.1** | **175.1** / 347.5 | - |
+
+At c=64, the 256-token budget is mostly taken by decodes, so prefills stall: TTFT rises sevenfold and ITL p50 almost doubles. The default stays at 2,048-token chunks.
+
+As in `sampler-serve`, vLLM's sampled throughput at c=16 is far below its greedy one: 796 against 1,502 tok/s, with a TTFT p50 of 613 ms. This was not investigated.

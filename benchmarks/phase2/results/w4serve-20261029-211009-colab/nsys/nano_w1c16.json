@@ -1,0 +1,277 @@
+{
+  "label": "nano_w1c16",
+  "window_ms": 4525.590727,
+  "gpu_busy_frac": 0.9868660407921152,
+  "per_step_source": "median of 240 NVTX step ranges",
+  "steps": 274,
+  "batch": 1,
+  "per_step": {
+    "wall_ms": 5.713284,
+    "gpu_busy_ms": 5.6719875,
+    "gpu_idle_ms": 0.0412965,
+    "kernels": 262.0,
+    "launch_calls": 2.0,
+    "launch_api_ms": 0.4535845
+  },
+  "kernel_time_by_category": {
+    "gemm": {
+      "ms": 3145.25703,
+      "frac": 0.7046180288182504
+    },
+    "attention": {
+      "ms": 658.170512,
+      "frac": 0.14744703035978546
+    },
+    "other": {
+      "ms": 448.624283,
+      "frac": 0.10050331497628381
+    },
+    "norm": {
+      "ms": 82.634129,
+      "frac": 0.01851215863559902
+    },
+    "activation": {
+      "ms": 80.145578,
+      "frac": 0.01795465955571184
+    },
+    "rope": {
+      "ms": 39.505356,
+      "frac": 0.008850210271204209
+    },
+    "elementwise/copy": {
+      "ms": 6.585355,
+      "frac": 0.0014752879700799554
+    },
+    "sampling": {
+      "ms": 2.853734,
+      "frac": 0.0006393094130852705
+    }
+  },
+  "top_kernels": [
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn",
+      "category": "gemm",
+      "count": 4096,
+      "total_ms": 2031.825441,
+      "avg_us": 496.05113305664065,
+      "frac": 0.45518087186031736
+    },
+    {
+      "name": "gemm_w4a16_tiled_kernel",
+      "category": "gemm",
+      "count": 30848,
+      "total_ms": 912.446484,
+      "avg_us": 29.578789030082987,
+      "frac": 0.20441135233969202
+    },
+    {
+      "name": "_paged_decode_split_kernel",
+      "category": "attention",
+      "count": 8704,
+      "total_ms": 507.036341,
+      "avg_us": 58.25325608915441,
+      "frac": 0.1135891101194481
+    },
+    {
+      "name": "dequantize_w4a16_tiled_kernel",
+      "category": "other",
+      "count": 4096,
+      "total_ms": 448.624283,
+      "avg_us": 109.52741284179687,
+      "frac": 0.10050331497628381
+    },
+    {
+      "name": "_gemv_kernel",
+      "category": "gemm",
+      "count": 273,
+      "total_ms": 200.985105,
+      "avg_us": 736.2091758241759,
+      "frac": 0.04502580461824104
+    },
+    {
+      "name": "_paged_prefill_kernel",
+      "category": "attention",
+      "count": 1024,
+      "total_ms": 110.339561,
+      "avg_us": 107.7534775390625,
+      "frac": 0.024718884094662084
+    },
+    {
+      "name": "_fused_add_rms_norm_kernel",
+      "category": "norm",
+      "count": 17472,
+      "total_ms": 81.74408,
+      "avg_us": 4.678576007326007,
+      "frac": 0.018312764892591742
+    },
+    {
+      "name": "_silu_and_mul_kernel",
+      "category": "activation",
+      "count": 8736,
+      "total_ms": 80.145578,
+      "avg_us": 9.174173305860807,
+      "frac": 0.01795465955571184
+    },
+    {
+      "name": "_paged_decode_reduce_kernel",
+      "category": "attention",
+      "count": 8704,
+      "total_ms": 40.79461,
+      "avg_us": 4.686880744485293,
+      "frac": 0.009139036145675282
+    },
+    {
+      "name": "_rope_cache_write_kernel",
+      "category": "rope",
+      "count": 8736,
+      "total_ms": 39.505356,
+      "avg_us": 4.522133241758242,
+      "frac": 0.008850210271204209
+    },
+    {
+      "name": "vectorized_gather_kernel",
+      "category": "elementwise/copy",
+      "count": 1358,
+      "total_ms": 3.580511,
+      "avg_us": 2.6366060382916054,
+      "frac": 0.0008021260516766297
+    },
+    {
+      "name": "sample_stats_kernel",
+      "category": "sampling",
+      "count": 273,
+      "total_ms": 2.853734,
+      "avg_us": 10.453238095238095,
+      "frac": 0.0006393094130852705
+    },
+    {
+      "name": "vectorized_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 832,
+      "total_ms": 1.886184,
+      "avg_us": 2.267048076923077,
+      "frac": 0.00042255346364126014
+    },
+    {
+      "name": "index_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 279,
+      "total_ms": 1.11866,
+      "avg_us": 4.009534050179211,
+      "frac": 0.00025060845476206566
+    },
+    {
+      "name": "_rms_norm_kernel",
+      "category": "norm",
+      "count": 273,
+      "total_ms": 0.890049,
+      "avg_us": 3.260252747252747,
+      "frac": 0.00019939374300727817
+    }
+  ],
+  "cuda_api": {
+    "cudaEventSynchronize": {
+      "calls": 273,
+      "total_ms": 2470.384688
+    },
+    "cudaLaunchKernel": {
+      "calls": 8764,
+      "total_ms": 127.566919
+    },
+    "cudaGraphLaunch": {
+      "calls": 241,
+      "total_ms": 111.494856
+    },
+    "cuLaunchKernelEx": {
+      "calls": 7168,
+      "total_ms": 67.84847
+    },
+    "cudaMemcpyAsync": {
+      "calls": 1121,
+      "total_ms": 16.071489
+    },
+    "cudaMemsetAsync": {
+      "calls": 1024,
+      "total_ms": 8.966172
+    },
+    "cudaEventRecordWithFlags": {
+      "calls": 366,
+      "total_ms": 1.373391
+    },
+    "cudaEventQuery": {
+      "calls": 151,
+      "total_ms": 0.983589
+    },
+    "cudaStreamIsCapturing": {
+      "calls": 624,
+      "total_ms": 0.895646
+    },
+    "cudaMalloc": {
+      "calls": 4,
+      "total_ms": 0.535891
+    },
+    "cudaHostAlloc": {
+      "calls": 2,
+      "total_ms": 0.062164
+    },
+    "cudaEventCreateWithFlags": {
+      "calls": 21,
+      "total_ms": 0.036134
+    },
+    "cudaFree": {
+      "calls": 1,
+      "total_ms": 0.00251
+    }
+  },
+  "timeline_slice_ns": [
+    13856432796,
+    13873572648
+  ],
+  "nvtx_phases": {
+    "collect": {
+      "count": 273,
+      "median_us": 4473.53,
+      "total_ms": 2480.532267
+    },
+    "forward": {
+      "count": 31,
+      "median_us": 37079.686,
+      "total_ms": 1141.172872
+    },
+    "replay": {
+      "count": 241,
+      "median_us": 777.205,
+      "total_ms": 280.873568
+    },
+    "sample": {
+      "count": 273,
+      "median_us": 254.68,
+      "total_ms": 128.308862
+    },
+    "detokenize": {
+      "count": 4095,
+      "median_us": 19.029,
+      "total_ms": 91.214018
+    },
+    "prepare": {
+      "count": 31,
+      "median_us": 1788.936,
+      "total_ms": 56.697729
+    },
+    "postprocess": {
+      "count": 272,
+      "median_us": 59.0805,
+      "total_ms": 28.887999
+    },
+    "schedule": {
+      "count": 273,
+      "median_us": 57.122,
+      "total_ms": 16.488506
+    },
+    "publish": {
+      "count": 273,
+      "median_us": 44.297,
+      "total_ms": 12.985959
+    }
+  }
+}

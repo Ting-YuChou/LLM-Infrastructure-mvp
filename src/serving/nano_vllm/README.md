@@ -26,6 +26,12 @@ Offline decode, ms per step, CUDA graphs on both sides.
 The GEMMs on their own (nsys, inside the decode graph) run 1.05–1.11× faster
 than Marlin per layer at every batch size from 1 to 256.
 
+Online (`vllm bench serve`, random 1024-token prompts, 256 output tokens),
+nano serves 192 / 1,629 / 2,101 tok/s at c=1/16/64 against vLLM AWQ's
+167 / 1,502 / 1,949, with ITL p50 5.16 / 7.11 / 15.09 ms against
+5.76 / 7.90 / 16.39. An uncached 1024-token prompt's TTFT p50 is 89 ms
+against 95 at c=1, and 348 ms against 654 at c=16.
+
 ### BF16 and FP8 KV cache
 
 Offline decode, ms per step:
@@ -144,6 +150,7 @@ needs a GPU.
 | result | data | write-up |
 |---|---|---|
 | W4A16 decode and per-layer GEMMs | [chunk-c7 summary](../../../benchmarks/phase1/results/chunk-c7-20261024-052230-colab/summary.md) | [phase1 README](../../../benchmarks/phase1/README.md), round 4 |
+| W4A16 online vs vLLM AWQ | [w4serve summary](../../../benchmarks/phase2/results/w4serve-20261029-211009-colab/summary.md) | [phase2 README](../../../benchmarks/phase2/README.md), W4A16 online |
 | Sampling: kernel and offline decode | [sampler-s2 summary](../../../benchmarks/phase1/results/sampler-s2-20261028-120816-colab/summary.md) | [phase1 README](../../../benchmarks/phase1/README.md), round 5 |
 | Sampling online (W1s) | [sampler-serve summary](../../../benchmarks/phase2/results/sampler-serve-20261028-124708-colab/summary.md) | same |
 | BF16 / FP8 KV offline decode | [kernels-r4 summary](../../../benchmarks/phase1/results/kernels-r4-20261023-072114-colab/summary.md) | [phase1 README](../../../benchmarks/phase1/README.md), round 1 |

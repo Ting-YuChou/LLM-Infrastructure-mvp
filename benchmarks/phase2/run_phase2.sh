@@ -42,7 +42,10 @@
 #
 # P2_RUNS entries are engine:label:workloads[:extra], workloads comma-separated,
 # extra comma-separated: KEY=VALUE environment settings for nano, server
-# arguments for vllm and sglang. Default: the M0 baseline (below).
+# arguments for vllm, vllmw4 and sglang. Default: the M0 baseline (below).
+# vllmw4 is vLLM on P2_VLLM_W4_MODEL (AWQ int4, downloaded on first use),
+# served under P2_MODEL's name so the same tokenizer and requests apply; the
+# nano counterpart is nano with WEIGHT_QUANT=w4a16.
 #
 # Env: P0_ROOT (default /workspace/p0), P0_RUN_ID (default: UTC timestamp),
 # P0_REPO_DIR (default: the checkout holding this script), P2_STEPS, P2_RUNS,
@@ -50,7 +53,8 @@
 # (KEY=VALUE,... for those servers), P2_OFFLINE_RUNS (nano_bench --runs),
 # P2_CONCURRENCY (w1 levels, default "1 2 4 8 16 32 64"), P2_NANO_KV_BLOCKS
 # (default: vLLM's logged KV token count / 16 from this run, else 9000),
-# P2_MODEL (default unsloth/Meta-Llama-3.1-8B-Instruct), P0_VLLM_VERSION.
+# P2_MODEL (default unsloth/Meta-Llama-3.1-8B-Instruct), P2_VLLM_W4_MODEL (default
+# hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4, as Phase 1), P0_VLLM_VERSION.
 set -uo pipefail
 
 CODE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -60,6 +64,8 @@ RUN_ID="${P0_RUN_ID:-$(date -u +%Y%m%d-%H%M%S)}"
 OUT="${ROOT}/results/${RUN_ID}"
 MODEL_ID="${P2_MODEL:-unsloth/Meta-Llama-3.1-8B-Instruct}"
 MODEL="${ROOT}/models/$(basename "${MODEL_ID}")"
+W4_MODEL_ID="${P2_VLLM_W4_MODEL:-hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4}"
+W4_MODEL="${ROOT}/models/$(basename "${W4_MODEL_ID}")"
 VENVS="${ROOT}/venvs"
 PY="${VENVS}/vllm/bin/python"
 VLLM_VERSION="${P0_VLLM_VERSION:-0.19.1}"
@@ -110,7 +116,9 @@ installs() {
   local rc=0
   command -v uv > /dev/null || python3 -m pip install -q uv > "${OUT}/logs/install_uv.log" 2>&1
   run_step install_venv install_venv || rc=1
-  [[ -x "${VENVS}/sglang/bin/python" ]] || run_step install_sglang install_sglang || rc=1
+  if [[ " ${RUNS} " == *" sglang:"* && ! -x "${VENVS}/sglang/bin/python" ]]; then
+    run_step install_sglang install_sglang || rc=1
+  fi
   run_step install_nsys install_nsys || rc=1
   [[ -f "${MODEL}/config.json" ]] || run_step download_model download_model || rc=1
   [[ -f "${CUDA_ENV}" ]] || run_step cuda129 cuda129 || rc=1  # the CUDA kernels' tests
@@ -183,7 +191,7 @@ w3() {  # background decodes with long prompts arriving on top (seed 1: distinct
 nano_kv_blocks() {  # vLLM's KV capacity in 16-token blocks, so both hold the same tokens
   local tokens
   if [[ -n "${P2_NANO_KV_BLOCKS:-}" ]]; then echo "${P2_NANO_KV_BLOCKS}"; return; fi
-  tokens="$(grep -ohE 'GPU KV cache size: [0-9,]+ tokens' "${OUT}"/logs/vllm*_server.log 2>/dev/null \
+  tokens="$(grep -ohE 'GPU KV cache size: [0-9,]+ tokens' "${OUT}"/logs/vllm{,_*}_server.log 2>/dev/null \
     | head -1 | grep -oE '[0-9,]+' | tr -d ,)"
   echo $(( ${tokens:-144000} / 16 ))
 }
@@ -209,6 +217,11 @@ run_server() {  # engine label workloads extra
       port=8000; ready=/health
       cmd=("${VENVS}/vllm/bin/vllm" serve "${MODEL}" --host 127.0.0.1 --port 8000
         --max-model-len 8192 --seed 0 ${args[@]+"${args[@]}"}) ;;
+    vllmw4)
+      [[ -f "${W4_MODEL}/config.json" ]] || download_w4_model > "${OUT}/logs/download_w4_model.log" 2>&1 || return 1
+      port=8000; ready=/health
+      cmd=("${VENVS}/vllm/bin/vllm" serve "${W4_MODEL}" --served-model-name "${MODEL}" --host 127.0.0.1
+        --port 8000 --max-model-len 8192 --seed 0 ${args[@]+"${args[@]}"}) ;;
     sglang)
       port=30000; ready=/health_generate
       cmd=(env "PATH=${VENVS}/sglang/bin:${PATH}" "${VENVS}/sglang/bin/python" -m sglang.launch_server
@@ -231,6 +244,11 @@ run_server() {  # engine label workloads extra
   done
   stop_server
   return "${rc}"
+}
+
+download_w4_model() {  # download_model reads MODEL_ID and MODEL
+  local MODEL_ID="${W4_MODEL_ID}" MODEL="${W4_MODEL}"
+  download_model
 }
 
 snapshot() {  # name port: the server's /metrics (and nano's /stats) around a workload
