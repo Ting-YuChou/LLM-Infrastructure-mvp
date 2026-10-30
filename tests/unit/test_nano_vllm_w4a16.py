@@ -499,3 +499,18 @@ def test_config_reads_quantization_config(tmp_path):
     del data["quantization_config"]
     (tmp_path / "config.json").write_text(json.dumps(data))
     assert NanoLlamaConfig.from_pretrained(tmp_path).quantization_config is None
+
+
+def test_large_launch_config_keeps_the_most_blocks_busy():
+    from serving.nano_vllm.kernels.w4a16 import W4A16_CONFIG, large_launch_config
+
+    # 1,024 rows: 8 chunks of 128 keep 8 x 13 = 104 of 108 SMs busy, 4 of 256 all 108.
+    assert large_launch_config(1024, 4096, W4A16_CONFIG, 108) == (256, 128, 108)
+    # 512 rows: 4 x 27 either way; the tie goes to 128x256.
+    assert large_launch_config(512, 4096, W4A16_CONFIG, 108) == (128, 256, 108)
+    # Only 256x128 divides N = 384.
+    assert large_launch_config(300, 384, W4A16_CONFIG, 108)[:2] == (256, 128)
+    assert large_launch_config(300, 4096, {**W4A16_CONFIG, "large_tile": "256x128", "tiled_grid": 7}, 108) == (
+        256, 128, 7)
+    with pytest.raises(ValueError, match="divisible"):
+        large_launch_config(300, 384, {**W4A16_CONFIG, "large_tile": "128x256"}, 108)

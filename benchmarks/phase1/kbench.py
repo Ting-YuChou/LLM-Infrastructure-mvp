@@ -93,6 +93,8 @@ from src.serving.nano_vllm.kernels.w8a16 import (  # noqa: E402
 from src.serving.nano_vllm.kernels.w4a16 import (  # noqa: E402
     AWQ_PACK_ORDER,
     W4A16_CONFIG,
+    W4A16_LARGE_TILES,
+    W4A16_TILED_MAX_ROWS,
     awq_unpack,
     dequantize_w4a16,
     pack_w4a16,
@@ -849,10 +851,26 @@ def _need_w4a16(i: dict, max_rows: int, what: str) -> None:
         raise RuntimeError("building kernels/csrc/w4a16.cu failed (see the log)")
 
 
-def _nano_tiled(i: dict):
-    _need_w4a16(i, W4A16_CONFIG["tiled_max_rows"], "gemm_w4a16_tiled")
-    x, weight = i["x"], _awq_weight(i)
-    return lambda: w4a16_linear(x, weight)
+def _nano_tiled(max_rows: int):
+    def factory(i: dict):
+        _need_w4a16(i, max_rows, "gemm_w4a16_tiled")
+        x, weight = i["x"], _awq_weight(i)
+        return lambda: w4a16_linear(x, weight, config={"tiled_max_rows": max_rows})
+
+    return factory
+
+
+def _nano_large(tile: str):
+    """gemm_w4a16_large at any row count (tiled_max_rows 0), past 64 rows only:
+    below that a chunk would be mostly padding."""
+    def factory(i: dict):
+        if i["x"].shape[0] < 64:
+            raise NotApplicable("gemm_w4a16_large is timed from 64 rows")
+        _need_w4a16(i, 1 << 30, "gemm_w4a16_large")
+        x, weight = i["x"], _awq_weight(i)
+        return lambda: w4a16_linear(x, weight, config={"tiled_max_rows": 0, "large_tile": tile})
+
+    return factory
 
 
 def _vllm_awq_marlin(i: dict):
@@ -902,19 +920,22 @@ register(
             {"layer": layer, "M": m, "N": n, "K": k}
             for layer, (n, k) in LINEAR_SHAPES.items()
             if layer != "lm_head"  # stays bf16 in AWQ checkpoints
-            for m in (1, 4, 8, 16, 32, 64, 128, 256)
+            # past 256: prefill chunks (gemm_w4a16_large, or dequantize + cuBLAS before)
+            for m in (1, 4, 8, 16, 32, 64, 128, 256, 384, 512, 1024, 2048)
         ],
         inputs=_awq_inputs,
         impls={
             "vllm_awq_marlin": _vllm_awq_marlin,
-            "cuda_tiled": _nano_tiled,
+            "cuda_tiled": _nano_tiled(W4A16_CONFIG["tiled_max_rows"]),
+            "cuda_tiled_512": _nano_tiled(W4A16_TILED_MAX_ROWS),
+            **{f"cuda_large_{tile}": _nano_large(tile) for tile in W4A16_LARGE_TILES},
             "dequant_cublas": _dequant_cublas,
             "cublas_bf16": _cublas_dequantized,
         },
         reference=lambda i: w4a16_linear_reference(i["x"], _awq_weight(i)),
         bytes=lambda s: _w4a16_weight_bytes(s) + 2 * s["M"] * (s["K"] + s["N"]),
         rotate_bytes=_w4a16_weight_bytes,
-        ncu="gemm_w4a16|Marlin|marlin",
+        ncu="gemm_w4a16|Marlin|marlin|dequantize_w4a16",
     )
 )
 

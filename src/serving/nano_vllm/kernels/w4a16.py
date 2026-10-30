@@ -52,10 +52,12 @@ The tensor-core kernels split K across blocks when the weight is short; the
 splits meet in a persistent fp32 workspace (w4a16_workspace).
 Tiled weights use gemm_w4a16_tiled up to W4A16_CONFIG["tiled_max_rows"]
 rows, one launch taking past 64 rows several chunks of rows; see the kernel
-for its schedule.
-Bigger batches dequantize the whole weight and call F.linear: they are
-compute-bound, so the extra pass over the weight is a small share of their
-time.
+for its schedule. Past that (prefill chunks) gemm_w4a16_large takes them,
+up to W4A16_LARGE_MAX_ROWS rows per launch: the same schedule over chunks
+of 128 or 256 rows whose warps split rows and columns instead of K, so each
+dequantized fragment feeds four m16 tiles. Row-layout weights past their
+kernels' limits, and anything without the extension, dequantize the whole
+weight and call F.linear.
 """
 
 from __future__ import annotations
@@ -106,6 +108,11 @@ W4A16_CONFIG = {
     "tiled_blocks_per_sm": 1,
     "tiled_grid": 0,
     "tiled_max_rows": 256,
+    # gemm_w4a16_large past tiled_max_rows (False: dequantize + F.linear, the
+    # path before round 6, 14 ms of a 2,048-token step in run w4serve);
+    # "auto" or one of W4A16_LARGE_TILES.
+    "large": True,
+    "large_tile": "auto",
 }
 W4A16_LAYOUTS = ("rows", "tiled")
 # (TILE_K, TILE_N) the tiled kernel is built for, by m16 tiles (16-row
@@ -124,6 +131,11 @@ _TILED_TILES_BY_MT = {
     4: ("64x256", "64x128", "128x128"),
 }
 W4A16_TILED_N_MULTIPLE = 128
+# gemm_w4a16_large's (rows per chunk, TILE_N), csrc/w4a16.cu's LargeShape,
+# and rows per launch (kLargeMaxRows: chunks x slices counters fit
+# w4a16_workspace's N / 16).
+W4A16_LARGE_TILES = {"128x256": (128, 256), "256x128": (256, 128)}
+W4A16_LARGE_MAX_ROWS = 2048
 # Rows of one chunk at most (16 x the largest m16 tile count built), and of
 # one launch (csrc/w4a16.cu's kTiledMaxChunkRows, kTiledMaxRows).
 W4A16_TILED_MAX_CHUNK_ROWS = 64
@@ -417,26 +429,54 @@ def w4a16_linear(
 def _tiled_linear(
     x: torch.Tensor, weight: W4A16Weight, bias: Optional[torch.Tensor], rows: int, config: dict
 ) -> torch.Tensor:
-    """gemm_w4a16_tiled, one launch, up to tiled_max_rows rows."""
+    """gemm_w4a16_tiled up to tiled_max_rows rows (one launch), gemm_w4a16_large past that."""
     n, k = weight.shape
+    tiled = 0 < rows <= min(config["tiled_max_rows"], W4A16_TILED_MAX_ROWS)
     if (
         x.is_cuda
         and x.dtype == weight.dtype
         and x.dtype in (torch.bfloat16, torch.float16)
-        and 0 < rows <= min(config["tiled_max_rows"], W4A16_TILED_MAX_ROWS)
+        and (tiled or (rows > 0 and config["large"]))
     ):  # pragma: no cover - depends on CUDA
         extension = load_cuda_extension("w4a16")
         if extension is not None:
             flat = x.reshape(rows, k).contiguous()
             out = torch.empty(rows, n, dtype=x.dtype, device=x.device)
             _, counters = w4a16_workspace(x.device, n)
-            tile_k, tile_n, grid = tiled_launch_config(rows, n, k, config, _sm_count(x.device))
-            extension.gemm_w4a16_tiled(
-                flat, weight.qweight, weight.scales, weight.zeros, counters, out, tile_k, tile_n, grid
-            )
+            args = (weight.qweight, weight.scales, weight.zeros, counters)
+            if tiled:
+                tile_k, tile_n, grid = tiled_launch_config(rows, n, k, config, _sm_count(x.device))
+                extension.gemm_w4a16_tiled(flat, *args, out, tile_k, tile_n, grid)
+            else:
+                for start in range(0, rows, W4A16_LARGE_MAX_ROWS):
+                    stop = min(start + W4A16_LARGE_MAX_ROWS, rows)
+                    tile_m, tile_n, grid = large_launch_config(stop - start, n, config, _sm_count(x.device))
+                    extension.gemm_w4a16_large(flat[start:stop], *args, out[start:stop], tile_m, tile_n, grid)
             out = out.view(*x.shape[:-1], n)
             return out if bias is None else out + bias
     return F.linear(x, dequantize_w4a16(weight, x.dtype), bias)
+
+
+def large_launch_config(rows: int, n: int, config: dict, sm_count: int) -> tuple[int, int, int]:
+    """(rows per chunk, TILE_N, grid) of one gemm_w4a16_large launch. "auto"
+    takes the tile whose chunks of rows keep the most blocks busy (each
+    chunk gets grid // chunks of the persistent grid), 128x256 on a tie."""
+    grid = config["tiled_grid"] or sm_count * config["tiled_blocks_per_sm"]
+    name = config["large_tile"]
+    if name == "auto":
+        fits = [t for t, (_, tile_n) in W4A16_LARGE_TILES.items() if n % tile_n == 0]
+        if not fits:
+            raise ValueError(f"no gemm_w4a16_large tile divides N = {n}")
+
+        def busy(tile: str) -> int:
+            chunks = -(-rows // W4A16_LARGE_TILES[tile][0])
+            return chunks * max(1, grid // chunks) if chunks <= grid else grid
+
+        name = max(fits, key=lambda t: (busy(t), t == "128x256"))
+    tile_m, tile_n = W4A16_LARGE_TILES[name]
+    if n % tile_n:
+        raise ValueError(f"tile {name} needs N divisible by {tile_n}, got {n}")
+    return tile_m, tile_n, grid
 
 
 def w4a16_tiled_trace(

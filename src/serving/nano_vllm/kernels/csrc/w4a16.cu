@@ -879,13 +879,14 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
     const int group = TILE_K >= 128 ? row0 / 8 : 0;
     return reinterpret_cast<const uint4*>(stage(s) + Sh::kABytes)[Sh::kBWords + (group * Sh::kCols + col) * 8 + g];
   };
-  // Its zero points, as dequant_pair biases. Read from the stage where they
-  // are used rather than double-buffered like the scales: four more live
-  // registers would spill the MT 3-4 builds (248-252 registers before).
-  auto fetch_zeros = [&](int s, uint32_t (&zp)[8]) {
+  // Its zero points (two words, zero_pairs decodes them). Read at the top of
+  // each tile, before the tile's last row refills a stage: a warp running
+  // ahead refills stage s at the end of tile t + 1, after every warp has
+  // reached tile t's last barrier, so a read later than that could race.
+  auto fetch_zeros = [&](int s) {
     const int group = TILE_K >= 128 ? row0 / 8 : 0;
     const uint2* z = reinterpret_cast<const uint2*>(stage(s) + Sh::kABytes + 16 * (Sh::kBWords + Sh::kSWords));
-    zero_pairs<T>(z[(group * Sh::kCols + col) * 8 + g], zp);
+    return z[(group * Sh::kCols + col) * 8 + g];
   };
   auto mma_row = [&](const uint32_t (&af)[MT][4], const uint4& bw, const uint4& packed_scales,
                      const uint32_t (&zp)[8]) {
@@ -1101,10 +1102,12 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
   for (int t = begin; t < end; ++t) {
     const int s_next = s + 1 == kTiledStages ? 0 : s + 1;
     // A warp's rows of a stage share one group: up to MT 2 its zero points
-    // are decoded once per tile, past that once per row (registers).
+    // are decoded once per tile, past that once per row (eight registers
+    // fewer; the MT 3-4 builds were at 248-252).
     constexpr bool kTileZeros = MT <= 2;
+    const uint2 zw = fetch_zeros(s);
     uint32_t zp_tile[8];
-    if constexpr (kTileZeros) fetch_zeros(s, zp_tile);
+    if constexpr (kTileZeros) zero_pairs<T>(zw, zp_tile);
 #pragma unroll
     for (int rr = 0; rr < R; ++rr) {
       if (rr + 1 < R) {
@@ -1122,7 +1125,7 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
         mma_row(a_cur, b_cur, sc_cur, zp_tile);
       } else {
         uint32_t zp[8];
-        fetch_zeros(s, zp);  // stage s stays valid: the refill above went to s - 1
+        zero_pairs<T>(zw, zp);
         mma_row(a_cur, b_cur, sc_cur, zp);
       }
 #pragma unroll
@@ -1151,6 +1154,305 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
       for (int e = 0; e < kTraceEvents; ++e) trace[blockIdx.x * kTraceEvents + e] = trace_sh[e];
     }
   }
+}
+
+// gemm_w4a16_large: tiled weights for prefill-sized batches (past
+// tiled_max_rows), where dequantizing each weight to T for cuBLAS cost
+// 14 ms of a 2,048-token step (run w4serve). The schedule is
+// gemm_w4a16_tiled's: tiles numbered slice * (K / 64) + k tile, block b of a
+// chunk of rows takes [b * iters, (b + 1) * iters), and the chunks of rows
+// walk the weight in step so it comes from DRAM once. The block differs: a
+// chunk is 64 WM rows, and the eight warps split the rows and columns of a
+// slice instead of the k16 rows of a stage. Warp (wm, wn) owns rows
+// 64 wm .. +63 and n64 column wn, every k16 row, so each dequantized weight
+// fragment feeds four m16 tiles and no two warps add into the same output.
+// A slice the block holds whole is written from registers. A stripe end
+// shared with other blocks goes through fp32 slots: the block stores its
+// partial in slot 2 b (its stripe's first slice) or 2 b + 1 (its last), and
+// the last block to arrive sums the slots in block order, so every run
+// gives the same bits.
+constexpr int kLargeStages = 4;
+constexpr int kLargeTileK = 64;
+constexpr int kLargeMaxRows = 2048;  // per launch: chunks x slices counters stay within N / 16
+
+template <int WM, int WN>
+struct LargeShape {
+  static constexpr int kRows = 64 * WM;  // rows of x per chunk
+  static constexpr int kCols = WN;       // n64 columns per slice
+  static constexpr int kTileN = 64 * WN;
+  static constexpr int kKRows = kLargeTileK / 16;
+  static constexpr int kAChunks = kLargeTileK / 8;  // 16-byte chunks per row of the x tile
+  static constexpr int kABytes = kRows * kLargeTileK * 2;
+  static constexpr int kBWords = kKRows * kCols * 32;
+  static constexpr int kSWords = kCols * 8;  // a stage's k rows share one scale group
+  static constexpr int kZWords = kCols * 4;
+  static constexpr int kStageBytes = kABytes + 16 * (kBWords + kSWords + kZWords);
+  static constexpr int kFlagOffset = kLargeStages * kStageBytes;
+  static constexpr int kSmemBytes = kFlagOffset + 16;
+  static_assert(WM * WN == kTiledWarps, "eight warps");
+  static_assert(kStageBytes % 128 == 0, "stages start on 128-byte lines");
+  static_assert(kSmemBytes <= 163 * 1024, "shared memory per block");
+  static_assert((kRows * kAChunks) % kTiledThreads == 0 && kBWords % kTiledThreads == 0 &&
+                    kSWords + kZWords <= kTiledThreads,
+                "whole cp.async rounds");
+};
+
+template <typename T, int WM, int WN>
+__global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_large_kernel(
+    const T* __restrict__ x,
+    const uint4* __restrict__ qweight,
+    const uint4* __restrict__ scales,
+    const uint4* __restrict__ zeros,
+    T* __restrict__ y,
+    float* __restrict__ slots,
+    int* __restrict__ counters,
+    int rows,
+    int n,
+    int k,
+    int iters,
+    int chunk_blocks) {
+  using Sh = LargeShape<WM, WN>;
+  using T2 = typename Traits<T>::T2;
+  constexpr int MT = 4;
+  constexpr int TILE_K = kLargeTileK;
+  const int chunk = blockIdx.x / chunk_blocks;
+  const int block = blockIdx.x - chunk * chunk_blocks;
+  const int m = min(Sh::kRows, rows - chunk * Sh::kRows);
+  x += static_cast<int64_t>(chunk) * Sh::kRows * k;
+  y += static_cast<int64_t>(chunk) * Sh::kRows * n;
+  slots += static_cast<int64_t>(chunk) * 2 * chunk_blocks * Sh::kRows * Sh::kTileN;
+  counters += chunk * (n / Sh::kTileN);
+  extern __shared__ __align__(128) unsigned char smem[];
+  int& last_block = *reinterpret_cast<int*>(smem + Sh::kFlagOffset);
+  const int tid = threadIdx.x;
+  const int warp = tid / 32;
+  const int lane = tid % 32;
+  const int g = lane / 4;
+  const int c = lane % 4;
+  const int wn = warp % WN;  // this warp's n64 column of the slice
+  const int wm = warp / WN;  // and its 64 rows of the chunk
+  const int k_tiles = k / TILE_K;
+  const int units = n / 64;
+  const int total = k_tiles * (n / Sh::kTileN);
+  const int begin = block * iters;
+  const int end = min(begin + iters, total);
+  if (begin >= end) return;
+  auto stage = [&](int s) { return smem + s * Sh::kStageBytes; };
+
+  // Rows m .. kRows - 1 of x are never loaded: zero them once in every stage.
+  {
+    const int pad = (Sh::kRows - m) * Sh::kAChunks;
+    for (int i = tid; i < kLargeStages * pad; i += kTiledThreads)
+      reinterpret_cast<uint4*>(stage(i / pad))[m * Sh::kAChunks + i % pad] = make_uint4(0, 0, 0, 0);
+  }
+
+  // Fixed per-thread offsets of the loads, as in gemm_w4a16_tiled.
+  int b_off[Sh::kBWords / kTiledThreads];
+#pragma unroll
+  for (int j = 0; j < Sh::kBWords / kTiledThreads; ++j) {
+    const int i = tid + j * kTiledThreads;
+    const int unit = i / 32;  // k16 row unit / kCols, column unit % kCols
+    b_off[j] = ((unit / Sh::kCols) * units + unit % Sh::kCols) * 32 + i % 32;
+  }
+  constexpr int kARowStep = kTiledThreads / Sh::kAChunks;
+  constexpr int kAJobs = Sh::kRows / kARowStep;
+  static_assert(kARowStep % 8 == 0, "one swizzle per thread");
+  const int a_row = tid / Sh::kAChunks;
+  const int a_ch = tid % Sh::kAChunks;
+  const T* x_thread = x + static_cast<int64_t>(a_row) * k + a_ch * 8;
+  const int a_dst = a_row * TILE_K + (a_ch ^ (a_row % 8)) * 8;
+  const int64_t a_step = static_cast<int64_t>(kARowStep) * k;
+  unsigned a_rows = 0;  // bit j: row a_row + j * kARowStep is below m
+#pragma unroll
+  for (int j = 0; j < kAJobs; ++j) a_rows |= (a_row + j * kARowStep < m ? 1u : 0u) << j;
+  int ld_t = begin;
+  int ld_slice = begin / k_tiles;
+  int ld_kr = begin - ld_slice * k_tiles;
+  const int b_step = Sh::kKRows * units * 32;  // uint4 per k tile
+  auto b_slice = [&](int slice) { return qweight + static_cast<int64_t>(slice) * Sh::kCols * 32; };
+  const T* ld_x = x_thread + ld_kr * TILE_K;
+  const uint4* ld_b = b_slice(ld_slice) + static_cast<int64_t>(ld_kr) * b_step;
+  auto load = [&](int s) {
+    T* a = reinterpret_cast<T*>(stage(s));
+#pragma unroll
+    for (int j = 0; j < kAJobs; ++j)
+      if (a_rows >> j & 1) cp_async_16(a + a_dst + j * kARowStep * TILE_K, ld_x + j * a_step, 16);
+    uint4* b = reinterpret_cast<uint4*>(stage(s) + Sh::kABytes);
+#pragma unroll
+    for (int j = 0; j < Sh::kBWords / kTiledThreads; ++j) cp_async_16(b + tid + j * kTiledThreads, ld_b + b_off[j], 16);
+    const int64_t group_unit = static_cast<int64_t>(ld_kr * TILE_K / 128) * units + ld_slice * Sh::kCols;
+    if (tid < Sh::kSWords) {
+      cp_async_16(b + Sh::kBWords + tid, scales + group_unit * 8 + tid, 16);
+    } else if (tid < Sh::kSWords + Sh::kZWords) {
+      cp_async_16(b + Sh::kBWords + tid, zeros + group_unit * 4 + (tid - Sh::kSWords), 16);
+    }
+  };
+  auto load_next = [&](int s) {
+    if (ld_t < end) load(s);
+    cp_async_commit();  // an empty group past the end keeps the wait counts uniform
+    ++ld_t;
+    if (++ld_kr == k_tiles) {
+      ld_kr = 0;
+      ++ld_slice;
+      ld_x = x_thread;
+      ld_b = b_slice(ld_slice);
+    } else {
+      ld_x += TILE_K;
+      ld_b += b_step;
+    }
+  };
+
+  float acc[MT][8][4];
+  auto zero_acc = [&]() {
+#pragma unroll
+    for (int mt = 0; mt < MT; ++mt)
+#pragma unroll
+      for (int j = 0; j < 8; ++j)
+#pragma unroll
+        for (int r = 0; r < 4; ++r) acc[mt][j][r] = 0.f;
+  };
+  auto fetch = [&](int s, int r, uint32_t (&af)[MT][4], uint4& bw) {
+    const T* a = reinterpret_cast<const T*>(stage(s));
+#pragma unroll
+    for (int mt = 0; mt < MT; ++mt)
+      ldmatrix_x4(af[mt], a + (64 * wm + 16 * mt + lane % 16) * TILE_K + ((2 * r + lane / 16) ^ (lane % 8)) * 8);
+    bw = reinterpret_cast<const uint4*>(stage(s) + Sh::kABytes)[(r * Sh::kCols + wn) * 32 + lane];
+  };
+  auto fetch_scales = [&](int s) {
+    return reinterpret_cast<const uint4*>(stage(s) + Sh::kABytes)[Sh::kBWords + wn * 8 + g];
+  };
+  auto fetch_zeros = [&](int s) {  // at the top of a tile, as in gemm_w4a16_tiled
+    return reinterpret_cast<const uint2*>(stage(s) + Sh::kABytes + 16 * (Sh::kBWords + Sh::kSWords))[wn * 8 + g];
+  };
+  auto mma_row = [&](const uint32_t (&af)[MT][4], const uint4& bw, const uint4& packed_scales,
+                     const uint32_t (&zp)[8]) {
+    const uint32_t* words = reinterpret_cast<const uint32_t*>(&bw);
+    const T* s8 = reinterpret_cast<const T*>(&packed_scales);
+#pragma unroll
+    for (int i = 0; i < 4; ++i) {
+      const uint32_t sc[2] = {broadcast_scale<T>(s8[2 * i]), broadcast_scale<T>(s8[2 * i + 1])};
+      uint32_t bf[4];  // b0, b1 of n8 tile 2i, then of tile 2i + 1
+#pragma unroll
+      for (int p = 0; p < 4; ++p) bf[p] = hmul2_bits<T>(dequant_pair<T>(words[i], p, zp[2 * i + p / 2]), sc[p / 2]);
+#pragma unroll
+      for (int mt = 0; mt < MT; ++mt) {
+        mma16816<T>(acc[mt][2 * i], af[mt], bf[0], bf[1]);
+        mma16816<T>(acc[mt][2 * i + 1], af[mt], bf[2], bf[3]);
+      }
+    }
+  };
+
+  // acc element (mt, j, h): row 64 wm + 16 mt + g + 8 h, columns 64 wn + 8 j + 2c and + 1 of the slice.
+  auto finish_slice = [&](int slice) {
+    const int first = slice * k_tiles;
+    const int lo = first / iters;  // the blocks whose stripes meet this slice
+    const int hi = min((first + k_tiles - 1) / iters, chunk_blocks - 1);
+    const int col0 = 64 * wn + 2 * c;
+    if (lo == hi) {
+      T* ys = y + slice * Sh::kTileN + col0;
+#pragma unroll
+      for (int mt = 0; mt < MT; ++mt)
+#pragma unroll
+        for (int h = 0; h < 2; ++h) {
+          const int row = 64 * wm + 16 * mt + g + 8 * h;
+          if (row < m) {
+#pragma unroll
+            for (int j = 0; j < 8; ++j) {
+              T2 v;
+              v.x = Traits<T>::from_float(acc[mt][j][2 * h]);
+              v.y = Traits<T>::from_float(acc[mt][j][2 * h + 1]);
+              *reinterpret_cast<T2*>(ys + static_cast<int64_t>(row) * n + 8 * j) = v;
+            }
+          }
+        }
+      return;
+    }
+    // Slot 2 b + 1 holds a stripe's last slice, 2 b its first: among the
+    // blocks lo..hi of this slice, only lo can have started in an earlier one.
+    constexpr int64_t kSlot = Sh::kRows * Sh::kTileN;
+    const int lo_slot = 2 * lo + (lo * iters < first ? 1 : 0);
+    float* mine = slots + (block == lo ? lo_slot : 2 * block) * kSlot + col0;
+#pragma unroll
+    for (int mt = 0; mt < MT; ++mt)
+#pragma unroll
+      for (int h = 0; h < 2; ++h) {
+        const int row = 64 * wm + 16 * mt + g + 8 * h;
+#pragma unroll
+        for (int j = 0; j < 8; ++j)
+          __stcg(reinterpret_cast<float2*>(mine + row * Sh::kTileN + 8 * j),
+                 make_float2(acc[mt][j][2 * h], acc[mt][j][2 * h + 1]));
+      }
+    __syncthreads();
+    if (tid == 0) last_block = atom_add_acq_rel(counters + slice, 1) == hi - lo;
+    __syncthreads();
+    if (!last_block) return;
+    // The whole block sums the slots, 4 columns a thread at a time, in block
+    // order: the same bits every run.
+    constexpr int kVecs = Sh::kTileN / 4;
+    T* ys = y + slice * Sh::kTileN;
+    for (int i = tid; i < m * kVecs; i += kTiledThreads) {
+      const int row = i / kVecs;
+      const int v = i % kVecs;
+      float4 sum = make_float4(0.f, 0.f, 0.f, 0.f);
+      for (int b = lo; b <= hi; ++b) {
+        const float4 part = __ldcg(reinterpret_cast<const float4*>(
+            slots + (b == lo ? lo_slot : 2 * b) * kSlot + row * Sh::kTileN + 4 * v));
+        sum = make_float4(sum.x + part.x, sum.y + part.y, sum.z + part.z, sum.w + part.w);
+      }
+      T2 lo2, hi2;
+      lo2.x = Traits<T>::from_float(sum.x);
+      lo2.y = Traits<T>::from_float(sum.y);
+      hi2.x = Traits<T>::from_float(sum.z);
+      hi2.y = Traits<T>::from_float(sum.w);
+      T2* dst = reinterpret_cast<T2*>(ys + static_cast<int64_t>(row) * n + 4 * v);
+      dst[0] = lo2;
+      dst[1] = hi2;
+    }
+    if (tid == 0) counters[slice] = 0;  // ready for the next call
+  };
+
+  // Main loop. Unlike gemm_w4a16_tiled there is no register double buffer
+  // (its 24 registers spilled this kernel): a warp reads a row's fragments
+  // as it starts the row, and everything a tile needs from its stage is read
+  // before the tile's last row refills a stage and meets the barrier, so a
+  // warp running ahead never overwrites a stage still being read.
+  zero_acc();
+#pragma unroll
+  for (int s = 0; s < kLargeStages - 1; ++s) load_next(s);
+  cp_async_wait<kLargeStages - 2>();
+  __syncthreads();
+  int s = 0;
+  int slice = begin / k_tiles;
+  int kr = begin - slice * k_tiles;
+  for (int t = begin; t < end; ++t) {
+    const uint2 zw = fetch_zeros(s);
+    const uint4 sc = fetch_scales(s);
+#pragma unroll
+    for (int rr = 0; rr < Sh::kKRows; ++rr) {
+      uint32_t af[MT][4];
+      uint4 bw;
+      fetch(s, rr, af, bw);
+      if (rr + 1 == Sh::kKRows) {
+        load_next(s == 0 ? kLargeStages - 1 : s - 1);  // the stage of tile t - 1, read by everyone
+        cp_async_wait<kLargeStages - 2>();             // tile t + 1 has landed
+        __syncthreads();
+      }
+      uint32_t zp[8];
+      zero_pairs<T>(zw, zp);
+      mma_row(af, bw, sc, zp);
+    }
+    s = s + 1 == kLargeStages ? 0 : s + 1;
+    if (kr == k_tiles - 1 && t != end - 1) {
+      finish_slice(slice);
+      zero_acc();
+    }
+    if (++kr == k_tiles) {
+      kr = 0;
+      ++slice;
+    }
+  }
+  finish_slice((end - 1) / k_tiles);
+  cp_async_wait<0>();
 }
 
 // The tiled weight back to [N, K] in the scales' dtype, for batches too big
@@ -1463,6 +1765,48 @@ void launch_tiled_config(const torch::Tensor& x, const torch::Tensor& qweight, c
   TORCH_CHECK(false, "gemm_w4a16_tiled: no kernel built for ", tile_k, "x", tile_n, " tiles and ", x.size(0), " rows");
 }
 
+template <typename T, int WM, int WN>
+void launch_large(const torch::Tensor& x, const torch::Tensor& qweight, const torch::Tensor& scales,
+                  const torch::Tensor& zeros, const torch::Tensor& counters, torch::Tensor& out, int grid,
+                  cudaStream_t stream) {
+  using Sh = LargeShape<WM, WN>;
+  const auto kernel = gemm_w4a16_large_kernel<T, WM, WN>;
+  static bool configured = false;  // once per instantiation; the first call runs before any capture
+  if (!configured) {
+    C10_CUDA_CHECK(cudaFuncSetAttribute(kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, Sh::kSmemBytes));
+    configured = true;
+  }
+  const int m = static_cast<int>(x.size(0));
+  const int k = static_cast<int>(x.size(1));
+  const int n = static_cast<int>(out.size(1));
+  const int slices = n / Sh::kTileN;
+  const int total = (k / kLargeTileK) * slices;
+  const int chunks = (m + Sh::kRows - 1) / Sh::kRows;
+  const int chunk_grid = std::max(1, grid / chunks);
+  const int iters = (total + chunk_grid - 1) / chunk_grid;
+  const int chunk_blocks = (total + iters - 1) / iters;
+  TORCH_CHECK(counters.numel() >= static_cast<int64_t>(chunks) * slices,
+              "gemm_w4a16_large: counters must have one entry per slice and chunk of rows");
+  torch::Tensor slots = torch::empty({static_cast<int64_t>(chunks) * 2 * chunk_blocks * Sh::kRows * Sh::kTileN},
+                                     x.options().dtype(torch::kFloat32));
+  kernel<<<chunks * chunk_blocks, kTiledThreads, Sh::kSmemBytes, stream>>>(
+      static_cast<const T*>(x.data_ptr()), static_cast<const uint4*>(qweight.data_ptr()),
+      static_cast<const uint4*>(scales.data_ptr()), static_cast<const uint4*>(zeros.data_ptr()),
+      static_cast<T*>(out.data_ptr()), slots.data_ptr<float>(), counters.data_ptr<int>(), m, n, k, iters,
+      chunk_blocks);
+  C10_CUDA_KERNEL_LAUNCH_CHECK();
+}
+
+// The (WM, WN) built; w4a16.py's W4A16_LARGE_TILES lists the same.
+template <typename T>
+void launch_large_config(const torch::Tensor& x, const torch::Tensor& qweight, const torch::Tensor& scales,
+                         const torch::Tensor& zeros, const torch::Tensor& counters, torch::Tensor& out,
+                         int64_t tile_m, int64_t tile_n, int grid, cudaStream_t stream) {
+  if (tile_m == 128 && tile_n == 256) return launch_large<T, 2, 4>(x, qweight, scales, zeros, counters, out, grid, stream);
+  if (tile_m == 256 && tile_n == 128) return launch_large<T, 4, 2>(x, qweight, scales, zeros, counters, out, grid, stream);
+  TORCH_CHECK(false, "gemm_w4a16_large: no kernel built for ", tile_m, "x", tile_n, " tiles");
+}
+
 void check_tiled_weight(const torch::Tensor& qweight, const torch::Tensor& scales, const torch::Tensor& zeros) {
   TORCH_CHECK(qweight.is_cuda() && scales.is_cuda(), "w4a16 tiled: CUDA tensors expected");
   TORCH_CHECK(qweight.scalar_type() == torch::kInt32 && qweight.dim() == 4 && qweight.is_contiguous() &&
@@ -1509,6 +1853,34 @@ void gemm_w4a16_tiled(torch::Tensor x, torch::Tensor qweight, torch::Tensor scal
   } else {
     launch_tiled_config<__half>(x, qweight, scales, zeros, counters, out, tile_k, tile_n, static_cast<int>(grid),
                                 trace, stream);
+  }
+}
+
+void gemm_w4a16_large(torch::Tensor x, torch::Tensor qweight, torch::Tensor scales, torch::Tensor zeros,
+                      torch::Tensor counters, torch::Tensor out, int64_t tile_m, int64_t tile_n, int64_t grid) {
+  check_tiled_weight(qweight, scales, zeros);
+  const int64_t k = qweight.size(0) * 16;
+  const int64_t n = qweight.size(1) * 64;
+  TORCH_CHECK(x.is_cuda() && x.dim() == 2 && x.is_contiguous() && x.size(1) == k && aligned16(x),
+              "gemm_w4a16_large: x must be a contiguous, 16-byte aligned [M, K] CUDA tensor");
+  TORCH_CHECK(x.size(0) >= 1 && x.size(0) <= kLargeMaxRows, "gemm_w4a16_large: 1 to ", kLargeMaxRows,
+              " rows per launch");
+  TORCH_CHECK(x.scalar_type() == scales.scalar_type(), "gemm_w4a16_large: x and scales must share a dtype");
+  TORCH_CHECK(out.is_cuda() && out.is_contiguous() && out.scalar_type() == x.scalar_type() && out.dim() == 2 &&
+                  out.size(0) == x.size(0) && out.size(1) == n && aligned16(out),
+              "gemm_w4a16_large: out must be a contiguous, 16-byte aligned [M, N] tensor of x's dtype");
+  TORCH_CHECK(tile_n > 0 && n % tile_n == 0 && k % kLargeTileK == 0,
+              "gemm_w4a16_large: TILE_N must divide N and K must be a multiple of ", kLargeTileK);
+  TORCH_CHECK(counters.is_cuda() && counters.scalar_type() == torch::kInt32 && counters.is_contiguous(),
+              "gemm_w4a16_large: counters must be a zeroed int32 CUDA tensor");
+  TORCH_CHECK(grid >= 1, "gemm_w4a16_large: grid must be positive");
+  const auto stream = c10::cuda::getCurrentCUDAStream();
+  if (x.scalar_type() == torch::kBFloat16) {
+    launch_large_config<__nv_bfloat16>(x, qweight, scales, zeros, counters, out, tile_m, tile_n,
+                                       static_cast<int>(grid), stream);
+  } else {
+    launch_large_config<__half>(x, qweight, scales, zeros, counters, out, tile_m, tile_n, static_cast<int>(grid),
+                                stream);
   }
 }
 
@@ -1624,6 +1996,10 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, module) {
              pybind11::arg("counters"),
              pybind11::arg("out"), pybind11::arg("tile_k"), pybind11::arg("tile_n"), pybind11::arg("grid"),
              pybind11::arg("trace") = pybind11::none());
+  module.def("gemm_w4a16_large", &gemm_w4a16_large, "W4A16 GEMM for prefill-sized batches (tiled layout)",
+             pybind11::arg("x"), pybind11::arg("qweight"), pybind11::arg("scales"), pybind11::arg("zeros"),
+             pybind11::arg("counters"), pybind11::arg("out"), pybind11::arg("tile_m"), pybind11::arg("tile_n"),
+             pybind11::arg("grid"));
   module.def("dequantize_w4a16_tiled", &dequantize_w4a16_tiled, "tiled int4 weight -> [N, K] in the scales dtype",
              pybind11::arg("qweight"), pybind11::arg("scales"), pybind11::arg("zeros"));
 }
