@@ -130,8 +130,8 @@ class NanoVLLMConfig:
             raise ValueError("linear_backend must be one of: torch, triton, cuda")
         if self.weight_quant not in {"none", "w4a16", "awq"}:
             raise ValueError("weight_quant must be one of: none, w4a16, awq")
-        if self.lm_head_quant not in {"auto", "none", "int8"}:
-            raise ValueError("lm_head_quant must be one of: auto, none, int8")
+        if self.lm_head_quant not in {"auto", "none", "int8", "int8_dense"}:
+            raise ValueError("lm_head_quant must be one of: auto, none, int8, int8_dense")
         if self.kv_cache_dtype not in {"auto", "fp8"}:
             raise ValueError("kv_cache_dtype must be one of: auto, fp8")
         if self.kv_cache_dtype == "fp8" and self.attention_backend == "flash_attn":

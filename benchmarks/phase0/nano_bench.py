@@ -218,8 +218,8 @@ def main() -> None:
         help="awq: --model is an AWQ checkpoint (it loads as awq under none too)",
     )
     parser.add_argument(
-        "--lm-head-quant", default="none", choices=["auto", "none", "int8"],
-        help="int8: lm_head as int8 with a scale per vocab row",
+        "--lm-head-quant", default="none", choices=["auto", "none", "int8", "int8_dense"],
+        help="int8: lm_head as int8 with a scale per vocab row; int8_dense: and bf16 past 64 rows",
     )
     parser.add_argument("--kv-cache-dtype", default="auto", choices=["auto", "fp8"])
     parser.add_argument(

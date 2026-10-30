@@ -29,7 +29,8 @@ engine:
   # Marlin-style gemm_w4a16_tiled kernel.
   weight_quant: "none"
   # "int8": lm_head as int8 with one scale per vocab row, half its bytes;
-  # "auto": by weight_quant (see model.AUTO_LM_HEAD_QUANT).
+  # "int8_dense": int8 up to 64 rows and the bf16 weight past that (both kept);
+  # "auto": int8_dense under w4a16 / awq, none otherwise (model.AUTO_LM_HEAD_QUANT).
   lm_head_quant: "auto"
   # "fp8": the paged KV cache holds e4m3 codes plus one fp32 scale per
   # (token, kv head): about half the KV bytes, so about twice the tokens.

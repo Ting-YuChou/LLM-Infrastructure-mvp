@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from serving.nano_vllm.kernels.w8a16 import (  # noqa: E402
     TRITON_AVAILABLE,
+    W8A16_DENSE_ROWS,
     quantize_w8a16,
     w8a16_linear,
     w8a16_linear_reference,
@@ -42,6 +43,18 @@ def test_lm_head_shape(rows):
 @pytest.mark.parametrize("rows,n,k", [(1, 1000, 4000), (40, 1000, 4000), (2048, 512, 4096)])
 def test_ragged_shapes_and_many_rows(rows, n, k):
     _check(rows, n, k)
+
+
+@pytest.mark.parametrize("rows", [W8A16_DENSE_ROWS, W8A16_DENSE_ROWS + 1, 256])
+def test_dense_copy_past_the_int8_rows(rows):
+    dense = (torch.randn(VOCAB, HIDDEN, device="cuda") / HIDDEN**0.5).bfloat16()
+    weight = quantize_w8a16(dense, keep_dense=True)
+    x = torch.randn(rows, HIDDEN, device="cuda").bfloat16()
+    out = w8a16_linear(x, weight)
+    if rows > W8A16_DENSE_ROWS:
+        assert torch.equal(out, torch.nn.functional.linear(x, dense))
+    else:
+        torch.testing.assert_close(out.float(), w8a16_linear_reference(x.float(), weight), rtol=1.6e-2, atol=1.6e-2)
 
 
 @pytest.mark.parametrize("rows", [2, 64])

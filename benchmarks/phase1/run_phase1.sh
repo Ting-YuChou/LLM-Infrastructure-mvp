@@ -39,7 +39,8 @@
 # vLLM runs the paged ones), P1_NANO_CONFIGS (label:attention:linear:eager|graph[:weight_quant[:flags]]
 # per nano_bench run, default: the Phase 1 milestones in order; flags joined by +: async for async
 # scheduling, sampled for P1_SAMPLING instead of greedy (with any sampled config vLLM runs its
-# points sampled too), tiled / rows for the W4A16 weight layout, int8head for an int8 lm_head,
+# points sampled too), tiled / rows for the W4A16 weight layout, int8head for an int8 lm_head
+# (int8dense: int8 up to 64 rows, bf16 past that),
 # fullgraph for decode CUDA graphs
 # up to the largest batch (default: piecewise graphs past 64 rows), fp8kv for an fp8 KV cache
 # (with any fp8kv config vLLM runs its points with --kv-cache-dtype fp8 and
@@ -176,6 +177,7 @@ nano_config_args() {  # label:attention:linear:eager|graph[:weight_quant[:flags]
   [[ "+${flags}+" == *+rows+* ]] && args+=" --w4a16-layout rows"
   [[ "+${flags}+" == *+fullgraph+* ]] && args+=" --full-graphs"
   [[ "+${flags}+" == *+int8head+* ]] && args+=" --lm-head-quant int8"
+  [[ "+${flags}+" == *+int8dense+* ]] && args+=" --lm-head-quant int8_dense"
   echo "${args}"
 }
 
@@ -237,7 +239,7 @@ e2e() {
     nsys_run "vllmw4_b${b}" "${PY}" "${P0_DIR}/vllm_offline.py" --model "${W4_MODEL}" --batch "${b}" \
       --input-len "${input}" --output-len 64 --profile-steps 32 \
       --out "${OUT}/offline/vllmw4_b${b}_nsys.json" || rc=1
-    # gemm_w4a16_tiled up to tiled_max_rows (256), gemm_w4a16_large past it.
+    # gemm_w4a16_tiled up to tiled_max_rows (512), dequantize + cuBLAS past it.
     specs+=("nano_b${b}=${OUT}/nsys/nano_${label}_b${b}.sqlite:gemm_w4a16:dequantize"
       "vllm_awq_b${b}=${OUT}/nsys/vllmw4_b${b}.sqlite:Marlin")
   done

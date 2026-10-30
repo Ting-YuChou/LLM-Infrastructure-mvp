@@ -17,6 +17,7 @@ from serving.nano_vllm import model as model_mod  # noqa: E402
 from serving.nano_vllm.config import NanoVLLMConfig  # noqa: E402
 from serving.nano_vllm.kernels import W8A16Weight, linear  # noqa: E402
 from serving.nano_vllm.kernels.w8a16 import (  # noqa: E402
+    W8A16_DENSE_ROWS,
     dequantize_w8a16,
     quantize_w8a16,
     w8a16_config,
@@ -38,6 +39,16 @@ def test_quantize_is_symmetric_per_row_within_half_a_step():
     assert torch.all(err <= q.scales[:, None] / 2 + 1e-6)
 
 
+def test_dense_copy_takes_batches_past_the_int8_rows():
+    torch.manual_seed(2)
+    weight = torch.randn(96, 128)
+    q = quantize_w8a16(weight, keep_dense=True)
+    assert q.dense is weight and q.nbytes() == 96 * 128 + 96 * 4 + weight.numel() * 4
+    small, large = torch.randn(W8A16_DENSE_ROWS, 128), torch.randn(W8A16_DENSE_ROWS + 1, 128)
+    torch.testing.assert_close(linear(small, q), w8a16_linear_reference(small, q), rtol=1e-5, atol=1e-5)
+    assert torch.equal(linear(large, q), torch.nn.functional.linear(large, weight))
+
+
 def test_linear_dispatches_int8_weights():
     torch.manual_seed(1)
     q = quantize_w8a16(torch.randn(96, 128))
@@ -56,17 +67,19 @@ def test_configs_cover_every_row_count():
 def test_lm_head_quant_resolution(monkeypatch):
     assert resolve_lm_head_quant("none", "awq") == "none"
     assert resolve_lm_head_quant("int8", "none") == "int8"
+    assert resolve_lm_head_quant("auto", "awq") == "int8_dense"
+    assert resolve_lm_head_quant("auto", "w4a16") == "int8_dense"
+    assert resolve_lm_head_quant("auto", "none") == "none"
     monkeypatch.setattr(model_mod, "AUTO_LM_HEAD_QUANT", {"awq": "int8"})
     assert resolve_lm_head_quant("auto", "awq") == "int8"
-    assert resolve_lm_head_quant("auto", "none") == "none"
     with pytest.raises(ValueError, match="lm_head_quant"):
         resolve_lm_head_quant("int4", "awq")
 
 
-def _int8_head_model(weights, config=None):
+def _int8_head_model(weights, config=None, mode="int8"):
     return NanoLlamaForCausalLM(
         config=config or _config(), weights=weights, device=torch.device("cpu"), dtype=torch.float32,
-        use_triton=False, lm_head_quant="int8",
+        use_triton=False, lm_head_quant=mode,
     )
 
 
@@ -92,6 +105,17 @@ def test_tied_embeddings_quantize_a_copy_and_keep_the_lookup_exact():
     model = _int8_head_model(weights, config)
     assert isinstance(model.lm_head_weight, W8A16Weight)
     assert torch.equal(model.weights["model.embed_tokens.weight"], weights["model.embed_tokens.weight"])
+
+
+def test_int8_dense_keeps_the_head_and_the_tied_embedding_without_copies():
+    weights = _weights(_config())
+    head = weights["lm_head.weight"]
+    model = _int8_head_model(weights, mode="int8_dense")
+    assert isinstance(model.lm_head_weight, W8A16Weight) and torch.equal(model.lm_head_weight.dense, head)
+    del weights["lm_head.weight"]
+    config = dataclasses.replace(_config(), tie_word_embeddings=True)
+    model = _int8_head_model(weights, config, mode="int8_dense")
+    assert model.lm_head_weight.dense is model.weights["model.embed_tokens.weight"]
 
 
 def test_lm_head_quant_comes_from_yaml_and_env(tmp_path, monkeypatch):

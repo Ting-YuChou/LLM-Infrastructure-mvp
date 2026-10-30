@@ -16,6 +16,11 @@ BLOCK_N output columns, K in BLOCK_K steps. The programs of one column tile
 are adjacent in the grid (m varies fastest), so past BLOCK_M rows its int8
 weight comes from L2 after the first read instead of HBM. Off CUDA (or
 without Triton) it is F.linear on the dequantized weight.
+
+The kernel's tl.dot on converted int8 tops out near 130 TFLOPs (run awq-a2:
+1,124 us at 128 rows, 2,111 at 256, against cuBLAS bf16's 810 and 1,168),
+so past W8A16_DENSE_ROWS rows a weight that kept its dense copy
+(quantize_w8a16(..., keep_dense=True)) goes to F.linear on that instead.
 """
 
 from __future__ import annotations
@@ -44,15 +49,20 @@ W8A16_CONFIGS = (
     {"rows": 64, "block_m": 64, "block_n": 128, "block_k": 128, "num_warps": 4, "num_stages": 3},
     {"rows": 1 << 30, "block_m": 128, "block_n": 128, "block_k": 64, "num_warps": 8, "num_stages": 3},
 )
+# Up to this many rows the int8 kernel beats cuBLAS bf16 (run awq-a2: 523
+# against 778 us at 64 rows).
+W8A16_DENSE_ROWS = 64
 
 
 @dataclass(frozen=True)
 class W8A16Weight:
-    """An int8 [out_features, in_features] weight with fp32 per-row scales."""
+    """An int8 [out_features, in_features] weight with fp32 per-row scales,
+    and optionally the weight it came from, for batches past W8A16_DENSE_ROWS."""
 
     qweight: torch.Tensor  # int8 [N, K]
     scales: torch.Tensor  # fp32 [N]
     dtype: torch.dtype  # the activations' (and outputs') dtype
+    dense: Optional[torch.Tensor] = None  # [N, K] in dtype
 
     @property
     def shape(self) -> torch.Size:
@@ -63,18 +73,23 @@ class W8A16Weight:
         return self.qweight.device
 
     def nbytes(self) -> int:
-        return self.qweight.numel() + self.scales.numel() * 4
+        dense = 0 if self.dense is None else self.dense.numel() * self.dense.element_size()
+        return self.qweight.numel() + self.scales.numel() * 4 + dense
 
 
-def quantize_w8a16(weight: torch.Tensor) -> W8A16Weight:
-    """Symmetric per-row int8 of a [N, K] weight; outputs keep its dtype."""
+def quantize_w8a16(weight: torch.Tensor, keep_dense: bool = False) -> W8A16Weight:
+    """Symmetric per-row int8 of a [N, K] weight; outputs keep its dtype.
+    keep_dense keeps ``weight`` itself for batches past W8A16_DENSE_ROWS."""
     if weight.ndim != 2:
         raise ValueError("quantize_w8a16 expects a 2-D [out_features, in_features] weight")
     w = weight.float()
     scales = w.abs().amax(dim=1) / 127
     scales = torch.where(scales == 0, torch.ones_like(scales), scales)  # an all-zero row: any scale
     q = torch.round(w / scales[:, None]).clamp_(-127, 127).to(torch.int8)
-    return W8A16Weight(qweight=q.contiguous(), scales=scales.contiguous(), dtype=weight.dtype)
+    return W8A16Weight(
+        qweight=q.contiguous(), scales=scales.contiguous(), dtype=weight.dtype,
+        dense=weight.contiguous() if keep_dense else None,
+    )
 
 
 def dequantize_w8a16(weight: W8A16Weight, dtype: Optional[torch.dtype] = None) -> torch.Tensor:
@@ -90,11 +105,14 @@ def w8a16_linear_reference(x: torch.Tensor, weight: W8A16Weight) -> torch.Tensor
 def w8a16_linear(
     x: torch.Tensor, weight: W8A16Weight, bias: Optional[torch.Tensor] = None, config: Optional[dict] = None
 ) -> torch.Tensor:
-    """y = x @ (q * s).T (+ bias). ``config`` overrides the W8A16_CONFIGS entry."""
+    """y = x @ (q * s).T (+ bias), or x @ dense.T past W8A16_DENSE_ROWS rows
+    when the weight kept it. ``config`` overrides the W8A16_CONFIGS entry."""
     k = x.shape[-1]
     if weight.shape[1] != k:
         raise ValueError(f"x has {k} features, the weight expects {weight.shape[1]}")
     rows = x.numel() // k if k else 0
+    if weight.dense is not None and rows > W8A16_DENSE_ROWS:
+        return F.linear(x, weight.dense, bias)
     if (
         TRITON_AVAILABLE
         and x.is_cuda

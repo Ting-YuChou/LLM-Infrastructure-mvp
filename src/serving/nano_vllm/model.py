@@ -219,9 +219,14 @@ AWQ_SUFFIXES = ("qweight", "qzeros", "scales")
 AWQ_FORMAT = {"bits": 4, "group_size": 128, "zero_point": True, "version": "gemm"}
 
 # lm_head_quant: "int8" stores lm_head as int8 with a scale per vocab row
-# (kernels/w8a16.py); "auto" picks per weight_quant from AUTO_LM_HEAD_QUANT.
-LM_HEAD_QUANT_MODES = ("auto", "none", "int8")
-AUTO_LM_HEAD_QUANT: Dict[str, str] = {}
+# (kernels/w8a16.py); "int8_dense" keeps the dtype weight too, for batches
+# past W8A16_DENSE_ROWS rows, where the int8 kernel is slower than cuBLAS;
+# "auto" picks per weight_quant from AUTO_LM_HEAD_QUANT: int8_dense under
+# 4-bit weights, where lm_head is the largest read of a decode step (runs
+# awq-a2, awq-a3: wikitext-2 PPL +0.001% and top-1 99.01% against the bf16
+# head; decode 0.36 / 0.36 / 0.30 ms faster at b=1/16/64, the same past 64).
+LM_HEAD_QUANT_MODES = ("auto", "none", "int8", "int8_dense")
+AUTO_LM_HEAD_QUANT: Dict[str, str] = {"awq": "int8_dense", "w4a16": "int8_dense"}
 
 Linear = Union[torch.Tensor, W4A16Weight, W8A16Weight]
 
@@ -793,7 +798,9 @@ class NanoLlamaForCausalLM:
         embedding when tied (then quantized as a copy: the lookup stays exact)."""
         if self.config.tie_word_embeddings:
             embed = self.weights["model.embed_tokens.weight"]
-            return quantize_w8a16(embed) if self.lm_head_quant == "int8" else embed
+            if self.lm_head_quant == "none":
+                return embed
+            return quantize_w8a16(embed, keep_dense=self.lm_head_quant == "int8_dense")
         if "lm_head.weight" not in self.weights:
             raise KeyError(
                 "Model checkpoint is missing lm_head.weight and config.json does "
@@ -830,8 +837,8 @@ class NanoLlamaForCausalLM:
             )
             return pack_w4a16(codes, scales.to(self.dtype), zeros, layout="tiled")
         moved = self._move_weight(tensor)
-        if name == "lm_head.weight" and self.lm_head_quant == "int8":
-            return quantize_w8a16(moved)
+        if name == "lm_head.weight" and self.lm_head_quant != "none":
+            return quantize_w8a16(moved, keep_dense=self.lm_head_quant == "int8_dense")
         if self.weight_quant == "w4a16" and name.endswith(QUANTIZED_LINEARS):
             tiled = W4A16_CONFIG["layout"] == "tiled" and w4a16_tiled_supported(*moved.shape)
             return quantize_w4a16(moved, layout="tiled" if tiled else "rows")
