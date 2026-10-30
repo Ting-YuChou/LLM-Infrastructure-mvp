@@ -85,13 +85,11 @@ from src.serving.nano_vllm.sampling import (  # noqa: E402
     sample_rows,
 )
 from src.serving.nano_vllm.kernels.w4a16 import (  # noqa: E402
+    AWQ_PACK_ORDER,
     W4A16_CONFIG,
-    W4A16_GEMV_MAX_ROWS,
-    W4A16_MMA_MAX_ROWS,
-    W4A16Weight,
+    awq_unpack,
     dequantize_w4a16,
-    quantize_w4a16,
-    unpack_w4a16,
+    pack_w4a16,
     w4a16_linear,
     w4a16_linear_reference,
 )
@@ -408,7 +406,10 @@ def main() -> None:
     parser.add_argument("--ncu-reps", type=int, default=3)
     parser.add_argument("--bandwidth-json", type=Path, help="phase0 bandwidth.json for copy_GBps")
     parser.add_argument("--peak-gbps", type=float, help="default: 2,039 on an 80GB A100, else 1,555")
+    parser.add_argument("--awq-model", type=Path, help="AWQ checkpoint whose layer 0 awq_dequant checks")
     args = parser.parse_args()
+    global AWQ_MODEL
+    AWQ_MODEL = args.awq_model
 
     names = [n for n in args.kernels.split(",") if n] or list(KERNELS)
     unknown = [n for n in names if n not in KERNELS]
@@ -799,75 +800,92 @@ register(
 )
 
 
-# W4A16 (M7). Every impl multiplies by the same 4-bit codes: each factory
-# quantizes w with quantize_w4a16 (setup, outside the timed region), and
-# vLLM's Marlin gets those codes repacked into its layout. GB/s counts the
-# 4-bit weight, its scales, x and y, so the cublas_bf16 row (F.linear on the
-# dequantized bf16 weight) reads as the bandwidth W4A16 would need to match it.
-def _w4a16_cuda(kernel: str, max_rows: int):
-    """kernel "tiled": the same codes in the tiled layout, gemm_w4a16_tiled."""
-
-    def factory(i: dict):
-        if not i["x"].is_cuda:
-            raise Unavailable("needs a GPU")
-        if i["x"].shape[0] > max_rows:
-            raise NotApplicable(f"the {kernel} kernel takes up to {max_rows} rows")
-        if load_cuda_extension("w4a16") is None:
-            raise RuntimeError("building kernels/csrc/w4a16.cu failed (see the log)")
-        x = i["x"]
-        if kernel == "tiled":
-            weight = quantize_w4a16(i["w"], layout="tiled")
-            return lambda: w4a16_linear(x, weight)
-        weight = quantize_w4a16(i["w"])
-        return lambda: w4a16_linear(x, weight, config={"kernel": kernel})
-
-    return factory
+# W4A16 (M7; AWQ since round 6). Every impl multiplies by the same
+# asymmetric 4-bit codes, zero points and scales, as an AWQ checkpoint holds
+# them: nano packs them into its tiled layout, vLLM into awq_marlin's
+# (awq_marlin_repack of the AutoAWQ words, the path vLLM 0.19.1 serves AWQ
+# checkpoints with). GB/s counts the 4-bit weight, its scales and zero
+# points, x and y, so the cublas_bf16 row (F.linear on the dequantized bf16
+# weight) reads as the bandwidth W4A16 would need to match it.
+AWQ_MODEL: Path | None = None  # --awq-model: awq_dequant reads layer 0 of this checkpoint
 
 
-def _marlin_weight(weight: W4A16Weight, device: torch.device):
-    """Our codes and scales in the layout of vLLM's gptq_marlin (uint4b8, no act order)."""
-    from vllm.model_executor.layers.quantization.utils import marlin_utils
-    from vllm.model_executor.layers.quantization.utils.marlin_utils_test import (
-        get_weight_perm,
-        marlin_weights,
-    )
-
-    n, k = weight.shape
-    codes = unpack_w4a16(weight.qweight).t().contiguous().to(torch.int32)  # [K, N], q + 8
-    packed = marlin_weights(codes, k, n, 4, get_weight_perm(4, False))
-    scales = marlin_utils.marlin_permute_scales(
-        weight.scales.t().contiguous(), k, n, weight.group_size
-    )
-    return packed.to(device), scales.to(device)
+def _awq_inputs(s: dict, dev: str) -> dict:
+    n, k = s["N"], s["K"]
+    return {
+        "x": randn(s.get("M", 1), k, device=dev),
+        "codes": torch.randint(0, 16, (n, k), dtype=torch.uint8, device=dev),
+        "zeros": torch.randint(0, 16, (n, k // 128), dtype=torch.uint8, device=dev),
+        "scales": (torch.rand(n, k // 128, device=dev) * (2 / 15) * k**-0.5).to(BF16),
+    }
 
 
-def _vllm_marlin(i: dict):
+def _awq_weight(i: dict):
+    """nano's tiled weight of the inputs' codes."""
+    return pack_w4a16(i["codes"], i["scales"], i["zeros"], layout="tiled")
+
+
+def _awq_pack(values: torch.Tensor) -> torch.Tensor:
+    """uint8 [R, N] -> AutoAWQ's int32 [R, N / 8] (nibble p: column 8j + AWQ_PACK_ORDER[p])."""
+    v = values.to(torch.int32).view(values.shape[0], -1, 8)
+    out = torch.zeros(v.shape[:2], dtype=torch.int32, device=values.device)
+    for p, column in enumerate(AWQ_PACK_ORDER):
+        out |= v[..., column] << (4 * p)
+    return out
+
+
+def _need_w4a16(i: dict, max_rows: int, what: str) -> None:
     if not i["x"].is_cuda:
         raise Unavailable("needs a GPU")
-    from vllm.model_executor.layers.quantization.utils import marlin_utils
+    if i["x"].shape[0] > max_rows:
+        raise NotApplicable(f"{what} takes up to {max_rows} rows")
+    if load_cuda_extension("w4a16") is None:
+        raise RuntimeError("building kernels/csrc/w4a16.cu failed (see the log)")
+
+
+def _nano_tiled(i: dict):
+    _need_w4a16(i, W4A16_CONFIG["tiled_max_rows"], "gemm_w4a16_tiled")
+    x, weight = i["x"], _awq_weight(i)
+    return lambda: w4a16_linear(x, weight)
+
+
+def _vllm_awq_marlin(i: dict):
+    """vLLM 0.19.1's AWQMarlinLinearMethod: repack at load, apply per call."""
+    if not i["x"].is_cuda:
+        raise Unavailable("needs a GPU")
+    from vllm import _custom_ops as ops
+    from vllm.model_executor.layers.quantization.utils import marlin_utils as mu
     from vllm.scalar_type import scalar_types
 
-    weight = quantize_w4a16(i["w"])
-    n, k = weight.shape
-    packed, scales = _marlin_weight(weight, i["x"].device)
     x = i["x"]
-    workspace = marlin_utils.marlin_make_workspace_new(x.device)
-    empty = marlin_utils.marlin_make_empty_g_idx(x.device)  # no zero points, no act order
-    return lambda: marlin_utils.apply_gptq_marlin_linear(
-        x, packed, scales, empty, empty, empty, workspace, scalar_types.uint4b8,
-        n, k, is_k_full=True,
+    n, k = i["codes"].shape
+    qweight = ops.awq_marlin_repack(_awq_pack(i["codes"].t().contiguous()), size_k=k, size_n=n, num_bits=4)
+    scales = mu.marlin_permute_scales(i["scales"].t().contiguous(), size_k=k, size_n=n, group_size=128)
+    zeros = mu.awq_to_marlin_zero_points(_awq_pack(i["zeros"].t().contiguous()), size_k=k // 128, size_n=n, num_bits=4)
+    workspace = mu.marlin_make_workspace_new(x.device)
+    empty = mu.marlin_make_empty_g_idx(x.device)
+    return lambda: mu.apply_awq_marlin_linear(
+        x, qweight, scales, zeros, empty, empty, workspace, scalar_types.uint4, n, k
     )
 
 
 def _w4a16_weight_bytes(shape: dict) -> int:
-    """The 4-bit weight and its scales: what a W4A16 call reads. The inputs hold
-    the bf16 weight (4x that), which alone would keep down_proj's 29 MB weight
-    to one copy, L2-resident across the timed calls."""
-    return shape["N"] * shape["K"] // 2 + 2 * shape["N"] * shape["K"] // 128
+    """The 4-bit weight, its scales and zero points: what a W4A16 call reads.
+    The inputs hold the codes a byte each (twice that), which alone would keep
+    down_proj's 30 MB weight to one copy, L2-resident across the timed calls."""
+    return shape["N"] * shape["K"] // 2 + 3 * shape["N"] * shape["K"] // 128
+
+
+def _dequant_cublas(i: dict):
+    """What nano runs past tiled_max_rows today: dequantize, then cuBLAS."""
+    if not i["x"].is_cuda:
+        raise Unavailable("needs a GPU")
+    x, weight = i["x"], _awq_weight(i)
+    return lambda: F.linear(x, dequantize_w4a16(weight))
 
 
 def _cublas_dequantized(i: dict):
-    x, weight = i["x"], dequantize_w4a16(quantize_w4a16(i["w"]))
+    x, weight = i["x"], dequantize_w4a16(_awq_weight(i))
     return lambda: F.linear(x, weight)
 
 
@@ -877,42 +895,32 @@ register(
         shapes=[
             {"layer": layer, "M": m, "N": n, "K": k}
             for layer, (n, k) in LINEAR_SHAPES.items()
-            if layer != "lm_head"  # stays bf16 under weight_quant="w4a16"
+            if layer != "lm_head"  # stays bf16 in AWQ checkpoints
             for m in (1, 4, 8, 16, 32, 64, 128, 256)
         ],
-        inputs=lambda s, dev: {
-            "x": randn(s["M"], s["K"], device=dev),
-            "w": randn(s["N"], s["K"], device=dev, scale=s["K"] ** -0.5),
-        },
+        inputs=_awq_inputs,
         impls={
-            "vllm_marlin": _vllm_marlin,
-            "cuda_gemv": _w4a16_cuda("gemv", W4A16_GEMV_MAX_ROWS),
-            "cuda_mma": _w4a16_cuda("mma", W4A16_MMA_MAX_ROWS),
-            "cuda_wide": _w4a16_cuda("wide", W4A16_MMA_MAX_ROWS),
-            "cuda_auto": _w4a16_cuda("auto", W4A16_MMA_MAX_ROWS),
-            "cuda_tiled": _w4a16_cuda("tiled", W4A16_CONFIG["tiled_max_rows"]),
+            "vllm_awq_marlin": _vllm_awq_marlin,
+            "cuda_tiled": _nano_tiled,
+            "dequant_cublas": _dequant_cublas,
             "cublas_bf16": _cublas_dequantized,
         },
-        reference=lambda i: w4a16_linear_reference(i["x"], quantize_w4a16(i["w"])),
-        bytes=lambda s: s["N"] * s["K"] // 2 + 2 * s["N"] * s["K"] // 128
-        + 2 * s["M"] * (s["K"] + s["N"]),
+        reference=lambda i: w4a16_linear_reference(i["x"], _awq_weight(i)),
+        bytes=lambda s: _w4a16_weight_bytes(s) + 2 * s["M"] * (s["K"] + s["N"]),
         rotate_bytes=_w4a16_weight_bytes,
-        ncu="gemv_w4a16|gemm_w4a16|Marlin|marlin",
+        ncu="gemm_w4a16|Marlin|marlin",
     )
 )
 
 
 # Prefill batches (> tiled_max_rows rows) dequantize the whole weight before
-# F.linear, so the tiled layout's dequantization must keep up with the rows
-# one. Bytes: the 4-bit weight and scales read, the bf16 weight written.
-def _w4a16_dequant(layout: str):
-    def factory(i: dict):
-        if not i["w"].is_cuda:
-            raise Unavailable("needs a GPU")
-        weight = quantize_w4a16(i["w"], layout=layout)
-        return lambda: dequantize_w4a16(weight)
-
-    return factory
+# F.linear. Bytes: the 4-bit weight, scales and zero points read, the bf16
+# weight written.
+def _w4a16_dequant(i: dict):
+    if not i["codes"].is_cuda:
+        raise Unavailable("needs a GPU")
+    weight = _awq_weight(i)
+    return lambda: dequantize_w4a16(weight)
 
 
 register(
@@ -923,12 +931,99 @@ register(
             for layer, (n, k) in LINEAR_SHAPES.items()
             if layer != "lm_head"
         ],
-        inputs=lambda s, dev: {"w": randn(s["N"], s["K"], device=dev, scale=s["K"] ** -0.5)},
-        impls={"rows": _w4a16_dequant("rows"), "tiled": _w4a16_dequant("tiled")},
-        reference=lambda i: dequantize_w4a16(quantize_w4a16(i["w"].cpu())).to(i["w"].device),
-        bytes=lambda s: s["N"] * s["K"] // 2 + 2 * s["N"] * s["K"] // 128 + 2 * s["N"] * s["K"],
+        inputs=_awq_inputs,
+        impls={"tiled": _w4a16_dequant},
+        reference=lambda i: dequantize_w4a16(_awq_weight({k: v.cpu() for k, v in i.items()}), BF16).to(
+            i["codes"].device
+        ),
+        bytes=lambda s: _w4a16_weight_bytes(s) + 2 * s["N"] * s["K"],
         rotate_bytes=_w4a16_weight_bytes,
         ncu="dequantize_w4a16",
+    )
+)
+
+
+# The AWQ checkpoint itself, bit for bit: layer 0 of --awq-model (q/k/v and
+# gate/up concatenated along N while packed, as nano loads them), or random
+# AutoAWQ tensors without it. nano unpacks and dequantizes in fp16 (the
+# checkpoint's dtype); vLLM's awq_dequantize_triton reads the same words.
+# Both must equal the reference written from AutoAWQ's definition, exactly:
+# (q - z) is exact and one fp16 rounding of (q - z) * s is the only one.
+AWQ_LAYER_PARTS = {
+    "qkv_proj": ("self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj"),
+    "o_proj": ("self_attn.o_proj",),
+    "gate_up_proj": ("mlp.gate_proj", "mlp.up_proj"),
+    "down_proj": ("mlp.down_proj",),
+}
+
+
+def _awq_layer(s: dict, dev: str) -> dict:
+    if AWQ_MODEL is None:
+        i = _awq_inputs(s, dev)
+        return {
+            "qweight": _awq_pack(i["codes"].t().contiguous()),
+            "qzeros": _awq_pack(i["zeros"].t().contiguous()),
+            "scales": i["scales"].t().contiguous().half(),
+        }
+    from safetensors import safe_open
+
+    names = {f"model.layers.0.{part}.{suffix}": None for part in AWQ_LAYER_PARTS[s["layer"]]
+             for suffix in ("qweight", "qzeros", "scales")}
+    for path in sorted(AWQ_MODEL.glob("*.safetensors")):
+        with safe_open(str(path), framework="pt") as f:
+            for name in names.keys() & set(f.keys()):
+                names[name] = f.get_tensor(name)
+    missing = [name for name, t in names.items() if t is None]
+    if missing:
+        raise KeyError(f"{AWQ_MODEL} lacks {missing}")
+    return {
+        suffix: torch.cat([names[f"model.layers.0.{part}.{suffix}"] for part in AWQ_LAYER_PARTS[s["layer"]]], dim=1)
+        .contiguous().to(dev)
+        for suffix in ("qweight", "qzeros", "scales")
+    }
+
+
+def _awq_reference(i: dict) -> torch.Tensor:
+    """AutoAWQ's definition: column 8j + AWQ_PACK_ORDER[p] at nibble p, w = (q - z) * s."""
+    def unpack(words: torch.Tensor) -> torch.Tensor:
+        out = torch.empty(words.shape[0], words.shape[1] * 8, dtype=torch.float32, device=words.device)
+        for p, column in enumerate(AWQ_PACK_ORDER):
+            out[:, column::8] = ((words >> (4 * p)) & 0xF).float()
+        return out
+
+    q, z = unpack(i["qweight"]), unpack(i["qzeros"]).repeat_interleave(128, dim=0)
+    s = i["scales"].float().repeat_interleave(128, dim=0)
+    return ((q - z) * s).half().t()
+
+
+def _nano_awq_dequant(i: dict):
+    if not i["qweight"].is_cuda:
+        raise Unavailable("needs a GPU")
+    codes, zeros, scales = awq_unpack(i["qweight"], i["qzeros"], i["scales"])
+    weight = pack_w4a16(codes, scales, zeros, layout="tiled")  # fp16 scales: an fp16 weight
+    return lambda: dequantize_w4a16(weight)
+
+
+def _vllm_awq_dequant(i: dict):
+    if not i["qweight"].is_cuda:
+        raise Unavailable("needs a GPU")
+    from vllm.model_executor.layers.quantization.awq_triton import awq_dequantize_triton
+
+    return lambda: awq_dequantize_triton(i["qweight"], i["scales"], i["qzeros"]).t()
+
+
+register(
+    Kernel(
+        name="awq_dequant",
+        shapes=[{"layer": layer, "N": n, "K": k} for layer, (n, k) in LINEAR_SHAPES.items() if layer != "lm_head"],
+        inputs=_awq_layer,
+        impls={"vllm_triton": _vllm_awq_dequant, "nano": _nano_awq_dequant},
+        reference=_awq_reference,
+        bytes=lambda s: _w4a16_weight_bytes(s) + 2 * s["N"] * s["K"],
+        rotate_bytes=_w4a16_weight_bytes,
+        ncu="dequantize|awq",
+        atol=0.0,
+        rtol=0.0,
     )
 )
 

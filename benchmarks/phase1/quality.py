@@ -5,10 +5,15 @@ Every config (label:attention:linear:weight_quant[:kv_cache_dtype]) runs the ser
 path, forward_batch over a whole chunk with every position's logits, on the
 same wikitext-2 test chunks. Reports perplexity and, against the first
 config, how often the top-1 next token agrees. The default compares the
-PyTorch path, the Triton kernels, and the Triton kernels with W4A16 weights.
+PyTorch path, the Triton kernels, and the Triton kernels with W4A16 weights;
+weight_quant "awq" loads --awq-model instead of --model (same tokenizer).
+The chunks (chunks.pt) and each config's top-1 tokens (top1/<label>.pt) stay
+in --out for quality_vllm.py, which scores vLLM on the same chunks and adds
+its rows to quality.json / quality.md.
 
   python quality.py --model <dir> --out results/quality
   python quality.py --model <dir> --out d --chunks 8 --configs "a:torch:torch:none b:triton:triton:w4a16"
+  python quality.py --model <dir> --awq-model <awq dir> --out d --configs "a:triton:triton:none b:triton:triton:awq"
 """
 
 from __future__ import annotations
@@ -102,9 +107,31 @@ def evaluate(model: NanoLlamaForCausalLM, data: list[list[int]]) -> dict:
     return {"nll": nll, "tokens": count, "ppl": math.exp(nll / count), "top1": torch.cat(top1)}
 
 
+def write_tables(out: Path, results: list[dict], length: int) -> str:
+    """quality.json and quality.md from every row so far (quality_vllm.py adds its own)."""
+    (out / "quality.json").write_text(json.dumps(results, indent=2))
+    lines = [
+        f"# Teacher-forced quality ({results[0]['tokens']} tokens, chunks of {length})",
+        "",
+        "| config | attention | linear | weights | KV cache | weight GiB | perplexity | top-1 agreement |",
+        "|---|---|---|---|---|---:|---:|---:|",
+    ]
+    for r in results:
+        agree = f"{100 * r['top1_agreement']:.2f}% vs {r['top1_agreement_vs']}" if "top1_agreement" in r else "-"
+        gib = "-" if r.get("weights_gib") is None else f"{r['weights_gib']:.1f}"
+        lines.append(
+            f"| {r['label']} | {r['attention_backend']} | {r['linear_backend']} | {r['weight_quant']} "
+            f"| {r['kv_cache_dtype']} | {gib} | {r['ppl']:.3f} | {agree} |"
+        )
+    text = "\n".join(lines)
+    (out / "quality.md").write_text(text + "\n")
+    return text
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--model", required=True)
+    parser.add_argument("--awq-model", help="AWQ checkpoint for weight_quant=awq configs")
     parser.add_argument("--out", required=True)
     parser.add_argument("--configs", default=DEFAULT_CONFIGS)
     parser.add_argument("--length", type=int, default=2048)
@@ -112,15 +139,20 @@ def main() -> None:
     args = parser.parse_args()
     assert torch.cuda.is_available(), "quality.py needs a GPU"
 
+    out = Path(args.out)
+    (out / "top1").mkdir(parents=True, exist_ok=True)
     data = chunks(args.model, args.length, args.chunks)
+    torch.save(torch.tensor(data, dtype=torch.int32), out / "chunks.pt")
     results, baseline = [], None
     for config in args.configs.split():
         label, attention, linear_backend, weight_quant, *rest = config.split(":")
         kv_cache_dtype = rest[0] if rest else "auto"
+        if weight_quant == "awq" and not args.awq_model:
+            parser.error(f"{label}: weight_quant awq needs --awq-model")
         torch.cuda.reset_peak_memory_stats()
         t0 = time.perf_counter()
         model = NanoLlamaForCausalLM.from_pretrained(
-            args.model,
+            args.awq_model if weight_quant == "awq" else args.model,
             dtype="bfloat16",
             device="cuda",
             use_triton=True,
@@ -147,6 +179,7 @@ def main() -> None:
             "load_s": load_s,
             "eval_s": time.perf_counter() - t0,
         }
+        torch.save(scores["top1"], out / "top1" / f"{label}.pt")
         if baseline is None:
             baseline = (label, scores["top1"])
         else:
@@ -158,23 +191,7 @@ def main() -> None:
         gc.collect()
         torch.cuda.empty_cache()
 
-    out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "quality.json").write_text(json.dumps(results, indent=2))
-    lines = [
-        f"# Teacher-forced quality ({results[0]['tokens']} tokens, chunks of {args.length})",
-        "",
-        "| config | attention | linear | weights | KV cache | weight GiB | perplexity | top-1 agreement |",
-        "|---|---|---|---|---|---:|---:|---:|",
-    ]
-    for r in results:
-        agree = f"{100 * r['top1_agreement']:.2f}% vs {r['top1_agreement_vs']}" if "top1_agreement" in r else "-"
-        lines.append(
-            f"| {r['label']} | {r['attention_backend']} | {r['linear_backend']} | {r['weight_quant']} "
-            f"| {r['kv_cache_dtype']} | {r['weights_gib']:.1f} | {r['ppl']:.3f} | {agree} |"
-        )
-    (out / "quality.md").write_text("\n".join(lines) + "\n")
-    print("\n".join(lines))
+    print(write_tables(out, results, args.length))
 
 
 if __name__ == "__main__":

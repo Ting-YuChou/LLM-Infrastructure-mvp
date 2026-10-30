@@ -23,8 +23,9 @@
 #             points (also on P1_VLLM_W4_MODEL when a config is w4a16); nsys on
 #             the last nano config at P1_NSYS_RUNS and, when it is w4a16, on vLLM's AWQ, then
 #             gemm_breakdown.py: each projection's GEMM time inside decode, both engines
-#   quality   quality.py: wikitext-2 perplexity and top-1 agreement of the torch,
-#             Triton and W4A16 paths on the real model
+#   quality   quality.py: wikitext-2 perplexity and top-1 agreement of nano configs on
+#             the real model (bf16, RTN W4A16, the AWQ checkpoint), then quality_vllm.py:
+#             vLLM on the same chunks (P1_QUALITY_VLLM)
 #   summarize summary.md
 #
 # Env: P0_ROOT (default /workspace/p0), P0_RUN_ID (default: UTC timestamp),
@@ -42,7 +43,8 @@
 # (with any fp8kv config vLLM runs its points with --kv-cache-dtype fp8 and
 # P1_VLLM_FP8_BACKEND, default TRITON_ATTN: FLASH_ATTN refuses fp8 on sm80)), P1_NSYS_RUNS (the e2e
 # step's nsys points, batch:input_len, 64 output tokens; default "1:128 16:1024 64:1024"), P1_QUALITY_CONFIGS
-# (quality.py --configs), P1_SAMPLING ("temperature top_p", default "0.7 0.9": the nano server's
+# (quality.py --configs; weight_quant awq loads P1_VLLM_W4_MODEL), P1_QUALITY_VLLM (quality_vllm.py
+# runs, label=bf16|awq, space-separated; default "vllm_bf16=bf16 vllm_awq=awq"), P1_SAMPLING ("temperature top_p", default "0.7 0.9": the nano server's
 # default sampling), P1_NCU_LAUNCHES (cap per kbench kernel, default
 # 300), P1_NCU_SHAPES (the ncu step's shape regex, default P1_KBENCH_SHAPES), P1_NCU_SECTIONS
 # (extra ncu sections, space-separated; SourceCounters also exports the per-instruction
@@ -80,6 +82,9 @@ NANO_CONFIGS="${P1_NANO_CONFIGS:-torch_eager:torch:torch:eager triton_eager:trit
 read -r SAMPLED_TEMPERATURE SAMPLED_TOP_P <<< "${P1_SAMPLING:-0.7 0.9}"
 VLLM_FP8_BACKEND="${P1_VLLM_FP8_BACKEND:-TRITON_ATTN}"
 CUDA_ENV="${ROOT}/cuda129.env"
+# The serving path in bf16 (the agreement baseline), RTN W4A16 and the AWQ checkpoint.
+QUALITY_CONFIGS="${P1_QUALITY_CONFIGS:-bf16_triton:triton:triton:none w4a16_triton:triton:triton:w4a16 awq_triton:triton:triton:awq}"
+QUALITY_VLLM="${P1_QUALITY_VLLM-vllm_bf16=bf16 vllm_awq=awq}"
 
 export HF_HOME="${ROOT}/hf_cache" UV_CACHE_DIR="${ROOT}/uv_cache" UV_PYTHON_INSTALL_DIR="${ROOT}/uv_python"
 export PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false MPLBACKEND=Agg
@@ -109,8 +114,12 @@ install_venv() {  # reuse the VM's vLLM venv when phase 0 already made it
 # --- kernels -----------------------------------------------------------------
 kbench() {
   local rc=0
+  # awq_dequant checks layer 0 of the AWQ checkpoint when it is there.
+  if [[ -z "${KERNELS}" || ",${KERNELS}," == *,awq_dequant,* ]]; then
+    [[ -d "${W4_MODEL}" ]] || download_w4_model || rc=1
+  fi
   "${PY}" "${CODE_DIR}/kbench.py" --out "${OUT}/kbench" ${KERNELS:+--kernels "${KERNELS}"} \
-    ${KBENCH_SHAPES:+--shapes "${KBENCH_SHAPES}"} || rc=1
+    ${KBENCH_SHAPES:+--shapes "${KBENCH_SHAPES}"} $([[ -d "${W4_MODEL}" ]] && echo --awq-model "${W4_MODEL}") || rc=1
   cat "${OUT}/kbench/kbench.md" >&3
   return "${rc}"
 }
@@ -232,11 +241,20 @@ download_w4_model() {  # download_model reads MODEL_ID and MODEL
 }
 
 quality() {
+  local rc=0 spec
   # wikitext-2 comes as parquet; the vLLM venv has neither datasets nor pyarrow.
   "${PY}" -c "import pyarrow" 2>/dev/null || uv pip install -p "${PY}" pyarrow || return 1
-  PYTHONPATH="${REPO_DIR}" "${PY}" "${CODE_DIR}/quality.py" --model "${MODEL}" --out "${OUT}/quality" \
-    ${P1_QUALITY_CONFIGS:+--configs "${P1_QUALITY_CONFIGS}"} &&
+  if [[ "${QUALITY_CONFIGS}" == *:awq* || "${QUALITY_VLLM}" == *=awq* ]]; then
+    [[ -d "${W4_MODEL}" ]] || download_w4_model || return 1
+  fi
+  PYTHONPATH="${REPO_DIR}" "${PY}" "${CODE_DIR}/quality.py" --model "${MODEL}" --awq-model "${W4_MODEL}" \
+    --out "${OUT}/quality" --configs "${QUALITY_CONFIGS}" || return 1
+  for spec in ${QUALITY_VLLM}; do  # vLLM in its own process per model
+    PYTHONPATH="${REPO_DIR}" "${PY}" "${CODE_DIR}/quality_vllm.py" --label "${spec%%=*}" --out "${OUT}/quality" \
+      --model "$([[ "${spec#*=}" == awq ]] && echo "${W4_MODEL}" || echo "${MODEL}")" || rc=1
+  done
   cat "${OUT}/quality/quality.md" >&3
+  return "${rc}"
 }
 
 environment() {
