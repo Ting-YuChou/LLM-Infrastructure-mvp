@@ -879,18 +879,12 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
   };
   // The scales of this lane's eight columns (n8 tiles 0..7, column g), for
   // the group holding the warp's k16 rows; kept packed (4 registers) and
-  // broadcast to both halves where they are used. Like the zero points they
-  // are read at the top of each tile (no register double buffer: that and
-  // decoding the zero points once per tile did not fit MT 4's registers).
+  // broadcast to both halves where they are used.
   auto fetch_scales = [&](int s) {
     const int group = TILE_K >= 128 ? row0 / 8 : 0;
     return reinterpret_cast<const uint4*>(stage(s) + Sh::kABytes)[Sh::kBWords + (group * Sh::kCols + col) * 8 + g];
   };
-  // Its zero points (two words, zero_pairs decodes them). Read at the top of
-  // each tile, before the tile's last row refills a stage: a warp running
-  // ahead refills stage s at the end of tile t + 1, after every warp has
-  // reached tile t's last barrier, so a read later than that could race.
-  // (Decoding them per row cost 8.5% of the GEMM time at 64 rows, run awq-a1.)
+  // Its zero points (two words, zero_pairs decodes them).
   auto fetch_zeros = [&](int s) {
     const int group = TILE_K >= 128 ? row0 / 8 : 0;
     const uint2* z = reinterpret_cast<const uint2*>(stage(s) + Sh::kABytes + 16 * (Sh::kBWords + Sh::kSWords));
@@ -1103,15 +1097,24 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
   uint32_t a_cur[MT][4], a_nxt[MT][4];
   uint4 b_cur, b_nxt;
   fetch(0, row0, a_cur, b_cur);
+  // A tile's scales and zero-point words come with its first row, so its
+  // first mma does not wait on shared memory (read at the top of each tile
+  // instead, the GEMM took 7-8% longer at 64 and 128 rows, run awq-a2). That
+  // read follows tile t's last barrier and precedes this warp's arrival at
+  // tile t + 1's, before which no warp can refill the stage.
+  uint4 sc_cur = fetch_scales(0), sc_nxt = sc_cur;
+  uint2 zw_cur = fetch_zeros(0), zw_nxt = zw_cur;
+  // The zero points are decoded once per tile up to MT 2 and once per row
+  // past that, where the eight registers of a tile's pairs did not fit.
+  constexpr bool kTileZeros = MT <= 2;
   int s = 0;
   int slice = begin / k_tiles;
   int kr = begin - slice * k_tiles;
   for (int t = begin; t < end; ++t) {
     const int s_next = s + 1 == kTiledStages ? 0 : s + 1;
     // A warp's rows of a stage share one group.
-    const uint4 sc = fetch_scales(s);
-    uint32_t zp[8];
-    zero_pairs<T>(fetch_zeros(s), zp);
+    uint32_t zp_tile[8];
+    if constexpr (kTileZeros) zero_pairs<T>(zw_cur, zp_tile);
 #pragma unroll
     for (int rr = 0; rr < R; ++rr) {
       if (rr + 1 < R) {
@@ -1123,14 +1126,24 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
         // Past the last tile this reads a stale stage, unused: unconditional,
         // the double buffer needs no register copies around the branch.
         fetch(s_next, row0, a_nxt, b_nxt);
+        sc_nxt = fetch_scales(s_next);
+        zw_nxt = fetch_zeros(s_next);
       }
-      mma_row(a_cur, b_cur, sc, zp);
+      if constexpr (kTileZeros) {
+        mma_row(a_cur, b_cur, sc_cur, zp_tile);
+      } else {
+        uint32_t zp[8];
+        zero_pairs<T>(zw_cur, zp);
+        mma_row(a_cur, b_cur, sc_cur, zp);
+      }
 #pragma unroll
       for (int mt = 0; mt < MT; ++mt)
 #pragma unroll
         for (int q = 0; q < 4; ++q) a_cur[mt][q] = a_nxt[mt][q];
       b_cur = b_nxt;
     }
+    sc_cur = sc_nxt;
+    zw_cur = zw_nxt;
     s = s_next;
     if (kr == k_tiles - 1 && t != end - 1) finish_slice(slice, std::false_type{});
     if (++kr == k_tiles) {
