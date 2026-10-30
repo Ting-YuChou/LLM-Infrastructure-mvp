@@ -66,9 +66,12 @@ class NanoVLLMConfig:
     # "triton" / "cuda": a GEMV kernel for linear layers when a batch has at
     # most 16 / 2 rows; "cuda" builds kernels/csrc/gemv_bf16.cu on first use.
     linear_backend: str = "triton"
-    # "w4a16": quantize the decoder-layer projections to 4-bit integers at
-    # load (RTN, groups of 128 along K), in the tiled layout of the
-    # Marlin-style kernel; kernels/w4a16.py.
+    # "awq": the model path is an AWQ checkpoint (AutoAWQ GEMM format, 4-bit,
+    # groups of 128, zero points), as vLLM serves with awq_marlin; such a
+    # checkpoint loads as "awq" under "none" too. "w4a16": quantize a
+    # full-precision checkpoint's decoder-layer projections to 4 bits at load
+    # (RTN, symmetric, groups of 128). Both run the Marlin-style kernel of
+    # kernels/w4a16.py.
     weight_quant: str = "none"
     # "fp8": the paged KV cache holds e4m3 codes plus an fp32 scale per
     # (token, kv head), about half the bytes of bf16 (kernels/fp8.py);
@@ -121,8 +124,8 @@ class NanoVLLMConfig:
             raise ValueError("attention_backend must be one of: torch, triton, flash_attn")
         if self.linear_backend not in {"torch", "triton", "cuda"}:
             raise ValueError("linear_backend must be one of: torch, triton, cuda")
-        if self.weight_quant not in {"none", "w4a16"}:
-            raise ValueError("weight_quant must be one of: none, w4a16")
+        if self.weight_quant not in {"none", "w4a16", "awq"}:
+            raise ValueError("weight_quant must be one of: none, w4a16, awq")
         if self.kv_cache_dtype not in {"auto", "fp8"}:
             raise ValueError("kv_cache_dtype must be one of: auto, fp8")
         if self.kv_cache_dtype == "fp8" and self.attention_backend == "flash_attn":

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,9 +29,11 @@ from .kernels import (
 )
 from .kernels.fp8 import KV_CACHE_DTYPES
 from .kernels.rotary import compute_inv_freq, validate_rope_scaling
-from .kernels.w4a16 import W4A16_CONFIG, w4a16_tiled_supported, w4a16_workspace
+from .kernels.w4a16 import W4A16_CONFIG, awq_unpack, pack_w4a16, w4a16_tiled_supported, w4a16_workspace
 from .kv_cache import PagedKVCache, StaticKVCache
 from .metadata import BatchMetadata, build_batch
+
+logger = logging.getLogger(__name__)
 
 
 def torch_dtype_from_string(
@@ -77,6 +80,8 @@ class NanoLlamaConfig:
     bos_token_id: Optional[int] = None
     eos_token_id: Optional[int | list[int]] = None
     pad_token_id: Optional[int] = None
+    # config.json's quantization_config (pre-quantized checkpoints).
+    quantization_config: Optional[Dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         validate_rope_scaling(self.rope_scaling)
@@ -121,6 +126,7 @@ class NanoLlamaConfig:
             bos_token_id=data.get("bos_token_id"),
             eos_token_id=data.get("eos_token_id"),
             pad_token_id=data.get("pad_token_id"),
+            quantization_config=dict(data["quantization_config"]) if data.get("quantization_config") else None,
         )
 
 
@@ -154,9 +160,18 @@ def _concat_projections(
     weights: Dict[str, torch.Tensor], prefixes: list[str], fused: str
 ) -> None:
     """Replace several linear layers that read the same input with one."""
-    weights[f"{fused}.weight"] = torch.cat(
-        [weights.pop(f"{prefix}.weight") for prefix in prefixes]
-    )
+    if f"{prefixes[0]}.qweight" in weights:
+        # AWQ tensors hold N in dim 1, packed 8 columns per int32 for
+        # qweight/qzeros; every part's N is a multiple of 8, so the packed
+        # words concatenate as they are.
+        for suffix in AWQ_SUFFIXES:
+            weights[f"{fused}.{suffix}"] = torch.cat(
+                [weights.pop(f"{prefix}.{suffix}") for prefix in prefixes], dim=1
+            )
+    else:
+        weights[f"{fused}.weight"] = torch.cat(
+            [weights.pop(f"{prefix}.weight") for prefix in prefixes]
+        )
     biases = [weights.pop(f"{prefix}.bias", None) for prefix in prefixes]
     if any(bias is not None for bias in biases):
         if any(bias is None for bias in biases):
@@ -186,17 +201,84 @@ def fuse_projections(
     return weights
 
 
-WEIGHT_QUANT_MODES = ("none", "w4a16")
+# "w4a16": RTN-quantize a full-precision checkpoint at load; "awq": load an
+# AWQ checkpoint (an AWQ checkpoint always loads as "awq", resolve_weight_quant).
+WEIGHT_QUANT_MODES = ("none", "w4a16", "awq")
 # The decoder-layer projections; embeddings, norms and lm_head stay in the
-# model dtype under weight_quant="w4a16".
+# model dtype under either.
 QUANTIZED_LINEARS = (
     "self_attn.qkv_proj.weight",
     "self_attn.o_proj.weight",
     "mlp.gate_up_proj.weight",
     "mlp.down_proj.weight",
 )
+AWQ_SUFFIXES = ("qweight", "qzeros", "scales")
+# What nano reads: AutoAWQ's GEMM format, 4 bits, groups of 128, zero points.
+AWQ_FORMAT = {"bits": 4, "group_size": 128, "zero_point": True, "version": "gemm"}
 
 Linear = Union[torch.Tensor, W4A16Weight]
+
+
+@dataclass(frozen=True)
+class AWQTensors:
+    """One projection of an AWQ checkpoint, as stored (awq_unpack)."""
+
+    qweight: torch.Tensor
+    qzeros: torch.Tensor
+    scales: torch.Tensor
+
+
+def resolve_weight_quant(requested: str, config: NanoLlamaConfig) -> str:
+    """The weight_quant a checkpoint loads with.
+
+    An AWQ checkpoint loads as "awq" whether "awq" or "none" was asked for
+    (its weights exist only in 4 bits); "w4a16" on it, or "awq" on a
+    full-precision checkpoint, is an error.
+    """
+    if requested not in WEIGHT_QUANT_MODES:
+        raise ValueError(f"weight_quant must be one of: {', '.join(WEIGHT_QUANT_MODES)}")
+    quant = config.quantization_config
+    if not quant:
+        if requested == "awq":
+            raise ValueError(
+                "weight_quant='awq' needs an AWQ checkpoint (config.json quantization_config "
+                "with quant_method 'awq')"
+            )
+        return requested
+    found = {
+        "bits": quant.get("bits"),
+        "group_size": quant.get("group_size"),
+        "zero_point": quant.get("zero_point"),
+        "version": str(quant.get("version", "")).lower(),
+    }
+    if str(quant.get("quant_method", "")).lower() != "awq" or found != AWQ_FORMAT:
+        raise ValueError(
+            "nano-vLLM loads pre-quantized checkpoints in AutoAWQ's GEMM format only "
+            f"({AWQ_FORMAT}); config.json has quantization_config {quant}"
+        )
+    if requested == "w4a16":
+        raise ValueError(
+            "weight_quant='w4a16' quantizes a full-precision checkpoint at load; this one "
+            "is already AWQ (use 'awq')"
+        )
+    if requested == "none":
+        logger.info("AWQ checkpoint: loading with weight_quant='awq'")
+    return "awq"
+
+
+def _group_awq(weights: Dict[str, Any]) -> Dict[str, Any]:
+    """Each AWQ projection's three tensors -> one AWQTensors under ``<name>.weight``."""
+    grouped: Dict[str, Any] = {}
+    for name, tensor in weights.items():
+        base, _, suffix = name.rpartition(".")
+        if suffix in AWQ_SUFFIXES and f"{base}.qweight" in weights:
+            if suffix == "qweight":
+                grouped[f"{base}.weight"] = AWQTensors(
+                    tensor, weights[f"{base}.qzeros"], weights[f"{base}.scales"]
+                )
+        else:
+            grouped[name] = tensor
+    return grouped
 
 
 @dataclass(frozen=True)
@@ -231,8 +313,7 @@ class NanoLlamaForCausalLM:
         weight_quant: str = "none",
         kv_cache_dtype: str = "auto",
     ) -> None:
-        if weight_quant not in WEIGHT_QUANT_MODES:
-            raise ValueError(f"weight_quant must be one of: {', '.join(WEIGHT_QUANT_MODES)}")
+        weight_quant = resolve_weight_quant(weight_quant, config)
         if kv_cache_dtype not in KV_CACHE_DTYPES:
             raise ValueError(f"kv_cache_dtype must be one of: {', '.join(KV_CACHE_DTYPES)}")
         self.config = config
@@ -249,10 +330,10 @@ class NanoLlamaForCausalLM:
             # Build the extensions now, never inside a CUDA-graph capture.
             if linear_backend == "cuda":
                 load_cuda_extension()
-            if weight_quant == "w4a16":
+            if weight_quant in ("w4a16", "awq"):
                 load_cuda_extension("w4a16")
         self._validate_required_weights(weights)
-        weights = fuse_projections(weights, config.num_hidden_layers)
+        weights = _group_awq(fuse_projections(weights, config.num_hidden_layers))
         self.weights = {
             name: self._load_weight(name, tensor) for name, tensor in weights.items()
         }
@@ -710,14 +791,23 @@ class NanoLlamaForCausalLM:
             return tensor.to(device=self.device, dtype=self.dtype)
         return tensor.to(device=self.device)
 
-    def _load_weight(self, name: str, tensor: torch.Tensor) -> torch.Tensor | W4A16Weight:
+    def _load_weight(self, name: str, tensor: torch.Tensor | AWQTensors) -> torch.Tensor | W4A16Weight:
         """Move one checkpoint tensor; quantize it here under weight_quant.
 
         One weight at a time, so the full-precision copy of a quantized
         projection is on the device only while it is being quantized. The
         layout follows W4A16_CONFIG["layout"]; a shape the tiled kernel
-        cannot take stays in rows.
+        cannot take stays in rows. AWQ projections are unpacked on the
+        device and always take the tiled layout (the row-layout kernels have
+        no zero points); their fp16 scales take the model dtype.
         """
+        if isinstance(tensor, AWQTensors):
+            if not name.endswith(QUANTIZED_LINEARS):
+                raise ValueError(f"{name}: nano-vLLM reads AWQ weights for the decoder projections only")
+            codes, zeros, scales = awq_unpack(
+                *(t.to(self.device) for t in (tensor.qweight, tensor.qzeros, tensor.scales))
+            )
+            return pack_w4a16(codes, scales.to(self.dtype), zeros, layout="tiled")
         moved = self._move_weight(tensor)
         if self.weight_quant == "w4a16" and name.endswith(QUANTIZED_LINEARS):
             tiled = W4A16_CONFIG["layout"] == "tiled" and w4a16_tiled_supported(*moved.shape)
@@ -756,20 +846,18 @@ class NanoLlamaForCausalLM:
             "model.embed_tokens.weight",
             "model.norm.weight",
         ]
+        # An AWQ checkpoint stores each projection as qweight/qzeros/scales.
+        suffixes = AWQ_SUFFIXES if self.weight_quant == "awq" else ("weight",)
         for layer_idx in range(self.config.num_hidden_layers):
+            prefix = f"model.layers.{layer_idx}"
             required.extend(
-                [
-                    f"model.layers.{layer_idx}.input_layernorm.weight",
-                    f"model.layers.{layer_idx}.post_attention_layernorm.weight",
-                    f"model.layers.{layer_idx}.self_attn.q_proj.weight",
-                    f"model.layers.{layer_idx}.self_attn.k_proj.weight",
-                    f"model.layers.{layer_idx}.self_attn.v_proj.weight",
-                    f"model.layers.{layer_idx}.self_attn.o_proj.weight",
-                    f"model.layers.{layer_idx}.mlp.gate_proj.weight",
-                    f"model.layers.{layer_idx}.mlp.up_proj.weight",
-                    f"model.layers.{layer_idx}.mlp.down_proj.weight",
-                ]
+                [f"{prefix}.input_layernorm.weight", f"{prefix}.post_attention_layernorm.weight"]
             )
+            for proj in (
+                "self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj", "self_attn.o_proj",
+                "mlp.gate_proj", "mlp.up_proj", "mlp.down_proj",
+            ):
+                required.extend(f"{prefix}.{proj}.{suffix}" for suffix in suffixes)
         missing = [name for name in required if name not in weights]
         if missing:
             raise KeyError(
