@@ -278,4 +278,28 @@ the full output length). nano got 9,942 KV blocks (M0's vLLM capacity).
   - W3: nano's background ITL p50 8.08 against 9.23 ms, p99 12.2 against 11.6, p99.9 130.5 against 161.9; long-prompt TTFT p50 351.9 against 398.6 ms.
 - 512-token chunks: W1 ITL p99 44.85 / 49.96 ms at c=16 / 64 (2,048: 86.65 / 93.84), W1 TTFT p50 at c=64 206.6 against 286.8 ms, W1u c=16 TTFT 200.4 against 350.4; but W1 c=64 throughput 2,052 against 2,107 tok/s, W3 ITL p99 29.3 ms and long-prompt TTFT p50 433.2 ms. The benchmark default stays 2,048; nano's own default is 512.
 - W1u c=1 TTFT p50 89.1 ms, the same as `w4serve`: a 1,024-row step still dequantizes. Phase 1's G4 asked for −10 ms; missed.
-- KV: 215,424 tokens against `w4serve`'s 227,824. Allocated before sizing 5.87 against 5.33 GiB (the int8 lm_head is 0.49 GiB), but 8.32 against 6.80 GiB in use on the GPU: about 1 GiB reserved and not allocated, likely fragmentation from unpacking AWQ on the GPU.
+- KV: 215,424 tokens against `w4serve`'s 227,824. Allocated before sizing 5.87 against 5.33 GiB (the int8 lm_head is 0.49 GiB), but 8.32 against 6.80 GiB in use on the GPU: about 1 GiB reserved and not allocated, likely fragmentation from unpacking AWQ on the GPU. (Run `kvfrag` below: it was the int8 lm_head's quantization.)
+
+## KV after loading (2026-10-30)
+
+### Run kvfrag-20261030-095505-colab (new VM `kvfrag`, stopped after this run)
+
+- Question: does building each weight on a side stream give the KV cache back the memory left reserved after loading?
+- Cause, found before the run with a CPU trace of the real `_load_weight` (8B shapes, meta tensors) replayed through a model of the CUDA caching allocator:
+  - Converting weights at load makes large GPU temporaries: the int8 lm_head quantizes 128,256 x 4,096 in fp32 (2 GiB per temporary), and RTN and AWQ unpacking reach ~470 MiB per projection.
+  - Best fit puts the weights loaded after them in their freed blocks, and `empty_cache` releases only segments with no live block.
+  - Replay of `awqserve`'s load: 5.86 GiB allocated (5.87 measured) and 2.00 GiB reserved but unallocated. The projections leave 0.76 of that (the same for RTN and AWQ) and the int8 lm_head 1.24.
+  - Measured in use minus allocated: 0.55 GiB for bf16, 1.47 for `w4serve`, 2.45 for `awqserve`, i.e. 0.55 plus the replay's figures.
+  - `empty_cache` after each weight: 1.44 GiB in the replay.
+- Code: ba685ff. `_build_on_stream` builds each weight (and a tied int8 head) on a side stream and clones it onto the current one; the KV sizing line prints PyTorch's reserved and allocated memory. Replay: 0.00 GiB reserved but unallocated.
+- Settings: `P2_STEPS="installs tests serve summarize" P2_CONCURRENCY="1"`, with these `P2_RUNS`:
+  - `nano:nano_awq:w1`, with `WEIGHT_QUANT=awq,ENGINE_MULTIPROCESS=true,MAX_NUM_BATCHED_TOKENS=2048,NUM_KVCACHE_BLOCKS=0`;
+  - `nano:nano_w4:w1`, the same with `WEIGHT_QUANT=w4a16` (RTN, now with the `int8_dense` head).
+- 15 minutes, 1.25 CU: installs 245 s, tests 520 s (963 passed, no skips), servers 148 s.
+- KV, both servers: 230,736 tokens (`awqserve` 215,424, `w4serve` 227,824, vLLM 237,824).
+  - 6.45 GiB in use on the GPU after sizing (`awqserve` 8.32);
+  - PyTorch reserved 5.92 and allocated 5.88 GiB (5.87 before sizing).
+- W1 c=1:
+  - nano_awq: 205 tok/s, TTFT p50 14.4 ms, ITL p50 4.84 / p99 5.17 ms;
+  - nano_w4: 204 tok/s, TTFT p50 14.4 ms, ITL p50 4.84 / p99 5.48 ms.
+- Startup: 25 s for nano_awq (the VM's first server) and 20 s for nano_w4; `awqserve`'s nano_awq took 20 s.

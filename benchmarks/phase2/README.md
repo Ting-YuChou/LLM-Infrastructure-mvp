@@ -448,6 +448,30 @@ W3 (4096-token prompts arriving on top of 32 decodes):
 - With 512-token chunks, nano beats vLLM on W1's ITL p99 at c=16 (44.85 against 75.20 ms), the one W1 metric it lost with 2,048. The price is 2.6% throughput at c=64, a worse W3 ITL p99 (29.3 ms) and a long-prompt TTFT p50 behind vLLM's (433 against 399 ms).
 - Neither chunk size wins every metric: 2,048 loses W1's ITL p99 at c=16 and W3's ITL p99 by 0.6 ms; 512 loses W3's ITL p99 and long-prompt TTFT.
 - The uncached 1024-token TTFT at c=1 did not improve (89.1 ms, as in `w4serve`). One 1,024-row step is past `tiled_max_rows`, so it still dequantizes; Phase 1's large-M kernel lost to dequantize + cuBLAS and stays off.
-- nano's KV cache is 5% smaller than in `w4serve` (215,424 against 227,824 tokens). The int8 lm_head adds 0.5 GiB; the other ~1 GiB is reserved but not allocated after loading, likely fragmentation from unpacking AWQ on the GPU. Not fixed.
+- nano's KV cache is 5% smaller than in `w4serve` (215,424 against 227,824 tokens). The int8 lm_head adds 0.5 GiB; the other ~1 GiB is reserved but not allocated after loading. That came from quantizing the int8 lm_head, not from unpacking AWQ; fixed in `kvfrag` (below): 230,736 tokens.
 
 vLLM's sampled c=16 throughput is again far below its greedy one (794 against 1,502 tok/s).
+
+### KV cache after quantized loading (run `kvfrag-20261030-095505-colab`)
+
+In `awqserve`, 2.45 GiB of the GPU was in use beyond PyTorch's allocations once the KV cache was sized (8.32 against 5.87 GiB), against 0.55 GiB with the bf16 model (CUDA context and modules). Converting weights at load (the int8 lm_head, RTN, AWQ unpacking) makes large GPU temporaries, up to 2 GiB each for the lm_head in fp32. The caching allocator placed the weights loaded after them in their freed blocks (best fit), and `empty_cache` releases only segments with no live block, so those segments stayed reserved.
+
+Replaying the load's allocations through a model of the allocator (a CPU trace of the real `_load_weight` at the 8B shapes) gives 5.86 GiB allocated (5.87 measured) and 2.00 GiB reserved but unallocated:
+- 0.76 GiB from the projections, the same for RTN and AWQ;
+- 1.24 GiB more from the int8 lm_head.
+
+So the ~1 GiB lost against `w4serve` came from the int8 lm_head. `empty_cache` after each weight leaves 1.44 GiB.
+
+Fix: `model._build_on_stream` builds each weight on a side stream and copies it onto the current one. The allocator reuses a block only on the stream that allocated it, so the weights fill their own segments and the side stream's are all released. The KV sizing line now prints PyTorch's reserved and allocated memory. Both nano configs, with the `int8_dense` head:
+
+| | `w4serve` (RTN, bf16 head) | `awqserve` (AWQ) | `kvfrag` AWQ | `kvfrag` RTN |
+|---|---:|---:|---:|---:|
+| PyTorch allocated before sizing (GiB) | 5.33 | 5.87 | 5.87 | 5.87 |
+| in use on the GPU after sizing (GiB) | 6.80 | 8.32 | **6.45** | **6.45** |
+| PyTorch reserved / allocated after sizing (GiB) | - | - | 5.92 / 5.88 | 5.92 / 5.88 |
+| KV tokens | 227,824 | 215,424 | **230,736** | **230,736** |
+
+- AWQ gains 15,312 KV tokens (+7.1%). nano is now 3.0% below vLLM's 237,824, down from 9.4%. RTN holds 0.5 GiB more weights than in `w4serve` and still gains 2,912 tokens.
+- 0.53 GiB of the GPU is outside PyTorch, as with the bf16 model; 0.04 GiB is reserved but unallocated.
+- W1 at c=1 is unchanged: nano_awq 205 tok/s, TTFT p50 14.4 ms, ITL p50 4.84 ms (`awqserve`: 204, 14.4, 4.85).
+- 963 tests passed with no skips.

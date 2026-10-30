@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, replace
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Callable, Dict, Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -300,6 +301,42 @@ def _group_awq(weights: Dict[str, Any]) -> Dict[str, Any]:
     return grouped
 
 
+def _clone_weight(weight: Linear) -> Linear:
+    """A copy of a loaded weight (a tensor, W4A16Weight or W8A16Weight),
+    allocated on the current stream."""
+    if isinstance(weight, torch.Tensor):
+        return weight.clone()
+    return replace(weight, **{
+        field.name: value.clone()
+        for field in fields(weight)
+        if isinstance(value := getattr(weight, field.name), torch.Tensor)
+    })
+
+
+def _build_on_stream(stream: torch.cuda.Stream, build: Callable[[], Linear]) -> Linear:
+    """build() with ``stream`` current, then a copy of its result made on the
+    current stream.
+
+    Converting a weight at load (the int8 lm_head, RTN quantization, AWQ
+    unpacking) makes temporaries of up to 2 GiB (lm_head in fp32). The
+    caching allocator carves later allocations, weights included, out of
+    their freed blocks, and empty_cache releases only segments with no live
+    block, so loading on one stream left ~2 GiB reserved but unallocated,
+    which the KV cache never got (run awqserve). A block is reused only by
+    the stream that allocated it: the temporaries and the built weight stay
+    in segments of ``stream``, empty once the copy is made, and the copies
+    fill segments of their own.
+    """
+    current = torch.cuda.current_stream(stream.device)
+    with torch.cuda.stream(stream):
+        weight = build()
+    stream.synchronize()
+    copy = _clone_weight(weight)
+    # Done reading before the temporaries' blocks are freed for reuse on stream.
+    current.synchronize()
+    return copy
+
+
 @dataclass(frozen=True)
 class _LayerWeights:
     """Per-layer tensors, looked up once instead of by name on every call."""
@@ -355,9 +392,7 @@ class NanoLlamaForCausalLM:
                 load_cuda_extension("w4a16")
         self._validate_required_weights(weights)
         weights = _group_awq(fuse_projections(weights, config.num_hidden_layers))
-        self.weights = {
-            name: self._load_weight(name, tensor) for name, tensor in weights.items()
-        }
+        self.weights = self._load_weights(weights)
         quantized = [w for w in self.weights.values() if isinstance(w, W4A16Weight)]
         if quantized and device.type == "cuda":
             # Split-K buffers, before any CUDA graph is captured.
@@ -800,7 +835,13 @@ class NanoLlamaForCausalLM:
             embed = self.weights["model.embed_tokens.weight"]
             if self.lm_head_quant == "none":
                 return embed
-            return quantize_w8a16(embed, keep_dense=self.lm_head_quant == "int8_dense")
+            keep_dense = self.lm_head_quant == "int8_dense"
+            if embed.device.type != "cuda":
+                return quantize_w8a16(embed, keep_dense=keep_dense)
+            # Only the int8 copy is new; the dense one is the embedding itself.
+            head = _build_on_stream(torch.cuda.Stream(embed.device), lambda: quantize_w8a16(embed))
+            torch.cuda.empty_cache()
+            return replace(head, dense=embed) if keep_dense else head
         if "lm_head.weight" not in self.weights:
             raise KeyError(
                 "Model checkpoint is missing lm_head.weight and config.json does "
@@ -818,6 +859,20 @@ class NanoLlamaForCausalLM:
         if tensor.is_floating_point():
             return tensor.to(device=self.device, dtype=self.dtype)
         return tensor.to(device=self.device)
+
+    def _load_weights(self, weights: Dict[str, Any]) -> Dict[str, Any]:
+        """_load_weight for every weight; on CUDA each is built on a side
+        stream, so its temporaries stay out of the weights' segments
+        (_build_on_stream)."""
+        if self.device.type != "cuda":
+            return {name: self._load_weight(name, tensor) for name, tensor in weights.items()}
+        scratch = torch.cuda.Stream(self.device)
+        loaded = {
+            name: _build_on_stream(scratch, functools.partial(self._load_weight, name, tensor))
+            for name, tensor in weights.items()
+        }
+        torch.cuda.empty_cache()
+        return loaded
 
     def _load_weight(self, name: str, tensor: torch.Tensor | AWQTensors) -> torch.Tensor | W4A16Weight:
         """Move one checkpoint tensor; quantize it here under weight_quant.
