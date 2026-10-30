@@ -1,6 +1,8 @@
+import contextlib
 import dataclasses
 import itertools
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -9,12 +11,14 @@ torch = pytest.importorskip("torch")
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
+from serving.nano_vllm import model as model_mod  # noqa: E402
 from serving.nano_vllm.config import NanoVLLMConfig  # noqa: E402
 from serving.nano_vllm.kernels import (  # noqa: E402
     W4A16Weight,
     dequantize_w4a16,
     linear,
     quantize_w4a16,
+    quantize_w8a16,
     w4a16_linear_reference,
 )
 from serving.nano_vllm.kernels import w4a16 as w4a16_mod  # noqa: E402
@@ -484,6 +488,69 @@ def test_awq_model_needs_every_projection_in_awq_form():
     del awq["model.layers.1.mlp.down_proj.qzeros"]
     with pytest.raises(KeyError, match="down_proj.qzeros"):
         _model(awq, weight_quant="awq", config=config)
+
+
+def test_cuda_load_builds_each_weight_on_a_side_stream_and_copies_it_back(monkeypatch):
+    """Built on the current stream, the conversions' freed temporaries took
+    the weights after them and their segments could not be released; the copy
+    has to be made on the current stream, after the build finished."""
+    events = []
+
+    class Stream:
+        def __init__(self, device=None, name="side"):
+            self.device, self.name = device, name
+
+        def synchronize(self):
+            events.append(f"sync {self.name}")
+
+    current = [Stream(name="main")]
+
+    @contextlib.contextmanager
+    def stream(s):
+        previous, current[0] = current[0], s
+        try:
+            yield
+        finally:
+            current[0] = previous
+
+    clone_weight = model_mod._clone_weight
+
+    def clone(weight):
+        events.append(f"clone on {current[0].name}")
+        return clone_weight(weight)
+
+    monkeypatch.setattr(torch.cuda, "Stream", Stream)
+    monkeypatch.setattr(torch.cuda, "stream", stream)
+    monkeypatch.setattr(torch.cuda, "current_stream", lambda device=None: current[0])
+    monkeypatch.setattr(torch.cuda, "empty_cache", lambda: events.append("empty_cache"))
+    monkeypatch.setattr(model_mod, "_clone_weight", clone)
+
+    built = {
+        "plain": torch.arange(4.0),
+        "w4": quantize_w4a16(torch.randn(128, 128), layout="tiled"),
+        "w8": quantize_w8a16(torch.randn(8, 16)),
+    }
+
+    def load_weight(name, tensor):
+        events.append(f"build {name} on {current[0].name}")
+        return built[name]
+
+    model = types.SimpleNamespace(device=torch.device("cuda"), _load_weight=load_weight)
+    loaded = NanoLlamaForCausalLM._load_weights(model, dict.fromkeys(built))
+
+    assert events == [
+        event
+        for name in built
+        for event in (f"build {name} on side", "sync side", "clone on main", "sync main")
+    ] + ["empty_cache"]
+    assert loaded["w8"].dense is None and loaded["w8"].dtype == built["w8"].dtype
+    for name, weight in built.items():
+        pairs = [(loaded[name], weight)] if name == "plain" else [
+            (getattr(loaded[name], field), getattr(weight, field))
+            for field in ("qweight", "scales", "zeros") if hasattr(weight, field)
+        ]
+        for copy, original in pairs:
+            assert torch.equal(copy, original) and copy.data_ptr() != original.data_ptr()
 
 
 def test_config_reads_quantization_config(tmp_path):

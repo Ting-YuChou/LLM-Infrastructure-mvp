@@ -358,14 +358,19 @@ def size_kv_cache(config: NanoVLLMConfig, model) -> int:
             f"{config.gpu_memory_utilization} but one max_model_len sequence needs "
             f"{needed}; raise gpu_memory_utilization or lower max_model_len"
         )
+    # Of what is already on the GPU, PyTorch holds the reserved part; reserved
+    # but not allocated is cached blocks in segments empty_cache could not release.
     logger.info(
         "nano-vLLM KV cache: %d blocks (%d tokens, %.2f GiB); %.2f GiB already on the "
-        "GPU of %.2f GiB, activation peak %.2f GiB for %d tokens (allocated before: %.2f GiB)",
+        "GPU of %.2f GiB (PyTorch reserved %.2f, allocated %.2f), activation peak %.2f GiB "
+        "for %d tokens (allocated before: %.2f GiB)",
         num_blocks,
         num_blocks * block_size,
         num_blocks * per_block / 1024**3,
         (total - free) / 1024**3,
         total / 1024**3,
+        torch.cuda.memory_reserved() / 1024**3,
+        torch.cuda.memory_allocated() / 1024**3,
         activation_peak / 1024**3,
         tokens,
         before / 1024**3,
