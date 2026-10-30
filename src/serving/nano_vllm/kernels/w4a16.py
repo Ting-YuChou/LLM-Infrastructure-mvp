@@ -29,12 +29,12 @@ Marlin-style kernel, gemm_w4a16_tiled:
 - scales: [K // 128, N // 64, 8, 8], [.., g, j] being column 64t + 8j + g,
   so one 16-byte load gives lane (g, c) the scales of its eight columns.
 - zeros: int32 [K // 128, N // 64, 8, 2], [.., g, w] holding the zero
-  points of columns 64t + 8j + g, j = 4w + jj, at nibbles jj and 4 + jj
-  (bits 4jj and 16 + 4jj). The kernel turns a code into magic + q by OR-ing
-  it into the mantissa of magic (128.0 in bf16, 1024.0 in fp16, both with
-  an ulp of 1); the same OR of word >> 4jj gives magic + z in both halves,
-  so one subtraction leaves q - z exactly. One byte per zero point, half
-  of a bf16 scale. Symmetric weights store z = 8.
+  points of columns 64t + 8j + g, j = 4w + b, in byte b. The kernel turns a
+  code into magic + q by OR-ing it into the mantissa of magic (128.0 in
+  bf16, 1024.0 in fp16, both with an ulp of 1); one byte permute of z and
+  magic's high byte gives magic + z in both halves, so one subtraction
+  leaves q - z exactly. One byte per zero point, half of a bf16 scale.
+  Symmetric weights store z = 8.
 It needs group_size 128 and N a multiple of 128 (W4A16_TILED_N_MULTIPLE).
 Row-layout weights are symmetric only (zeros None).
 
@@ -103,15 +103,18 @@ W4A16_CONFIG = {
     # the persistent grid, or an explicit grid size (tests force schedules);
     # up to tiled_max_rows rows it beats dequantize + F.linear (run marlin-t1c:
     # at 128 rows 531 vs 913 us for a layer's four projections; at 256 rows
-    # in decode, run concur-c1, dequantizing took 13.4 ms of a 50 ms step).
+    # in decode, run concur-c1, dequantizing took 13.4 ms of a 50 ms step;
+    # kbench awq-a1: at 384 / 512 rows 911 / 1,225 vs 1,167 / 1,386 us).
     "tiled_tile": "auto",
     "tiled_blocks_per_sm": 1,
     "tiled_grid": 0,
-    "tiled_max_rows": 256,
-    # gemm_w4a16_large past tiled_max_rows (False: dequantize + F.linear, the
-    # path before round 6, 14 ms of a 2,048-token step in run w4serve);
-    # "auto" or one of W4A16_LARGE_TILES.
-    "large": True,
+    "tiled_max_rows": 512,
+    # gemm_w4a16_large past tiled_max_rows instead of dequantize + F.linear.
+    # Off: in run awq-a1 it ran at ~182 TFLOPs at 1,024-2,048 rows against
+    # cuBLAS's ~257, so dequantizing first was 5-20% faster there (vLLM's
+    # Marlin too was slower than dequantize + cuBLAS). "auto" or one of
+    # W4A16_LARGE_TILES.
+    "large": False,
     "large_tile": "auto",
 }
 W4A16_LAYOUTS = ("rows", "tiled")
@@ -307,21 +310,17 @@ def _tile_scales(scales: torch.Tensor) -> torch.Tensor:
 
 def _tile_zeros(zeros: torch.Tensor) -> torch.Tensor:
     """uint8 [N, K/128] -> int32 [K/128, N/64, 8 (g), 2 (w)]: column
-    64t + 8(4w + jj) + g at nibbles jj and 4 + jj of word [.., g, w]."""
+    64t + 8(4w + b) + g in byte b of word [.., g, w]."""
     n, groups = zeros.shape
-    z = zeros.view(n // 64, 2, 4, 8, groups).permute(4, 0, 3, 1, 2).to(torch.int64)  # [G, T, g, w, jj]
-    words = torch.zeros(z.shape[:-1], dtype=torch.int64, device=zeros.device)
-    for jj in range(4):
-        words |= (z[..., jj] << (4 * jj)) | (z[..., jj] << (16 + 4 * jj))
-    return torch.where(words >= 2**31, words - 2**32, words).to(torch.int32).contiguous()
+    z = zeros.view(n // 64, 2, 4, 8, groups).permute(4, 0, 3, 1, 2)  # [G, T, g, w, b]
+    return z.contiguous().view(torch.int32).reshape(groups, n // 64, 8, 2)  # little-endian bytes
 
 
 def _untile_zeros(tiled: torch.Tensor) -> torch.Tensor:
     """int32 [K/128, N/64, 8, 2] -> uint8 [N, K/128] (inverse of _tile_zeros)."""
     groups, tiles = tiled.shape[:2]
-    shifts = 4 * torch.arange(4, device=tiled.device, dtype=torch.int32)
-    nibbles = (tiled.unsqueeze(-1) >> shifts) & 0xF  # [G, T, g, w, jj], the low halves
-    return nibbles.permute(1, 3, 4, 2, 0).reshape(tiles * 64, groups).to(torch.uint8)
+    z = tiled.contiguous().view(torch.uint8).view(groups, tiles, 8, 2, 4)  # [G, T, g, w, b]
+    return z.permute(1, 3, 4, 2, 0).reshape(tiles * 64, groups).clone()
 
 
 def _untile_scales(tiled: torch.Tensor) -> torch.Tensor:

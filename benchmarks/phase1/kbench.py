@@ -868,7 +868,7 @@ def _nano_large(tile: str):
             raise NotApplicable("gemm_w4a16_large is timed from 64 rows")
         _need_w4a16(i, 1 << 30, "gemm_w4a16_large")
         x, weight = i["x"], _awq_weight(i)
-        return lambda: w4a16_linear(x, weight, config={"tiled_max_rows": 0, "large_tile": tile})
+        return lambda: w4a16_linear(x, weight, config={"tiled_max_rows": 0, "large": True, "large_tile": tile})
 
     return factory
 
@@ -921,7 +921,7 @@ register(
             for layer, (n, k) in LINEAR_SHAPES.items()
             if layer != "lm_head"  # stays bf16 in AWQ checkpoints
             # past 256: prefill chunks (gemm_w4a16_large, or dequantize + cuBLAS before)
-            for m in (1, 4, 8, 16, 32, 64, 128, 256, 384, 512, 1024, 2048)
+            for m in (1, 4, 8, 16, 32, 64, 128, 256, 384, 512, 768, 1024, 2048)
         ],
         inputs=_awq_inputs,
         impls={

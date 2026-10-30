@@ -417,12 +417,11 @@ def test_tiled_zero_points_dequantize_to_q_minus_z_times_s(dtype):
     weight = pack_w4a16(codes, scales, zeros, layout="tiled")
 
     assert weight.zeros.shape == (k // 128, n // 64, 8, 2) and weight.zeros.dtype == torch.int32
-    # Column 64t + 8(4w + jj) + g sits at nibbles jj and 4 + jj of word [group, t, g, w].
+    # Column 64t + 8(4w + b) + g is byte b of word [group, t, g, w].
     raw = weight.zeros.to(torch.int64) & 0xFFFFFFFF
     for group, t, g, j in itertools.product(range(k // 128), range(n // 64), range(8), range(8)):
         word = int(raw[group, t, g, j // 4])
-        z = int(zeros[64 * t + 8 * j + g, group])
-        assert (word >> (4 * (j % 4))) & 0xF == z and (word >> (16 + 4 * (j % 4))) & 0xF == z
+        assert (word >> (8 * (j % 4))) & 0xFF == int(zeros[64 * t + 8 * j + g, group])
     torch.testing.assert_close(w4a16_row_zeros(weight), zeros.float(), rtol=0, atol=0)
     q = codes.float().reshape(n, k // 128, 128)
     expected = ((q - zeros.float().unsqueeze(-1)) * scales.float().unsqueeze(-1)).reshape(n, k)
@@ -436,7 +435,7 @@ def test_rtn_tiled_weights_store_zero_point_8_and_match_rows():
     tiled = quantize_w4a16(weight, layout="tiled")
     rows = quantize_w4a16(weight)
     assert rows.zeros is None
-    assert torch.all(tiled.zeros == torch.tensor(0x88888888 - 2**32, dtype=torch.int32))
+    assert torch.all(tiled.zeros == torch.tensor(0x08080808, dtype=torch.int32))
     torch.testing.assert_close(w4a16_row_zeros(tiled), w4a16_row_zeros(rows), rtol=0, atol=0)
     torch.testing.assert_close(dequantize_w4a16(tiled), dequantize_w4a16(rows), rtol=0, atol=0)
 

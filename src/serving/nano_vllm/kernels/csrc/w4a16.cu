@@ -67,6 +67,7 @@ struct Traits<__nv_bfloat16> {
   using T2 = __nv_bfloat162;
   static constexpr uint32_t kMagic = 0x43004300u;  // 128.0 in both halves
   static constexpr uint32_t kBias = 0x43084308u;   // 136.0 in both halves
+  static constexpr uint32_t kMagicHigh = 0x43434343u;  // kMagic's high byte, for zero_pairs
   __device__ static float2 to_float2(T2 v) { return __bfloat1622float2(v); }
   __device__ static float to_float(__nv_bfloat16 v) { return __bfloat162float(v); }
   __device__ static __nv_bfloat16 from_float(float v) { return __float2bfloat16(v); }
@@ -77,6 +78,7 @@ struct Traits<__half> {
   using T2 = __half2;
   static constexpr uint32_t kMagic = 0x64006400u;  // 1024.0 in both halves
   static constexpr uint32_t kBias = 0x64086408u;   // 1032.0 in both halves
+  static constexpr uint32_t kMagicHigh = 0x64646464u;
   __device__ static float2 to_float2(T2 v) { return __half22float2(v); }
   __device__ static float to_float(__half v) { return __half2float(v); }
   __device__ static __half from_float(float v) { return __float2half(v); }
@@ -231,13 +233,16 @@ __device__ __forceinline__ uint32_t dequant_pair(uint32_t word, int i, uint32_t 
 }
 
 // A lane's eight zero points (n8 tiles j = 0..7 of its column, w4a16.py's
-// tiled zeros): z_j sits at nibbles j % 4 and 4 + j % 4 of word j / 4, so
-// one lop3 gives dequant_pair's bias, magic + z_j in both halves.
+// tiled zeros): z_j is byte j % 4 of word j / 4, so one prmt of it and
+// magic's high byte gives dequant_pair's bias, magic + z_j (bits magic | z_j)
+// in both halves.
 template <typename T>
 __device__ __forceinline__ void zero_pairs(uint2 words, uint32_t (&zp)[8]) {
 #pragma unroll
-  for (int j = 0; j < 8; ++j)
-    zp[j] = and_or((j < 4 ? words.x : words.y) >> (4 * (j % 4)), 0x000F000Fu, Traits<T>::kMagic);
+  for (int j = 0; j < 8; ++j) {
+    const uint32_t b = j % 4;  // bytes: z_j, magic's high byte, z_j, magic's high byte
+    zp[j] = __byte_perm(j < 4 ? words.x : words.y, Traits<T>::kMagicHigh, b | 4u << 4 | b << 8 | 4u << 12);
+  }
 }
 
 template <typename T>
@@ -874,7 +879,9 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
   };
   // The scales of this lane's eight columns (n8 tiles 0..7, column g), for
   // the group holding the warp's k16 rows; kept packed (4 registers) and
-  // broadcast to both halves where they are used.
+  // broadcast to both halves where they are used. Like the zero points they
+  // are read at the top of each tile (no register double buffer: that and
+  // decoding the zero points once per tile did not fit MT 4's registers).
   auto fetch_scales = [&](int s) {
     const int group = TILE_K >= 128 ? row0 / 8 : 0;
     return reinterpret_cast<const uint4*>(stage(s) + Sh::kABytes)[Sh::kBWords + (group * Sh::kCols + col) * 8 + g];
@@ -883,6 +890,7 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
   // each tile, before the tile's last row refills a stage: a warp running
   // ahead refills stage s at the end of tile t + 1, after every warp has
   // reached tile t's last barrier, so a read later than that could race.
+  // (Decoding them per row cost 8.5% of the GEMM time at 64 rows, run awq-a1.)
   auto fetch_zeros = [&](int s) {
     const int group = TILE_K >= 128 ? row0 / 8 : 0;
     const uint2* z = reinterpret_cast<const uint2*>(stage(s) + Sh::kABytes + 16 * (Sh::kBWords + Sh::kSWords));
@@ -1095,19 +1103,15 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
   uint32_t a_cur[MT][4], a_nxt[MT][4];
   uint4 b_cur, b_nxt;
   fetch(0, row0, a_cur, b_cur);
-  uint4 sc_cur = fetch_scales(0), sc_nxt = sc_cur;
   int s = 0;
   int slice = begin / k_tiles;
   int kr = begin - slice * k_tiles;
   for (int t = begin; t < end; ++t) {
     const int s_next = s + 1 == kTiledStages ? 0 : s + 1;
-    // A warp's rows of a stage share one group: up to MT 2 its zero points
-    // are decoded once per tile, past that once per row (eight registers
-    // fewer; the MT 3-4 builds were at 248-252).
-    constexpr bool kTileZeros = MT <= 2;
-    const uint2 zw = fetch_zeros(s);
-    uint32_t zp_tile[8];
-    if constexpr (kTileZeros) zero_pairs<T>(zw, zp_tile);
+    // A warp's rows of a stage share one group.
+    const uint4 sc = fetch_scales(s);
+    uint32_t zp[8];
+    zero_pairs<T>(fetch_zeros(s), zp);
 #pragma unroll
     for (int rr = 0; rr < R; ++rr) {
       if (rr + 1 < R) {
@@ -1119,22 +1123,14 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_tiled_kernel(
         // Past the last tile this reads a stale stage, unused: unconditional,
         // the double buffer needs no register copies around the branch.
         fetch(s_next, row0, a_nxt, b_nxt);
-        sc_nxt = fetch_scales(s_next);
       }
-      if constexpr (kTileZeros) {
-        mma_row(a_cur, b_cur, sc_cur, zp_tile);
-      } else {
-        uint32_t zp[8];
-        zero_pairs<T>(zw, zp);
-        mma_row(a_cur, b_cur, sc_cur, zp);
-      }
+      mma_row(a_cur, b_cur, sc, zp);
 #pragma unroll
       for (int mt = 0; mt < MT; ++mt)
 #pragma unroll
         for (int q = 0; q < 4; ++q) a_cur[mt][q] = a_nxt[mt][q];
       b_cur = b_nxt;
     }
-    sc_cur = sc_nxt;
     s = s_next;
     if (kr == k_tiles - 1 && t != end - 1) finish_slice(slice, std::false_type{});
     if (++kr == k_tiles) {
@@ -1425,8 +1421,9 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_large_kernel(
   int slice = begin / k_tiles;
   int kr = begin - slice * k_tiles;
   for (int t = begin; t < end; ++t) {
-    const uint2 zw = fetch_zeros(s);
     const uint4 sc = fetch_scales(s);
+    uint32_t zp[8];
+    zero_pairs<T>(fetch_zeros(s), zp);
 #pragma unroll
     for (int rr = 0; rr < Sh::kKRows; ++rr) {
       uint32_t af[MT][4];
@@ -1437,8 +1434,6 @@ __global__ void __launch_bounds__(kTiledThreads, 1) gemm_w4a16_large_kernel(
         cp_async_wait<kLargeStages - 2>();             // tile t + 1 has landed
         __syncthreads();
       }
-      uint32_t zp[8];
-      zero_pairs<T>(zw, zp);
       mma_row(af, bw, sc, zp);
     }
     s = s + 1 == kLargeStages ? 0 : s + 1;

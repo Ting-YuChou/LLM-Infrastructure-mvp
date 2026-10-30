@@ -278,14 +278,15 @@ def test_tiled_large_batches_dequantize_and_call_f_linear_without_the_large_kern
     assert torch.equal(w4a16_linear(x, weight, config={"large": False}), expected)
 
 
-# gemm_w4a16_large: past tiled_max_rows by default; tiled_max_rows=0 sends
-# every row count to it (padding rows of a chunk, slices shared by blocks).
+# gemm_w4a16_large: past tiled_max_rows with large=True (off by default);
+# tiled_max_rows=0 sends every row count to it (padding rows of a chunk,
+# slices shared by blocks).
 @pytest.mark.parametrize("rows", [257, 300, 512, 1000, 2048, 2100])
 @pytest.mark.parametrize("shape", TILED_SHAPES.values(), ids=TILED_SHAPES)
 def test_large_kernel_matches_dequantized_matmul(shape, rows):
     weight = _awq_weight(*shape, torch.bfloat16)
     x = torch.randn(rows, shape[1], device="cuda").to(torch.bfloat16)
-    _check(x, weight)
+    _check(x, weight, tiled_max_rows=256, large=True)
 
 
 @pytest.mark.parametrize("grid", ["one_block_per_slice", 1, 3, 7, 0])
@@ -300,22 +301,22 @@ def test_large_kernel_tiles_and_grids(rows, tile, grid):
         grid = n // tile_n * -(-rows // tile_m)
     weight = _awq_weight(n, k, torch.bfloat16)
     x = torch.randn(rows, k, device="cuda").to(torch.bfloat16)
-    _check(x, weight, tiled_max_rows=0, large_tile=tile, tiled_grid=grid)
+    _check(x, weight, tiled_max_rows=0, large=True, large_tile=tile, tiled_grid=grid)
 
 
 @pytest.mark.parametrize("tile", list(w4a16_mod.W4A16_LARGE_TILES))
 def test_large_kernel_in_fp16(tile):
     weight = _awq_weight(1024, 2048, torch.float16)
     x = torch.randn(300, 2048, device="cuda").to(torch.float16)
-    _check(x, weight, large_tile=tile)
-    _check(x, weight, large_tile=tile, tiled_grid=5)
+    _check(x, weight, tiled_max_rows=0, large=True, large_tile=tile)
+    _check(x, weight, tiled_max_rows=0, large=True, large_tile=tile, tiled_grid=5)
 
 
 def test_large_kernel_is_deterministic_and_leaves_the_counters_zeroed():
     weight = _awq_weight(4096, 14336, torch.bfloat16)
     for rows in (257, 1000, 2048):
         x = torch.randn(rows, 14336, device="cuda").to(torch.bfloat16)
-        outs = [w4a16_linear(x, weight) for _ in range(3)]
+        outs = [w4a16_linear(x, weight, config={"tiled_max_rows": 256, "large": True}) for _ in range(3)]
         assert all(torch.equal(outs[0], out) for out in outs[1:])
     _, counters = w4a16_mod.w4a16_workspace(x.device, 4096)
     torch.cuda.synchronize()
@@ -327,10 +328,11 @@ def test_large_kernel_is_captured_by_a_cuda_graph(rows):
     """Piecewise graphs reach 512 tokens, past tiled_max_rows."""
     weight = _awq_weight(4096, 4096, torch.bfloat16)
     x = torch.randn(rows, 4096, device="cuda").to(torch.bfloat16)
-    w4a16_linear(x, weight)  # warm-up outside the capture
+    config = {"tiled_max_rows": 256, "large": True}
+    w4a16_linear(x, weight, config=config)  # warm-up outside the capture
     graph = torch.cuda.CUDAGraph()
     with torch.cuda.graph(graph):
-        out = w4a16_linear(x, weight)
+        out = w4a16_linear(x, weight, config=config)
     x.copy_(torch.randn_like(x))
     graph.replay()
     torch.testing.assert_close(out.float(), _reference(x, weight), rtol=1.6e-2, atol=1.6e-2)
