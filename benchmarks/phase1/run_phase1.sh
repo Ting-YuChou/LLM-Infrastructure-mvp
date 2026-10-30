@@ -237,8 +237,8 @@ e2e() {
     nsys_run "vllmw4_b${b}" "${PY}" "${P0_DIR}/vllm_offline.py" --model "${W4_MODEL}" --batch "${b}" \
       --input-len "${input}" --output-len 64 --profile-steps 32 \
       --out "${OUT}/offline/vllmw4_b${b}_nsys.json" || rc=1
-    # Past tiled_max_rows (128) nano dequantizes each weight and calls cuBLAS.
-    specs+=("nano_b${b}=${OUT}/nsys/nano_${label}_b${b}.sqlite:$( ((b > 128)) && echo gemm || echo gemm_w4a16):dequantize"
+    # gemm_w4a16_tiled up to tiled_max_rows (256), gemm_w4a16_large past it.
+    specs+=("nano_b${b}=${OUT}/nsys/nano_${label}_b${b}.sqlite:gemm_w4a16:dequantize"
       "vllm_awq_b${b}=${OUT}/nsys/vllmw4_b${b}.sqlite:Marlin")
   done
   if ((${#specs[@]})); then

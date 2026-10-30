@@ -45,7 +45,8 @@
 # arguments for vllm, vllmw4 and sglang. Default: the M0 baseline (below).
 # vllmw4 is vLLM on P2_VLLM_W4_MODEL (AWQ int4, downloaded on first use),
 # served under P2_MODEL's name so the same tokenizer and requests apply; the
-# nano counterpart is nano with WEIGHT_QUANT=w4a16.
+# nano counterpart is nano with WEIGHT_QUANT=awq, which loads the same
+# checkpoint (WEIGHT_QUANT=w4a16: RTN of P2_MODEL at load).
 #
 # Env: P0_ROOT (default /workspace/p0), P0_RUN_ID (default: UTC timestamp),
 # P0_REPO_DIR (default: the checkout holding this script), P2_STEPS, P2_RUNS,
@@ -197,9 +198,13 @@ nano_kv_blocks() {  # vLLM's KV capacity in 16-token blocks, so both hold the sa
 }
 
 nano_cmd() {  # extra KEY=VALUE,...: the nano server command with the benchmark settings
-  local extra=()
+  local extra=() model="${MODEL}"
   [[ -n "$1" ]] && IFS=, read -r -a extra <<< "$1"
-  echo env PYTHONPATH="${REPO_DIR}" MODEL_NAME="${MODEL}" DTYPE=bfloat16 HOST=127.0.0.1 \
+  if [[ ",$1," == *,WEIGHT_QUANT=awq,* ]]; then  # the AWQ checkpoint vllmw4 serves
+    [[ -f "${W4_MODEL}/config.json" ]] || download_w4_model > "${OUT}/logs/download_w4_model.log" 2>&1 || return 1
+    model="${W4_MODEL}"
+  fi
+  echo env PYTHONPATH="${REPO_DIR}" MODEL_NAME="${model}" DTYPE=bfloat16 HOST=127.0.0.1 \
     PORT="${NANO_PORT}" MAX_MODEL_LEN=8192 MAX_NEW_TOKENS=4096 \
     NUM_KVCACHE_BLOCKS="$(nano_kv_blocks)" MAX_NUM_SEQS=64 MAX_CONCURRENT_REQUESTS=256 \
     MAX_NUM_BATCHED_TOKENS=512 CUDA_GRAPH_MAX_BS=64 ${extra[@]+"${extra[@]}"} \
