@@ -1,0 +1,175 @@
+{
+  "label": "nano_awq_b16",
+  "window_ms": 439.151554,
+  "gpu_busy_frac": 0.99360505280143,
+  "per_step_source": "median of 63 NVTX step ranges",
+  "steps": 63,
+  "batch": 1,
+  "per_step": {
+    "wall_ms": 7.061715,
+    "gpu_busy_ms": 7.018131,
+    "gpu_idle_ms": 0.043584,
+    "kernels": 332,
+    "launch_calls": 2,
+    "launch_api_ms": 0.435132
+  },
+  "kernel_time_by_category": {
+    "gemm": {
+      "ms": 285.577472,
+      "frac": 0.6531274736352852
+    },
+    "attention": {
+      "ms": 125.520583,
+      "frac": 0.28707075768223805
+    },
+    "norm": {
+      "ms": 12.12187,
+      "frac": 0.027723217358109235
+    },
+    "rope": {
+      "ms": 6.641741,
+      "frac": 0.01518993599001357
+    },
+    "activation": {
+      "ms": 5.3422,
+      "frac": 0.012217832048231103
+    },
+    "elementwise/copy": {
+      "ms": 1.38225,
+      "frac": 0.0031612628409021454
+    },
+    "sampling": {
+      "ms": 0.660032,
+      "frac": 0.001509520445220709
+    }
+  },
+  "top_kernels": [
+    {
+      "name": "gemm_w4a16_tiled_kernel",
+      "category": "gemm",
+      "count": 7936,
+      "total_ms": 239.938554,
+      "avg_us": 30.234192792338707,
+      "frac": 0.548749383150655
+    },
+    {
+      "name": "_paged_decode_split_kernel",
+      "category": "attention",
+      "count": 1984,
+      "total_ms": 116.112474,
+      "avg_us": 58.52443245967741,
+      "frac": 0.26555402381726645
+    },
+    {
+      "name": "_gemv_kernel",
+      "category": "gemm",
+      "count": 62,
+      "total_ms": 45.638918,
+      "avg_us": 736.1115806451613,
+      "frac": 0.10437809048463018
+    },
+    {
+      "name": "_fused_add_rms_norm_kernel",
+      "category": "norm",
+      "count": 3968,
+      "total_ms": 11.9596,
+      "avg_us": 3.0140120967741937,
+      "frac": 0.027352099165891337
+    },
+    {
+      "name": "_paged_decode_reduce_kernel",
+      "category": "attention",
+      "count": 1984,
+      "total_ms": 9.408109,
+      "avg_us": 4.741990423387096,
+      "frac": 0.021516733864971636
+    },
+    {
+      "name": "_rope_cache_write_kernel",
+      "category": "rope",
+      "count": 1984,
+      "total_ms": 6.641741,
+      "avg_us": 3.3476517137096775,
+      "frac": 0.01518993599001357
+    },
+    {
+      "name": "_silu_and_mul_kernel",
+      "category": "activation",
+      "count": 1984,
+      "total_ms": 5.3422,
+      "avg_us": 2.692641129032258,
+      "frac": 0.012217832048231103
+    },
+    {
+      "name": "vectorized_gather_kernel",
+      "category": "elementwise/copy",
+      "count": 310,
+      "total_ms": 0.695405,
+      "avg_us": 2.2432419354838706,
+      "frac": 0.0015904199572273877
+    },
+    {
+      "name": "sample_stats_kernel",
+      "category": "sampling",
+      "count": 62,
+      "total_ms": 0.660032,
+      "avg_us": 10.64567741935484,
+      "frac": 0.001509520445220709
+    },
+    {
+      "name": "vectorized_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 186,
+      "total_ms": 0.447453,
+      "avg_us": 2.4056612903225805,
+      "frac": 0.0010233434920963558
+    },
+    {
+      "name": "index_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 62,
+      "total_ms": 0.239392,
+      "avg_us": 3.8611612903225807,
+      "frac": 0.0005474993915784022
+    },
+    {
+      "name": "_rms_norm_kernel",
+      "category": "norm",
+      "count": 62,
+      "total_ms": 0.16227,
+      "avg_us": 2.6172580645161294,
+      "frac": 0.0003711181922178992
+    }
+  ],
+  "cuda_api": {
+    "cudaEventSynchronize": {
+      "calls": 63,
+      "total_ms": 367.334477
+    },
+    "cudaGraphLaunch": {
+      "calls": 61,
+      "total_ms": 25.902087
+    },
+    "cudaMemcpyAsync": {
+      "calls": 246,
+      "total_ms": 3.23828
+    },
+    "cudaLaunchKernel": {
+      "calls": 62,
+      "total_ms": 1.091788
+    },
+    "cudaEventRecordWithFlags": {
+      "calls": 62,
+      "total_ms": 0.240891
+    },
+    "cudaStreamIsCapturing": {
+      "calls": 123,
+      "total_ms": 0.175158
+    }
+  },
+  "timeline_slice_ns": [
+    225856734,
+    247041879
+  ],
+  "nvtx_phases": {}
+}

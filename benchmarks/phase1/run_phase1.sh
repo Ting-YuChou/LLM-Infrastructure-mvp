@@ -20,11 +20,13 @@
 #   golden    golden.py: saves the tiled kernel's outputs to P1_GOLDEN the first time,
 #             then checks later runs against them bit for bit
 #   e2e       nano_bench.py per nano config and vllm_offline.py at the same
-#             points (also on P1_VLLM_W4_MODEL when a config is w4a16); nsys on
-#             the last nano config at P1_NSYS_RUNS and, when it is w4a16, on vLLM's AWQ, then
+#             points (also on P1_VLLM_W4_MODEL when a config is w4a16 or awq; awq configs
+#             load that checkpoint); nsys on the last nano config at P1_NSYS_RUNS and,
+#             when it is w4a16 or awq, on vLLM's AWQ, then
 #             gemm_breakdown.py: each projection's GEMM time inside decode, both engines
-#   quality   quality.py: wikitext-2 perplexity and top-1 agreement of the torch,
-#             Triton and W4A16 paths on the real model
+#   quality   quality.py: wikitext-2 perplexity and top-1 agreement of nano configs on
+#             the real model (bf16, RTN W4A16, the AWQ checkpoint), then quality_vllm.py:
+#             vLLM on the same chunks (P1_QUALITY_VLLM)
 #   summarize summary.md
 #
 # Env: P0_ROOT (default /workspace/p0), P0_RUN_ID (default: UTC timestamp),
@@ -37,12 +39,15 @@
 # vLLM runs the paged ones), P1_NANO_CONFIGS (label:attention:linear:eager|graph[:weight_quant[:flags]]
 # per nano_bench run, default: the Phase 1 milestones in order; flags joined by +: async for async
 # scheduling, sampled for P1_SAMPLING instead of greedy (with any sampled config vLLM runs its
-# points sampled too), tiled / rows for the W4A16 weight layout, fullgraph for decode CUDA graphs
+# points sampled too), tiled / rows for the W4A16 weight layout, int8head for an int8 lm_head
+# (int8dense: int8 up to 64 rows, bf16 past that),
+# fullgraph for decode CUDA graphs
 # up to the largest batch (default: piecewise graphs past 64 rows), fp8kv for an fp8 KV cache
 # (with any fp8kv config vLLM runs its points with --kv-cache-dtype fp8 and
 # P1_VLLM_FP8_BACKEND, default TRITON_ATTN: FLASH_ATTN refuses fp8 on sm80)), P1_NSYS_RUNS (the e2e
 # step's nsys points, batch:input_len, 64 output tokens; default "1:128 16:1024 64:1024"), P1_QUALITY_CONFIGS
-# (quality.py --configs), P1_SAMPLING ("temperature top_p", default "0.7 0.9": the nano server's
+# (quality.py --configs; weight_quant awq loads P1_VLLM_W4_MODEL), P1_QUALITY_VLLM (quality_vllm.py
+# runs, label=bf16|awq, space-separated; default "vllm_bf16=bf16 vllm_awq=awq"), P1_SAMPLING ("temperature top_p", default "0.7 0.9": the nano server's
 # default sampling), P1_NCU_LAUNCHES (cap per kbench kernel, default
 # 300), P1_NCU_SHAPES (the ncu step's shape regex, default P1_KBENCH_SHAPES), P1_NCU_SECTIONS
 # (extra ncu sections, space-separated; SourceCounters also exports the per-instruction
@@ -75,11 +80,15 @@ E2E_RUNS="${P1_E2E_RUNS:-static:1:128:256,paged:1:128:256,paged:16:1024:256,page
 # torch_eager: the M1 refactor alone; triton_eager: Triton attention and fused
 # kernels (M2, M4, M5); triton_graph: + decode CUDA graphs (M3); gemv_graph:
 # + the Triton GEMV (M6); cuda_gemv_graph: the CUDA GEMV instead (M6);
-# w4a16_graph: 4-bit decoder weights (M7).
-NANO_CONFIGS="${P1_NANO_CONFIGS:-torch_eager:torch:torch:eager triton_eager:triton:torch:eager triton_graph:triton:torch:graph gemv_graph:triton:triton:graph cuda_gemv_graph:triton:cuda:graph w4a16_graph:triton:triton:graph:w4a16}"
+# awq_graph: 4-bit decoder weights (M7; the AWQ checkpoint since round 6, RTN
+# before: weight_quant w4a16).
+NANO_CONFIGS="${P1_NANO_CONFIGS:-torch_eager:torch:torch:eager triton_eager:triton:torch:eager triton_graph:triton:torch:graph gemv_graph:triton:triton:graph cuda_gemv_graph:triton:cuda:graph awq_graph:triton:triton:graph:awq}"
 read -r SAMPLED_TEMPERATURE SAMPLED_TOP_P <<< "${P1_SAMPLING:-0.7 0.9}"
 VLLM_FP8_BACKEND="${P1_VLLM_FP8_BACKEND:-TRITON_ATTN}"
 CUDA_ENV="${ROOT}/cuda129.env"
+# The serving path in bf16 (the agreement baseline), RTN W4A16 and the AWQ checkpoint.
+QUALITY_CONFIGS="${P1_QUALITY_CONFIGS:-bf16_triton:triton:triton:none w4a16_triton:triton:triton:w4a16 awq_triton:triton:triton:awq}"
+QUALITY_VLLM="${P1_QUALITY_VLLM-vllm_bf16=bf16 vllm_awq=awq}"
 
 export HF_HOME="${ROOT}/hf_cache" UV_CACHE_DIR="${ROOT}/uv_cache" UV_PYTHON_INSTALL_DIR="${ROOT}/uv_python"
 export PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false MPLBACKEND=Agg
@@ -109,8 +118,12 @@ install_venv() {  # reuse the VM's vLLM venv when phase 0 already made it
 # --- kernels -----------------------------------------------------------------
 kbench() {
   local rc=0
+  # awq_dequant checks layer 0 of the AWQ checkpoint when it is there.
+  if [[ -z "${KERNELS}" || ",${KERNELS}," == *,awq_dequant,* ]]; then
+    [[ -d "${W4_MODEL}" ]] || download_w4_model || rc=1
+  fi
   "${PY}" "${CODE_DIR}/kbench.py" --out "${OUT}/kbench" ${KERNELS:+--kernels "${KERNELS}"} \
-    ${KBENCH_SHAPES:+--shapes "${KBENCH_SHAPES}"} || rc=1
+    ${KBENCH_SHAPES:+--shapes "${KBENCH_SHAPES}"} $([[ -d "${W4_MODEL}" ]] && echo --awq-model "${W4_MODEL}") || rc=1
   cat "${OUT}/kbench/kbench.md" >&3
   return "${rc}"
 }
@@ -163,18 +176,29 @@ nano_config_args() {  # label:attention:linear:eager|graph[:weight_quant[:flags]
   [[ "+${flags}+" == *+tiled+* ]] && args+=" --w4a16-layout tiled"
   [[ "+${flags}+" == *+rows+* ]] && args+=" --w4a16-layout rows"
   [[ "+${flags}+" == *+fullgraph+* ]] && args+=" --full-graphs"
+  [[ "+${flags}+" == *+int8head+* ]] && args+=" --lm-head-quant int8"
+  [[ "+${flags}+" == *+int8dense+* ]] && args+=" --lm-head-quant int8_dense"
   echo "${args}"
 }
+
+nano_model() {  # the checkpoint a nano config loads: the AWQ one under weight_quant awq
+  local quant
+  IFS=: read -r _ _ _ _ quant _ <<< "$1"
+  if [[ "${quant}" == awq ]]; then echo "${W4_MODEL}"; else echo "${MODEL}"; fi
+}
+
+w4_configs() { [[ "$1" == *:w4a16* || "$1" == *:awq* ]]; }  # 4-bit nano configs: vLLM's AWQ runs too
 
 sampled_args() { echo "--temperature ${SAMPLED_TEMPERATURE} --top-p ${SAMPLED_TOP_P}"; }
 
 e2e() {
   local rc=0 run kind batch input output config label last modes=greedy mode tag args
   export PYTHONPATH="${REPO_DIR}"
+  if w4_configs "${NANO_CONFIGS}"; then [[ -d "${W4_MODEL}" ]] || download_w4_model || rc=1; fi
   for config in ${NANO_CONFIGS}; do
     label="${config%%:*}"
     # shellcheck disable=SC2046  # the flags are meant to split
-    "${PY}" "${P0_DIR}/nano_bench.py" --model "${MODEL}" --runs "${E2E_RUNS}" \
+    "${PY}" "${P0_DIR}/nano_bench.py" --model "$(nano_model "${config}")" --runs "${E2E_RUNS}" \
       $(nano_config_args "${config}") --out "${OUT}/offline/nano_${label}.json" || rc=1
     last="${config}"
   done
@@ -193,9 +217,8 @@ e2e() {
       "${PY}" "${P0_DIR}/vllm_offline.py" --model "${MODEL}" --batch "${batch}" \
         --input-len "${input}" --output-len "${output}" ${args} \
         --out "${OUT}/offline/vllm_${tag}b${batch}_in${input}_out${output}.json" || rc=1
-      if [[ "${NANO_CONFIGS}" == *:w4a16* ]]; then
+      if w4_configs "${NANO_CONFIGS}"; then
         # shellcheck disable=SC2086
-        { [[ -d "${W4_MODEL}" ]] || download_w4_model; } &&
         "${PY}" "${P0_DIR}/vllm_offline.py" --model "${W4_MODEL}" --batch "${batch}" \
           --input-len "${input}" --output-len "${output}" ${args} \
           --out "${OUT}/offline/vllmw4_${tag}b${batch}_in${input}_out${output}.json" || rc=1
@@ -208,16 +231,16 @@ e2e() {
   for run in ${P1_NSYS_RUNS:-1:128 16:1024 64:1024}; do
     IFS=: read -r b input <<< "${run}"
     # shellcheck disable=SC2046
-    nsys_run "nano_${label}_b${b}" "${PY}" "${P0_DIR}/nano_bench.py" --model "${MODEL}" \
+    nsys_run "nano_${label}_b${b}" "${PY}" "${P0_DIR}/nano_bench.py" --model "$(nano_model "${last}")" \
       --runs "paged:${b}:${input}:64" $(nano_config_args "${last}") \
       --out "${OUT}/offline/nano_${label}_b${b}_nsys.json" || rc=1
-    [[ "${last}" == *:w4a16* && -d "${W4_MODEL}" ]] || continue
+    w4_configs "${last}" && [[ -d "${W4_MODEL}" ]] || continue
     # vLLM's AWQ (Marlin) under nsys too, then each projection's GEMM time inside decode, both sides.
     nsys_run "vllmw4_b${b}" "${PY}" "${P0_DIR}/vllm_offline.py" --model "${W4_MODEL}" --batch "${b}" \
       --input-len "${input}" --output-len 64 --profile-steps 32 \
       --out "${OUT}/offline/vllmw4_b${b}_nsys.json" || rc=1
-    # Past tiled_max_rows (128) nano dequantizes each weight and calls cuBLAS.
-    specs+=("nano_b${b}=${OUT}/nsys/nano_${label}_b${b}.sqlite:$( ((b > 128)) && echo gemm || echo gemm_w4a16):dequantize"
+    # gemm_w4a16_tiled up to tiled_max_rows (512), dequantize + cuBLAS past it.
+    specs+=("nano_b${b}=${OUT}/nsys/nano_${label}_b${b}.sqlite:gemm_w4a16:dequantize"
       "vllm_awq_b${b}=${OUT}/nsys/vllmw4_b${b}.sqlite:Marlin")
   done
   if ((${#specs[@]})); then
@@ -232,11 +255,20 @@ download_w4_model() {  # download_model reads MODEL_ID and MODEL
 }
 
 quality() {
+  local rc=0 spec
   # wikitext-2 comes as parquet; the vLLM venv has neither datasets nor pyarrow.
   "${PY}" -c "import pyarrow" 2>/dev/null || uv pip install -p "${PY}" pyarrow || return 1
-  PYTHONPATH="${REPO_DIR}" "${PY}" "${CODE_DIR}/quality.py" --model "${MODEL}" --out "${OUT}/quality" \
-    ${P1_QUALITY_CONFIGS:+--configs "${P1_QUALITY_CONFIGS}"} &&
+  if [[ "${QUALITY_CONFIGS}" == *:awq* || "${QUALITY_VLLM}" == *=awq* ]]; then
+    [[ -d "${W4_MODEL}" ]] || download_w4_model || return 1
+  fi
+  PYTHONPATH="${REPO_DIR}" "${PY}" "${CODE_DIR}/quality.py" --model "${MODEL}" --awq-model "${W4_MODEL}" \
+    --out "${OUT}/quality" --configs "${QUALITY_CONFIGS}" || return 1
+  for spec in ${QUALITY_VLLM}; do  # vLLM in its own process per model
+    PYTHONPATH="${REPO_DIR}" "${PY}" "${CODE_DIR}/quality_vllm.py" --label "${spec%%=*}" --out "${OUT}/quality" \
+      --model "$([[ "${spec#*=}" == awq ]] && echo "${W4_MODEL}" || echo "${MODEL}")" || rc=1
+  done
   cat "${OUT}/quality/quality.md" >&3
+  return "${rc}"
 }
 
 environment() {

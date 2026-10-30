@@ -27,6 +27,7 @@ from serving.nano_vllm.kernels.w4a16 import (  # noqa: E402
     W4A16_CONFIG,
     W4A16_TILED_TILES,
     dequantize_w4a16,
+    pack_w4a16,
     quantize_w4a16,
     tiled_chunk_rows,
     tiled_launch_config,
@@ -34,6 +35,7 @@ from serving.nano_vllm.kernels.w4a16 import (  # noqa: E402
     unpack_w4a16,
     w4a16_linear,
     w4a16_row_scales,
+    w4a16_row_zeros,
     w4a16_tiled_trace,
 )
 
@@ -62,15 +64,23 @@ def _weight(n, k, dtype, group_size=128, layout="rows"):
     return quantize_w4a16(w, group_size=group_size, layout=layout)
 
 
+def _awq_weight(n, k, dtype):
+    """Asymmetric codes and zero points, as an AWQ checkpoint has (tiled)."""
+    codes = torch.randint(0, 16, (n, k), dtype=torch.uint8, device="cuda")
+    zeros = torch.randint(0, 16, (n, k // 128), dtype=torch.uint8, device="cuda")
+    scales = (torch.rand(n, k // 128, device="cuda") * 2 / (15 * k**0.5)).to(dtype)
+    return pack_w4a16(codes, scales, zeros, layout="tiled")
+
+
 def _reference(x, weight):
     return x.float() @ dequantize_w4a16_torch(weight).T
 
 
 def dequantize_w4a16_torch(weight):
     n, k = weight.shape
-    q = unpack_w4a16(weight.qweight).float() - 8
     g = weight.group_size
-    return (q.view(n, k // g, g) * w4a16_row_scales(weight).float().unsqueeze(-1)).view(n, k)
+    q = unpack_w4a16(weight.qweight).float().view(n, k // g, g) - w4a16_row_zeros(weight).unsqueeze(-1)
+    return (q * w4a16_row_scales(weight).float().unsqueeze(-1)).view(n, k)
 
 
 def test_w4a16_extension_builds():
@@ -183,6 +193,33 @@ def test_tiled_dequantize_kernel_matches_the_row_kernel_bit_for_bit(dtype):
     assert torch.equal(dequantize_w4a16(tiled), dequantize_w4a16_torch(rows).to(dtype))
 
 
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
+def test_tiled_dequantize_kernel_with_zero_points_matches_torch(dtype):
+    """(q - z) is exact, times the scale in fp32, rounded once: bit for bit."""
+    weight = _awq_weight(384, 1024, dtype)
+    assert torch.equal(dequantize_w4a16(weight), dequantize_w4a16_torch(weight).to(dtype))
+
+
+@pytest.mark.parametrize("rows", [1, 7, 16, 33, 64, 100, 256, 512])
+@pytest.mark.parametrize("shape", TILED_SHAPES.values(), ids=TILED_SHAPES)
+def test_tiled_kernel_with_zero_points_matches_dequantized_matmul(shape, rows):
+    weight = _awq_weight(*shape, torch.bfloat16)
+    x = torch.randn(rows, shape[1], device="cuda").to(torch.bfloat16)
+    _check(x, weight, tiled_max_rows=512)
+
+
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
+@pytest.mark.parametrize(
+    "rows,tile", [(5, "128x128"), (5, "256x128"), (5, "64x256"), (40, "64x128"), (40, "64x256"), (100, "128x128")]
+)
+def test_tiled_kernel_with_zero_points_in_every_tile_and_dtype(rows, tile, dtype):
+    """Up to MT 2 the zero points are decoded once per tile, past that once per row."""
+    weight = _awq_weight(1024, 2048, dtype)
+    x = torch.randn(rows, 2048, device="cuda").to(dtype)
+    _check(x, weight, tiled_tile=tile, tiled_max_rows=512)
+    _check(x, weight, tiled_tile=tile, tiled_grid=5, tiled_max_rows=512)
+
+
 @pytest.mark.parametrize("rows", [1, 2, 7, 16, 17, 33, 48, 64, 65, 96, 100, 130, 192, 256, 512])
 @pytest.mark.parametrize("shape", TILED_SHAPES.values(), ids=TILED_SHAPES)
 def test_tiled_kernel_matches_dequantized_matmul(shape, rows):
@@ -233,12 +270,72 @@ def test_tiled_kernel_is_deterministic_and_leaves_the_buffers_zeroed():
     assert not workspace.any() and not counters.any()
 
 
-def test_tiled_large_batches_dequantize_and_call_f_linear():
+def test_tiled_large_batches_dequantize_and_call_f_linear_without_the_large_kernel():
     rows = w4a16_mod.W4A16_CONFIG["tiled_max_rows"] + 1
     weight = _weight(256, 512, torch.bfloat16, layout="tiled")
     x = torch.randn(rows, 512, device="cuda").to(torch.bfloat16)
     expected = torch.nn.functional.linear(x, dequantize_w4a16(weight))
-    assert torch.equal(w4a16_linear(x, weight), expected)
+    assert torch.equal(w4a16_linear(x, weight, config={"large": False}), expected)
+
+
+# gemm_w4a16_large: past tiled_max_rows with large=True (off by default);
+# tiled_max_rows=0 sends every row count to it (padding rows of a chunk,
+# slices shared by blocks).
+@pytest.mark.parametrize("rows", [257, 300, 512, 1000, 2048, 2100])
+@pytest.mark.parametrize("shape", TILED_SHAPES.values(), ids=TILED_SHAPES)
+def test_large_kernel_matches_dequantized_matmul(shape, rows):
+    weight = _awq_weight(*shape, torch.bfloat16)
+    x = torch.randn(rows, shape[1], device="cuda").to(torch.bfloat16)
+    _check(x, weight, tiled_max_rows=256, large=True)
+
+
+@pytest.mark.parametrize("grid", ["one_block_per_slice", 1, 3, 7, 0])
+@pytest.mark.parametrize("tile", list(w4a16_mod.W4A16_LARGE_TILES))
+@pytest.mark.parametrize("rows", [1, 17, 64, 300, 600])
+def test_large_kernel_tiles_and_grids(rows, tile, grid):
+    """grid = slices x chunks gives each block one slice; 1, 3, 7 and the
+    default make stripes that cross slices and slices shared by blocks."""
+    n, k = 1024, 2048
+    tile_m, tile_n = w4a16_mod.W4A16_LARGE_TILES[tile]
+    if grid == "one_block_per_slice":
+        grid = n // tile_n * -(-rows // tile_m)
+    weight = _awq_weight(n, k, torch.bfloat16)
+    x = torch.randn(rows, k, device="cuda").to(torch.bfloat16)
+    _check(x, weight, tiled_max_rows=0, large=True, large_tile=tile, tiled_grid=grid)
+
+
+@pytest.mark.parametrize("tile", list(w4a16_mod.W4A16_LARGE_TILES))
+def test_large_kernel_in_fp16(tile):
+    weight = _awq_weight(1024, 2048, torch.float16)
+    x = torch.randn(300, 2048, device="cuda").to(torch.float16)
+    _check(x, weight, tiled_max_rows=0, large=True, large_tile=tile)
+    _check(x, weight, tiled_max_rows=0, large=True, large_tile=tile, tiled_grid=5)
+
+
+def test_large_kernel_is_deterministic_and_leaves_the_counters_zeroed():
+    weight = _awq_weight(4096, 14336, torch.bfloat16)
+    for rows in (257, 1000, 2048):
+        x = torch.randn(rows, 14336, device="cuda").to(torch.bfloat16)
+        outs = [w4a16_linear(x, weight, config={"tiled_max_rows": 256, "large": True}) for _ in range(3)]
+        assert all(torch.equal(outs[0], out) for out in outs[1:])
+    _, counters = w4a16_mod.w4a16_workspace(x.device, 4096)
+    torch.cuda.synchronize()
+    assert not counters.any()
+
+
+@pytest.mark.parametrize("rows", [300, 512])
+def test_large_kernel_is_captured_by_a_cuda_graph(rows):
+    """Piecewise graphs reach 512 tokens, past tiled_max_rows."""
+    weight = _awq_weight(4096, 4096, torch.bfloat16)
+    x = torch.randn(rows, 4096, device="cuda").to(torch.bfloat16)
+    config = {"tiled_max_rows": 256, "large": True}
+    w4a16_linear(x, weight, config=config)  # warm-up outside the capture
+    graph = torch.cuda.CUDAGraph()
+    with torch.cuda.graph(graph):
+        out = w4a16_linear(x, weight, config=config)
+    x.copy_(torch.randn_like(x))
+    graph.replay()
+    torch.testing.assert_close(out.float(), _reference(x, weight), rtol=1.6e-2, atol=1.6e-2)
 
 
 @pytest.mark.parametrize("rows", [4, 40, 100, 256])

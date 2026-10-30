@@ -1,0 +1,15 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+50.9,805650164,1984,406073.7,405986.0,393122,422147,5904.5,_paged_decode_split_kernel
+22.7,359544473,5952,60407.3,48480.0,36992,96097,24755.8,"void <unnamed>::gemm_w4a16_tiled_kernel<__nv_bfloat16, (int)4, (int)128, (int)128, (bool)0>(const T1 *, const uint4 *, const uint4 *, const uint4 *, T1 *, float *, int *, int, int, int, int, int, long long *)"
+20.7,327682755,1984,165162.7,164929.0,163713,167617,763.9,"void <unnamed>::gemm_w4a16_tiled_kernel<__nv_bfloat16, (int)4, (int)64, (int)256, (bool)0>(const T1 *, const uint4 *, const uint4 *, const uint4 *, T1 *, float *, int *, int, int, int, int, int, long long *)"
+3.2,50479984,62,814193.3,813509.0,807716,829924,3309.2,ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn
+1.1,16807803,3968,4235.8,4224.0,3552,4832,243.7,_fused_add_rms_norm_kernel
+0.7,10593754,1984,5339.6,5312.0,4960,5824,104.8,_silu_and_mul_kernel
+0.5,7922323,1984,3993.1,3968.0,3680,4416,109.3,_rope_cache_write_kernel
+0.2,2725970,62,43967.3,43968.0,43552,44481,243.1,"void <unnamed>::sample_stats_kernel<__nv_bfloat16, (int)4>(<unnamed>::Args)"
+0.1,860677,310,2776.4,2816.0,2112,3360,354.9,"void at::native::vectorized_gather_kernel<(int)16, long>(char *, char *, T2 *, int, long, long, long, long, bool)"
+0.0,279617,62,4510.0,4512.0,4320,4704,72.1,"void at::native::index_elementwise_kernel<(int)128, (int)4, void at::native::gpu_index_kernel<void at::native::index_kernel_impl<at::native::OpaqueType<(int)8>>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>)::[lambda(char *, const char *, long) (instance 1)]>(at::TensorIteratorBase &, c10::ArrayRef<long>, c10::ArrayRef<long>, const T1 &, bool)::[lambda(int) (instance 1)]>(long, T3)"
+0.0,203811,62,3287.3,3264.0,3168,3424,48.2,_rms_norm_kernel
+0.0,190498,62,3072.5,3040.0,2912,3424,130.1,"void at::native::vectorized_elementwise_kernel<(int)4, void at::native::compare_scalar_kernel<long>(at::TensorIteratorBase &, at::native::<unnamed>::OpType, T1)::[lambda(long) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)"
+0.0,158176,62,2551.2,2560.0,2432,2784,68.8,"void at::native::vectorized_elementwise_kernel<(int)2, at::native::<unnamed>::launch_clamp_scalar(at::TensorIteratorBase &, c10::Scalar, c10::Scalar, at::native::detail::ClampLimits)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 4)]::operator ()() const::[lambda(long) (instance 1)], std::array<char *, (unsigned long)2>>(int, T2, T3)"
+0.0,146594,62,2364.4,2368.0,2336,2400,13.1,"void at::native::vectorized_elementwise_kernel<(int)2, at::native::<unnamed>::where_kernel_impl(at::TensorIterator &)::[lambda() (instance 1)]::operator ()() const::[lambda() (instance 8)]::operator ()() const::[lambda(bool, long, long) (instance 1)], std::array<char *, (unsigned long)4>>(int, T2, T3)"

@@ -20,10 +20,18 @@ engine:
   # "triton" / "cuda" use a GEMV kernel for linear layers at <= 16 / 2 rows
   # (decode); "cuda" JIT-builds it and needs nvcc matching torch's CUDA.
   linear_backend: "triton"
-  # "w4a16" quantizes the decoder-layer projections to 4-bit at load
-  # (round-to-nearest, groups of 128); about 4x less weight memory and traffic.
-  # Decode runs them through the Marlin-style gemm_w4a16_tiled kernel.
+  # "awq": the model is an AWQ checkpoint (AutoAWQ GEMM format, 4-bit, groups
+  # of 128, zero points), e.g. hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4;
+  # an AWQ checkpoint loads as "awq" under "none" too. "w4a16" quantizes a
+  # full-precision model's decoder-layer projections to 4-bit at load
+  # (round-to-nearest, symmetric, groups of 128; lower quality than AWQ).
+  # Either way about 4x less weight memory and traffic, run by the
+  # Marlin-style gemm_w4a16_tiled kernel.
   weight_quant: "none"
+  # "int8": lm_head as int8 with one scale per vocab row, half its bytes;
+  # "int8_dense": int8 up to 64 rows and the bf16 weight past that (both kept);
+  # "auto": int8_dense under w4a16 / awq, none otherwise (model.AUTO_LM_HEAD_QUANT).
+  lm_head_quant: "auto"
   # "fp8": the paged KV cache holds e4m3 codes plus one fp32 scale per
   # (token, kv head): about half the KV bytes, so about twice the tokens.
   kv_cache_dtype: "auto"

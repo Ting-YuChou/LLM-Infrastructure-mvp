@@ -929,3 +929,130 @@ nano 只跑 `w4a16_tiled_full`（fullgraph），其他和 `concur-c1` 相同。
   - vLLM 在 c=16 sampled 又只有 612 tok/s（greedy 937），TTFT p50 498 ms，和 `kernels-serve` 一樣，原因沒查。
 - **G4**：過。W1s 在 c=1/16/64，nano 的 ITL p50 都比 vLLM 低，throughput 都比 vLLM 高。
 - **VM**：跑完把 Colab VM（`sampler`）關掉了。
+
+## 2026-10-29 — AWQ 權重、int8 lm_head、大 M kernel：本機實作（45cea19 到 78d6708）
+
+nano 原本的 W4A16 是載入時做的 RTN（對稱、group 128、沒有 zero point），wikitext-2 的 PPL 是 8.023，比 bf16 的 7.232 高 10.9%。vLLM 那邊跑的是 `hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4`，所以兩邊的權重本來就不同。這一輪讓 nano 直接載入同一份 AutoAWQ checkpoint，再試兩項加速：int8 lm_head 和大 M 的 prefill kernel。分支是從 `claude/w4a16-serve`（77e6d5f）開的本機分支 `claude/nano-awq`。
+
+### 做了什麼
+
+- **AWQ 載入**（45cea19）：
+  - `config.json` 的 `quantization_config` 必須是 `{quant_method: awq, version: gemm, bits: 4, group_size: 128, zero_point: true}`，其他組合報錯；
+  - `weight_quant` 新增 `"awq"`：AWQ checkpoint 配 `"none"` 時自動改用 awq，AWQ 配 `"w4a16"` 或 bf16 checkpoint 配 `"awq"` 都報錯；
+  - `awq_unpack`：qweight `[K, N/8]` 沿 N 打包，nibble 順序 `(0,2,4,6,1,3,5,7)`，解出 codes、zeros、scales，再用既有的 `_pack_tiled` 排成 tiled layout；
+  - q/k/v 和 gate/up 在 packed 的 dim 1 上直接串接；scales 從 fp16 轉成模型的 dtype。
+- **kernel 的 zero point**（e64c862）：`dequant_pair` 多一個 bias（magic + z），tiled kernel 和 `dequantize_w4a16_tiled` 跟著 scales 一起讀 zeros；RTN 走同一個 kernel，z 一律是 8，結果和原本逐 bit 相同。
+- **kbench 與品質工具**（7303761）：
+  - `w4a16_linear` 改用非對稱的隨機 codes、zeros、scales，新 impl `vllm_awq_marlin`（照 vLLM 0.19.1 的 repack 和 apply）；
+  - 新 kernel `awq_dequant`：真實 checkpoint 的第 0 層，nano 解包後 dequant，和 vLLM 的 `awq_dequantize_triton` 比 atol=rtol=0；
+  - `quality.py` 加 `--awq-model`，chunks 和每個 config 的 top-1 寫成檔案；新的 `quality_vllm.py` 在 vLLM venv 用同樣的 chunks 算 vLLM 的 NLL 和 top-1。
+- **int8 lm_head**（4c3a72f）：`W8A16Weight`，每列對稱 int8、fp32 scale；Triton kernel 在 K 迴圈把 int8 轉 bf16 做 `tl.dot`，最後乘 scale。設定是 `lm_head_quant: auto | none | int8`（env `LM_HEAD_QUANT`），`auto` 在 G3 過之前等於 none。
+- **`gemm_w4a16_large`**（836af08）：
+  - 和 tiled kernel 相同的持久 striped grid（fp32 slots 加 counters），每個 chunk 64·WM 列；
+  - 8 個 warp 依列 × 欄排列，每個 warp 負責 64×64（MT 4）；BK 64，4 個 stage；block tile 128×256 或 256×128；
+  - 計畫寫的是「依輸出 tile 平行、不需要 slots」，實作改成沿用 tiled 的排程，因為 qkv、o_proj 在 512 列時的 tile 不滿一個 wave。
+- **Harness**（87480b9、78d6708）：phase1 的 nano W4 config 改用 `--weight-quant awq` 載入 AWQ checkpoint；phase2 的 nano 在 `WEIGHT_QUANT=awq` 時載入 `P2_VLLM_W4_MODEL`；`quality.py` 的 config 多一個 prefill 欄位。
+- **編譯**：本機 docker 的 nvcc，0 spill（只有 trace build 有 4 B，之前就有）。
+
+## 2026-10-30 03:42 — run `awq-a1-20261030-034248-colab`：AWQ 第一輪（新 VM `awq`）
+
+`P1_STEPS="installs cuda129 tests kbench e2e quality summarize"`；e2e 的 nano 跑 w4a16（RTN）、awq、awq + int8 lm_head，各有 greedy 和 sampled，b=1/16/64/128/256；nsys 錄 awq 的 b=1/16/64；quality 是 bf16、RTN、AWQ、AWQ 的 dequant prefill、AWQ + int8 lm_head，再加 vLLM bf16 和 vLLM AWQ。程式在 78d6708。
+
+- **tests**：沒跑到。`tests/gpu/test_nano_vllm_w8a16.py` 和 `tests/unit/test_nano_vllm_w8a16.py` 同名，pytest 收集時出錯，整個 step 中斷。GPU 測試檔改名成 `test_nano_vllm_w8a16_kernels.py`（7b71fd8）。
+- **品質**（wikitext-2 test，288,627 個 token，2048 一段）：
+
+  | config | PPL | top-1 agreement |
+  |---|---:|---:|
+  | nano bf16 | 7.232 | baseline |
+  | nano W4A16 RTN | 8.023（+10.9%） | 85.91% |
+  | nano AWQ | 7.562（+4.6%） | 90.10% |
+  | nano AWQ，dequant prefill | 7.563 | 90.11% |
+  | nano AWQ + int8 lm_head | 7.563 | 90.06% |
+  | vLLM bf16 | 7.232 | 98.81% |
+  | vLLM AWQ（awq_marlin） | 7.560 | 90.13% |
+
+  - nano AWQ 和 vLLM AWQ 差 +0.04%（7.5625 對 7.5595），在 ±0.5% 內；
+  - int8 lm_head 對 AWQ：PPL +0.001%（7.5626），top-1 99.01%，兩項都過 G3 的品質門檻；
+  - large kernel 和 dequant prefill 差 0.0002，過 ≤ 0.01。
+- **`awq_dequant`**：四種投影 nano 和 vLLM 的 `awq_dequantize_triton` 逐 bit 相同，速度也相同（qkv 53.1 對 53.7 µs）。
+- **kbench decode**（µs，nano tiled / Marlin）：M=1 qkv 20.0 / 19.1、o 14.8 / 14.6、gate_up 52.4 / 54.9；M=64 qkv 33.5 / 35.6、o 28.1 / 28.3、gate_up 92.7 / 91.4。
+- **kbench 大 M**（µs）：
+
+  | 投影 | M | large 128x256 | large 256x128 | dequant + cuBLAS | cuBLAS bf16 | Marlin |
+  |---|---:|---:|---:|---:|---:|---:|
+  | qkv | 2048 | 602 | - | 468 | 429 | 538 |
+  | gate_up | 2048 | 2,767 | 2,636 | 2,080 | 1,873 | 2,553 |
+  | down | 2048 | 1,378 | - | 1,057 | - | - |
+  | o_proj | 2048 | 435 | 423 | 336 | 313 | 353 |
+
+  - large kernel 在 1,024–2,048 列大約 182 TFLOPs，cuBLAS 是 257，比 dequant + cuBLAS 慢 20–30%，G4 沒過；64–256 列也比 tiled 慢；
+  - Marlin 在 2,048 列同樣比 dequant + cuBLAS 慢；
+  - tiled kernel 一次跑 512 列（`cuda_tiled_512`）在 384 和 512 列反而最快：四個投影合計 911 和 1,225 µs，dequant + cuBLAS 是 1,167 和 1,386。
+- **kbench lm_head**（µs）：int8 在 ≤ 16 列 369–386，bf16 713–736（1.9 倍）；64 列 641 對 779；256 列 2,526 對 cuBLAS 1,164。256 列慢的原因是 grid 先跑完一個 row block 的所有 column tile 才換下一個，每個 row block 都從 HBM 重讀一次 int8 權重。
+- **e2e**（ms/step，greedy，vLLM AWQ 是 awq_marlin）：
+
+  | config | b=1 | b=16 | b=64 | b=128 | b=256 |
+  |---|---:|---:|---:|---:|---:|
+  | nano RTN | 5.20 | 7.15 | 15.59 | 27.32 | 38.42 |
+  | nano AWQ | 5.19 | 7.15 | 15.57 | 27.29 | 38.34 |
+  | nano AWQ + int8 lm_head | 4.82 | 6.78 | 15.41 | 27.79 | 39.87 |
+  | vLLM AWQ | 5.56 | 7.86 | 16.22 | 27.27 | 38.76 |
+
+  - AWQ 和 RTN 在同一次 run 裡幾乎一樣，因為 RTN 現在也走帶 zero point 的 kernel（z=8）；兩者都比 `sampler-s2` 的 RTN（舊 kernel，5.09 / 7.06 / 15.00）慢 2–4%。b=64 的 GEMM 多了 8.5%，來自 MT 3–4 每個 k16 row 都解一次 zero point（7b71fd8 改成每個 tile 解一次）；
+  - int8 lm_head 在 b=1 快 0.37 ms、b=16 快 0.37 ms，b=128 和 b=256 反而慢 0.5 和 1.5 ms（上面的 kernel 問題）；
+  - sampled：nano AWQ 5.21 / 7.20 / 15.69 / 27.47 / 38.70，vLLM 5.84 / 9.33 / 18.11 / 31.07 / 44.68。
+- **nsys GEMM**（每層的四個投影，µs，nano / vLLM AWQ）：b=1 114.0 / 117.7，b=16 120.8 / 126.6，b=64 214.8 / 221.3。
+- **門檻**：G1 的品質部分過，測試沒跑到；G2 和 vLLM 比過，和 s2 RTN 比沒過（要在同一台 VM 重比）；G3 品質過，速度在 b ≥ 128 沒過；G4 沒過。
+- **VM**：跑完把 `awq` 關掉了。
+
+## 2026-10-30 04:52 — run `awq-a2-20261030-045241-colab`：byte zeros、tiled 到 512 列、int8 lm_head 的 grid（7b71fd8、6d9b08e，新 VM `awq`，跑完保留）
+
+`P1_STEPS="installs cuda129 tests kbench e2e quality summarize" P1_KERNELS="w4a16_linear,lm_head"`；e2e 的 nano 跑 w4a16（RTN）、awq、awq + int8 lm_head，greedy，b=1/16/64/128/256；nsys 錄 awq 的 b=1/64/128；quality 是 AWQ 和 AWQ + int8 lm_head（launcher 不傳空的 env，所以 vLLM 的兩列也跑了）。
+
+- **tests**：957 passed，沒有 skip。這是 AWQ、zero point、large kernel、int8 lm_head 的 GPU 測試第一次跑。
+- **e2e**（ms/step，greedy）：
+
+  | config | b=1 | b=16 | b=64 | b=128 | b=256 |
+  |---|---:|---:|---:|---:|---:|
+  | nano RTN | 5.16 | 7.13 | 15.47 | 27.10 | 37.97 |
+  | nano AWQ | 5.16 | 7.13 | 15.47 | 27.08 | 37.93 |
+  | nano AWQ + int8 lm_head | 4.80 | 6.76 | 15.18 | 27.39 | 39.04 |
+  | vLLM AWQ | 5.56 | 7.86 | 16.20 | 27.32 | 38.91 |
+
+  - AWQ 每個 b 都比 vLLM AWQ 快（0.93 / 0.91 / 0.96 / 0.99 / 0.97 倍時間）；
+  - 和 `sampler-s2` 的 RTN（舊 kernel，5.09 / 7.06 / 15.00）比，還是慢 1.4% / 1.0% / 3.1%，G2 沒過；
+  - int8 lm_head 在 b=1/16/64 快 0.36 / 0.37 / 0.29 ms，b=128/256 慢 0.31 / 1.11 ms。
+- **nsys GEMM**（每層四個投影，µs）：b=1 113.8（s2 112.3），b=64 211.9（s2 197.9），b=128 346.0（`chunk-c7` 320.4）。byte zeros 只從 A1 的 214.8 降到 211.9。kbench（cold）也一樣：b=64 的 down 59.5 µs，`chunk-c6` 是 54.2；b=256 的 down 166.9 對 150.6。
+- **原因**（讀程式）：s2 的 tile 在上一個 tile 的最後一列（barrier 之後）就和第一列的 fragment 一起讀好下一個 tile 的 scales；A1、A2 改成在每個 tile 開頭讀 scales 和 zeros，第一個 mma 要等 shared memory 的延遲。MT 3–4 每個 warp 每個 tile 只有一兩列，這個等待佔的比例最大。
+- **kbench lm_head**（µs）：int8 在 ≤ 16 列 369–386（bf16 713–736），32 列 506（767），64 列 524（779）；128 列 1,124（cuBLAS 810），256 列 2,111（1,168）。grid 改成 m 最快之後 256 列從 2,526 降到 2,111，但四組候選 config 在 128 列以上都在 967–1,200 µs 之間，block_m 128 的 config 連 1 列都要 1,075 µs：Triton 的 int8 轉 bf16 `tl.dot` 大約只到 130 TFLOPs，cuBLAS 是 250 左右。
+- **quality**：AWQ 7.563；AWQ + int8 lm_head 7.563，top-1 99.01%（和 A1 一樣）；vLLM AWQ 7.560，top-1 對 nano AWQ 是 98.39%。
+- **門檻**：G1 過（測試、逐 bit、PPL）；G2 沒過；G3 品質過，速度只在 b ≤ 64 過；G4 不做（large kernel 預設關閉，見 7b71fd8）。
+
+## 2026-10-30 05:42 — run `awq-a3-20261030-054204-colab`：提前讀 scales 和 zeros、`int8_dense`（同一台 VM `awq`）
+
+`P1_STEPS="tests kbench e2e summarize" P1_KERNELS=w4a16_linear`；e2e 的 nano 跑 awq（bf16 lm_head）和 awq + `int8_dense`，b=1/16/64/128/256；nsys 錄 awq 的 b=1/16/64/128。
+
+### 改了什麼
+
+- **提前讀**（afcc56c）：tile 的 scales 和 zero point words 改回在上一個 tile 最後一列、barrier 之後，和下一列的 fragment 一起讀；MT ≤ 2 每個 tile 解一次 zero point，MT 3–4 每列解一次（暫存器）。非 trace 的 build 都是 0 spill；trace build 有 8–68 B。
+- **`int8_dense`**（4edfb73）：`W8A16Weight` 可以保留原本的 bf16 權重，超過 `W8A16_DENSE_ROWS`（64）列時改用 `F.linear`；tied embeddings 時這份就是 embedding 本身，不多佔記憶體。
+
+### 結果
+
+- **tests**：962 passed，沒有 skip。
+- **nsys GEMM**（每層四個投影，µs，A3 / A2 / AWQ 之前）：b=1 113.9 / 113.8 / 112.3，b=16 119.5 / - / 118.2，b=64 205.3 / 211.9 / 197.9，b=128 332.4 / 346.0 / 320.4。
+- **kbench**（cold，µs，A3 / A2 / `chunk-c6`）：down 在 64 列 56.9 / 59.5 / 54.2，256 列 158.7 / 166.9 / 150.6；gate_up 在 256 列 309.6 / 317.7 / 300.5。
+- **e2e**（ms/step，greedy）：
+
+  | config | b=1 | b=16 | b=64 | b=128 | b=256 |
+  |---|---:|---:|---:|---:|---:|
+  | nano AWQ | 5.16 | 7.13 | 15.25 | 26.60 | 37.04 |
+  | nano AWQ + `int8_dense` | 4.80 | 6.77 | 14.95 | 26.61 | 37.07 |
+  | vLLM AWQ | 5.55 | 7.86 | 16.20 | 27.35 | 38.88 |
+  | nano RTN（`sampler-s2`，舊 kernel） | 5.09 | 7.06 | 15.00 | - | - |
+
+  - `int8_dense` 在 b ≤ 64 快 0.30–0.36 ms，b=128/256 和 bf16 head 一樣，所以 `auto` 在 w4a16 和 awq 下改成 `int8_dense`（4edfb73）；
+  - 對 vLLM AWQ 的時間比：0.87 / 0.86 / 0.92 / 0.97 / 0.95（`sampler-s2` 時 RTN 對 vLLM AWQ 是 0.92 / 0.90 / 0.93）。
+- **門檻**：
+  - G2（AWQ + bf16 head 比舊 RTN 慢 ≤ 1%）：b=1 +1.4%、b=16 +1.0%、b=64 +1.7%，沒過。b=1 受頻寬限制，byte zeros 多讀 1.5% 的 bytes（每個 column 每 128 個權重：64 B 權重、2 B scale、1 B zero），幾乎就是差距；b=64 的 GEMM 還多 3.7%，來自 MT 3–4 每列解 zero point；
+  - G3：過（品質見 A2，速度在每個 b 都不比 bf16 head 慢）。

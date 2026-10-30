@@ -1,3 +1,4 @@
+import dataclasses
 import itertools
 import sys
 from pathlib import Path
@@ -20,13 +21,22 @@ from serving.nano_vllm.kernels import w4a16 as w4a16_mod  # noqa: E402
 from serving.nano_vllm.kernels.w4a16 import (  # noqa: E402
     W4A16_PACK_ORDER,
     W4A16_TILED_TILES,
+    awq_unpack,
+    pack_w4a16,
     tiled_chunk_rows,
     tiled_launch_config,
     tiled_schedule,
     unpack_w4a16,
     w4a16_row_scales,
+    w4a16_row_zeros,
 )
-from serving.nano_vllm.model import NanoLlamaConfig, NanoLlamaForCausalLM  # noqa: E402
+from tiny_llama import AWQ_QUANT_CONFIG, awq_checkpoint, awq_pack_columns  # noqa: E402
+
+from serving.nano_vllm.model import (  # noqa: E402
+    NanoLlamaConfig,
+    NanoLlamaForCausalLM,
+    resolve_weight_quant,
+)
 
 PROJECTIONS = ("q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj")
 
@@ -143,7 +153,8 @@ def test_tiled_weights_dequantize_and_multiply_like_rows():
     rows, tiled = quantize_w4a16(weight), quantize_w4a16(weight, layout="tiled")
     assert torch.equal(unpack_w4a16(tiled.qweight), unpack_w4a16(rows.qweight))
     assert torch.equal(dequantize_w4a16(tiled), dequantize_w4a16(rows))
-    assert tiled.nbytes() == rows.nbytes()
+    # Tiled weights also store their zero points (8), a byte per scale.
+    assert tiled.nbytes() == rows.nbytes() + rows.scales.numel()
     x = torch.randn(2, 3, 384)
     torch.testing.assert_close(linear(x, tiled, backend="triton"), linear(x, rows, backend="triton"), rtol=0, atol=0)
 
@@ -266,9 +277,9 @@ def _weights(config: NanoLlamaConfig) -> dict[str, torch.Tensor]:
     return weights
 
 
-def _model(weights, weight_quant="none") -> NanoLlamaForCausalLM:
+def _model(weights, weight_quant="none", config=None) -> NanoLlamaForCausalLM:
     return NanoLlamaForCausalLM(
-        config=_config(),
+        config=config or _config(),
         weights=weights,
         device=torch.device("cpu"),
         dtype=torch.float32,
@@ -346,7 +357,8 @@ def test_unknown_weight_quant_is_rejected():
     with pytest.raises(ValueError, match="weight_quant"):
         _model(_weights(_config()), weight_quant="int8")
     with pytest.raises(ValueError, match="weight_quant"):
-        NanoVLLMConfig(weight_quant="awq")
+        NanoVLLMConfig(weight_quant="gptq")
+    assert NanoVLLMConfig(weight_quant="awq").weight_quant == "awq"
 
 
 def test_weight_quant_comes_from_yaml_and_env(tmp_path, monkeypatch):
@@ -355,3 +367,149 @@ def test_weight_quant_comes_from_yaml_and_env(tmp_path, monkeypatch):
     assert NanoVLLMConfig.from_yaml(str(path)).weight_quant == "w4a16"
     monkeypatch.setenv("WEIGHT_QUANT", "none")
     assert NanoVLLMConfig.from_yaml(str(path)).weight_quant == "none"
+
+
+AWQ_CONFIG = AWQ_QUANT_CONFIG
+_awq_pack_columns = awq_pack_columns
+_awq_checkpoint = awq_checkpoint
+
+
+def test_awq_unpack_inverts_autoawq_packing():
+    torch.manual_seed(5)
+    n, k = 384, 256
+    codes = torch.randint(0, 16, (n, k), dtype=torch.uint8)
+    zeros = torch.randint(0, 16, (n, k // 128), dtype=torch.uint8)
+    scales = torch.rand(n, k // 128).half()
+    got_codes, got_zeros, got_scales = awq_unpack(
+        _awq_pack_columns(codes.t()), _awq_pack_columns(zeros.t()), scales.t().contiguous()
+    )
+    torch.testing.assert_close(got_codes, codes, rtol=0, atol=0)
+    torch.testing.assert_close(got_zeros, zeros, rtol=0, atol=0)
+    torch.testing.assert_close(got_scales, scales, rtol=0, atol=0)
+    # Column 8j + 1 is nibble 4 (bits 16..19) of word j.
+    one = torch.zeros(1, 8, dtype=torch.uint8)
+    one[0, 1] = 0xA
+    assert awq_unpack(torch.tensor([[0xA << 16]], dtype=torch.int32), torch.zeros(1, 1, dtype=torch.int32),
+                      torch.ones(1, 8))[0].t().tolist() == one.tolist()
+
+
+def test_awq_unpack_of_packed_words_concatenated_along_n_equals_concatenated_parts():
+    torch.manual_seed(6)
+    parts = [torch.randint(0, 16, (n, 128), dtype=torch.uint8) for n in (128, 64, 64)]
+    zeros = [torch.randint(0, 16, (n, 1), dtype=torch.uint8) for n in (128, 64, 64)]
+    scales = [torch.rand(n, 1) for n in (128, 64, 64)]
+    fused = awq_unpack(
+        torch.cat([_awq_pack_columns(c.t()) for c in parts], dim=1),
+        torch.cat([_awq_pack_columns(z.t()) for z in zeros], dim=1),
+        torch.cat([s.t() for s in scales], dim=1),
+    )
+    for got, expected in zip(fused, (torch.cat(parts), torch.cat(zeros), torch.cat(scales))):
+        torch.testing.assert_close(got, expected, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16, torch.float16])
+def test_tiled_zero_points_dequantize_to_q_minus_z_times_s(dtype):
+    torch.manual_seed(7)
+    n, k = 256, 384
+    codes = torch.randint(0, 16, (n, k), dtype=torch.uint8)
+    zeros = torch.randint(0, 16, (n, k // 128), dtype=torch.uint8)
+    scales = torch.rand(n, k // 128).to(dtype)
+    weight = pack_w4a16(codes, scales, zeros, layout="tiled")
+
+    assert weight.zeros.shape == (k // 128, n // 64, 8, 2) and weight.zeros.dtype == torch.int32
+    # Column 64t + 8(4w + b) + g is byte b of word [group, t, g, w].
+    raw = weight.zeros.to(torch.int64) & 0xFFFFFFFF
+    for group, t, g, j in itertools.product(range(k // 128), range(n // 64), range(8), range(8)):
+        word = int(raw[group, t, g, j // 4])
+        assert (word >> (8 * (j % 4))) & 0xFF == int(zeros[64 * t + 8 * j + g, group])
+    torch.testing.assert_close(w4a16_row_zeros(weight), zeros.float(), rtol=0, atol=0)
+    q = codes.float().reshape(n, k // 128, 128)
+    expected = ((q - zeros.float().unsqueeze(-1)) * scales.float().unsqueeze(-1)).reshape(n, k)
+    torch.testing.assert_close(dequantize_w4a16(weight, torch.float32), expected, rtol=0, atol=0)
+    assert weight.nbytes() == codes.numel() // 2 + scales.numel() * (scales.element_size() + 1)
+
+
+def test_rtn_tiled_weights_store_zero_point_8_and_match_rows():
+    torch.manual_seed(8)
+    weight = torch.randn(256, 256).bfloat16()
+    tiled = quantize_w4a16(weight, layout="tiled")
+    rows = quantize_w4a16(weight)
+    assert rows.zeros is None
+    assert torch.all(tiled.zeros == torch.tensor(0x08080808, dtype=torch.int32))
+    torch.testing.assert_close(w4a16_row_zeros(tiled), w4a16_row_zeros(rows), rtol=0, atol=0)
+    torch.testing.assert_close(dequantize_w4a16(tiled), dequantize_w4a16(rows), rtol=0, atol=0)
+
+
+def test_zero_points_need_the_tiled_layout():
+    codes = torch.zeros(128, 128, dtype=torch.uint8)
+    with pytest.raises(ValueError, match="tiled"):
+        pack_w4a16(codes, torch.ones(128, 1), torch.zeros(128, 1, dtype=torch.uint8), layout="rows")
+
+
+def test_awq_checkpoint_matches_a_model_holding_the_dequantized_weights():
+    weights = _weights(_config())
+    awq, dequantized = _awq_checkpoint(weights)
+    config = dataclasses.replace(_config(), quantization_config=AWQ_CONFIG)
+    model = _model(awq, weight_quant="none", config=config)  # an AWQ checkpoint loads as awq
+    reference = _model(dequantized)
+
+    assert model.weight_quant == "awq"
+    layer = model.layers[0]
+    assert all(w.layout == "tiled" and w.zeros is not None for w in (layer.qkv, layer.o_proj, layer.gate_up, layer.down))
+    assert isinstance(model.lm_head_weight, torch.Tensor)
+    for actual, expected in zip(_paged_logits(model), _paged_logits(reference)):
+        torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-5)
+
+
+def test_weight_quant_resolution_against_the_checkpoint():
+    plain = _config()
+    awq = dataclasses.replace(plain, quantization_config=AWQ_CONFIG)
+    assert resolve_weight_quant("none", plain) == "none"
+    assert resolve_weight_quant("w4a16", plain) == "w4a16"
+    assert resolve_weight_quant("none", awq) == "awq"
+    assert resolve_weight_quant("awq", awq) == "awq"
+    with pytest.raises(ValueError, match="needs an AWQ checkpoint"):
+        resolve_weight_quant("awq", plain)
+    with pytest.raises(ValueError, match="already AWQ"):
+        resolve_weight_quant("w4a16", awq)
+    for change in ({"bits": 8}, {"group_size": 64}, {"zero_point": False}, {"version": "gemv"},
+                   {"quant_method": "gptq"}):
+        with pytest.raises(ValueError, match="GEMM format"):
+            resolve_weight_quant("none", dataclasses.replace(plain, quantization_config={**AWQ_CONFIG, **change}))
+
+
+def test_awq_model_needs_every_projection_in_awq_form():
+    awq, _ = _awq_checkpoint(_weights(_config()))
+    config = dataclasses.replace(_config(), quantization_config=AWQ_CONFIG)
+    del awq["model.layers.1.mlp.down_proj.qzeros"]
+    with pytest.raises(KeyError, match="down_proj.qzeros"):
+        _model(awq, weight_quant="awq", config=config)
+
+
+def test_config_reads_quantization_config(tmp_path):
+    import json
+
+    data = {
+        "model_type": "llama", "vocab_size": 32, "hidden_size": 128, "intermediate_size": 256,
+        "num_hidden_layers": 1, "num_attention_heads": 4, "quantization_config": AWQ_CONFIG,
+    }
+    (tmp_path / "config.json").write_text(json.dumps(data))
+    assert NanoLlamaConfig.from_pretrained(tmp_path).quantization_config == AWQ_CONFIG
+    del data["quantization_config"]
+    (tmp_path / "config.json").write_text(json.dumps(data))
+    assert NanoLlamaConfig.from_pretrained(tmp_path).quantization_config is None
+
+
+def test_large_launch_config_keeps_the_most_blocks_busy():
+    from serving.nano_vllm.kernels.w4a16 import W4A16_CONFIG, large_launch_config
+
+    # 1,024 rows: 8 chunks of 128 keep 8 x 13 = 104 of 108 SMs busy, 4 of 256 all 108.
+    assert large_launch_config(1024, 4096, W4A16_CONFIG, 108) == (256, 128, 108)
+    # 512 rows: 4 x 27 either way; the tie goes to 128x256.
+    assert large_launch_config(512, 4096, W4A16_CONFIG, 108) == (128, 256, 108)
+    # Only 256x128 divides N = 384.
+    assert large_launch_config(300, 384, W4A16_CONFIG, 108)[:2] == (256, 128)
+    assert large_launch_config(300, 4096, {**W4A16_CONFIG, "large_tile": "256x128", "tiled_grid": 7}, 108) == (
+        256, 128, 7)
+    with pytest.raises(ValueError, match="divisible"):
+        large_launch_config(300, 384, {**W4A16_CONFIG, "large_tile": "128x256"}, 108)

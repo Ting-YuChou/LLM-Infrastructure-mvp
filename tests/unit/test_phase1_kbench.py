@@ -24,10 +24,10 @@ def _input_bytes(kernel, shape):
 def test_w4a16_rotates_by_the_4bit_weight(name):
     kernel = kbench.KERNELS[name]
     shape = DOWN if name == "w4a16_linear" else {k: v for k, v in DOWN.items() if k != "M"}
-    # The bf16 weight in the inputs is over 2x the L2, which alone means one copy:
-    # down_proj's 29 MB 4-bit weight would then stay in L2 across the timed calls.
-    assert _input_bytes(kernel, shape) >= 2 * L2
-    assert kbench.copies_for(_input_bytes(kernel, shape), L2) == 1
+    # The inputs hold the codes a byte each, twice the 4-bit weight: rotating by
+    # them would time down_proj's 30 MB weight with half the copies it needs.
+    assert _input_bytes(kernel, shape) > 1.9 * kbench._w4a16_weight_bytes(shape)
+    assert kbench.copies_for(_input_bytes(kernel, shape), L2) < 18
     assert kbench.timing_copies(kernel, shape, _input_bytes(kernel, shape), L2) == 18
     gate_up = GATE_UP if name == "w4a16_linear" else {k: v for k, v in GATE_UP.items() if k != "M"}
     assert kbench.timing_copies(kernel, gate_up, _input_bytes(kernel, gate_up), L2) == 9

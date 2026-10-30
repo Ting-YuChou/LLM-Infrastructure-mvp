@@ -233,3 +233,49 @@ the full output length). nano got 9,942 KV blocks (M0's vLLM capacity).
 - nsys of w1c1c: host time per step 22.4 ms for eager steps (the first
   pass's 1024-token prefills) and 4.0 ms for piecewise steps (the second
   pass's cached prefills), decode steps 12.1 ms with 0.04 ms idle.
+
+## W4A16 online (2026-10-29)
+
+### Run w4serve-20261029-211009-colab (new VM `w4serve`, stopped after the run)
+
+- Question: does the W4A16 path past 256 rows put nano behind vLLM AWQ online? That path dequantizes each weight and calls cuBLAS. TTFT and the mixed steps both go through it.
+- Harness: `run_phase2.sh` gained engine `vllmw4`. It is vLLM on `P2_VLLM_W4_MODEL` (default the AWQ checkpoint Phase 1 uses), downloaded on first use and served under the BF16 model's name. SGLang is now installed only when `P2_RUNS` has an sglang entry.
+- Settings: `P2_STEPS="installs serve nsys summarize" P2_CONCURRENCY="1 16 64" P2_NSYS="w1c16 w1c64"`, with these `P2_RUNS`:
+  - `vllmw4:vllm_awq:w1,w1s,w1u,w3`;
+  - `nano:nano_w4:w1,w1s,w1u,w3`, with `WEIGHT_QUANT=w4a16,ENGINE_MULTIPROCESS=true,MAX_NUM_BATCHED_TOKENS=2048,NUM_KVCACHE_BLOCKS=0`;
+  - `nano:nano_w4_c256:w1,w1u`, the same with 256-token chunks.
+  - `P2_NSYS_ENV` used the same W4A16 settings in one process.
+  - No GPU tests: the code under test is main at ac24d86, which `sampler-s2` tested.
+- 26 minutes in all. vLLM's venv took 276 s, the server runs 1,104 s, nsys 101 s.
+- Serve: every run was `ok`. nano is ahead on every W1, W1u, W1s and W3 metric except W1's ITL p99 at c=16 (86.4 against 76.1 ms). Examples:
+  - W1 c=64: 2,101 against 1,949 tok/s; TTFT p50 283 against 569 ms;
+  - W1u c=1 TTFT p50: 89.1 against 95.1 ms.
+- nsys:
+  - each step past 256 rows spends 14.0 ms in 128 dequantize launches and 63 ms in cuBLAS GEMMs;
+  - w1c16 had 32 such steps and w1c64 had 64.
+  - The dequantization moves 17.6 GB, about 81% of peak bandwidth.
+- 256-token chunks:
+  - no dequantization, and ITL p99 drops to 25–31 ms;
+  - but at c=64, TTFT p50 is 1,877 ms and ITL p50 27.3 ms;
+  - so 2,048 stays the default.
+- vLLM's sampled c=16 throughput again collapsed: 796 against 1,502 tok/s greedy.
+- The "engine core died" line at the end of each nano log comes from `stop_server` killing the process group. It is in `sampler-serve`'s and `kernels-serve`'s logs too.
+
+## AWQ online (2026-10-30)
+
+### Run awqserve-20261030-060945-colab (VM `awq`, kept from Phase 1's runs `awq-a2`/`awq-a3`, stopped after this run)
+
+- Question: with the same AWQ checkpoint on both sides, does nano stay ahead of vLLM online, and do 512-token chunks (all steps within `gemm_w4a16_tiled` now that it takes 512 rows) fix W1's ITL p99 at c=16?
+- Code: 4edfb73 (AWQ loading, zero points in the tiled kernel with the prefetch fix, `lm_head_quant` `auto` = `int8_dense`, `tiled_max_rows` 512).
+- Settings: `P2_STEPS="tests serve nsys summarize" P2_CONCURRENCY="1 16 64" P2_NSYS="w1c16 w1c64"`, with these `P2_RUNS`:
+  - `vllmw4:vllm_awq:w1,w1s,w1u,w3`;
+  - `nano:nano_awq:w1,w1s,w1u,w3`, with `WEIGHT_QUANT=awq,ENGINE_MULTIPROCESS=true,MAX_NUM_BATCHED_TOKENS=2048,NUM_KVCACHE_BLOCKS=0`;
+  - `nano:nano_awq_c512:w1,w1u,w3`, the same with 512-token chunks;
+  - `P2_NSYS_ENV="WEIGHT_QUANT=awq,MAX_NUM_BATCHED_TOKENS=2048,NUM_KVCACHE_BLOCKS=0"`.
+- 22 minutes: tests 300 s (962 passed, no skips), servers 911 s, nsys 99 s.
+- Serve: every run was `ok` with 0 failed requests.
+  - nano is ahead on every W1, W1u and W1s metric but W1's ITL p99 at c=16 (86.65 against 75.20 ms), as in `w4serve`. Examples: W1 c=1 204 against 172 tok/s, ITL p50 4.85 against 5.75 ms; W1s c=16 1,415 against 794 tok/s.
+  - W3: nano's background ITL p50 8.08 against 9.23 ms, p99 12.2 against 11.6, p99.9 130.5 against 161.9; long-prompt TTFT p50 351.9 against 398.6 ms.
+- 512-token chunks: W1 ITL p99 44.85 / 49.96 ms at c=16 / 64 (2,048: 86.65 / 93.84), W1 TTFT p50 at c=64 206.6 against 286.8 ms, W1u c=16 TTFT 200.4 against 350.4; but W1 c=64 throughput 2,052 against 2,107 tok/s, W3 ITL p99 29.3 ms and long-prompt TTFT p50 433.2 ms. The benchmark default stays 2,048; nano's own default is 512.
+- W1u c=1 TTFT p50 89.1 ms, the same as `w4serve`: a 1,024-row step still dequantizes. Phase 1's G4 asked for −10 ms; missed.
+- KV: 215,424 tokens against `w4serve`'s 227,824. Allocated before sizing 5.87 against 5.33 GiB (the int8 lm_head is 0.49 GiB), but 8.32 against 6.80 GiB in use on the GPU: about 1 GiB reserved and not allocated, likely fragmentation from unpacking AWQ on the GPU.

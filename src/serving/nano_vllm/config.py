@@ -66,10 +66,17 @@ class NanoVLLMConfig:
     # "triton" / "cuda": a GEMV kernel for linear layers when a batch has at
     # most 16 / 2 rows; "cuda" builds kernels/csrc/gemv_bf16.cu on first use.
     linear_backend: str = "triton"
-    # "w4a16": quantize the decoder-layer projections to 4-bit integers at
-    # load (RTN, groups of 128 along K), in the tiled layout of the
-    # Marlin-style kernel; kernels/w4a16.py.
+    # "awq": the model path is an AWQ checkpoint (AutoAWQ GEMM format, 4-bit,
+    # groups of 128, zero points), as vLLM serves with awq_marlin; such a
+    # checkpoint loads as "awq" under "none" too. "w4a16": quantize a
+    # full-precision checkpoint's decoder-layer projections to 4 bits at load
+    # (RTN, symmetric, groups of 128). Both run the Marlin-style kernel of
+    # kernels/w4a16.py.
     weight_quant: str = "none"
+    # "int8": lm_head as int8 with a scale per vocab row (kernels/w8a16.py),
+    # half the bytes of the largest bf16 read left under 4-bit weights;
+    # "auto": model.AUTO_LM_HEAD_QUANT by weight_quant.
+    lm_head_quant: str = "auto"
     # "fp8": the paged KV cache holds e4m3 codes plus an fp32 scale per
     # (token, kv head), about half the bytes of bf16 (kernels/fp8.py);
     # "auto": the model dtype.
@@ -121,8 +128,10 @@ class NanoVLLMConfig:
             raise ValueError("attention_backend must be one of: torch, triton, flash_attn")
         if self.linear_backend not in {"torch", "triton", "cuda"}:
             raise ValueError("linear_backend must be one of: torch, triton, cuda")
-        if self.weight_quant not in {"none", "w4a16"}:
-            raise ValueError("weight_quant must be one of: none, w4a16")
+        if self.weight_quant not in {"none", "w4a16", "awq"}:
+            raise ValueError("weight_quant must be one of: none, w4a16, awq")
+        if self.lm_head_quant not in {"auto", "none", "int8", "int8_dense"}:
+            raise ValueError("lm_head_quant must be one of: auto, none, int8, int8_dense")
         if self.kv_cache_dtype not in {"auto", "fp8"}:
             raise ValueError("kv_cache_dtype must be one of: auto, fp8")
         if self.kv_cache_dtype == "fp8" and self.attention_backend == "flash_attn":
@@ -214,6 +223,9 @@ class NanoVLLMConfig:
             ),
             weight_quant=str(
                 _env("WEIGHT_QUANT", engine.get("weight_quant", cls.weight_quant))
+            ),
+            lm_head_quant=str(
+                _env("LM_HEAD_QUANT", engine.get("lm_head_quant", cls.lm_head_quant))
             ),
             kv_cache_dtype=str(
                 _env("KV_CACHE_DTYPE", engine.get("kv_cache_dtype", cls.kv_cache_dtype))
