@@ -405,3 +405,49 @@ The only metric where nano is behind is W1's ITL p99 at c=16. Every request comp
 At c=64, the 256-token budget is mostly taken by decodes, so prefills stall: TTFT rises sevenfold and ITL p50 almost doubles. The default stays at 2,048-token chunks.
 
 As in `sampler-serve`, vLLM's sampled throughput at c=16 is far below its greedy one: 796 against 1,502 tok/s, with a TTFT p50 of 613 ms. This was not investigated.
+
+### AWQ online (run `awqserve-20261030-060945-colab`)
+
+The same comparison with the same weights on both sides. nano loads vLLM's AutoAWQ checkpoint itself (`WEIGHT_QUANT=awq`, Phase 1's round 6). It also uses the round's two decode changes: zero points in the tiled kernel, and the int8 lm_head up to 64 rows (`lm_head_quant` `auto`, which resolves to `int8_dense`). `gemm_w4a16_tiled` now takes up to 512 rows, so only chunks past 512 tokens are dequantized. Two nano configs:
+
+- `nano_awq`: 2,048-token chunks, as in `w4serve`;
+- `nano_awq_c512`: nano's default of 512-token chunks, so no step is dequantized.
+
+KV: nano 215,424 tokens (217,648 at 512-token chunks), vLLM 237,824. 962 tests passed beforehand, and every request completed.
+
+| | c=1 | c=16 | c=64 |
+|---|---:|---:|---:|
+| W1 output tok/s, nano / vLLM | **204** / 172 | **1,679** / 1,502 | **2,107** / 1,941 |
+| W1 TTFT p50 (ms) | **14.4** / 21.0 | **108.6** / 134.7 | **286.8** / 574.6 |
+| W1 ITL p50 (ms) | **4.85** / 5.75 | **6.79** / 7.88 | **15.01** / 16.35 |
+| W1 ITL p99 (ms) | **5.16** / 6.08 | 86.65 / **75.20** | **93.84** / 186.18 |
+| W1u (uncached) TTFT p50 (ms) | **89.1** / 95.4 | **350.4** / 645.1 | - |
+| W1s (T 0.7, top-p 0.9) output tok/s | **191** / 156 | **1,415** / 794 | **2,095** / 1,830 |
+| W1s ITL p50 (ms) | **4.88** / 6.02 | **6.86** / 9.44 | **15.15** / 18.27 |
+
+Against `w4serve` (RTN weights), nano's ITL p50 fell from 5.16 / 7.11 / 15.09 to 4.85 / 6.79 / 15.01 ms, and W1 throughput at c=1 rose from 192 to 204 tok/s; vLLM's numbers are within 4% of that run's.
+
+W3 (4096-token prompts arriving on top of 32 decodes):
+
+| | nano | nano, 512-token chunks | vLLM |
+|---|---:|---:|---:|
+| background ITL p50 / p99 / p99.9 (ms) | **8.08** / 12.2 / 130.5 | 8.10 / 29.3 / **47.9** | 9.23 / **11.6** / 161.9 |
+| background tok/s | **3,639** | 3,590 | 3,193 |
+| long-prompt TTFT p50 (ms) | **351.9** | 433.2 | 398.6 |
+
+**512-token chunks** now cost little at c=64, where 256-token chunks in `w4serve` stalled prefills:
+
+| | c=1 | c=16 | c=64 |
+|---|---:|---:|---:|
+| W1 ITL p99 (ms), 512 / 2,048 chunks | 5.51 / **5.16** | **44.85** / 86.65 | **49.96** / 93.84 |
+| W1 ITL p50 (ms) | 4.84 / 4.85 | 6.80 / 6.79 | 15.37 / **15.01** |
+| W1 TTFT p50 (ms) | 14.7 / 14.4 | 119.0 / **108.6** | **206.6** / 286.8 |
+| W1 output tok/s | 204 / 204 | 1,660 / **1,679** | 2,052 / **2,107** |
+| W1u TTFT p50 (ms) | 92.1 / **89.1** | **200.4** / 350.4 | - |
+
+- With 512-token chunks, nano beats vLLM on W1's ITL p99 at c=16 (44.85 against 75.20 ms), the one W1 metric it lost with 2,048. The price is 2.6% throughput at c=64, a worse W3 ITL p99 (29.3 ms) and a long-prompt TTFT p50 behind vLLM's (433 against 399 ms).
+- Neither chunk size wins every metric: 2,048 loses W1's ITL p99 at c=16 and W3's ITL p99 by 0.6 ms; 512 loses W3's ITL p99 and long-prompt TTFT.
+- The uncached 1024-token TTFT at c=1 did not improve (89.1 ms, as in `w4serve`). One 1,024-row step is past `tiled_max_rows`, so it still dequantizes; Phase 1's large-M kernel lost to dequantize + cuBLAS and stays off.
+- nano's KV cache is 5% smaller than in `w4serve` (215,424 against 227,824 tokens). The int8 lm_head adds 0.5 GiB; the other ~1 GiB is reserved but not allocated after loading, likely fragmentation from unpacking AWQ on the GPU. Not fixed.
+
+vLLM's sampled c=16 throughput is again far below its greedy one (794 against 1,502 tok/s).

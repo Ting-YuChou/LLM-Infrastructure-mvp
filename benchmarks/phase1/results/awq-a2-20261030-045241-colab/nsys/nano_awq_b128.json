@@ -1,0 +1,175 @@
+{
+  "label": "nano_awq_b128",
+  "window_ms": 1608.59276,
+  "gpu_busy_frac": 0.9914394554405429,
+  "per_step_source": "median of 63 NVTX step ranges",
+  "steps": 63,
+  "batch": 1,
+  "per_step": {
+    "wall_ms": 25.876126,
+    "gpu_busy_ms": 25.663776,
+    "gpu_idle_ms": 0.21235,
+    "kernels": 300,
+    "launch_calls": 70,
+    "launch_api_ms": 1.196447
+  },
+  "kernel_time_by_category": {
+    "attention": {
+      "ms": 805.650164,
+      "frac": 0.5088595576386266
+    },
+    "gemm": {
+      "ms": 737.707212,
+      "frac": 0.46594586873955446
+    },
+    "norm": {
+      "ms": 17.011614,
+      "frac": 0.010744765856907423
+    },
+    "activation": {
+      "ms": 10.593754,
+      "frac": 0.0066911585388474285
+    },
+    "rope": {
+      "ms": 7.922323,
+      "frac": 0.0050038465296586435
+    },
+    "sampling": {
+      "ms": 2.72597,
+      "frac": 0.001721759580422759
+    },
+    "elementwise/copy": {
+      "ms": 1.635562,
+      "frac": 0.0010330431159827176
+    }
+  },
+  "top_kernels": [
+    {
+      "name": "_paged_decode_split_kernel",
+      "category": "attention",
+      "count": 1984,
+      "total_ms": 805.650164,
+      "avg_us": 406.07367137096776,
+      "frac": 0.5088595576386266
+    },
+    {
+      "name": "gemm_w4a16_tiled_kernel",
+      "category": "gemm",
+      "count": 7936,
+      "total_ms": 687.227228,
+      "avg_us": 86.59617288306451,
+      "frac": 0.4340620269982339
+    },
+    {
+      "name": "ampere_bf16_s16816gemm_bf16_256x128_ldg8_f2f_stages_64x3_tn",
+      "category": "gemm",
+      "count": 62,
+      "total_ms": 50.479984,
+      "avg_us": 814.1932903225807,
+      "frac": 0.03188384174132055
+    },
+    {
+      "name": "_fused_add_rms_norm_kernel",
+      "category": "norm",
+      "count": 3968,
+      "total_ms": 16.807803,
+      "avg_us": 4.235837449596775,
+      "frac": 0.010616036068301702
+    },
+    {
+      "name": "_silu_and_mul_kernel",
+      "category": "activation",
+      "count": 1984,
+      "total_ms": 10.593754,
+      "avg_us": 5.33959375,
+      "frac": 0.0066911585388474285
+    },
+    {
+      "name": "_rope_cache_write_kernel",
+      "category": "rope",
+      "count": 1984,
+      "total_ms": 7.922323,
+      "avg_us": 3.9931063508064515,
+      "frac": 0.0050038465296586435
+    },
+    {
+      "name": "sample_stats_kernel",
+      "category": "sampling",
+      "count": 62,
+      "total_ms": 2.72597,
+      "avg_us": 43.96725806451613,
+      "frac": 0.001721759580422759
+    },
+    {
+      "name": "vectorized_gather_kernel",
+      "category": "elementwise/copy",
+      "count": 310,
+      "total_ms": 0.860677,
+      "avg_us": 2.776377419354839,
+      "frac": 0.0005436152526988627
+    },
+    {
+      "name": "vectorized_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 186,
+      "total_ms": 0.495268,
+      "avg_us": 2.6627311827956985,
+      "frac": 0.00031281797814239294
+    },
+    {
+      "name": "index_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 62,
+      "total_ms": 0.279617,
+      "avg_us": 4.509951612903225,
+      "frac": 0.00017660988514146177
+    },
+    {
+      "name": "_rms_norm_kernel",
+      "category": "norm",
+      "count": 62,
+      "total_ms": 0.203811,
+      "avg_us": 3.287274193548387,
+      "frac": 0.00012872978860572308
+    }
+  ],
+  "cuda_api": {
+    "cudaEventSynchronize": {
+      "calls": 63,
+      "total_ms": 1137.772629
+    },
+    "cudaGraphLaunch": {
+      "calls": 2046,
+      "total_ms": 52.826173
+    },
+    "cuLaunchKernelEx": {
+      "calls": 1984,
+      "total_ms": 19.106726
+    },
+    "cudaMemcpyAsync": {
+      "calls": 555,
+      "total_ms": 7.732642
+    },
+    "cudaLaunchKernel": {
+      "calls": 309,
+      "total_ms": 3.860892
+    },
+    "cudaStreamIsCapturing": {
+      "calls": 2291,
+      "total_ms": 2.436311
+    },
+    "cudaEventQuery": {
+      "calls": 303,
+      "total_ms": 1.664252
+    },
+    "cudaEventRecordWithFlags": {
+      "calls": 245,
+      "total_ms": 0.784747
+    }
+  },
+  "timeline_slice_ns": [
+    804152603,
+    809152603
+  ],
+  "nvtx_phases": {}
+}

@@ -607,6 +607,84 @@ At b=64 the four kernels take 172 µs per step, while a pass that only reads the
 - **hist (68 µs)**: many of a row's tokens land in the same few bins, so lanes of a warp still collide on shared u32 atomics, which replay. Warp-aggregated atomics (`__match_any_sync`, then `__reduce_add_sync`) would issue one atomic per distinct bin per warp.
 - **draw (52 µs)**: with a large nucleus, almost every warp step has a kept token, so all lanes pay for Philox (two calls per 8 tokens), `log1pf` and `__logf`, about 50 instructions per token. An inverse-CDF draw would replace that with one exp per token: one random number per row, then a search over per-chunk kept masses.
 
+## Kernel list, round 6: AWQ weights, int8 lm_head, large-M prefill (runs `awq-a1` to `awq-a3`)
+
+Until this round nano's W4A16 was its own RTN quantization at load: symmetric, groups of 128, no zero points. On wikitext-2 that cost 10.9% perplexity (8.023 against BF16's 7.232), and vLLM's AWQ side ran a different checkpoint (`hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4`), so the two engines never had the same weights. nano now loads that AutoAWQ checkpoint itself, and two speedups were tried on top: an int8 lm_head and a W4A16 kernel for prefill-sized batches. Branch `claude/nano-awq`, local only.
+
+### What was done
+
+- **AWQ loading** (`model.py`, `kernels/w4a16.py`): `weight_quant: awq`, chosen on its own for a checkpoint whose `quantization_config` is AutoAWQ GEMM, 4 bits, groups of 128, zero points (anything else is refused). `awq_unpack` undoes AutoAWQ's packing (nibble order 0, 2, 4, 6, 1, 3, 5, 7 along N), and the codes go into the tiled layout `gemm_w4a16_tiled` already reads. q/k/v and gate/up are concatenated while still packed; fp16 scales become the model's dtype.
+- **Zero points in the tiled kernel** (`csrc/w4a16.cu`): one byte per column and group, beside the scales in each stage. A tile turns them into (magic + z) pairs with `__byte_perm`, and `dequant_pair` subtracts that instead of a constant, so q − z is exact before the scale. RTN runs the same kernel with z = 8, bit-identical to before. Like the scales before zero points, a tile's scales and zero words are read with its first row's fragments, after the barrier that publishes the stage (read at the top of each tile instead, the first mma waited on shared memory: +7–8% GEMM time at 64–128 rows).
+- **int8 lm_head** (`kernels/w8a16.py`): symmetric int8 per vocab row with fp32 scales, a Triton kernel that converts to bf16 inside `tl.dot` and scales the output. Up to 64 rows it reads half the bytes of bf16; past that it reaches only ~130 TFLOPs, so `lm_head_quant: int8_dense`, the default under 4-bit weights, also keeps the bf16 weight for batches past 64 rows.
+- **Prefill past 256 rows**: `gemm_w4a16_tiled` now takes up to 512 rows (`tiled_max_rows`). `gemm_w4a16_large`, a kernel for 64·WM-row chunks with 64×64 per warp, ran at ~180 TFLOPs at 1,024–2,048 rows, slower than dequantizing and calling cuBLAS (230–250), so it is opt-in (`"large": True`) and dequantize + cuBLAS stays the path past 512 rows.
+- **Tools**: kbench's `w4a16_linear` uses asymmetric weights and adds vLLM's AWQ Marlin (repacked as vLLM 0.19.1 does) and the large kernel; `awq_dequant` checks a real layer against vLLM's `awq_dequantize_triton` bit for bit; `lm_head` compares int8 configs with bf16. `quality.py` takes `--awq-model` and an lm_head field, and `quality_vllm.py` scores vLLM on the same chunks.
+
+### Quality (wikitext-2 test, 288,627 tokens in chunks of 2,048, run `awq-a1`)
+
+| config | weights | perplexity | top-1 agreement vs nano BF16 |
+|---|---|---:|---:|
+| nano BF16 | bf16 | 7.232 | - |
+| vLLM BF16 | bf16 | 7.232 | 98.81% |
+| nano W4A16 (RTN, before) | RTN at load | 8.023 (+10.9%) | 85.91% |
+| nano AWQ | AutoAWQ checkpoint | **7.562** (+4.6%) | 90.10% |
+| vLLM AWQ (`awq_marlin`) | AutoAWQ checkpoint | 7.560 (+4.5%) | 90.13% |
+| nano AWQ + int8 lm_head | | 7.563 | 90.06% |
+
+- nano AWQ is within 0.04% of vLLM AWQ, and the first layer's dequantized weights are identical to vLLM's.
+- The int8 lm_head agrees with the bf16 head on 99.01% of top-1 tokens, at +0.001% perplexity (run `awq-a2`).
+
+### kernel (kbench, run `awq-a3`, cold, µs)
+
+Decode shapes, nano tiled (AWQ) / vLLM AWQ Marlin:
+
+| projection | M=1 | M=16 | M=64 | M=128 | M=256 |
+|---|---:|---:|---:|---:|---:|
+| qkv | 18.1 / 19.1 | 16.0 / 17.7 | 32.8 / 35.8 | 47.4 / 49.9 | 75.7 / 78.7 |
+| o_proj | 14.5 / 14.8 | 14.9 / 16.1 | 27.7 / 28.3 | 36.7 / 41.4 | 56.6 / 56.5 |
+| gate_up | 52.7 / 54.9 | 55.7 / 59.4 | 90.8 / 91.4 | 164.3 / 171.7 | 309.6 / 330.6 |
+| down | 30.8 / 30.0 | 32.3 / 32.4 | 56.9 / 65.3 | 91.4 / 96.2 | 158.7 / 169.7 |
+
+Prefill shapes, a layer's four projections (large: the faster of its two tiles):
+
+| rows | tiled | large kernel | dequantize + cuBLAS | vLLM Marlin | cuBLAS BF16 |
+|---:|---:|---:|---:|---:|---:|
+| 384 | **865** | 1,041 | 1,171 | 921 | 784 |
+| 512 | **1,171** | 1,300 | 1,392 | 1,212 | 1,014 |
+| 768 | - | 1,874 | 1,836 | **1,778** | 1,469 |
+| 1,024 | - | 2,450 | **2,288** | 2,355 | 1,921 |
+| 2,048 | - | 4,948 | **3,971** | 4,685 | 3,597 |
+
+- nano's path (tiled up to 512 rows, dequantize + cuBLAS past that) is faster than Marlin everywhere but 768 rows, where it is 3% slower.
+- The large kernel reaches ~180 TFLOPs at 2,048 rows, cuBLAS BF16 ~250.
+
+lm_head (run `awq-a2`): int8 369–386 µs up to 16 rows against bf16's 713–736, and 524 against 779 at 64 rows; at 128 and 256 rows 1,124 and 2,111 against cuBLAS's 810 and 1,168.
+
+### End-to-end decode (run `awq-a3`, ms/step, greedy)
+
+| config | b=1 | b=16 | b=64 | b=128 | b=256 |
+|---|---:|---:|---:|---:|---:|
+| nano AWQ, `int8_dense` lm_head (default) | **4.80** | **6.77** | **14.95** | **26.61** | **37.07** |
+| nano AWQ, bf16 lm_head | 5.16 | 7.13 | 15.25 | 26.60 | 37.04 |
+| vLLM AWQ | 5.55 | 7.86 | 16.20 | 27.35 | 38.88 |
+| nano RTN, before zero points (`sampler-s2`) | 5.09 | 7.06 | 15.00 | - | - |
+
+nano now takes 0.87 / 0.86 / 0.92 / 0.97 / 0.95 of vLLM AWQ's time with the same weights; with RTN it was 0.92 / 0.90 / 0.93 at b=1/16/64. GEMM per layer in decode (nsys, µs, nano / vLLM): b=1 113.9 / 117.7, b=16 119.5 / 126.1, b=64 205.3 / 220.2, b=128 332.4 / 349.5.
+
+### Gates
+
+- **G1, correctness**: passed. 962 tests passed with no skips (AWQ unpacking and loading, zero points in every tiled shape and both dtypes, the large kernel, int8 lm_head, CUDA graphs); a real layer matches vLLM bit for bit; perplexity is within ±0.5% of vLLM AWQ; the large kernel's perplexity is within 0.01 of the dequantize path.
+- **G2, AWQ decode at most 1% slower than RTN**: **missed**, +1.4% / +1.0% / +1.7% at b=1/16/64 with the bf16 head. At b=1 the step is bandwidth-bound, and the zero points add 1.5% to the bytes read (64 bytes of weights, 2 of scale and 1 of zero point per column and group). At b=64 the GEMM is still 3.7% slower, from decoding zero points once per k16 row at MT 3–4, where a tile's pairs did not fit in registers. Still faster than vLLM AWQ at every b.
+- **G3, int8 lm_head**: passed. Quality as above; 0.36 ms faster at b=1, and with `int8_dense` no batch size is slower.
+- **G4, large-M kernel**: **missed**. The large kernel is 7% slower than dequantize + cuBLAS at 1,024 rows and 25% at 2,048; prefill gains only from the tiled kernel up to 512 rows (−26% at 384 rows, −16% at 512). Online, the uncached 1024-token TTFT at c=1 did not change (89.1 ms, Phase 2's `awqserve`), since a 1,024-row step still dequantizes.
+- **G5, online** (Phase 2's `awqserve`): nano beats vLLM AWQ on throughput, TTFT p50 and ITL p50 in W1, W1u, W1s and W3. **Missed** with 2,048-token chunks: W1's ITL p99 at c=16 (86.65 against 75.20 ms) and W3's ITL p99 (12.2 against 11.6). With nano's default 512-token chunks the former is 44.85 ms, but W3's ITL p99 (29.3 ms) and long-prompt TTFT (433 against 399 ms) fall behind.
+
+### Not done yet
+
+- **A faster prefill kernel**: the large kernel lacks the tiled kernel's register double buffer (it spilled), and each B fragment is dequantized by every warp row of the block (2× at 128×256). Dequantizing a stage into shared memory once, then running a plain BF16 mma loop over it, may get closer to cuBLAS.
+- **int8 lm_head past 64 rows**: a CUDA kernel in the tiled kernel's style would let `int8` drop the bf16 copy (0.5 GB).
+- **Zero points as nibbles**: half the zero-point bytes, recovering about 0.7% at b=1.
+- **KV capacity after loading AWQ**: about 1 GiB stays reserved but unallocated after unpacking on the GPU (Phase 2's `awqserve`: 215,424 KV tokens against 227,824 with RTN).
+
 ## Files
 
 | file | content |
@@ -617,7 +695,8 @@ At b=64 the four kernels take 172 µs per step, while a pass that only reads the
 | `tiled_trace.py` | trace build of `gemm_w4a16_tiled`: per-block time breakdown, the last block to finish, `--prefetch-tiles` to measure the upper bound of L2 prefetch; over 64 rows the same schedule is applied per chunk |
 | `golden.py` | bit-for-bit comparison of the tiled kernel's output (saved once, checked afterwards) |
 | `gemm_breakdown.py` | reads the GEMM time of each projection in decode from nsys's SQLite, for both nano and vLLM; consecutive launches of the same projection are merged into one, and a `:prelude` regex (for example dequantization) is counted with the next GEMM |
-| `quality.py` | perplexity and top-1 agreement on the 8B |
+| `quality.py` | perplexity and top-1 agreement on the 8B; AWQ configs load `--awq-model` |
+| `quality_vllm.py` | vLLM's perplexity and top-1 on `quality.py`'s chunks (vLLM venv), added to the same table |
 | `interp/` | runs `TRITON_INTERPRET=1` locally in Docker (linux/arm64) to check the logic of the Triton kernels: `interp_check.py`, and `dot_check.py`, which shows the interpreter's bf16 `tl.dot` is wrong |
 | `summarize.py` | collects one run into `summary.md` |
 | `results/<run_id>/` | `summary.md`, `status.tsv`, `logs/`, `tests/`, `kbench/`, `tune/`, `ncu/`, `nsys/`, `offline/`, `quality/`, `trace/`, `environment.txt`, and `code/`, a copy of the code for that run |

@@ -1,0 +1,239 @@
+{
+  "label": "vllmw4_b1",
+  "window_ms": 212.730083,
+  "gpu_busy_frac": 0.8180669726904587,
+  "per_step_source": "median of 31 NVTX step ranges",
+  "steps": 32,
+  "batch": 1,
+  "per_step": {
+    "wall_ms": 5.672537,
+    "gpu_busy_ms": 5.599718,
+    "gpu_idle_ms": 0.072819,
+    "kernels": 366,
+    "launch_calls": 15,
+    "launch_api_ms": 0.59663
+  },
+  "kernel_time_by_category": {
+    "other": {
+      "ms": 117.379499,
+      "frac": 0.6815310373857077
+    },
+    "gemm": {
+      "ms": 22.295284,
+      "frac": 0.12945129398898672
+    },
+    "attention": {
+      "ms": 19.399148,
+      "frac": 0.11263569510412443
+    },
+    "norm": {
+      "ms": 6.239515,
+      "frac": 0.0362279884218426
+    },
+    "elementwise/copy": {
+      "ms": 3.490781,
+      "frac": 0.02026823777988964
+    },
+    "activation": {
+      "ms": 2.189091,
+      "frac": 0.012710341012460076
+    },
+    "sampling": {
+      "ms": 1.235814,
+      "frac": 0.007175406306988762
+    }
+  },
+  "top_kernels": [
+    {
+      "name": "Marlin",
+      "category": "other",
+      "count": 3970,
+      "total_ms": 117.255242,
+      "avg_us": 29.535325440806044,
+      "frac": 0.6808095740736823
+    },
+    {
+      "name": "ampere_fp16_s16816gemm_fp16_64x64_sliced1x2_ldg8_f2f_stages_64x5_tn",
+      "category": "gemm",
+      "count": 31,
+      "total_ms": 22.295284,
+      "avg_us": 719.2027096774194,
+      "frac": 0.12945129398898672
+    },
+    {
+      "name": "flash_fwd_splitkv_kernel",
+      "category": "attention",
+      "count": 993,
+      "total_ms": 8.192231,
+      "avg_us": 8.249980866062437,
+      "frac": 0.04756588449856439
+    },
+    {
+      "name": "flash_fwd_splitkv_combine_kernel",
+      "category": "attention",
+      "count": 993,
+      "total_ms": 8.040194,
+      "avg_us": 8.096872104733132,
+      "frac": 0.04668312443216633
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_2",
+      "category": "norm",
+      "count": 961,
+      "total_ms": 3.220438,
+      "avg_us": 3.3511321540062435,
+      "frac": 0.018698567208711242
+    },
+    {
+      "name": "reshape_and_cache_flash_kernel",
+      "category": "attention",
+      "count": 993,
+      "total_ms": 3.166723,
+      "avg_us": 3.1890463242698894,
+      "frac": 0.01838668617339371
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_marlin_gemm_mean_mul_pow_rsqrt_0",
+      "category": "norm",
+      "count": 992,
+      "total_ms": 2.767396,
+      "avg_us": 2.7897137096774194,
+      "frac": 0.016068106294584356
+    },
+    {
+      "name": "triton_poi_fused_3",
+      "category": "elementwise/copy",
+      "count": 961,
+      "total_ms": 2.308954,
+      "avg_us": 2.402657648283039,
+      "frac": 0.01340629179969391
+    },
+    {
+      "name": "triton_poi_fused_marlin_gemm_mul_silu_slice_1",
+      "category": "activation",
+      "count": 992,
+      "total_ms": 2.189091,
+      "avg_us": 2.2067449596774193,
+      "frac": 0.012710341012460076
+    },
+    {
+      "name": "reduce_kernel",
+      "category": "sampling",
+      "count": 31,
+      "total_ms": 1.235814,
+      "avg_us": 39.86496774193549,
+      "frac": 0.007175406306988762
+    },
+    {
+      "name": "unrolled_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 189,
+      "total_ms": 0.552673,
+      "avg_us": 2.924195767195767,
+      "frac": 0.0032089402854332447
+    },
+    {
+      "name": "index_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 63,
+      "total_ms": 0.33376,
+      "avg_us": 5.297777777777777,
+      "frac": 0.0019378835399344635
+    },
+    {
+      "name": "vectorized_elementwise_kernel",
+      "category": "elementwise/copy",
+      "count": 96,
+      "total_ms": 0.20557,
+      "avg_us": 2.1413541666666664,
+      "frac": 0.001193584369919486
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_embedding_marlin_gemm_mean_mul_pow_rsqrt_0",
+      "category": "norm",
+      "count": 32,
+      "total_ms": 0.151105,
+      "avg_us": 4.72203125,
+      "frac": 0.0008773486706070144
+    },
+    {
+      "name": "_compute_slot_mapping_kernel",
+      "category": "other",
+      "count": 32,
+      "total_ms": 0.124257,
+      "avg_us": 3.88303125,
+      "frac": 0.0007214633120255173
+    },
+    {
+      "name": "triton_red_fused__to_copy_add_mean_mul_pow_rsqrt_2",
+      "category": "norm",
+      "count": 31,
+      "total_ms": 0.100576,
+      "avg_us": 3.2443870967741937,
+      "frac": 0.0005839662479399827
+    },
+    {
+      "name": "triton_poi_fused_1",
+      "category": "elementwise/copy",
+      "count": 32,
+      "total_ms": 0.089824,
+      "avg_us": 2.807,
+      "frac": 0.0005215377849085368
+    }
+  ],
+  "cuda_api": {
+    "cudaEventSynchronize": {
+      "calls": 64,
+      "total_ms": 167.585631
+    },
+    "cudaGraphLaunch": {
+      "calls": 32,
+      "total_ms": 14.928594
+    },
+    "cudaLaunchKernel": {
+      "calls": 416,
+      "total_ms": 4.759715
+    },
+    "cudaMemcpyAsync": {
+      "calls": 352,
+      "total_ms": 3.980506
+    },
+    "cudaEventQuery": {
+      "calls": 60,
+      "total_ms": 0.349784
+    },
+    "cuLaunchKernelEx": {
+      "calls": 32,
+      "total_ms": 0.298324
+    },
+    "cudaEventRecord": {
+      "calls": 64,
+      "total_ms": 0.286891
+    },
+    "cudaEventRecordWithFlags": {
+      "calls": 64,
+      "total_ms": 0.225719
+    },
+    "cudaEventCreateWithFlags": {
+      "calls": 64,
+      "total_ms": 0.208655
+    },
+    "cudaStreamIsCapturing": {
+      "calls": 128,
+      "total_ms": 0.156056
+    },
+    "cudaEventDestroy": {
+      "calls": 63,
+      "total_ms": 0.101615
+    },
+    "cudaStreamWaitEvent": {
+      "calls": 32,
+      "total_ms": 0.092954
+    }
+  },
+  "timeline_slice_ns": [
+    134950622,
+    151968233
+  ],
+  "nvtx_phases": {}
+}

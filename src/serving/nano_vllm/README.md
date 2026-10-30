@@ -11,26 +11,35 @@ has been measured on other GPUs.
 
 ## Results
 
-### 4-bit weights: own W4A16 GEMM vs vLLM AWQ (Marlin)
+### 4-bit weights: the same AWQ checkpoint as vLLM
 
-Offline decode, ms per step, CUDA graphs on both sides.
+nano loads vLLM's AutoAWQ checkpoint
+(`hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4`) and runs it through its
+own W4A16 GEMM; vLLM runs it through Marlin (`awq_marlin`). Offline decode, ms
+per step, CUDA graphs on both sides:
 
-| batch / prompt | nano W4A16 | vLLM AWQ | speedup |
+| batch / prompt | nano AWQ | vLLM AWQ | speedup |
 |---|---:|---:|---:|
-| 1 / 128 | 5.24 | 5.55 | 1.06× |
-| 16 / 1024 | 7.11 | 7.85 | 1.10× |
-| 64 / 1024 | 15.03 | 16.18 | 1.08× |
-| 128 / 1024 | 25.83 | 27.48 | 1.06× |
-| 256 / 512 | 36.14 | 39.05 | 1.08× |
+| 1 / 128 | 4.80 | 5.55 | 1.16× |
+| 16 / 1024 | 6.77 | 7.86 | 1.16× |
+| 64 / 1024 | 14.95 | 16.20 | 1.08× |
+| 128 / 1024 | 26.61 | 27.35 | 1.03× |
+| 256 / 512 | 37.07 | 38.88 | 1.05× |
 
-The GEMMs on their own (nsys, inside the decode graph) run 1.05–1.11× faster
-than Marlin per layer at every batch size from 1 to 256.
+- Same quality: wikitext-2 perplexity 7.562 against vLLM's 7.560 (BF16:
+  7.232; nano's earlier round-to-nearest W4A16 reached 8.023), and a real
+  layer dequantizes to exactly vLLM's values.
+- The GEMMs alone (nsys, inside the decode graph) run 1.03–1.07× faster than
+  Marlin per layer from b=1 to 128.
+- Up to 64 rows lm_head runs in int8 with a scale per vocab row, 0.30–0.36 ms
+  less per step, at +0.001% perplexity and 99.01% top-1 agreement with BF16;
+  past 64 rows it uses the BF16 weight.
 
 Online (`vllm bench serve`, random 1024-token prompts, 256 output tokens),
-nano serves 192 / 1,629 / 2,101 tok/s at c=1/16/64 against vLLM AWQ's
-167 / 1,502 / 1,949, with ITL p50 5.16 / 7.11 / 15.09 ms against
-5.76 / 7.90 / 16.39. An uncached 1024-token prompt's TTFT p50 is 89 ms
-against 95 at c=1, and 348 ms against 654 at c=16.
+nano serves 204 / 1,679 / 2,107 tok/s at c=1/16/64 against vLLM AWQ's
+172 / 1,502 / 1,941, with ITL p50 4.85 / 6.79 / 15.01 ms against
+5.75 / 7.88 / 16.35. An uncached 1024-token prompt's TTFT p50 is 89 ms
+against 95 at c=1, and 350 ms against 645 at c=16.
 
 ### BF16 and FP8 KV cache
 
@@ -55,7 +64,7 @@ The server's default sampling, offline decode, ms per step:
 
 | | b=1 | b=16 | b=64 |
 |---|---:|---:|---:|
-| nano W4A16 | **5.11** | **7.11** | **15.13** |
+| nano W4A16 (round-to-nearest weights) | **5.11** | **7.11** | **15.13** |
 | vLLM AWQ | 5.81 | 9.33 | 18.11 |
 | nano BF16 | **12.03** | **14.14** | **22.68** |
 | vLLM BF16 | 12.87 | 16.15 | 24.76 |
@@ -111,11 +120,13 @@ Engine:
 Kernels (`kernels/`):
 
 - `csrc/w4a16.cu`: a Marlin-style W4A16 GEMM.
-  - Weights are stored pre-laid-out as `mma.sync` fragments.
+  - Weights are stored pre-laid-out as `mma.sync` fragments, AWQ's zero points
+    as one byte per column and group.
   - A 4-stage `cp.async` pipeline feeds a persistent striped grid.
   - Results are reduced deterministically, with no spin locks.
-  - One launch handles up to 256 rows: the rows are split into chunks that
-    share weight tiles through L2.
+  - One launch handles up to 512 rows: the rows are split into chunks that
+    share weight tiles through L2. Larger batches dequantize and call cuBLAS.
+- `w8a16.py`: the int8 lm_head (Triton).
 - `csrc/sampler.cu`: sort-free sampling. Top-k / top-p cutoffs come from
   radix histograms over 16-bit logit keys, and tokens are drawn with an
   exponential race keyed by (seed, sequence, position).
@@ -131,8 +142,10 @@ Kernels (`kernels/`):
 python -m src.serving.nano_vllm.server --config config/nano_vllm_config.yaml
 ```
 
-Point `model.name` at a Llama checkpoint. Set `engine.weight_quant: w4a16` for
-4-bit weights and `engine.kv_cache_dtype: fp8` for the FP8 KV cache.
+Point `model.name` at a Llama checkpoint. An AutoAWQ checkpoint (4 bits, groups
+of 128, GEMM format) is detected and loaded as such; `engine.weight_quant: w4a16`
+quantizes a BF16 checkpoint to 4 bits at load instead. `engine.kv_cache_dtype:
+fp8` turns on the FP8 KV cache.
 
 The benchmarks run on Colab through a single driver script, which starts a VM,
 runs the steps and downloads the results:
@@ -149,8 +162,10 @@ needs a GPU.
 
 | result | data | write-up |
 |---|---|---|
-| W4A16 decode and per-layer GEMMs | [chunk-c7 summary](../../../benchmarks/phase1/results/chunk-c7-20261024-052230-colab/summary.md) | [phase1 README](../../../benchmarks/phase1/README.md), round 4 |
-| W4A16 online vs vLLM AWQ | [w4serve summary](../../../benchmarks/phase2/results/w4serve-20261029-211009-colab/summary.md) | [phase2 README](../../../benchmarks/phase2/README.md), W4A16 online |
+| AWQ decode and per-layer GEMMs | [awq-a3 summary](../../../benchmarks/phase1/results/awq-a3-20261030-054204-colab/summary.md) | [phase1 README](../../../benchmarks/phase1/README.md), round 6 |
+| AWQ quality (nano, vLLM, RTN) | [awq-a1 quality](../../../benchmarks/phase1/results/awq-a1-20261030-034248-colab/quality/quality.md) | same |
+| int8 lm_head quality | [awq-a2 quality](../../../benchmarks/phase1/results/awq-a2-20261030-045241-colab/quality/quality.md) | same |
+| AWQ online vs vLLM AWQ | [awqserve summary](../../../benchmarks/phase2/results/awqserve-20261030-060945-colab/summary.md) | [phase2 README](../../../benchmarks/phase2/README.md), AWQ online |
 | Sampling: kernel and offline decode | [sampler-s2 summary](../../../benchmarks/phase1/results/sampler-s2-20261028-120816-colab/summary.md) | [phase1 README](../../../benchmarks/phase1/README.md), round 5 |
 | Sampling online (W1s) | [sampler-serve summary](../../../benchmarks/phase2/results/sampler-serve-20261028-124708-colab/summary.md) | same |
 | BF16 / FP8 KV offline decode | [kernels-r4 summary](../../../benchmarks/phase1/results/kernels-r4-20261023-072114-colab/summary.md) | [phase1 README](../../../benchmarks/phase1/README.md), round 1 |

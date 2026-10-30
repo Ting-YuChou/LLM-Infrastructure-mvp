@@ -1,0 +1,154 @@
+{
+ "nano_b1": {
+  "qkv": {
+   "n": 1984,
+   "median_us": 16.48
+  },
+  "o_proj": {
+   "n": 1984,
+   "median_us": 14.8475
+  },
+  "gate_up": {
+   "n": 1984,
+   "median_us": 52.256
+  },
+  "down": {
+   "n": 1984,
+   "median_us": 30.273
+  },
+  "sum_us": 113.8565
+ },
+ "vllm_awq_b1": {
+  "qkv": {
+   "n": 1024,
+   "median_us": 16.384
+  },
+  "o_proj": {
+   "n": 1024,
+   "median_us": 14.624
+  },
+  "gate_up": {
+   "n": 1024,
+   "median_us": 55.68
+  },
+  "down": {
+   "n": 1024,
+   "median_us": 31.009
+  },
+  "sum_us": 117.697
+ },
+ "nano_b16": {
+  "qkv": {
+   "n": 1984,
+   "median_us": 16.224
+  },
+  "o_proj": {
+   "n": 1984,
+   "median_us": 15.072
+  },
+  "gate_up": {
+   "n": 1984,
+   "median_us": 55.936
+  },
+  "down": {
+   "n": 1984,
+   "median_us": 32.288
+  },
+  "sum_us": 119.52
+ },
+ "vllm_awq_b16": {
+  "qkv": {
+   "n": 1024,
+   "median_us": 17.824
+  },
+  "o_proj": {
+   "n": 1024,
+   "median_us": 16.192
+  },
+  "gate_up": {
+   "n": 1024,
+   "median_us": 58.752
+  },
+  "down": {
+   "n": 1024,
+   "median_us": 33.344
+  },
+  "sum_us": 126.11200000000001
+ },
+ "nano_b64": {
+  "qkv": {
+   "n": 1984,
+   "median_us": 33.024
+  },
+  "o_proj": {
+   "n": 1984,
+   "median_us": 28.48
+  },
+  "gate_up": {
+   "n": 1984,
+   "median_us": 87.52
+  },
+  "down": {
+   "n": 1984,
+   "median_us": 56.288
+  },
+  "sum_us": 205.31199999999998
+ },
+ "vllm_awq_b64": {
+  "qkv": {
+   "n": 1024,
+   "median_us": 34.912
+  },
+  "o_proj": {
+   "n": 1024,
+   "median_us": 30.176
+  },
+  "gate_up": {
+   "n": 1024,
+   "median_us": 89.44
+  },
+  "down": {
+   "n": 1024,
+   "median_us": 65.697
+  },
+  "sum_us": 220.225
+ },
+ "nano_b128": {
+  "qkv": {
+   "n": 1984,
+   "median_us": 47.04
+  },
+  "o_proj": {
+   "n": 1984,
+   "median_us": 37.28
+  },
+  "gate_up": {
+   "n": 1984,
+   "median_us": 159.264
+  },
+  "down": {
+   "n": 1984,
+   "median_us": 88.864
+  },
+  "sum_us": 332.44800000000004
+ },
+ "vllm_awq_b128": {
+  "qkv": {
+   "n": 1024,
+   "median_us": 49.216
+  },
+  "o_proj": {
+   "n": 1024,
+   "median_us": 41.152
+  },
+  "gate_up": {
+   "n": 1024,
+   "median_us": 165.345
+  },
+  "down": {
+   "n": 1024,
+   "median_us": 93.824
+  },
+  "sum_us": 349.537
+ }
+}

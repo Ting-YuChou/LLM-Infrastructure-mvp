@@ -110,9 +110,10 @@ W4A16_CONFIG = {
     "tiled_grid": 0,
     "tiled_max_rows": 512,
     # gemm_w4a16_large past tiled_max_rows instead of dequantize + F.linear.
-    # Off: in run awq-a1 it ran at ~182 TFLOPs at 1,024-2,048 rows against
-    # cuBLAS's ~257, so dequantizing first was 5-20% faster there (vLLM's
-    # Marlin too was slower than dequantize + cuBLAS). "auto" or one of
+    # Off: in runs awq-a1 and awq-a3 it ran at ~180 TFLOPs at 1,024-2,048
+    # rows against cuBLAS's 230-250, so dequantizing first was 7-25% faster
+    # there (a layer's four projections; vLLM's Marlin was also slower than
+    # dequantize + cuBLAS, except at 768 rows). "auto" or one of
     # W4A16_LARGE_TILES.
     "large": False,
     "large_tile": "auto",
