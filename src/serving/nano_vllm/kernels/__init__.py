@@ -27,9 +27,11 @@ from .w4a16 import (
     w4a16_linear,
     w4a16_linear_reference,
 )
+from .w8a16 import W8A16Weight, dequantize_w8a16, quantize_w8a16, w8a16_linear
 
 __all__ = [
     "W4A16Weight",
+    "W8A16Weight",
     "apply_rope",
     "apply_rope_cos_sin",
     "causal_attention",
@@ -37,6 +39,7 @@ __all__ = [
     "decode_config",
     "decode_num_splits",
     "dequantize_w4a16",
+    "dequantize_w8a16",
     "fused_add_rms_norm",
     "fused_add_rms_norm_reference",
     "linear",
@@ -46,6 +49,7 @@ __all__ = [
     "paged_prefill_attention",
     "paged_prefill_attention_reference",
     "quantize_w4a16",
+    "quantize_w8a16",
     "rms_norm",
     "rms_norm_reference",
     "rmsnorm_triton_available",
@@ -58,4 +62,5 @@ __all__ = [
     "silu_mul_reference",
     "w4a16_linear",
     "w4a16_linear_reference",
+    "w8a16_linear",
 ]

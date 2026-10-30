@@ -84,6 +84,12 @@ from src.serving.nano_vllm.sampling import (  # noqa: E402
     keep_mask,
     sample_rows,
 )
+from src.serving.nano_vllm.kernels.w8a16 import (  # noqa: E402
+    dequantize_w8a16,
+    quantize_w8a16,
+    w8a16_linear,
+    w8a16_linear_reference,
+)
 from src.serving.nano_vllm.kernels.w4a16 import (  # noqa: E402
     AWQ_PACK_ORDER,
     W4A16_CONFIG,
@@ -1024,6 +1030,45 @@ register(
         ncu="dequantize|awq",
         atol=0.0,
         rtol=0.0,
+    )
+)
+
+
+# lm_head (Llama 3: 128,256 x 4,096), bf16 as nano runs it today (the Triton
+# GEMV up to 16 rows, cuBLAS past that) against int8 with a scale per row
+# (kernels/w8a16.py). The bf16 weight is the int8 one dequantized, so every
+# impl multiplies the same numbers. GB/s counts the int8 weight: the bf16
+# rows read twice that.
+def _lm_head_inputs(s: dict, dev: str) -> dict:
+    w = randn(s["N"], s["K"], device=dev, scale=s["K"] ** -0.5)
+    return {"x": randn(s["M"], s["K"], device=dev), "w": dequantize_w8a16(quantize_w8a16(w))}
+
+
+def _lm_head_int8(config: dict | None = None):
+    def factory(i: dict):
+        if not TRITON_AVAILABLE or not i["x"].is_cuda:
+            raise Unavailable("needs Triton and a GPU")
+        x, weight = i["x"], quantize_w8a16(i["w"])
+        return lambda: w8a16_linear(x, weight, config=config)
+
+    return factory
+
+
+register(
+    Kernel(
+        name="lm_head",
+        shapes=[{"M": m, "N": n, "K": k} for m in (1, 4, 16, 64, 256) for n, k in [LINEAR_SHAPES["lm_head"]]],
+        inputs=_lm_head_inputs,
+        impls={
+            "bf16_nano": triton_impl(lambda i: linear(i["x"], i["w"], backend="triton")),
+            "int8": _lm_head_int8(),
+            "int8_k128": _lm_head_int8({"block_k": 128}),
+            "int8_n64": _lm_head_int8({"block_n": 64, "block_k": 128}),
+            "cublas_bf16": op_impl(lambda i: F.linear(i["x"], i["w"])),
+        },
+        reference=lambda i: w8a16_linear_reference(i["x"], quantize_w8a16(i["w"])),
+        bytes=lambda s: s["N"] * s["K"] + 4 * s["N"] + 2 * s["M"] * (s["K"] + s["N"]),
+        ncu="_gemv_kernel|_w8a16_kernel|gemm|gemv",
     )
 )
 

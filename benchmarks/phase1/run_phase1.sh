@@ -20,8 +20,9 @@
 #   golden    golden.py: saves the tiled kernel's outputs to P1_GOLDEN the first time,
 #             then checks later runs against them bit for bit
 #   e2e       nano_bench.py per nano config and vllm_offline.py at the same
-#             points (also on P1_VLLM_W4_MODEL when a config is w4a16); nsys on
-#             the last nano config at P1_NSYS_RUNS and, when it is w4a16, on vLLM's AWQ, then
+#             points (also on P1_VLLM_W4_MODEL when a config is w4a16 or awq; awq configs
+#             load that checkpoint); nsys on the last nano config at P1_NSYS_RUNS and,
+#             when it is w4a16 or awq, on vLLM's AWQ, then
 #             gemm_breakdown.py: each projection's GEMM time inside decode, both engines
 #   quality   quality.py: wikitext-2 perplexity and top-1 agreement of nano configs on
 #             the real model (bf16, RTN W4A16, the AWQ checkpoint), then quality_vllm.py:
@@ -38,7 +39,8 @@
 # vLLM runs the paged ones), P1_NANO_CONFIGS (label:attention:linear:eager|graph[:weight_quant[:flags]]
 # per nano_bench run, default: the Phase 1 milestones in order; flags joined by +: async for async
 # scheduling, sampled for P1_SAMPLING instead of greedy (with any sampled config vLLM runs its
-# points sampled too), tiled / rows for the W4A16 weight layout, fullgraph for decode CUDA graphs
+# points sampled too), tiled / rows for the W4A16 weight layout, int8head for an int8 lm_head,
+# fullgraph for decode CUDA graphs
 # up to the largest batch (default: piecewise graphs past 64 rows), fp8kv for an fp8 KV cache
 # (with any fp8kv config vLLM runs its points with --kv-cache-dtype fp8 and
 # P1_VLLM_FP8_BACKEND, default TRITON_ATTN: FLASH_ATTN refuses fp8 on sm80)), P1_NSYS_RUNS (the e2e
@@ -77,8 +79,9 @@ E2E_RUNS="${P1_E2E_RUNS:-static:1:128:256,paged:1:128:256,paged:16:1024:256,page
 # torch_eager: the M1 refactor alone; triton_eager: Triton attention and fused
 # kernels (M2, M4, M5); triton_graph: + decode CUDA graphs (M3); gemv_graph:
 # + the Triton GEMV (M6); cuda_gemv_graph: the CUDA GEMV instead (M6);
-# w4a16_graph: 4-bit decoder weights (M7).
-NANO_CONFIGS="${P1_NANO_CONFIGS:-torch_eager:torch:torch:eager triton_eager:triton:torch:eager triton_graph:triton:torch:graph gemv_graph:triton:triton:graph cuda_gemv_graph:triton:cuda:graph w4a16_graph:triton:triton:graph:w4a16}"
+# awq_graph: 4-bit decoder weights (M7; the AWQ checkpoint since round 6, RTN
+# before: weight_quant w4a16).
+NANO_CONFIGS="${P1_NANO_CONFIGS:-torch_eager:torch:torch:eager triton_eager:triton:torch:eager triton_graph:triton:torch:graph gemv_graph:triton:triton:graph cuda_gemv_graph:triton:cuda:graph awq_graph:triton:triton:graph:awq}"
 read -r SAMPLED_TEMPERATURE SAMPLED_TOP_P <<< "${P1_SAMPLING:-0.7 0.9}"
 VLLM_FP8_BACKEND="${P1_VLLM_FP8_BACKEND:-TRITON_ATTN}"
 CUDA_ENV="${ROOT}/cuda129.env"
@@ -172,18 +175,28 @@ nano_config_args() {  # label:attention:linear:eager|graph[:weight_quant[:flags]
   [[ "+${flags}+" == *+tiled+* ]] && args+=" --w4a16-layout tiled"
   [[ "+${flags}+" == *+rows+* ]] && args+=" --w4a16-layout rows"
   [[ "+${flags}+" == *+fullgraph+* ]] && args+=" --full-graphs"
+  [[ "+${flags}+" == *+int8head+* ]] && args+=" --lm-head-quant int8"
   echo "${args}"
 }
+
+nano_model() {  # the checkpoint a nano config loads: the AWQ one under weight_quant awq
+  local quant
+  IFS=: read -r _ _ _ _ quant _ <<< "$1"
+  if [[ "${quant}" == awq ]]; then echo "${W4_MODEL}"; else echo "${MODEL}"; fi
+}
+
+w4_configs() { [[ "$1" == *:w4a16* || "$1" == *:awq* ]]; }  # 4-bit nano configs: vLLM's AWQ runs too
 
 sampled_args() { echo "--temperature ${SAMPLED_TEMPERATURE} --top-p ${SAMPLED_TOP_P}"; }
 
 e2e() {
   local rc=0 run kind batch input output config label last modes=greedy mode tag args
   export PYTHONPATH="${REPO_DIR}"
+  if w4_configs "${NANO_CONFIGS}"; then [[ -d "${W4_MODEL}" ]] || download_w4_model || rc=1; fi
   for config in ${NANO_CONFIGS}; do
     label="${config%%:*}"
     # shellcheck disable=SC2046  # the flags are meant to split
-    "${PY}" "${P0_DIR}/nano_bench.py" --model "${MODEL}" --runs "${E2E_RUNS}" \
+    "${PY}" "${P0_DIR}/nano_bench.py" --model "$(nano_model "${config}")" --runs "${E2E_RUNS}" \
       $(nano_config_args "${config}") --out "${OUT}/offline/nano_${label}.json" || rc=1
     last="${config}"
   done
@@ -202,9 +215,8 @@ e2e() {
       "${PY}" "${P0_DIR}/vllm_offline.py" --model "${MODEL}" --batch "${batch}" \
         --input-len "${input}" --output-len "${output}" ${args} \
         --out "${OUT}/offline/vllm_${tag}b${batch}_in${input}_out${output}.json" || rc=1
-      if [[ "${NANO_CONFIGS}" == *:w4a16* ]]; then
+      if w4_configs "${NANO_CONFIGS}"; then
         # shellcheck disable=SC2086
-        { [[ -d "${W4_MODEL}" ]] || download_w4_model; } &&
         "${PY}" "${P0_DIR}/vllm_offline.py" --model "${W4_MODEL}" --batch "${batch}" \
           --input-len "${input}" --output-len "${output}" ${args} \
           --out "${OUT}/offline/vllmw4_${tag}b${batch}_in${input}_out${output}.json" || rc=1
@@ -217,10 +229,10 @@ e2e() {
   for run in ${P1_NSYS_RUNS:-1:128 16:1024 64:1024}; do
     IFS=: read -r b input <<< "${run}"
     # shellcheck disable=SC2046
-    nsys_run "nano_${label}_b${b}" "${PY}" "${P0_DIR}/nano_bench.py" --model "${MODEL}" \
+    nsys_run "nano_${label}_b${b}" "${PY}" "${P0_DIR}/nano_bench.py" --model "$(nano_model "${last}")" \
       --runs "paged:${b}:${input}:64" $(nano_config_args "${last}") \
       --out "${OUT}/offline/nano_${label}_b${b}_nsys.json" || rc=1
-    [[ "${last}" == *:w4a16* && -d "${W4_MODEL}" ]] || continue
+    w4_configs "${last}" && [[ -d "${W4_MODEL}" ]] || continue
     # vLLM's AWQ (Marlin) under nsys too, then each projection's GEMM time inside decode, both sides.
     nsys_run "vllmw4_b${b}" "${PY}" "${P0_DIR}/vllm_offline.py" --model "${W4_MODEL}" --batch "${b}" \
       --input-len "${input}" --output-len 64 --profile-steps 32 \

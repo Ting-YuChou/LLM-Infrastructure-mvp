@@ -12,7 +12,7 @@ blocks in flight. Two versions:
   CUDA_GEMV_CONFIG["rows_per_warp"] weight rows per warp, built with
   torch.utils.cpp_extension on first use; used up to CUDA_GEMV_MAX_ROWS.
 
-Quantized weights (W4A16Weight, w4a16.py) take their own path.
+Quantized weights (W4A16Weight, w4a16.py; W8A16Weight, w8a16.py) take their own path.
 """
 
 from __future__ import annotations
@@ -36,6 +36,7 @@ except ModuleNotFoundError:  # pragma: no cover
 
 from .cuda_ext import load_cuda_extension  # noqa: E402
 from .w4a16 import W4A16Weight, w4a16_linear  # noqa: E402
+from .w8a16 import W8A16Weight, w8a16_linear  # noqa: E402
 
 LINEAR_BACKENDS = ("torch", "triton", "cuda")
 GEMV_MAX_ROWS = 16
@@ -152,7 +153,7 @@ def gemv_split_k(
 
 def linear(
     x: torch.Tensor,
-    weight: torch.Tensor | W4A16Weight,
+    weight: torch.Tensor | W4A16Weight | W8A16Weight,
     bias: Optional[torch.Tensor] = None,
     backend: str = "torch",
     split_k: Optional[int] = None,
@@ -163,11 +164,13 @@ def linear(
     backend="triton" uses the Triton GEMV for <= 16 rows, backend="cuda" the
     CUDA one for <= 2 rows of bf16; everything else goes to F.linear.
     ``config`` overrides the chosen kernel's launch settings (GEMV_CONFIG or
-    CUDA_GEMV_CONFIG). A W4A16Weight always goes to w4a16_linear, whatever
-    the backend.
+    CUDA_GEMV_CONFIG). A W4A16Weight always goes to w4a16_linear and a
+    W8A16Weight to w8a16_linear, whatever the backend.
     """
     if isinstance(weight, W4A16Weight):
         return w4a16_linear(x, weight, bias, config)
+    if isinstance(weight, W8A16Weight):
+        return w8a16_linear(x, weight, bias, config)
     rows = x.numel() // x.shape[-1] if x.shape[-1] else 0
     if (
         backend == "triton"

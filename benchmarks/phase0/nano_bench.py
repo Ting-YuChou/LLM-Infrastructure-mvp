@@ -213,7 +213,14 @@ def main() -> None:
     parser.add_argument("--device", default="cuda", help="cpu only for testing the harness")
     parser.add_argument("--attention-backend", default="torch", choices=["torch", "triton"])
     parser.add_argument("--linear-backend", default="torch", choices=["torch", "triton", "cuda"])
-    parser.add_argument("--weight-quant", default="none", choices=["none", "w4a16"])
+    parser.add_argument(
+        "--weight-quant", default="none", choices=["none", "w4a16", "awq"],
+        help="awq: --model is an AWQ checkpoint (it loads as awq under none too)",
+    )
+    parser.add_argument(
+        "--lm-head-quant", default="none", choices=["auto", "none", "int8"],
+        help="int8: lm_head as int8 with a scale per vocab row",
+    )
     parser.add_argument("--kv-cache-dtype", default="auto", choices=["auto", "fp8"])
     parser.add_argument(
         "--w4a16-layout", choices=W4A16_LAYOUTS, help="W4A16_CONFIG['layout'] (default: its current value)"
@@ -259,6 +266,7 @@ def main() -> None:
         attention_backend=args.attention_backend,
         linear_backend=args.linear_backend,
         weight_quant=args.weight_quant,
+        lm_head_quant=args.lm_head_quant,
         kv_cache_dtype=args.kv_cache_dtype,
         enforce_eager=args.enforce_eager,
         **({"cuda_graph_max_bs": max(max_batch, NanoVLLMConfig.cuda_graph_max_bs)} if args.full_graphs else {}),
@@ -288,9 +296,10 @@ def main() -> None:
         result["load_s"] = load_s
         result["attention_backend"] = args.attention_backend
         result["linear_backend"] = args.linear_backend
-        result["weight_quant"] = args.weight_quant
+        result["weight_quant"] = engine.model.weight_quant
+        result["lm_head_quant"] = engine.model.lm_head_quant
         result["kv_cache_dtype"] = args.kv_cache_dtype
-        result["w4a16_layout"] = W4A16_CONFIG["layout"] if args.weight_quant == "w4a16" else None
+        result["w4a16_layout"] = W4A16_CONFIG["layout"] if engine.model.weight_quant != "none" else None
         result["async_scheduling"] = args.async_scheduling
         result["cuda_graph_max_bs"] = config.cuda_graph_max_bs
         result["temperature"] = args.temperature if kind == "paged" else 0.0

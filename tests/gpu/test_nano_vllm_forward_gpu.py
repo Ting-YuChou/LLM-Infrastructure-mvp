@@ -76,7 +76,7 @@ def _random_weights(config):
 
 def _model(
     device, dtype, use_triton, attention_backend="torch", linear_backend="torch", weight_quant="none",
-    kv_cache_dtype="auto", w4a16_layout=None,
+    kv_cache_dtype="auto", w4a16_layout=None, lm_head_quant="none",
 ):
     """``w4a16_layout`` overrides W4A16_CONFIG["layout"] while the weights are quantized;
     weight_quant="awq" loads the same weights as an AWQ checkpoint (tiny_llama.awq_checkpoint)."""
@@ -100,6 +100,7 @@ def _model(
             linear_backend=linear_backend,
             weight_quant=weight_quant,
             kv_cache_dtype=kv_cache_dtype,
+            lm_head_quant=lm_head_quant,
         )
     finally:
         w4a16.W4A16_CONFIG["layout"] = layout

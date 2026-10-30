@@ -24,11 +24,15 @@ PROMPT_LENS = [17, 30, 5, 64, 33, 1, 47, 16]
 
 
 def _runner(attention_backend, max_graph_batch, weight_quant="none", kv_cache_dtype="auto"):
-    # "w4a16_tiled": W4A16 weights in the tiled layout (gemm_w4a16_tiled).
+    # "w4a16_tiled": W4A16 weights in the tiled layout (gemm_w4a16_tiled);
+    # "awq_int8head": an AWQ checkpoint with lm_head in int8 (kernels/w8a16.py).
     layout = "tiled" if weight_quant == "w4a16_tiled" else None
+    lm_head_quant = "int8" if weight_quant == "awq_int8head" else "none"
+    weight_quant = {"w4a16_tiled": "w4a16", "awq_int8head": "awq"}.get(weight_quant, weight_quant)
     model = _model(
         "cuda", torch.bfloat16, use_triton=True, attention_backend=attention_backend,
-        weight_quant="w4a16" if layout else weight_quant, kv_cache_dtype=kv_cache_dtype, w4a16_layout=layout,
+        weight_quant=weight_quant, kv_cache_dtype=kv_cache_dtype, w4a16_layout=layout,
+        lm_head_quant=lm_head_quant,
     )
     Sequence.block_size = BLOCK_SIZE
     cache = model.new_paged_cache(num_blocks=96, block_size=BLOCK_SIZE)
@@ -49,6 +53,7 @@ def _runner(attention_backend, max_graph_batch, weight_quant="none", kv_cache_dt
         ("triton", 3, 8, "w4a16", "auto"),
         ("triton", 3, 8, "w4a16_tiled", "auto"),
         ("triton", 3, 8, "awq", "auto"),
+        ("triton", 3, 8, "awq_int8head", "auto"),
         ("triton", 3, 8, "none", "fp8"),
     ],
 )
@@ -87,6 +92,7 @@ def test_graph_replay_matches_eager(attention_backend, batch, max_graph_batch, w
         ("triton", "w4a16", "auto"),
         ("triton", "w4a16_tiled", "auto"),
         ("triton", "awq", "auto"),
+        ("triton", "awq_int8head", "auto"),
         ("triton", "none", "fp8"),
     ],
 )

@@ -18,12 +18,14 @@ from .kernels import (
     fused_add_rms_norm,
     linear,
     W4A16Weight,
+    W8A16Weight,
     load_cuda_extension,
     paged_decode_attention,
     paged_prefill_attention,
     rms_norm,
     rope_and_cache_write,
     quantize_w4a16,
+    quantize_w8a16,
     rope_cos_sin,
     silu_and_mul,
 )
@@ -216,7 +218,19 @@ AWQ_SUFFIXES = ("qweight", "qzeros", "scales")
 # What nano reads: AutoAWQ's GEMM format, 4 bits, groups of 128, zero points.
 AWQ_FORMAT = {"bits": 4, "group_size": 128, "zero_point": True, "version": "gemm"}
 
-Linear = Union[torch.Tensor, W4A16Weight]
+# lm_head_quant: "int8" stores lm_head as int8 with a scale per vocab row
+# (kernels/w8a16.py); "auto" picks per weight_quant from AUTO_LM_HEAD_QUANT.
+LM_HEAD_QUANT_MODES = ("auto", "none", "int8")
+AUTO_LM_HEAD_QUANT: Dict[str, str] = {}
+
+Linear = Union[torch.Tensor, W4A16Weight, W8A16Weight]
+
+
+def resolve_lm_head_quant(requested: str, weight_quant: str) -> str:
+    """"auto" -> AUTO_LM_HEAD_QUANT[weight_quant] (default "none")."""
+    if requested not in LM_HEAD_QUANT_MODES:
+        raise ValueError(f"lm_head_quant must be one of: {', '.join(LM_HEAD_QUANT_MODES)}")
+    return AUTO_LM_HEAD_QUANT.get(weight_quant, "none") if requested == "auto" else requested
 
 
 @dataclass(frozen=True)
@@ -312,8 +326,10 @@ class NanoLlamaForCausalLM:
         linear_backend: str = "torch",
         weight_quant: str = "none",
         kv_cache_dtype: str = "auto",
+        lm_head_quant: str = "none",
     ) -> None:
         weight_quant = resolve_weight_quant(weight_quant, config)
+        self.lm_head_quant = resolve_lm_head_quant(lm_head_quant, weight_quant)
         if kv_cache_dtype not in KV_CACHE_DTYPES:
             raise ValueError(f"kv_cache_dtype must be one of: {', '.join(KV_CACHE_DTYPES)}")
         self.config = config
@@ -375,6 +391,7 @@ class NanoLlamaForCausalLM:
         linear_backend: str = "torch",
         weight_quant: str = "none",
         kv_cache_dtype: str = "auto",
+        lm_head_quant: str = "none",
     ) -> "NanoLlamaForCausalLM":
         path = Path(model_path)
         if not path.is_dir():
@@ -395,6 +412,7 @@ class NanoLlamaForCausalLM:
             linear_backend=linear_backend,
             weight_quant=weight_quant,
             kv_cache_dtype=kv_cache_dtype,
+            lm_head_quant=lm_head_quant,
         )
 
     def new_cache(self, batch_size: int, max_seq_len: int) -> StaticKVCache:
@@ -490,7 +508,7 @@ class NanoLlamaForCausalLM:
             eps=self.config.rms_norm_eps,
             use_triton=self.use_triton,
         )
-        return F.linear(x, self.lm_head_weight)
+        return linear(x, self.lm_head_weight)
 
     @torch.inference_mode()
     def forward_batch(
@@ -770,9 +788,12 @@ class NanoLlamaForCausalLM:
         )
         return self.forward_batch(input_ids_t, positions_t, cache, metadata)
 
-    def _resolve_lm_head(self) -> torch.Tensor:
+    def _resolve_lm_head(self) -> torch.Tensor | W8A16Weight:
+        """lm_head.weight (int8 under lm_head_quant, _load_weight), or the
+        embedding when tied (then quantized as a copy: the lookup stays exact)."""
         if self.config.tie_word_embeddings:
-            return self.weights["model.embed_tokens.weight"]
+            embed = self.weights["model.embed_tokens.weight"]
+            return quantize_w8a16(embed) if self.lm_head_quant == "int8" else embed
         if "lm_head.weight" not in self.weights:
             raise KeyError(
                 "Model checkpoint is missing lm_head.weight and config.json does "
@@ -809,6 +830,8 @@ class NanoLlamaForCausalLM:
             )
             return pack_w4a16(codes, scales.to(self.dtype), zeros, layout="tiled")
         moved = self._move_weight(tensor)
+        if name == "lm_head.weight" and self.lm_head_quant == "int8":
+            return quantize_w8a16(moved)
         if self.weight_quant == "w4a16" and name.endswith(QUANTIZED_LINEARS):
             tiled = W4A16_CONFIG["layout"] == "tiled" and w4a16_tiled_supported(*moved.shape)
             return quantize_w4a16(moved, layout="tiled" if tiled else "rows")

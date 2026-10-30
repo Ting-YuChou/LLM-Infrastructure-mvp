@@ -386,6 +386,7 @@ def load_model(config: NanoVLLMConfig):
         linear_backend=config.linear_backend,
         weight_quant=config.weight_quant,
         kv_cache_dtype=config.kv_cache_dtype,
+        lm_head_quant=config.lm_head_quant,
     )
 
 

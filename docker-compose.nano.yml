@@ -14,6 +14,7 @@ services:
       ATTENTION_BACKEND: triton
       LINEAR_BACKEND: triton
       WEIGHT_QUANT: none
+      LM_HEAD_QUANT: auto
       KV_CACHE_DTYPE: auto
       ENFORCE_EAGER: "false"
       CUDA_GRAPH_MAX_BS: "64"

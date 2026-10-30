@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Teacher-forced quality of nano_vllm configs on the real model.
 
-Every config (label:attention:linear:weight_quant[:kv_cache_dtype]) runs the serving prefill
+Every config (label:attention:linear:weight_quant[:kv_cache_dtype[:lm_head_quant]]) runs the serving prefill
 path, forward_batch over a whole chunk with every position's logits, on the
 same wikitext-2 test chunks. Reports perplexity and, against the first
 config, how often the top-1 next token agrees. The default compares the
@@ -147,6 +147,7 @@ def main() -> None:
     for config in args.configs.split():
         label, attention, linear_backend, weight_quant, *rest = config.split(":")
         kv_cache_dtype = rest[0] if rest else "auto"
+        lm_head_quant = rest[1] if len(rest) > 1 else "none"
         if weight_quant == "awq" and not args.awq_model:
             parser.error(f"{label}: weight_quant awq needs --awq-model")
         torch.cuda.reset_peak_memory_stats()
@@ -161,6 +162,7 @@ def main() -> None:
             linear_backend=linear_backend,
             weight_quant=weight_quant,
             kv_cache_dtype=kv_cache_dtype,
+            lm_head_quant=lm_head_quant,
         )
         load_s = time.perf_counter() - t0
         weights_gib = torch.cuda.memory_allocated() / 1024**3
@@ -171,7 +173,7 @@ def main() -> None:
             "label": label,
             "attention_backend": attention,
             "linear_backend": linear_backend,
-            "weight_quant": weight_quant,
+            "weight_quant": weight_quant if lm_head_quant == "none" else f"{weight_quant}+{lm_head_quant} lm_head",
             "kv_cache_dtype": kv_cache_dtype,
             "ppl": scores["ppl"],
             "tokens": scores["tokens"],

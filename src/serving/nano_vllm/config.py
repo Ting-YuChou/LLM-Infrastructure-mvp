@@ -73,6 +73,10 @@ class NanoVLLMConfig:
     # (RTN, symmetric, groups of 128). Both run the Marlin-style kernel of
     # kernels/w4a16.py.
     weight_quant: str = "none"
+    # "int8": lm_head as int8 with a scale per vocab row (kernels/w8a16.py),
+    # half the bytes of the largest bf16 read left under 4-bit weights;
+    # "auto": model.AUTO_LM_HEAD_QUANT by weight_quant.
+    lm_head_quant: str = "auto"
     # "fp8": the paged KV cache holds e4m3 codes plus an fp32 scale per
     # (token, kv head), about half the bytes of bf16 (kernels/fp8.py);
     # "auto": the model dtype.
@@ -126,6 +130,8 @@ class NanoVLLMConfig:
             raise ValueError("linear_backend must be one of: torch, triton, cuda")
         if self.weight_quant not in {"none", "w4a16", "awq"}:
             raise ValueError("weight_quant must be one of: none, w4a16, awq")
+        if self.lm_head_quant not in {"auto", "none", "int8"}:
+            raise ValueError("lm_head_quant must be one of: auto, none, int8")
         if self.kv_cache_dtype not in {"auto", "fp8"}:
             raise ValueError("kv_cache_dtype must be one of: auto, fp8")
         if self.kv_cache_dtype == "fp8" and self.attention_backend == "flash_attn":
@@ -217,6 +223,9 @@ class NanoVLLMConfig:
             ),
             weight_quant=str(
                 _env("WEIGHT_QUANT", engine.get("weight_quant", cls.weight_quant))
+            ),
+            lm_head_quant=str(
+                _env("LM_HEAD_QUANT", engine.get("lm_head_quant", cls.lm_head_quant))
             ),
             kv_cache_dtype=str(
                 _env("KV_CACHE_DTYPE", engine.get("kv_cache_dtype", cls.kv_cache_dtype))
