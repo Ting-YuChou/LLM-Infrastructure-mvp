@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Teacher-forced quality of nano_vllm configs on the real model.
 
-Every config (label:attention:linear:weight_quant[:kv_cache_dtype[:lm_head_quant]]) runs the serving prefill
+Every config (label:attention:linear:weight_quant[:kv_cache_dtype[:lm_head_quant[:prefill]]]) runs the serving prefill
 path, forward_batch over a whole chunk with every position's logits, on the
 same wikitext-2 test chunks. Reports perplexity and, against the first
 config, how often the top-1 next token agrees. The default compares the
 PyTorch path, the Triton kernels, and the Triton kernels with W4A16 weights;
 weight_quant "awq" loads --awq-model instead of --model (same tokenizer).
+prefill "dequant" runs 4-bit weights past tiled_max_rows through dequantize +
+cuBLAS instead of gemm_w4a16_large (the default, "large").
 The chunks (chunks.pt) and each config's top-1 tokens (top1/<label>.pt) stay
 in --out for quality_vllm.py, which scores vLLM on the same chunks and adds
 its rows to quality.json / quality.md.
@@ -31,6 +33,7 @@ import torch
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
+from src.serving.nano_vllm.kernels.w4a16 import W4A16_CONFIG  # noqa: E402
 from src.serving.nano_vllm.metadata import build_batch  # noqa: E402
 from src.serving.nano_vllm.model import NanoLlamaForCausalLM  # noqa: E402
 
@@ -148,6 +151,7 @@ def main() -> None:
         label, attention, linear_backend, weight_quant, *rest = config.split(":")
         kv_cache_dtype = rest[0] if rest else "auto"
         lm_head_quant = rest[1] if len(rest) > 1 else "none"
+        W4A16_CONFIG["large"] = (rest[2] if len(rest) > 2 else "large") == "large"
         if weight_quant == "awq" and not args.awq_model:
             parser.error(f"{label}: weight_quant awq needs --awq-model")
         torch.cuda.reset_peak_memory_stats()
@@ -173,7 +177,9 @@ def main() -> None:
             "label": label,
             "attention_backend": attention,
             "linear_backend": linear_backend,
-            "weight_quant": weight_quant if lm_head_quant == "none" else f"{weight_quant}+{lm_head_quant} lm_head",
+            "weight_quant": weight_quant
+            + ("" if lm_head_quant == "none" else f"+{lm_head_quant} lm_head")
+            + ("" if W4A16_CONFIG["large"] else " (dequant prefill)"),
             "kv_cache_dtype": kv_cache_dtype,
             "ppl": scores["ppl"],
             "tokens": scores["tokens"],
