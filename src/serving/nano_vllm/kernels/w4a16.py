@@ -28,11 +28,13 @@ Marlin-style kernel, gemm_w4a16_tiled:
   registers of the two tiles, low half first.
 - scales: [K // 128, N // 64, 8, 8], [.., g, j] being column 64t + 8j + g,
   so one 16-byte load gives lane (g, c) the scales of its eight columns.
-- zeros: the zero points in the same layout and dtype, stored as
-  W4A16_ZERO_BIAS[dtype] + z. The kernel turns a code into magic + q by
-  OR-ing it into the mantissa of magic (128.0 in bf16, 1024.0 in fp16, both
-  with an ulp of 1), so one subtraction of the stored zero gives q - z
-  exactly. Symmetric weights store z = 8.
+- zeros: int32 [K // 128, N // 64, 8, 2], [.., g, w] holding the zero
+  points of columns 64t + 8j + g, j = 4w + jj, at nibbles jj and 4 + jj
+  (bits 4jj and 16 + 4jj). The kernel turns a code into magic + q by OR-ing
+  it into the mantissa of magic (128.0 in bf16, 1024.0 in fp16, both with
+  an ulp of 1); the same OR of word >> 4jj gives magic + z in both halves,
+  so one subtraction leaves q - z exactly. One byte per zero point, half
+  of a bf16 scale. Symmetric weights store z = 8.
 It needs group_size 128 and N a multiple of 128 (W4A16_TILED_N_MULTIPLE).
 Row-layout weights are symmetric only (zeros None).
 
@@ -73,9 +75,6 @@ logger = logging.getLogger(__name__)
 
 W4A16_GROUP_SIZE = 128
 W4A16_PACK_ORDER = (0, 2, 4, 6, 1, 3, 5, 7)
-# The code bias the kernels dequantize with (Traits::kMagic): zero points of
-# tiled weights are stored as this + z.
-W4A16_ZERO_BIAS = {torch.bfloat16: 128.0, torch.float16: 1024.0}
 # AutoAWQ (version "gemm") packs 8 output columns per int32: nibble p of word
 # j holds column 8j + AWQ_PACK_ORDER[p]; AWQ_UNPACK_ORDER inverts it.
 AWQ_PACK_ORDER = (0, 2, 4, 6, 1, 3, 5, 7)
@@ -149,7 +148,7 @@ class W4A16Weight:
     scales: torch.Tensor
     group_size: int = W4A16_GROUP_SIZE
     layout: str = "rows"
-    zeros: Optional[torch.Tensor] = None  # tiled: W4A16_ZERO_BIAS + z, like scales
+    zeros: Optional[torch.Tensor] = None  # tiled only: packed zero points (module docstring)
 
     @property
     def shape(self) -> torch.Size:
@@ -207,7 +206,7 @@ def pack_w4a16(
 ) -> W4A16Weight:
     """uint8 codes [N, K] in 0..15, scales [N, K / group_size] and zero points
     (uint8, same shape; None for symmetric, z = 8) -> a W4A16Weight in
-    ``layout``. Scales keep their dtype, which the zero points take too."""
+    ``layout``. Scales keep their dtype."""
     if sys.byteorder != "little":  # pragma: no cover
         raise RuntimeError("the int4 packing assumes a little-endian host")
     if layout not in W4A16_LAYOUTS:
@@ -227,17 +226,14 @@ def pack_w4a16(
             f"the tiled layout needs group_size 128 and out_features a multiple of "
             f"{W4A16_TILED_N_MULTIPLE} (got {n} x {k}, group_size {group_size})"
         )
-    bias = W4A16_ZERO_BIAS.get(scales.dtype, 0.0)
     if zeros is None:
-        stored = torch.full_like(scales, bias + 8)
-    else:
-        stored = (zeros.float() + bias).to(scales.dtype)
+        zeros = torch.full(scales.shape, 8, dtype=torch.uint8, device=scales.device)
     return W4A16Weight(
         qweight=_pack_tiled(codes),
         scales=_tile_scales(scales),
         group_size=group_size,
         layout="tiled",
-        zeros=_tile_scales(stored),
+        zeros=_tile_zeros(zeros),
     )
 
 
@@ -297,6 +293,25 @@ def _tile_scales(scales: torch.Tensor) -> torch.Tensor:
     return scales.view(n // 64, 8, 8, groups).permute(3, 0, 2, 1).contiguous()
 
 
+def _tile_zeros(zeros: torch.Tensor) -> torch.Tensor:
+    """uint8 [N, K/128] -> int32 [K/128, N/64, 8 (g), 2 (w)]: column
+    64t + 8(4w + jj) + g at nibbles jj and 4 + jj of word [.., g, w]."""
+    n, groups = zeros.shape
+    z = zeros.view(n // 64, 2, 4, 8, groups).permute(4, 0, 3, 1, 2).to(torch.int64)  # [G, T, g, w, jj]
+    words = torch.zeros(z.shape[:-1], dtype=torch.int64, device=zeros.device)
+    for jj in range(4):
+        words |= (z[..., jj] << (4 * jj)) | (z[..., jj] << (16 + 4 * jj))
+    return torch.where(words >= 2**31, words - 2**32, words).to(torch.int32).contiguous()
+
+
+def _untile_zeros(tiled: torch.Tensor) -> torch.Tensor:
+    """int32 [K/128, N/64, 8, 2] -> uint8 [N, K/128] (inverse of _tile_zeros)."""
+    groups, tiles = tiled.shape[:2]
+    shifts = 4 * torch.arange(4, device=tiled.device, dtype=torch.int32)
+    nibbles = (tiled.unsqueeze(-1) >> shifts) & 0xF  # [G, T, g, w, jj], the low halves
+    return nibbles.permute(1, 3, 4, 2, 0).reshape(tiles * 64, groups).to(torch.uint8)
+
+
 def _untile_scales(tiled: torch.Tensor) -> torch.Tensor:
     """[K/128, N/64, 8 (g), 8 (j)] -> [N, K/128] (inverse of _tile_scales)."""
     groups, tiles = tiled.shape[:2]
@@ -315,7 +330,7 @@ def w4a16_row_zeros(weight: W4A16Weight) -> torch.Tensor:
     if weight.zeros is None:
         n, k = weight.shape
         return torch.full((n, k // weight.group_size), 8.0, device=weight.device)
-    return _untile_scales(weight.zeros).float() - W4A16_ZERO_BIAS.get(weight.zeros.dtype, 0.0)
+    return _untile_zeros(weight.zeros).float()
 
 
 def unpack_w4a16(qweight: torch.Tensor) -> torch.Tensor:

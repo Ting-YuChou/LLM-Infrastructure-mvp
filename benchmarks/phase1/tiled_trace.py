@@ -225,7 +225,7 @@ def trace_shape(
     first = quantize_w4a16(torch.randn(n, k, device="cuda", dtype=torch.bfloat16) * k**-0.5, layout="tiled")
     copies = max(2, -(-ROTATE_BYTES // first.nbytes()))
     weights = [first] + [
-        type(first)(first.qweight.clone(), first.scales.clone(), first.group_size, first.layout)
+        type(first)(first.qweight.clone(), first.scales.clone(), first.group_size, first.layout, first.zeros.clone())
         for _ in range(copies - 1)
     ]
     x = torch.randn(rows, k, device="cuda", dtype=torch.bfloat16)

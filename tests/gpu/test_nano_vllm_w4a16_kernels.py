@@ -27,6 +27,7 @@ from serving.nano_vllm.kernels.w4a16 import (  # noqa: E402
     W4A16_CONFIG,
     W4A16_TILED_TILES,
     dequantize_w4a16,
+    pack_w4a16,
     quantize_w4a16,
     tiled_chunk_rows,
     tiled_launch_config,
@@ -34,6 +35,7 @@ from serving.nano_vllm.kernels.w4a16 import (  # noqa: E402
     unpack_w4a16,
     w4a16_linear,
     w4a16_row_scales,
+    w4a16_row_zeros,
     w4a16_tiled_trace,
 )
 
@@ -62,15 +64,23 @@ def _weight(n, k, dtype, group_size=128, layout="rows"):
     return quantize_w4a16(w, group_size=group_size, layout=layout)
 
 
+def _awq_weight(n, k, dtype):
+    """Asymmetric codes and zero points, as an AWQ checkpoint has (tiled)."""
+    codes = torch.randint(0, 16, (n, k), dtype=torch.uint8, device="cuda")
+    zeros = torch.randint(0, 16, (n, k // 128), dtype=torch.uint8, device="cuda")
+    scales = (torch.rand(n, k // 128, device="cuda") * 2 / (15 * k**0.5)).to(dtype)
+    return pack_w4a16(codes, scales, zeros, layout="tiled")
+
+
 def _reference(x, weight):
     return x.float() @ dequantize_w4a16_torch(weight).T
 
 
 def dequantize_w4a16_torch(weight):
     n, k = weight.shape
-    q = unpack_w4a16(weight.qweight).float() - 8
     g = weight.group_size
-    return (q.view(n, k // g, g) * w4a16_row_scales(weight).float().unsqueeze(-1)).view(n, k)
+    q = unpack_w4a16(weight.qweight).float().view(n, k // g, g) - w4a16_row_zeros(weight).unsqueeze(-1)
+    return (q * w4a16_row_scales(weight).float().unsqueeze(-1)).view(n, k)
 
 
 def test_w4a16_extension_builds():
@@ -181,6 +191,33 @@ def test_tiled_dequantize_kernel_matches_the_row_kernel_bit_for_bit(dtype):
     rows, tiled = quantize_w4a16(w), quantize_w4a16(w, layout="tiled")
     assert torch.equal(dequantize_w4a16(tiled), dequantize_w4a16(rows))
     assert torch.equal(dequantize_w4a16(tiled), dequantize_w4a16_torch(rows).to(dtype))
+
+
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
+def test_tiled_dequantize_kernel_with_zero_points_matches_torch(dtype):
+    """(q - z) is exact, times the scale in fp32, rounded once: bit for bit."""
+    weight = _awq_weight(384, 1024, dtype)
+    assert torch.equal(dequantize_w4a16(weight), dequantize_w4a16_torch(weight).to(dtype))
+
+
+@pytest.mark.parametrize("rows", [1, 7, 16, 33, 64, 100, 256, 512])
+@pytest.mark.parametrize("shape", TILED_SHAPES.values(), ids=TILED_SHAPES)
+def test_tiled_kernel_with_zero_points_matches_dequantized_matmul(shape, rows):
+    weight = _awq_weight(*shape, torch.bfloat16)
+    x = torch.randn(rows, shape[1], device="cuda").to(torch.bfloat16)
+    _check(x, weight, tiled_max_rows=512)
+
+
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
+@pytest.mark.parametrize(
+    "rows,tile", [(5, "128x128"), (5, "256x128"), (5, "64x256"), (40, "64x128"), (40, "64x256"), (100, "128x128")]
+)
+def test_tiled_kernel_with_zero_points_in_every_tile_and_dtype(rows, tile, dtype):
+    """Up to MT 2 the zero points are decoded once per tile, past that once per row."""
+    weight = _awq_weight(1024, 2048, dtype)
+    x = torch.randn(rows, 2048, device="cuda").to(dtype)
+    _check(x, weight, tiled_tile=tile, tiled_max_rows=512)
+    _check(x, weight, tiled_tile=tile, tiled_grid=5, tiled_max_rows=512)
 
 
 @pytest.mark.parametrize("rows", [1, 2, 7, 16, 17, 33, 48, 64, 65, 96, 100, 130, 192, 256, 512])

@@ -65,3 +65,55 @@ def build_tiny_llama(vocab_size, seed=0, causal_lm=True):
     if not causal_lm:
         config.num_labels = 1
     return model_cls(config)
+
+
+# AutoAWQ's GEMM format, written out from its definition rather than from the
+# loader: qweight [K, N / 8] with nibble p of word j holding column
+# 8j + AWQ_ORDER[p], qzeros likewise, scales [K / 128, N]; w = (q - z) * s.
+AWQ_ORDER = (0, 2, 4, 6, 1, 3, 5, 7)
+AWQ_QUANT_CONFIG = {"bits": 4, "group_size": 128, "zero_point": True, "version": "gemm", "quant_method": "awq"}
+AWQ_PROJECTIONS = ("q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj")
+
+
+def awq_pack_columns(values):
+    """uint8 [R, N] -> int32 [R, N / 8] the AutoAWQ way."""
+    import torch
+
+    r, n = values.shape
+    words = torch.zeros(r, n // 8, dtype=torch.int64)
+    for p, column in enumerate(AWQ_ORDER):
+        words |= values[:, column::8].to(torch.int64).cpu() << (4 * p)
+    return torch.where(words >= 2**31, words - 2**32, words).to(torch.int32)
+
+
+def awq_quantize(weight, group_size=128):
+    """Min-max asymmetric codes, zero points and fp16 scales of a [N, K] weight."""
+    import torch
+
+    n, k = weight.shape
+    groups = weight.float().reshape(n, k // group_size, group_size)
+    lo, hi = groups.amin(-1), groups.amax(-1)
+    scales = ((hi - lo) / 15).clamp_min(1e-6).half()
+    zeros = torch.round(-lo / scales.float()).clamp(0, 15)
+    codes = (torch.round(groups / scales.float().unsqueeze(-1)) + zeros.unsqueeze(-1)).clamp(0, 15)
+    return codes.reshape(n, k).to(torch.uint8), zeros.to(torch.uint8), scales
+
+
+def awq_checkpoint(weights, group_size=128):
+    """The decoder projections of a Llama state dict as an AWQ checkpoint, and
+    the same state dict holding their dequantized weights (fp32 of the fp16
+    scales), for a reference model."""
+    awq, dequantized = {}, {}
+    for name, tensor in weights.items():
+        base = name.rpartition(".")[0]
+        if not base.endswith(AWQ_PROJECTIONS):
+            awq[name] = dequantized[name] = tensor
+            continue
+        codes, zeros, scales = awq_quantize(tensor, group_size)
+        awq[f"{base}.qweight"] = awq_pack_columns(codes.t())
+        awq[f"{base}.qzeros"] = awq_pack_columns(zeros.t())
+        awq[f"{base}.scales"] = scales.t().contiguous()
+        q = codes.float().reshape(*zeros.shape, group_size)
+        w = (q - zeros.float().unsqueeze(-1)) * scales.float().unsqueeze(-1)
+        dequantized[name] = w.reshape(tensor.shape).to(tensor.dtype)
+    return awq, dequantized

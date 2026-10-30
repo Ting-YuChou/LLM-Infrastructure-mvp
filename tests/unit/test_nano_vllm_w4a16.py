@@ -21,7 +21,6 @@ from serving.nano_vllm.kernels import w4a16 as w4a16_mod  # noqa: E402
 from serving.nano_vllm.kernels.w4a16 import (  # noqa: E402
     W4A16_PACK_ORDER,
     W4A16_TILED_TILES,
-    W4A16_ZERO_BIAS,
     awq_unpack,
     pack_w4a16,
     tiled_chunk_rows,
@@ -31,6 +30,8 @@ from serving.nano_vllm.kernels.w4a16 import (  # noqa: E402
     w4a16_row_scales,
     w4a16_row_zeros,
 )
+from tiny_llama import AWQ_QUANT_CONFIG, awq_checkpoint, awq_pack_columns  # noqa: E402
+
 from serving.nano_vllm.model import (  # noqa: E402
     NanoLlamaConfig,
     NanoLlamaForCausalLM,
@@ -152,8 +153,8 @@ def test_tiled_weights_dequantize_and_multiply_like_rows():
     rows, tiled = quantize_w4a16(weight), quantize_w4a16(weight, layout="tiled")
     assert torch.equal(unpack_w4a16(tiled.qweight), unpack_w4a16(rows.qweight))
     assert torch.equal(dequantize_w4a16(tiled), dequantize_w4a16(rows))
-    # Tiled weights also store their zero points (8), one per scale.
-    assert tiled.nbytes() == rows.nbytes() + rows.scales.numel() * rows.scales.element_size()
+    # Tiled weights also store their zero points (8), a byte per scale.
+    assert tiled.nbytes() == rows.nbytes() + rows.scales.numel()
     x = torch.randn(2, 3, 384)
     torch.testing.assert_close(linear(x, tiled, backend="triton"), linear(x, rows, backend="triton"), rtol=0, atol=0)
 
@@ -368,48 +369,9 @@ def test_weight_quant_comes_from_yaml_and_env(tmp_path, monkeypatch):
     assert NanoVLLMConfig.from_yaml(str(path)).weight_quant == "none"
 
 
-# AutoAWQ's GEMM format, written out from its definition: qweight [K, N / 8],
-# nibble p of word j holding column 8j + order[p].
-AWQ_ORDER = (0, 2, 4, 6, 1, 3, 5, 7)
-AWQ_CONFIG = {"bits": 4, "group_size": 128, "zero_point": True, "version": "gemm", "quant_method": "awq"}
-
-
-def _awq_pack_columns(values: torch.Tensor) -> torch.Tensor:
-    """uint8 [R, N] -> int32 [R, N / 8] the AutoAWQ way."""
-    r, n = values.shape
-    words = torch.zeros(r, n // 8, dtype=torch.int64)
-    for p, column in enumerate(AWQ_ORDER):
-        words |= values[:, column::8].to(torch.int64) << (4 * p)
-    return torch.where(words >= 2**31, words - 2**32, words).to(torch.int32)
-
-
-def _asymmetric(weight: torch.Tensor, group_size: int = 128):
-    """Min-max asymmetric codes, zero points and fp16 scales, [N, K] orientation."""
-    n, k = weight.shape
-    groups = weight.reshape(n, k // group_size, group_size)
-    lo, hi = groups.amin(-1), groups.amax(-1)
-    scales = ((hi - lo) / 15).clamp_min(1e-6).half()
-    zeros = torch.round(-lo / scales.float()).clamp(0, 15)
-    codes = (torch.round(groups / scales.float().unsqueeze(-1)) + zeros.unsqueeze(-1)).clamp(0, 15)
-    return codes.reshape(n, k).to(torch.uint8), zeros.to(torch.uint8), scales
-
-
-def _awq_checkpoint(weights: dict[str, torch.Tensor]):
-    """The projections of ``weights`` as an AWQ checkpoint, plus the same model
-    holding the dequantized weights (fp32 of the fp16 scales)."""
-    awq, dequantized = {}, {}
-    for name, tensor in weights.items():
-        base, _, _ = name.rpartition(".")
-        if not base.endswith(PROJECTIONS):
-            awq[name] = dequantized[name] = tensor
-            continue
-        codes, zeros, scales = _asymmetric(tensor)
-        awq[f"{base}.qweight"] = _awq_pack_columns(codes.t())
-        awq[f"{base}.qzeros"] = _awq_pack_columns(zeros.t())
-        awq[f"{base}.scales"] = scales.t().contiguous()
-        q = codes.float().reshape(*zeros.shape, 128)
-        dequantized[name] = ((q - zeros.float().unsqueeze(-1)) * scales.float().unsqueeze(-1)).reshape(tensor.shape)
-    return awq, dequantized
+AWQ_CONFIG = AWQ_QUANT_CONFIG
+_awq_pack_columns = awq_pack_columns
+_awq_checkpoint = awq_checkpoint
 
 
 def test_awq_unpack_inverts_autoawq_packing():
@@ -454,17 +416,18 @@ def test_tiled_zero_points_dequantize_to_q_minus_z_times_s(dtype):
     scales = torch.rand(n, k // 128).to(dtype)
     weight = pack_w4a16(codes, scales, zeros, layout="tiled")
 
-    assert weight.zeros.shape == weight.scales.shape and weight.zeros.dtype == dtype
-    # Stored with the kernel's code bias, exactly.
-    assert torch.equal(
-        weight.zeros.float().flatten().unique().sort().values,
-        (zeros.float() + W4A16_ZERO_BIAS.get(dtype, 0.0)).flatten().unique().sort().values,
-    )
+    assert weight.zeros.shape == (k // 128, n // 64, 8, 2) and weight.zeros.dtype == torch.int32
+    # Column 64t + 8(4w + jj) + g sits at nibbles jj and 4 + jj of word [group, t, g, w].
+    raw = weight.zeros.to(torch.int64) & 0xFFFFFFFF
+    for group, t, g, j in itertools.product(range(k // 128), range(n // 64), range(8), range(8)):
+        word = int(raw[group, t, g, j // 4])
+        z = int(zeros[64 * t + 8 * j + g, group])
+        assert (word >> (4 * (j % 4))) & 0xF == z and (word >> (16 + 4 * (j % 4))) & 0xF == z
     torch.testing.assert_close(w4a16_row_zeros(weight), zeros.float(), rtol=0, atol=0)
     q = codes.float().reshape(n, k // 128, 128)
     expected = ((q - zeros.float().unsqueeze(-1)) * scales.float().unsqueeze(-1)).reshape(n, k)
     torch.testing.assert_close(dequantize_w4a16(weight, torch.float32), expected, rtol=0, atol=0)
-    assert weight.nbytes() == codes.numel() // 2 + 2 * scales.numel() * scales.element_size()
+    assert weight.nbytes() == codes.numel() // 2 + scales.numel() * (scales.element_size() + 1)
 
 
 def test_rtn_tiled_weights_store_zero_point_8_and_match_rows():
@@ -473,7 +436,7 @@ def test_rtn_tiled_weights_store_zero_point_8_and_match_rows():
     tiled = quantize_w4a16(weight, layout="tiled")
     rows = quantize_w4a16(weight)
     assert rows.zeros is None
-    assert torch.all(tiled.zeros.float() == 128 + 8)
+    assert torch.all(tiled.zeros == torch.tensor(0x88888888 - 2**32, dtype=torch.int32))
     torch.testing.assert_close(w4a16_row_zeros(tiled), w4a16_row_zeros(rows), rtol=0, atol=0)
     torch.testing.assert_close(dequantize_w4a16(tiled), dequantize_w4a16(rows), rtol=0, atol=0)
 

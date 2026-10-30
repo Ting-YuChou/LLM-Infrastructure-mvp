@@ -4,6 +4,7 @@ Run on Colab by `benchmarks/phase1/run_phase1.sh` (tests step); on a machine
 without CUDA every test here is skipped.
 """
 
+import dataclasses
 import sys
 from pathlib import Path
 
@@ -14,6 +15,9 @@ torch = pytest.importorskip("torch")
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "unit"))
+
+from tiny_llama import AWQ_QUANT_CONFIG, awq_checkpoint  # noqa: E402
 
 from serving.nano_vllm.metadata import build_batch  # noqa: E402
 from serving.nano_vllm.model import NanoLlamaConfig, NanoLlamaForCausalLM  # noqa: E402
@@ -74,15 +78,20 @@ def _model(
     device, dtype, use_triton, attention_backend="torch", linear_backend="torch", weight_quant="none",
     kv_cache_dtype="auto", w4a16_layout=None,
 ):
-    """``w4a16_layout`` overrides W4A16_CONFIG["layout"] while the weights are quantized."""
+    """``w4a16_layout`` overrides W4A16_CONFIG["layout"] while the weights are quantized;
+    weight_quant="awq" loads the same weights as an AWQ checkpoint (tiny_llama.awq_checkpoint)."""
     from serving.nano_vllm.kernels import w4a16
 
+    config, weights = CONFIG, _random_weights(CONFIG)
+    if weight_quant == "awq":
+        config = dataclasses.replace(CONFIG, quantization_config=AWQ_QUANT_CONFIG)
+        weights, _ = awq_checkpoint(weights)
     layout = w4a16.W4A16_CONFIG["layout"]
     w4a16.W4A16_CONFIG["layout"] = w4a16_layout or layout
     try:
         return NanoLlamaForCausalLM(
-            config=CONFIG,
-            weights=_random_weights(CONFIG),
+            config=config,
+            weights=weights,
             device=torch.device(device),
             dtype=dtype,
             use_triton=use_triton,
@@ -295,15 +304,13 @@ def test_fp8_kv_cache_tracks_the_full_precision_cache():
         assert cosine.min() > 0.995, cosine
 
 
-@pytest.mark.parametrize("layout", ["rows", "tiled"])
-def test_w4a16_model_tracks_fp32_with_the_same_dequantized_weights(layout):
+@pytest.mark.parametrize("weight_quant,layout", [("w4a16", "rows"), ("w4a16", "tiled"), ("awq", "tiled")])
+def test_w4a16_model_tracks_fp32_with_the_same_dequantized_weights(weight_quant, layout):
     """bf16 + Triton + the W4A16 kernels vs fp32 F.linear on the dequantized weights."""
-    import dataclasses
-
     from serving.nano_vllm.kernels import dequantize_w4a16
 
     quantized = _model(
-        "cuda", torch.bfloat16, use_triton=True, attention_backend="triton", weight_quant="w4a16",
+        "cuda", torch.bfloat16, use_triton=True, attention_backend="triton", weight_quant=weight_quant,
         w4a16_layout=layout,
     )
     assert all(getattr(quantized.layers[0], name).layout == layout for name in ("qkv", "o_proj", "gate_up", "down"))

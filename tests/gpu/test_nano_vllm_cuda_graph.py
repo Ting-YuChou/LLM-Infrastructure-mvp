@@ -48,6 +48,7 @@ def _runner(attention_backend, max_graph_batch, weight_quant="none", kv_cache_dt
         ("torch", 3, 8, "none", "auto"),
         ("triton", 3, 8, "w4a16", "auto"),
         ("triton", 3, 8, "w4a16_tiled", "auto"),
+        ("triton", 3, 8, "awq", "auto"),
         ("triton", 3, 8, "none", "fp8"),
     ],
 )
@@ -85,6 +86,7 @@ def test_graph_replay_matches_eager(attention_backend, batch, max_graph_batch, w
         ("torch", "none", "auto"),
         ("triton", "w4a16", "auto"),
         ("triton", "w4a16_tiled", "auto"),
+        ("triton", "awq", "auto"),
         ("triton", "none", "fp8"),
     ],
 )

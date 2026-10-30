@@ -83,7 +83,7 @@ def _generate(
 @pytest.mark.parametrize(
     "scheduling,weight_quant,layout",
     [("mixed", "none", "rows"), ("prefill_first", "none", "rows"), ("mixed", "w4a16", "rows"),
-     ("mixed", "w4a16", "tiled")],
+     ("mixed", "w4a16", "tiled"), ("mixed", "awq", "tiled")],
 )
 def test_async_scheduling_matches_sync(scheduling, weight_quant, layout, monkeypatch):
     # Split-K W4A16 (row layout) merges its splits with atomics, whose order
