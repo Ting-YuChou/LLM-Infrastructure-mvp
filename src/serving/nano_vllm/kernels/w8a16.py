@@ -11,10 +11,11 @@ is exact in bf16) with fp32 accumulation, then scales each column of the
 output by s once: x @ (q * s).T = (x @ q.T) * s exactly in real numbers, so
 the only rounding the int8 weight adds over bf16 is the quantization itself.
 
-One Triton kernel serves every row count: BLOCK_M rows of x per program
-(16 for decode-sized batches, 64 past that), BLOCK_N output columns, K in
-BLOCK_K steps. Off CUDA (or without Triton) it is F.linear on the
-dequantized weight.
+One Triton kernel serves every row count: BLOCK_M rows of x per program,
+BLOCK_N output columns, K in BLOCK_K steps. The programs of one column tile
+are adjacent in the grid (m varies fastest), so past BLOCK_M rows its int8
+weight comes from L2 after the first read instead of HBM. Off CUDA (or
+without Triton) it is F.linear on the dequantized weight.
 """
 
 from __future__ import annotations
@@ -36,10 +37,12 @@ except ModuleNotFoundError:  # pragma: no cover
     TRITON_AVAILABLE = False
 
 # Launch settings by row count (up to "rows" rows); benchmarks/phase1 kbench
-# lm_head picks among them.
+# lm_head picks among them. Run awq-a1: up to 16 rows 369-386 us, 1.9x bf16;
+# at 64 rows block_k 128 took 526 us against 641 with 64.
 W8A16_CONFIGS = (
     {"rows": 16, "block_m": 16, "block_n": 32, "block_k": 256, "num_warps": 4, "num_stages": 3},
-    {"rows": 1 << 30, "block_m": 64, "block_n": 128, "block_k": 64, "num_warps": 4, "num_stages": 3},
+    {"rows": 64, "block_m": 64, "block_n": 128, "block_k": 128, "num_warps": 4, "num_stages": 3},
+    {"rows": 1 << 30, "block_m": 128, "block_n": 128, "block_k": 64, "num_warps": 8, "num_stages": 3},
 )
 
 
@@ -112,8 +115,8 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
         stride_xm, stride_wn, stride_om,
         BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr, EVEN_K: tl.constexpr,
     ):
-        pid_n = tl.program_id(0)
-        pid_m = tl.program_id(1)
+        pid_m = tl.program_id(0)
+        pid_n = tl.program_id(1)
         offs_m = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
         offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
         m_mask = offs_m < M
@@ -152,7 +155,7 @@ def _w8a16_triton(  # pragma: no cover - depends on CUDA/Triton
     n = weight.shape[0]
     config = {**w8a16_config(m), **(config or {})}
     out = torch.empty(m, n, dtype=x.dtype, device=x.device)
-    grid = (triton.cdiv(n, config["block_n"]), triton.cdiv(m, config["block_m"]))
+    grid = (triton.cdiv(m, config["block_m"]), triton.cdiv(n, config["block_n"]))
     _w8a16_kernel[grid](
         x, weight.qweight, weight.scales, out, m, n, k,
         x.stride(0), weight.qweight.stride(0), out.stride(0),

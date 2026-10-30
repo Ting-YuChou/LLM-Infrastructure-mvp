@@ -34,7 +34,7 @@ def test_triton_is_available():
     assert TRITON_AVAILABLE
 
 
-@pytest.mark.parametrize("rows", [1, 3, 16, 17, 64, 100])
+@pytest.mark.parametrize("rows", [1, 3, 16, 17, 64, 65, 100, 256])
 def test_lm_head_shape(rows):
     _check(rows, VOCAB, HIDDEN)
 

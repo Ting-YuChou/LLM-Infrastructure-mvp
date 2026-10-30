@@ -49,7 +49,8 @@ def test_linear_dispatches_int8_weights():
 
 def test_configs_cover_every_row_count():
     assert w8a16_config(1)["block_m"] == 16 and w8a16_config(16)["block_m"] == 16
-    assert w8a16_config(17)["block_m"] == 64 and w8a16_config(4096)["block_m"] == 64
+    assert w8a16_config(17)["block_m"] == 64 and w8a16_config(64)["block_m"] == 64
+    assert w8a16_config(65)["block_m"] == 128 and w8a16_config(4096)["block_m"] == 128
 
 
 def test_lm_head_quant_resolution(monkeypatch):

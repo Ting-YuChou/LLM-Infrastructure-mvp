@@ -1078,13 +1078,25 @@ def _lm_head_int8(config: dict | None = None):
 register(
     Kernel(
         name="lm_head",
-        shapes=[{"M": m, "N": n, "K": k} for m in (1, 4, 16, 64, 256) for n, k in [LINEAR_SHAPES["lm_head"]]],
+        shapes=[
+            {"M": m, "N": n, "K": k} for m in (1, 4, 16, 32, 64, 128, 256) for n, k in [LINEAR_SHAPES["lm_head"]]
+        ],
         inputs=_lm_head_inputs,
         impls={
             "bf16_nano": triton_impl(lambda i: linear(i["x"], i["w"], backend="triton")),
             "int8": _lm_head_int8(),
-            "int8_k128": _lm_head_int8({"block_k": 128}),
-            "int8_n64": _lm_head_int8({"block_n": 64, "block_k": 128}),
+            "int8_m64_n256_w8": _lm_head_int8(
+                {"block_m": 64, "block_n": 256, "block_k": 64, "num_warps": 8, "num_stages": 3}
+            ),
+            "int8_m128_n256_w8": _lm_head_int8(
+                {"block_m": 128, "block_n": 256, "block_k": 64, "num_warps": 8, "num_stages": 3}
+            ),
+            "int8_m128_k128_w8": _lm_head_int8(
+                {"block_m": 128, "block_n": 128, "block_k": 128, "num_warps": 8, "num_stages": 3}
+            ),
+            "int8_m64_k128": _lm_head_int8(
+                {"block_m": 64, "block_n": 128, "block_k": 128, "num_warps": 4, "num_stages": 3}
+            ),
             "cublas_bf16": op_impl(lambda i: F.linear(i["x"], i["w"])),
         },
         reference=lambda i: w8a16_linear_reference(i["x"], quantize_w8a16(i["w"])),
