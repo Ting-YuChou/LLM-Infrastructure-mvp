@@ -683,7 +683,7 @@ nano now takes 0.87 / 0.86 / 0.92 / 0.97 / 0.95 of vLLM AWQ's time with the same
 - **A faster prefill kernel**: the large kernel lacks the tiled kernel's register double buffer (it spilled), and each B fragment is dequantized by every warp row of the block (2× at 128×256). Dequantizing a stage into shared memory once, then running a plain BF16 mma loop over it, may get closer to cuBLAS.
 - **int8 lm_head past 64 rows**: a CUDA kernel in the tiled kernel's style would let `int8` drop the bf16 copy (0.5 GB).
 - **Zero points as nibbles**: half the zero-point bytes, recovering about 0.7% at b=1.
-- **KV capacity after loading AWQ**: about 1 GiB stays reserved but unallocated after unpacking on the GPU (Phase 2's `awqserve`: 215,424 KV tokens against 227,824 with RTN).
+- **KV capacity after loading AWQ**: done after the round (Phase 2's `kvfrag`). The memory left reserved after loading came from the int8 lm_head's fp32 temporaries, plus 0.76 GiB from the projections with RTN or AWQ, not from AWQ unpacking alone. Weights are now built on a side stream, and nano keeps 230,736 KV tokens (`awqserve`: 215,424; vLLM: 237,824).
 
 ## Files
 
