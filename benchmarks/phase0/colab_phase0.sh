@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Phase 0 on one Google Colab A100 (40GB, ncu allowed), driven from this
 # machine with the Colab CLI (see scripts/colab_gpu_smoke.sh for sign-in).
-# BENCH_PHASE=phase1 / phase2 drives benchmarks/phase{1,2}/run_phase*.sh the
-# same way.
+# BENCH_PHASE=phase1 / phase2 / phase3 drives benchmarks/phase{1,2,3}/run_phase*.sh
+# the same way.
 #
 # Uploads benchmarks/phase0, benchmarks/${BENCH_PHASE}, src/serving/nano_vllm
 # and the nano_vllm tests from this checkout (no push needed), runs
@@ -22,7 +22,7 @@
 # `colab exec` gives up, default 900; the run goes on and tail/fetch still
 # work), P0_RUN_ID, P0_STEPS, P0_CONCURRENCY (default 1..128: 40 GB leaves room
 # for ~145k KV tokens, so 256 concurrent 1280-token requests would just queue),
-# and every P1_* / P2_* variable that is set (see benchmarks/phase{1,2}/run_phase*.sh).
+# and every P1_* / P2_* / P3_* variable that is set (see benchmarks/phase{1,2,3}/run_phase*.sh).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -64,7 +64,7 @@ upload_code() {
 
 run() {
   local env_args=(--env "P0_RUN_ID=${RUN_ID}" --env "BENCH_PHASE=${PHASE}") name names=()
-  for name in P0_STEPS P0_CONCURRENCY P0_SGLANG_SPEC ${!P1_@} ${!P2_@}; do
+  for name in P0_STEPS P0_CONCURRENCY P0_SGLANG_SPEC ${!P1_@} ${!P2_@} ${!P3_@}; do
     if [[ -n "${!name:-}" ]]; then env_args+=(--env "${name}=${!name}"); names+=("${name}"); fi
   done
   # The kernel keeps every --env of earlier runs; the launcher drops those.
@@ -96,6 +96,7 @@ rerun() {  # the VM already has the venvs and the model
     phase0) export P0_STEPS="${P0_STEPS:-bandwidth vllm_serve sglang_serve nsys_vllm nano ncu summarize}" ;;
     phase1) export P1_STEPS="${P1_STEPS:-tests kbench ncu e2e quality summarize}" ;;
     phase2) export P2_STEPS="${P2_STEPS:-tests prefix_bench serve nsys summarize}" ;;
+    phase3) export P3_STEPS="${P3_STEPS:-workloads accept serve summarize}" ;;
   esac
   upload_code
   run
