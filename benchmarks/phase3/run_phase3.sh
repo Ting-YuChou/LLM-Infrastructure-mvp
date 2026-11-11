@@ -104,7 +104,7 @@ install_venv() {  # the load generator's and nano's venv; reuse an earlier phase
     rm -rf "${VENVS}/vllm"
     install_vllm || return 1
   fi
-  uv pip install -p "${PY}" pytest ninja nanobind &&
+  uv pip install -p "${PY}" pytest ninja nanobind pandas &&  # pandas: vllm bench's custom dataset
   "${PY}" -c "import torch, vllm; print('vllm', vllm.__version__, '| torch', torch.__version__)"
 }
 
@@ -249,7 +249,13 @@ nano_cmd() {  # extra KEY=VALUE,...: the nano server command with the benchmark 
   local extra=() model="${MODEL}"
   [[ -n "$1" ]] && IFS=, read -r -a extra <<< "$1"
   if [[ ",$1," == *,WEIGHT_QUANT=awq,* ]]; then model="${W4_MODEL}"; fi
-  echo env PYTHONPATH="${REPO_DIR}" MODEL_NAME="${model}" DTYPE=bfloat16 HOST=127.0.0.1 \
+  # cuda129's toolkit (nvcc, cudart, cccl only) is for nano's kernels alone: under it
+  # flashinfer's JIT in the vLLM and SGLang servers finds no curand.h.
+  local cuda
+  cuda="$(sed -n 's/^export CUDA_HOME=//p' "${CUDA_ENV}" 2>/dev/null)"
+  echo env ${cuda:+CUDA_HOME="${cuda}" PATH="${cuda}/bin:${BASE_PATH}" TORCH_CUDA_ARCH_LIST=8.0} \
+    TORCH_EXTENSIONS_DIR="${ROOT}/torch_ext" \
+    PYTHONPATH="${REPO_DIR}" MODEL_NAME="${model}" DTYPE=bfloat16 HOST=127.0.0.1 \
     PORT="${NANO_PORT}" MAX_MODEL_LEN=8192 MAX_NEW_TOKENS=4096 \
     NUM_KVCACHE_BLOCKS="$(nano_kv_blocks)" MAX_NUM_SEQS=64 MAX_CONCURRENT_REQUESTS=256 \
     MAX_NUM_BATCHED_TOKENS=2048 CUDA_GRAPH_MAX_BS=64 ${extra[@]+"${extra[@]}"} \
@@ -353,8 +359,7 @@ nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader >&
 want installs && installs
 # ninja (cpp_extension JIT) comes from the venv.
 export PATH="${VENVS}/vllm/bin:${PATH}"
-# shellcheck source=/dev/null
-if [[ -f "${CUDA_ENV}" ]]; then source "${CUDA_ENV}"; fi
+BASE_PATH="${PATH}"
 {
   "${PY}" -c "import importlib.metadata as m; print('load generator / nano: vllm', m.version('vllm'))"
   "${SPEC_VLLM}/python" -c "import importlib.metadata as m; print('vllm baseline:', m.version('vllm'), '| torch', m.version('torch'))"
