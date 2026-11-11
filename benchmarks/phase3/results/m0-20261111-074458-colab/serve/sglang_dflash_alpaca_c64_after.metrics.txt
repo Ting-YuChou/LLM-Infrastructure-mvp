@@ -1,0 +1,13 @@
+sglang:graph_memory_usage_gb{engine_type="unified",model_name="/content/p0/models/Meta-Llama-3.1-8B-Instruct",moe_ep_rank="0",phase="draft_prefill",pp_rank="0",tp_rank="0"} 0.0
+sglang:graph_memory_usage_gb{engine_type="unified",model_name="/content/p0/models/Meta-Llama-3.1-8B-Instruct",moe_ep_rank="0",phase="draft_decode",pp_rank="0",tp_rank="0"} 0.21875
+sglang:graph_memory_usage_gb{engine_type="unified",model_name="/content/p0/models/Meta-Llama-3.1-8B-Instruct",moe_ep_rank="0",phase="draft_extend",pp_rank="0",tp_rank="0"} 0.0
+sglang:spec_accept_length{engine_type="unified",model_name="/content/p0/models/Meta-Llama-3.1-8B-Instruct",moe_ep_rank="0",pp_rank="0",tp_rank="0"} 3.584218512898331
+sglang:spec_accept_rate{engine_type="unified",model_name="/content/p0/models/Meta-Llama-3.1-8B-Instruct",moe_ep_rank="0",pp_rank="0",tp_rank="0"} 0.2871353903220368
+sglang:spec_cap_length{engine_type="unified",model_name="/content/p0/models/Meta-Llama-3.1-8B-Instruct",moe_ep_rank="0",pp_rank="0",tp_rank="0"} 0.0
+sglang:spec_block_accept_length{engine_type="unified",model_name="/content/p0/models/Meta-Llama-3.1-8B-Instruct",moe_ep_rank="0",pp_rank="0",tp_rank="0"} 0.0
+sglang:spec_num_steps{engine_type="unified",model_name="/content/p0/models/Meta-Llama-3.1-8B-Instruct",moe_ep_rank="0",pp_rank="0",tp_rank="0"} 1.0
+sglang:spec_num_draft_tokens{engine_type="unified",model_name="/content/p0/models/Meta-Llama-3.1-8B-Instruct",moe_ep_rank="0",pp_rank="0",tp_rank="0"} 10.0
+sglang:spec_verify_calls_total{engine_type="unified",model_name="/content/p0/models/Meta-Llama-3.1-8B-Instruct"} 19958.0
+sglang:startup_cuda_graph_time_seconds{engine_type="unified",model_name="/content/p0/models/Meta-Llama-3.1-8B-Instruct",phase="draft_prefill"} 0.0
+sglang:startup_cuda_graph_time_seconds{engine_type="unified",model_name="/content/p0/models/Meta-Llama-3.1-8B-Instruct",phase="draft_decode"} 1.4041052530001252
+sglang:startup_cuda_graph_time_seconds{engine_type="unified",model_name="/content/p0/models/Meta-Llama-3.1-8B-Instruct",phase="draft_extend"} 0.0

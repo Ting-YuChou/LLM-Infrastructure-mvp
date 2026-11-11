@@ -25,4 +25,52 @@ Each run writes `summary.md` in its results directory.
 
 ## Results
 
-None yet: M0 has not run.
+### M0 (run `m0-20261111-074458-colab`, Colab A100 40GB, vLLM 0.33.0, SGLang 0.5.23)
+
+Full tables: `results/m0-20261111-074458-colab/summary.md`. Requests stop at
+EOS or 256 tokens; DFlash servers use the public drafter with block 10.
+
+Output tok/s, temperature 0, one client (c=1):
+
+| server | alpaca | humaneval | gsm8k | long |
+|---|---:|---:|---:|---:|
+| vLLM BF16 | 78 | 78 | 78 | 74 |
+| vLLM BF16 + DFlash | 220 | 322 | 256 | 161 |
+| SGLang BF16 | 79 | 79 | 79 | 75 |
+| SGLang BF16 + DFlash | 196 | 295 | 222 | 157 |
+| nano BF16 (no speculation) | 83 | 83 | 83 | 79 |
+| vLLM AWQ | 175 | 174 | 174 | 150 |
+| vLLM AWQ + DFlash | 380 | 589 | 434 | 245 |
+| nano AWQ (no speculation) | 207 | 206 | 205 | 178 |
+
+Output tok/s, temperature 0, c=16 and c=64:
+
+| server | alpaca c=16 | alpaca c=64 | humaneval c=16 | humaneval c=64 |
+|---|---:|---:|---:|---:|
+| vLLM BF16 + DFlash | 1910 | 3327 | 2806 | 4576 |
+| SGLang BF16 + DFlash | 1652 | 2915 | 2456 | 4168 |
+| vLLM AWQ | 2112 | 5092 | 2113 | 4563 |
+| vLLM AWQ + DFlash | 2084 | 2943 | 2950 | 4204 |
+| nano AWQ (no speculation) | 2567 | 6012 | 2516 | 5159 |
+
+Tokens per cycle (acceptance study, greedy, block 10, 16 prompts per
+dataset, 8 for long):
+
+| target / drafter | alpaca | humaneval | gsm8k | long |
+|---|---:|---:|---:|---:|
+| BF16 / BF16 | 3.56 | 5.21 | 4.14 | 3.05 |
+| BF16 / 4-bit RTN | 3.49 | 5.13 | 4.16 | 2.97 |
+| AWQ / BF16 | 3.47 | 5.12 | 4.08 | 2.83 |
+| AWQ / 4-bit RTN | 3.45 | 5.08 | 4.03 | 2.82 |
+
+M0 gate (projected nano c=1 at least 1.2x the best DFlash baseline, 4-bit
+drafter; the cycle is an estimate until M3 measures it):
+
+| target | alpaca | humaneval | gsm8k | long | gate |
+|---|---:|---:|---:|---:|---|
+| AWQ | 1.40x | 1.33x | 1.43x | 1.76x | met |
+| BF16 | 1.11x | 1.12x | 1.14x | 1.29x | not met |
+
+On the BF16 target the verify pass (12 ms, the same weights read by every
+engine) is 84% of the cycle, so the projected margin is what the draft and
+the cycle overhead leave: about 1.3 ms of vLLM's 15.5 ms.
