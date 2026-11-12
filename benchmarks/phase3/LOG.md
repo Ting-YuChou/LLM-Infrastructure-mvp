@@ -343,3 +343,81 @@ results/<run_id>/.
   `_replay_spec` now run in inference mode like the piecewise ones.
 - A plain decode step as the host sees it (AWQ, one sequence): 5.00 ms
   median.
+
+### Run m4-smoke2-20261112-213151-colab (same VM: the same tests, AWQ spec_check with both drafters)
+
+- The cycle as the host sees it, AWQ target, one sequence (median of about
+  750 cycles; a plain decode step is 5.01 ms):
+
+  | drafter | ms / cycle | tokens / cycle | tok/s | M3 |
+  |---|---:|---:|---:|---:|
+  | BF16 | 7.69 | 4.00 | 475 | about 14.5 ms, 275 tok/s |
+  | 4-bit RTN | 6.70 | 3.94 | 531 | - |
+
+  G3 (at most 8.0 ms): met with either. Per dataset the cycle is 7.65 to
+  7.82 ms (BF16 drafter) and 6.66 to 6.81 ms (4-bit): the long prompts'
+  context costs 0.15 ms. The 4-bit drafter saves 1.0 ms and costs 1.5% of
+  the tokens per cycle here.
+- Emitted tokens that are not the teacher-forced argmax: 0.33-0.50% with
+  either drafter (plain: 0.33-0.43%), largest margin 0.25.
+- 16 sequences at once: a cycle of 160 verify rows takes 26 ms, a plain
+  decode step of 16 rows 6.3 ms; at 4.0 tokens per cycle that is 1991
+  against 1963 tok/s. 160 rows are past what the 4-bit GEMM does at the
+  price of one (16). M6's verify lengths are for this.
+- 101 of 103 tests passed. The two sampler tests failed in this order of
+  test files: the sampler's own graph test captures outside inference mode
+  while the warm-up tests' engines (in reference cycles) still held graphs
+  captured inside it. Now every capture and replay of the model runner is
+  in inference mode, the decode graphs' included, the sampler test's too,
+  and `tests/gpu/conftest.py` collects garbage after each GPU test.
+
+### Run m4-20261112-214147-colab (same VM: all tests, spec_check on both targets, serving)
+
+- tests/gpu and the nano unit tests: 1303 passed, none skipped (927 s).
+- The cycle as the host sees it, one sequence (median ms; spec_check.py):
+
+  | target | plain decode step | cycle, BF16 drafter | cycle, 4-bit drafter |
+  |---|---:|---:|---:|
+  | AWQ | 5.00 | 7.75 | 6.68 |
+  | BF16 | 12.29 | 15.45 | 14.50 |
+
+  G3 (AWQ, at most 8.0 ms): met with either drafter. On BF16 the cycle is
+  what M0 estimated for vLLM's (15.5 ms): the verify pass reads the same
+  16 GB in every engine, and both lm_head passes (the drafter's and the
+  target's) are 1 GB each in BF16.
+- Emitted tokens that are not the teacher-forced argmax: 0.17-0.50% in all
+  eight speculative rows (plain: 0.17-0.43%), largest margin 0.25.
+- Output tok/s at c=1, temperature 0 (alpaca / humaneval / gsm8k / long):
+
+  | server | tok/s | M3 | best DFlash baseline (M0) | ratio |
+  |---|---|---|---|---|
+  | nano AWQ + DFlash | 428 / 641 / 484 / 289 | 246 / 359 / 276 / 182 | vLLM AWQ: 380 / 589 / 434 / 245 | 1.13 / 1.09 / 1.11 / 1.18 |
+  | nano AWQ + 4-bit DFlash | 477 / 714 / 547 / 316 | - | same | 1.26 / 1.21 / 1.26 / 1.29 |
+  | nano BF16 + DFlash | 216 / 333 / 254 / 170 | 172 / 266 / 203 / 138 | vLLM BF16: 220 / 322 / 256 / 161 | 0.98 / 1.03 / 0.99 / 1.06 |
+  | nano BF16 + 4-bit DFlash | 228 / 357 / 272 / 180 | - | same | 1.03 / 1.11 / 1.06 / 1.12 |
+
+  SGLang BF16 + DFlash is 196 / 295 / 222 / 157, below all four rows' BF16
+  numbers. G4 (above vLLM's and SGLang's DFlash at c=1 on chat and code,
+  both targets): met with the 4-bit drafter on all eight; with the BF16
+  drafter met on AWQ, and on the BF16 target nano is level with vLLM
+  (alpaca and gsm8k 1-2% below, humaneval and long 3-6% above). The
+  baselines are M0's, from another VM of the same type; nano AWQ without a
+  drafter, the control, measures 207 / 206 / 205 / 177 here and 207 / 206 /
+  205 / 178 there.
+- Against nano without a drafter at c=1: AWQ 2.07x / 3.12x / 2.36x / 1.63x
+  (4-bit drafter: 2.31x / 3.47x / 2.66x / 1.78x).
+- The 4-bit drafter costs 1.3-3.1% of the tokens per cycle on AWQ (3.39 /
+  5.25 / 3.90 / 2.98 against 3.50 / 5.32 / 3.97 / 3.02) and under 1.5% on
+  BF16, and saves 1.0 ms of the cycle.
+- TTFT at c=1 with the drafter: at most 3% higher (10.1 against 9.8 ms on
+  alpaca).
+- Higher concurrency, AWQ + DFlash at c=4 / 16 / 64: alpaca 1214 / 2229 /
+  2739 (M3: 963 / 2055 / 2739), humaneval 1765 / 2966 / 3946. At c=16 and
+  c=64 that is about vLLM AWQ + DFlash's (2084 / 2943 and 2950 / 4204) and
+  below nano without a drafter (2567 / 6012): a block of 10 for every
+  sequence is 160 or 640 verify rows a step, and most steps at c=64 have a
+  prompt row and take the eager path. M6.
+- Not done: the drafter's lm_head pass could read an int8 copy on the BF16
+  target too (its logits only pick proposals), about 0.4 ms of the 15.45.
+- Three runs, 69 minutes of VM, 7.4 CU (419.76 -> 412.37): an A100 is about
+  6.4 CU per hour now, not the 3.5 of earlier entries. The VM is stopped.

@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="5" skipped="0" tests="86" time="248.426" timestamp="2026-11-12T21:22:00.339927+00:00" hostname="ed0995fea67e"><testcase classname="tests.gpu.test_nano_vllm_spec_gpu" name="test_graph_cycle_matches_the_eager_cycle[1-4-none-auto-none]" time="85.109" /><testcase classname="tests.gpu.test_nano_vllm_spec_gpu" name="test_graph_cycle_matches_the_eager_cycle[3-4-none-auto-none]" time="0.274" /><testcase classname="tests.gpu.test_nano_vllm_spec_gpu" name="test_graph_cycle_matches_the_eager_cycle[4-4-none-auto-none]" time="1.100" /><testcase classname="tests.gpu.test_nano_vllm_spec_gpu" name="test_graph_cycle_matches_the_eager_cycle[5-5-none-auto-none]" time="1.928" /><testcase classname="tests.gpu.test_nano_vllm_spec_gpu" name="test_graph_cycle_matches_the_eager_cycle[3-4-awq_int8head-auto-none]" time="123.046" /><testcase classname="tests.gpu.test_nano_vllm_spec_gpu" name="test_graph_cycle_matches_the_eager_cycle[3-4-w4a16-auto-w4a16]" time="0.282" /><testcase classname="tests.gpu.test_nano_vllm_spec_gpu" name="test_graph_cycle_matches_the_eager_cycle[3-4-none-fp8-none]" time="6.249" /><testcase classname="tests.gpu.test_nano_vllm_spec_gpu" name="test_graph_cycle_matches_the_eager_cycle[3-4-none-auto-w4a16]" time="0.274" /><testcase classname="tests.gpu.test_nano_vllm_spec_gpu" name="test_a_graph_cycle_launches_without_waiting_for_the_gpu" time="0.186" /><testcase classname="tests.gpu.test_nano_vllm_spec_gpu" name="test_sampled_rows_in_a_graph_cycle_follow_their_settings" time="0.195" /><testcase classname="tests.gpu.test_nano_vllm_warmup" name="test_no_kernel_compiles_after_warm_up[torch-False-auto]" time="2.898" /><testcase classname="tests.gpu.test_nano_vllm_warmup" name="test_no_kernel_compiles_after_warm_up[torch-True-auto]" time="0.475" /><testcase classname="tests.gpu.test_nano_vllm_warmup" name="test_no_kernel_compiles_after_warm_up[triton-False-auto]" time="0.863" /><testcase classname="tests.gpu.test_nano_vllm_warmup" name="test_no_kernel_compiles_after_warm_up[triton-True-auto]" time="0.485" /><testcase classname="tests.gpu.test_nano_vllm_warmup" name="test_no_kernel_compiles_after_warm_up[triton-True-fp8]" time="2.662" /><testcase classname="tests.gpu.test_nano_vllm_warmup" name="test_no_kernel_compiles_after_warm_up_with_a_drafter[torch-auto]" time="2.510"><failure message="RuntimeError: Inplace update to inference tensor outside InferenceMode is not allowed.You can make a clone to get a normal tensor before doing inplace update.See https://github.com/pytorch/rfcs/pull/17 for more details.">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_no_kernel_compiles_after_0')
+linear_backend = 'torch', kv_cache_dtype = 'auto'
+
+    @pytest.mark.parametrize(
+        "linear_backend,kv_cache_dtype", [("torch", "auto"), ("triton", "auto"), ("triton", "fp8")]
+    )
+    def test_no_kernel_compiles_after_warm_up_with_a_drafter(tmp_path, linear_backend, kv_cache_dtype):
+        config = NanoVLLMConfig(
+            max_model_len=128,
+            kvcache_block_size=16,
+            num_kvcache_blocks=256,
+            max_num_seqs=16,
+            max_num_batched_tokens=96,  # 16 verify rows of 5 tokens fit
+            attention_backend="triton",
+            scheduling="mixed",
+            speculative_model=str(drafter_checkpoint(tmp_path / "drafter")),
+        )
+        model = _model("cuda", torch.bfloat16, use_triton=True, attention_backend="triton",
+                       linear_backend=linear_backend, kv_cache_dtype=kv_cache_dtype)
+        core = EngineCore(config, model)
+        assert core.proposer is not None and core.proposer.num_draft_tokens == 4
+&gt;       core.capture_graphs()
+
+tests/gpu/test_nano_vllm_warmup.py:132: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/serving/nano_vllm/core.py:157: in capture_graphs
+    self.model_runner.capture_spec_graphs(
+src/serving/nano_vllm/model_runner.py:589: in capture_spec_graphs
+    with torch.cuda.graph(graph, pool=pool):
+../p0/venvs/vllm/lib/python3.12/site-packages/torch/cuda/graphs.py:260: in __enter__
+    self.cuda_graph.capture_begin(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;torch.cuda.graphs.CUDAGraph object at 0x7e9d196f1c70&gt;, pool = (0, 22)
+capture_error_mode = 'global'
+
+    def capture_begin(
+        self, pool: Optional[_POOL_HANDLE] = None, capture_error_mode: str = "global"
+    ) -&gt; None:
+        r"""Begin capturing CUDA work on the current stream.
+    
+        Typically, you shouldn't call ``capture_begin`` yourself.
+        Use :class:`~torch.cuda.graph` or :func:`~torch.cuda.make_graphed_callables`,
+        which call ``capture_begin`` internally.
+    
+        Arguments:
+            pool (optional): Token (returned by :func:`~torch.cuda.graph_pool_handle` or
+                :meth:`other_Graph_instance.pool()&lt;torch.cuda.CUDAGraph.pool&gt;`) that hints this graph may share memory
+                with the indicated pool.  See :ref:`Graph memory management&lt;graph-memory-management&gt;`.
+            capture_error_mode (str, optional): specifies the cudaStreamCaptureMode for the graph capture stream.
+                Can be "global", "thread_local" or "relaxed". During cuda graph capture, some actions, such as cudaMalloc,
+                may be unsafe. "global" will error on actions in other threads, "thread_local" will only error for
+                actions in the current thread, and "relaxed" will not error on these actions. Do NOT change this setting
+                unless you're familiar with `cudaStreamCaptureMode &lt;https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__STREAM.html#group__CUDART__STREAM_1g9d0535d93a214cbf126835257b16ba85&gt;`_
+        """  # noqa: B950
+&gt;       super().capture_begin(pool=pool, capture_error_mode=capture_error_mode)
+E       RuntimeError: Inplace update to inference tensor outside InferenceMode is not allowed.You can make a clone to get a normal tensor before doing inplace update.See https://github.com/pytorch/rfcs/pull/17 for more details.
+
+../p0/venvs/vllm/lib/python3.12/site-packages/torch/cuda/graphs.py:119: RuntimeError</failure></testcase><testcase classname="tests.gpu.test_nano_vllm_warmup" name="test_no_kernel_compiles_after_warm_up_with_a_drafter[triton-auto]" time="0.427"><failure message="RuntimeError: Inplace update to inference tensor outside InferenceMode is not allowed.You can make a clone to get a normal tensor before doing inplace update.See https://github.com/pytorch/rfcs/pull/17 for more details.">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_no_kernel_compiles_after_1')
+linear_backend = 'triton', kv_cache_dtype = 'auto'
+
+    @pytest.mark.parametrize(
+        "linear_backend,kv_cache_dtype", [("torch", "auto"), ("triton", "auto"), ("triton", "fp8")]
+    )
+    def test_no_kernel_compiles_after_warm_up_with_a_drafter(tmp_path, linear_backend, kv_cache_dtype):
+        config = NanoVLLMConfig(
+            max_model_len=128,
+            kvcache_block_size=16,
+            num_kvcache_blocks=256,
+            max_num_seqs=16,
+            max_num_batched_tokens=96,  # 16 verify rows of 5 tokens fit
+            attention_backend="triton",
+            scheduling="mixed",
+            speculative_model=str(drafter_checkpoint(tmp_path / "drafter")),
+        )
+        model = _model("cuda", torch.bfloat16, use_triton=True, attention_backend="triton",
+                       linear_backend=linear_backend, kv_cache_dtype=kv_cache_dtype)
+        core = EngineCore(config, model)
+        assert core.proposer is not None and core.proposer.num_draft_tokens == 4
+&gt;       core.capture_graphs()
+
+tests/gpu/test_nano_vllm_warmup.py:132: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/serving/nano_vllm/core.py:157: in capture_graphs
+    self.model_runner.capture_spec_graphs(
+src/serving/nano_vllm/model_runner.py:589: in capture_spec_graphs
+    with torch.cuda.graph(graph, pool=pool):
+../p0/venvs/vllm/lib/python3.12/site-packages/torch/cuda/graphs.py:260: in __enter__
+    self.cuda_graph.capture_begin(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;torch.cuda.graphs.CUDAGraph object at 0x7e9d196f2330&gt;, pool = (0, 24)
+capture_error_mode = 'global'
+
+    def capture_begin(
+        self, pool: Optional[_POOL_HANDLE] = None, capture_error_mode: str = "global"
+    ) -&gt; None:
+        r"""Begin capturing CUDA work on the current stream.
+    
+        Typically, you shouldn't call ``capture_begin`` yourself.
+        Use :class:`~torch.cuda.graph` or :func:`~torch.cuda.make_graphed_callables`,
+        which call ``capture_begin`` internally.
+    
+        Arguments:
+            pool (optional): Token (returned by :func:`~torch.cuda.graph_pool_handle` or
+                :meth:`other_Graph_instance.pool()&lt;torch.cuda.CUDAGraph.pool&gt;`) that hints this graph may share memory
+                with the indicated pool.  See :ref:`Graph memory management&lt;graph-memory-management&gt;`.
+            capture_error_mode (str, optional): specifies the cudaStreamCaptureMode for the graph capture stream.
+                Can be "global", "thread_local" or "relaxed". During cuda graph capture, some actions, such as cudaMalloc,
+                may be unsafe. "global" will error on actions in other threads, "thread_local" will only error for
+                actions in the current thread, and "relaxed" will not error on these actions. Do NOT change this setting
+                unless you're familiar with `cudaStreamCaptureMode &lt;https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__STREAM.html#group__CUDART__STREAM_1g9d0535d93a214cbf126835257b16ba85&gt;`_
+        """  # noqa: B950
+&gt;       super().capture_begin(pool=pool, capture_error_mode=capture_error_mode)
+E       RuntimeError: Inplace update to inference tensor outside InferenceMode is not allowed.You can make a clone to get a normal tensor before doing inplace update.See https://github.com/pytorch/rfcs/pull/17 for more details.
+
+../p0/venvs/vllm/lib/python3.12/site-packages/torch/cuda/graphs.py:119: RuntimeError</failure></testcase><testcase classname="tests.gpu.test_nano_vllm_warmup" name="test_no_kernel_compiles_after_warm_up_with_a_drafter[triton-fp8]" time="4.222"><failure message="RuntimeError: Inplace update to inference tensor outside InferenceMode is not allowed.You can make a clone to get a normal tensor before doing inplace update.See https://github.com/pytorch/rfcs/pull/17 for more details.">tmp_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_no_kernel_compiles_after_2')
+linear_backend = 'triton', kv_cache_dtype = 'fp8'
+
+    @pytest.mark.parametrize(
+        "linear_backend,kv_cache_dtype", [("torch", "auto"), ("triton", "auto"), ("triton", "fp8")]
+    )
+    def test_no_kernel_compiles_after_warm_up_with_a_drafter(tmp_path, linear_backend, kv_cache_dtype):
+        config = NanoVLLMConfig(
+            max_model_len=128,
+            kvcache_block_size=16,
+            num_kvcache_blocks=256,
+            max_num_seqs=16,
+            max_num_batched_tokens=96,  # 16 verify rows of 5 tokens fit
+            attention_backend="triton",
+            scheduling="mixed",
+            speculative_model=str(drafter_checkpoint(tmp_path / "drafter")),
+        )
+        model = _model("cuda", torch.bfloat16, use_triton=True, attention_backend="triton",
+                       linear_backend=linear_backend, kv_cache_dtype=kv_cache_dtype)
+        core = EngineCore(config, model)
+        assert core.proposer is not None and core.proposer.num_draft_tokens == 4
+&gt;       core.capture_graphs()
+
+tests/gpu/test_nano_vllm_warmup.py:132: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/serving/nano_vllm/core.py:157: in capture_graphs
+    self.model_runner.capture_spec_graphs(
+src/serving/nano_vllm/model_runner.py:589: in capture_spec_graphs
+    with torch.cuda.graph(graph, pool=pool):
+../p0/venvs/vllm/lib/python3.12/site-packages/torch/cuda/graphs.py:260: in __enter__
+    self.cuda_graph.capture_begin(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;torch.cuda.graphs.CUDAGraph object at 0x7e9d08f9e210&gt;, pool = (0, 26)
+capture_error_mode = 'global'
+
+    def capture_begin(
+        self, pool: Optional[_POOL_HANDLE] = None, capture_error_mode: str = "global"
+    ) -&gt; None:
+        r"""Begin capturing CUDA work on the current stream.
+    
+        Typically, you shouldn't call ``capture_begin`` yourself.
+        Use :class:`~torch.cuda.graph` or :func:`~torch.cuda.make_graphed_callables`,
+        which call ``capture_begin`` internally.
+    
+        Arguments:
+            pool (optional): Token (returned by :func:`~torch.cuda.graph_pool_handle` or
+                :meth:`other_Graph_instance.pool()&lt;torch.cuda.CUDAGraph.pool&gt;`) that hints this graph may share memory
+                with the indicated pool.  See :ref:`Graph memory management&lt;graph-memory-management&gt;`.
+            capture_error_mode (str, optional): specifies the cudaStreamCaptureMode for the graph capture stream.
+                Can be "global", "thread_local" or "relaxed". During cuda graph capture, some actions, such as cudaMalloc,
+                may be unsafe. "global" will error on actions in other threads, "thread_local" will only error for
+                actions in the current thread, and "relaxed" will not error on these actions. Do NOT change this setting
+                unless you're familiar with `cudaStreamCaptureMode &lt;https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__STREAM.html#group__CUDART__STREAM_1g9d0535d93a214cbf126835257b16ba85&gt;`_
+        """  # noqa: B950
+&gt;       super().capture_begin(pool=pool, capture_error_mode=capture_error_mode)
+E       RuntimeError: Inplace update to inference tensor outside InferenceMode is not allowed.You can make a clone to get a normal tensor before doing inplace update.See https://github.com/pytorch/rfcs/pull/17 for more details.
+
+../p0/venvs/vllm/lib/python3.12/site-packages/torch/cuda/graphs.py:119: RuntimeError</failure></testcase><testcase classname="tests.gpu.test_nano_vllm_kv_sizing" name="test_kv_cache_takes_the_budget_left_after_weights_and_activations" time="0.027" /><testcase classname="tests.gpu.test_nano_vllm_kv_sizing" name="test_fp8_kv_cache_fits_more_blocks_in_the_same_budget" time="0.032" /><testcase classname="tests.gpu.test_nano_vllm_kv_sizing" name="test_kv_sizing_refuses_a_budget_below_one_sequence" time="0.019" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[p0.9-peaked]" time="0.144" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[p0.9-flat]" time="0.026" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[p0.9-ties]" time="0.026" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[p0.9-masked]" time="0.027" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[cold_p0.9-peaked]" time="0.026" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[cold_p0.9-flat]" time="0.026" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[cold_p0.9-ties]" time="0.026" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[cold_p0.9-masked]" time="0.025" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[hot_p0.5-peaked]" time="0.025" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[hot_p0.5-flat]" time="0.024" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[hot_p0.5-ties]" time="0.025" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[hot_p0.5-masked]" time="0.025" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[p0.1-peaked]" time="0.024" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[p0.1-flat]" time="0.024" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[p0.1-ties]" time="0.024" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[p0.1-masked]" time="0.024" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[k1-peaked]" time="0.024" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[k1-flat]" time="0.024" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[k1-ties]" time="0.024" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[k1-masked]" time="0.025" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[k50-peaked]" time="0.024" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[k50-flat]" time="0.024" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[k50-ties]" time="0.024" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[k50-masked]" time="0.024" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[k50_p0.9-peaked]" time="0.027" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[k50_p0.9-flat]" time="0.026" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[k50_p0.9-ties]" time="0.025" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[k50_p0.9-masked]" time="0.025" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[k1000_p0.5-peaked]" time="0.024" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[k1000_p0.5-flat]" time="0.024" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[k1000_p0.5-ties]" time="0.024" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[k1000_p0.5-masked]" time="0.024" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[plain-peaked]" time="0.024" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[plain-flat]" time="0.025" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[plain-ties]" time="0.024" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[plain-masked]" time="0.026" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[greedy-peaked]" time="0.017" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[greedy-flat]" time="0.017" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[greedy-ties]" time="0.017" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_kept_set_matches_reference[greedy-masked]" time="0.017" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_rows_and_vocab_sizes[128256-1]" time="0.005" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_rows_and_vocab_sizes[128256-7]" time="0.006" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_rows_and_vocab_sizes[128256-20]" time="0.010" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_rows_and_vocab_sizes[128256-256]" time="0.096" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_rows_and_vocab_sizes[1000-1]" time="0.026" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_rows_and_vocab_sizes[1000-7]" time="0.006" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_rows_and_vocab_sizes[1000-20]" time="0.007" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_rows_and_vocab_sizes[1000-256]" time="0.047" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_fp16_logits" time="0.013" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_top_k_and_top_p_cutoffs_in_both_branches" time="0.027" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_greedy_rows_take_the_first_maximum" time="0.002" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_degenerate_rows_fall_back_to_argmax" time="0.005" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_draws_are_deterministic_per_seed_sequence_and_position" time="0.003" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_draws_follow_the_truncated_softmax[plain]" time="0.415" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_draws_follow_the_truncated_softmax[top_p]" time="0.393" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_draws_follow_the_truncated_softmax[top_k]" time="0.384" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_draws_follow_the_truncated_softmax[full_vocab_top_p]" time="0.593" /><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_sampler_replays_in_a_cuda_graph" time="0.006"><failure message="RuntimeError: Inplace update to inference tensor outside InferenceMode is not allowed.You can make a clone to get a normal tensor before doing inplace update.See https://github.com/pytorch/rfcs/pull/17 for more details.">def test_sampler_replays_in_a_cuda_graph():
+        logits = _logits("flat", 16)
+        options = [SETTINGS["k50_p0.9"]] * 8 + [SETTINGS["p0.9"]] * 8
+        eager, _ = _run(logits, options)
+        sampler = Sampler(16, "cuda", seed=0)
+        out = torch.empty(16, dtype=torch.long, device="cuda")
+        run = lambda: sampler.sample(logits, options, list(range(16)), [0] * 16, out)  # noqa: E731
+        stream = torch.cuda.Stream()
+        stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(stream):
+            run()
+        torch.cuda.current_stream().wait_stream(stream)
+        graph = torch.cuda.CUDAGraph()
+&gt;       with torch.cuda.graph(graph):
+
+tests/gpu/test_nano_vllm_sampler.py:240: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../p0/venvs/vllm/lib/python3.12/site-packages/torch/cuda/graphs.py:260: in __enter__
+    self.cuda_graph.capture_begin(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = &lt;torch.cuda.graphs.CUDAGraph object at 0x7e9d08f9f650&gt;, pool = None
+capture_error_mode = 'global'
+
+    def capture_begin(
+        self, pool: Optional[_POOL_HANDLE] = None, capture_error_mode: str = "global"
+    ) -&gt; None:
+        r"""Begin capturing CUDA work on the current stream.
+    
+        Typically, you shouldn't call ``capture_begin`` yourself.
+        Use :class:`~torch.cuda.graph` or :func:`~torch.cuda.make_graphed_callables`,
+        which call ``capture_begin`` internally.
+    
+        Arguments:
+            pool (optional): Token (returned by :func:`~torch.cuda.graph_pool_handle` or
+                :meth:`other_Graph_instance.pool()&lt;torch.cuda.CUDAGraph.pool&gt;`) that hints this graph may share memory
+                with the indicated pool.  See :ref:`Graph memory management&lt;graph-memory-management&gt;`.
+            capture_error_mode (str, optional): specifies the cudaStreamCaptureMode for the graph capture stream.
+                Can be "global", "thread_local" or "relaxed". During cuda graph capture, some actions, such as cudaMalloc,
+                may be unsafe. "global" will error on actions in other threads, "thread_local" will only error for
+                actions in the current thread, and "relaxed" will not error on these actions. Do NOT change this setting
+                unless you're familiar with `cudaStreamCaptureMode &lt;https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__STREAM.html#group__CUDART__STREAM_1g9d0535d93a214cbf126835257b16ba85&gt;`_
+        """  # noqa: B950
+&gt;       super().capture_begin(pool=pool, capture_error_mode=capture_error_mode)
+E       RuntimeError: Inplace update to inference tensor outside InferenceMode is not allowed.You can make a clone to get a normal tensor before doing inplace update.See https://github.com/pytorch/rfcs/pull/17 for more details.
+
+../p0/venvs/vllm/lib/python3.12/site-packages/torch/cuda/graphs.py:119: RuntimeError</failure></testcase><testcase classname="tests.gpu.test_nano_vllm_sampler" name="test_fp32_logits_take_the_pytorch_path" time="0.005"><failure message="RuntimeError: Offset increment outside graph capture encountered unexpectedly.">def test_fp32_logits_take_the_pytorch_path():
+        logits = _logits("peaked", 8).float()
+&gt;       out, _ = _run(logits, [SETTINGS["k1"]] * 8)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/gpu/test_nano_vllm_sampler.py:250: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/gpu/test_nano_vllm_sampler.py:63: in _run
+    sampler.sample(
+src/serving/nano_vllm/sampling.py:223: in sample
+    self.draw(logits, out, self.stage(options, seq_ids, positions, vocab, slot=slot))
+src/serving/nano_vllm/sampling.py:281: in draw
+    sample_rows(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+logits = tensor([[-2.3125, -1.0625, -6.6250,  ...,  0.8555, -6.3750,  4.0938],
+        [ 2.4844, -0.9609, -1.9766,  ...,  3.421...6133, -1.8672,  0.7539],
+        [-0.0952, -1.5156, -1.2891,  ...,  2.8438,  2.1719, -0.8086]],
+       device='cuda:0')
+temperature = tensor([0.7000, 0.7000, 0.7000, 0.7000, 0.7000, 0.7000, 0.7000, 0.7000],
+       device='cuda:0')
+top_p = tensor([1., 1., 1., 1., 1., 1., 1., 1.], device='cuda:0')
+top_k = tensor([1, 1, 1, 1, 1, 1, 1, 1], device='cuda:0', dtype=torch.int32)
+
+    def sample_rows(
+        logits: torch.Tensor,
+        temperature: torch.Tensor,
+        top_p: torch.Tensor,
+        top_k: torch.Tensor,
+    ) -&gt; torch.Tensor:
+        """One token per row of [rows, vocab] logits, on their device, no host sync.
+    
+        The argmax where temperature &lt;= 0 (or the row has no finite maximum);
+        otherwise a draw among the tokens keep_mask leaves by the exponential
+        race: the argmax of v - log(E) with v = logits / temperature and E ~
+        Exp(1), which picks token i with probability softmax(v)[i]. NaN logits
+        count as -inf.
+        """
+        inf = float("inf")
+        logits = torch.nan_to_num(logits.float(), nan=-inf, posinf=inf, neginf=-inf)
+        greedy_tokens = logits.argmax(dim=-1)
+        greedy = (temperature &lt;= 0) | ~torch.isfinite(logits.max(dim=-1).values)
+        temperature = torch.where(temperature &gt; 0, temperature, torch.ones_like(temperature))
+        keep = keep_mask(logits, temperature, top_p, top_k)
+&gt;       noise = torch.empty_like(logits).exponential_().clamp_min_(torch.finfo(torch.float32).tiny).log_()
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       RuntimeError: Offset increment outside graph capture encountered unexpectedly.
+
+src/serving/nano_vllm/sampling.py:137: RuntimeError</failure></testcase><testcase classname="tests.unit.test_nano_vllm_spec_graph" name="test_graph_cycles_accept_what_the_eager_cycles_accept[1]" time="5.560" /><testcase classname="tests.unit.test_nano_vllm_spec_graph" name="test_graph_cycles_accept_what_the_eager_cycles_accept[3]" time="0.420" /><testcase classname="tests.unit.test_nano_vllm_spec_graph" name="test_a_proposer_that_reads_the_host_gets_no_graph" time="0.017" /><testcase classname="tests.unit.test_nano_vllm_spec_graph" name="test_dflash_cycles_in_graphs_next_to_eager_steps_with_prefill_rows" time="1.100" /><testcase classname="tests.unit.test_nano_vllm_spec_graph" name="test_graph_cycles_write_the_drafter_context_of_the_computed_tokens" time="0.313" /><testcase classname="tests.unit.test_nano_vllm_spec_graph" name="test_sampler_stage_sets_padded_rows_to_greedy_and_draw_needs_no_flags" time="0.002" /></testsuite></testsuites>

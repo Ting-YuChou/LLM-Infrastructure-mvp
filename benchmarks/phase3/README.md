@@ -137,3 +137,40 @@ AWQ + DFlash at c=16 / c=64: alpaca 2055 / 2739 and humaneval 2898 / 4007,
 against vLLM AWQ + DFlash's 2084 / 2943 and 2950 / 4204 and nano AWQ
 without a drafter's 2567 / 6012 and 2516 / 5159. The block length is still
 fixed at 10 (M6).
+
+### M4 (run `m4-20261112-214147-colab`; baselines from the M0 run)
+
+The whole cycle (draft, verify, the drafter's context writes, sampling,
+acceptance) is one CUDA graph per number of sequences. A cycle as the host
+sees it, one sequence (median ms):
+
+| target | plain decode step | cycle, BF16 drafter | cycle, 4-bit drafter | M3 |
+|---|---:|---:|---:|---:|
+| AWQ | 5.00 | 7.75 | 6.68 | about 14 |
+| BF16 | 12.29 | 15.45 | 14.50 | about 20 |
+
+Output tok/s at c=1, temperature 0:
+
+| server | alpaca | humaneval | gsm8k | long |
+|---|---:|---:|---:|---:|
+| nano AWQ (no drafter) | 207 | 206 | 205 | 177 |
+| vLLM AWQ + DFlash | 380 | 589 | 434 | 245 |
+| nano AWQ + DFlash | 428 | 641 | 484 | 289 |
+| nano AWQ + DFlash, 4-bit drafter | 477 | 714 | 547 | 316 |
+| SGLang BF16 + DFlash | 196 | 295 | 222 | 157 |
+| vLLM BF16 + DFlash | 220 | 322 | 256 | 161 |
+| nano BF16 + DFlash | 216 | 333 | 254 | 170 |
+| nano BF16 + DFlash, 4-bit drafter | 228 | 357 | 272 | 180 |
+
+| gate | result |
+|---|---|
+| G3: an AWQ cycle at batch 1 within 8.0 ms | 7.75 ms (BF16 drafter), 6.68 ms (4-bit): met |
+| G4: above vLLM's and SGLang's DFlash at c=1, chat and code, both targets | 4-bit drafter: met on every dataset and target (1.21-1.29x on AWQ, 1.03-1.12x on BF16). Same BF16 drafter: met on AWQ (1.09-1.18x); level with vLLM on BF16 (0.98-1.06x), above SGLang |
+| tests/gpu + nano unit tests | 1303 passed, none skipped |
+| emitted tokens that are not the teacher-forced argmax, with the drafter | 0.17-0.50%, largest margin 0.25 (without: 0.17-0.43%, 0.25) |
+| tokens per cycle with the 4-bit drafter | 1.3-3.1% fewer on AWQ, under 1.5% fewer on BF16 |
+
+Not yet: with a block of 10 for every sequence, AWQ + DFlash at c=16 / c=64
+(alpaca 2229 / 2739, humaneval 2966 / 3946) is about vLLM AWQ + DFlash's and
+below nano without a drafter (2567 / 6012, 2516 / 5159); sampled requests
+draft greedily (M5); steps with a prompt row run outside the graph.
