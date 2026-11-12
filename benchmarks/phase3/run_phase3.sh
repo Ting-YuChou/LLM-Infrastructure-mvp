@@ -35,6 +35,9 @@
 #              (not in the default)
 #   parity     parity.py: nano's DFlashDrafter against the checkpoint's own
 #              code, top-1 agreement over 200 blocks (not in the default)
+#   spec_check spec_check.py: every token nano emits, with and without the
+#              drafter, against the target's argmax in one teacher-forced
+#              pass; AWQ and BF16 target (not in the default)
 #   serve      each P3_RUNS entry: start its server, run its workloads, stop it
 #   summarize  summary.md
 #
@@ -97,7 +100,7 @@ export HF_HOME="${ROOT}/hf_cache" UV_CACHE_DIR="${ROOT}/uv_cache" UV_PYTHON_INST
 export PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false MPLBACKEND=Agg
 export SERVE_TAG=P3_SERVE BENCH_TEMPERATURE=0 BENCH_IGNORE_EOS=0
 export NANO_EXT_DIR="${ROOT}/nano_ext"  # the C++ radix tree's build (radix_cpp.py)
-mkdir -p "${OUT}"/{logs,serve,accept,tests,parity}
+mkdir -p "${OUT}"/{logs,serve,accept,tests,parity,spec_check}
 exec 3>&1  # console; step output goes to ${OUT}/logs/<step>.log
 
 log() { echo "[p3 $(date -u +%H:%M:%S)] $*" >&3; }
@@ -378,6 +381,26 @@ parity() {  # in the study venv: the drafter's remote code needs its transformer
     --out "${OUT}/parity/parity.json" ${P3_PARITY_ARGS:-}
 }
 
+nano_env() {  # the nano server's build environment (see nano_cmd), for an in-process run
+  local cuda
+  cuda="$(sed -n 's/^export CUDA_HOME=//p' "${CUDA_ENV}" 2>/dev/null)"
+  echo env ${cuda:+CUDA_HOME="${cuda}" PATH="${cuda}/bin:${BASE_PATH}" TORCH_CUDA_ARCH_LIST=8.0} \
+    TORCH_EXTENSIONS_DIR="${ROOT}/torch_ext" PYTHONPATH="${REPO_DIR}"
+}
+
+spec_check() {
+  local label model quant rc=0 cmd=()
+  read -r -a cmd <<< "$(nano_env)"
+  for label in ${P3_SPEC_CHECK:-awq bf16}; do
+    model="${MODEL}"; quant=none
+    if [[ "${label}" == awq ]]; then model="${W4_MODEL}"; quant=awq; fi
+    "${cmd[@]}" "${PY}" "${CODE_DIR}/spec_check.py" --model "${model}" --weight-quant "${quant}" \
+      --drafter "${DRAFT}" --workloads "${WORKLOADS}" --label "${label}" \
+      --out "${OUT}/spec_check/${label}.json" | tee /dev/fd/3 || rc=1
+  done
+  return "${rc}"
+}
+
 summarize() {
   "${PY}" "${CODE_DIR}/summarize.py" "${OUT}" && cat "${OUT}/summary.md" >&3
 }
@@ -400,6 +423,7 @@ want workloads && run_step workloads workloads
 want accept && run_step accept accept
 want tests && run_step tests gpu_tests
 want parity && run_step parity parity
+want spec_check && run_step spec_check spec_check
 want serve && run_step serve serve
 want summarize && run_step summarize summarize
 log "done; results in ${OUT}"

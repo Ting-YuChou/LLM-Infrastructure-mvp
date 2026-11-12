@@ -237,6 +237,27 @@ def texts(out: Path) -> list[str]:
     ] + table(["server", "c16 = own c1", "c1 = base c1", "c16 = base c1", "c1 tok/s"], body)
 
 
+def spec_check(out: Path) -> list[str]:
+    rows = [row for path in sorted((out / "spec_check").glob("*.json")) for row in json.loads(path.read_text())]
+    if not rows:
+        return []
+    body = [
+        [f"{r['label']} {r['mode']} b={r['batch']}", str(r["tokens"]), str(r["not_argmax"]),
+         f"{100 * r['not_argmax'] / r['tokens']:.2f}%", fmt(r["max_margin"], 3), str(r["margins_over_0.5"]),
+         str(r["margins_over_1"]), fmt(r["tokens_per_cycle"], 2), fmt(r["out_tok_s"], 0)]
+        for r in rows
+    ]
+    return [
+        "## Emitted tokens against the target's argmax (spec_check.py)", "",
+        "Every generated token against the argmax of one teacher-forced pass of the target over the "
+        "finished sequence; the margin is the top logit minus the emitted token's.", "",
+    ] + table(
+        ["target, mode, batch", "tokens", "not argmax", "share", "largest margin", "margins > 0.5",
+         "margins > 1", "tokens/cycle", "tok/s"],
+        body,
+    )
+
+
 def gate(serve_rows: list[dict], accept_rows: list[dict]) -> list[str]:
     """Projected nano tokens/s at c=1 against the best DFlash baseline."""
     runs = by_run(serve_rows)
@@ -312,7 +333,7 @@ def main() -> None:
     if serve_rows:
         lines += ["## Serving", ""] + serving(serve_rows) + drafts(out, serve_rows)
     accept_lines, accept_rows = accept(out)
-    lines += texts(out) + parity(out) + accept_lines + gate(serve_rows, accept_rows)
+    lines += texts(out) + spec_check(out) + parity(out) + accept_lines + gate(serve_rows, accept_rows)
     (out / "summary.md").write_text("\n".join(lines) + "\n")
 
 
