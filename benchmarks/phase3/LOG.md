@@ -102,3 +102,58 @@ results/<run_id>/.
   slower), and a warm-up of the prefill kernel at verify shapes. On the GPU
   a batch of more than 6 sequences has more than 64 verify rows, where the
   lm_head switches from int8 to dense: to settle before M6.
+
+### Run m2-smoke-20261112-041533-colab (new VM: installs, parity, nano AWQ with and without the drafter)
+
+- 20 minutes, everything ran the first time on the GPU.
+- Parity (M1 gate, top-1 agreement >= 99% over 200 blocks): 98.89%, NOT
+  met by 0.11 points. All 20 disagreements are where the reference's top-1
+  leads its top-2 by at most 0.25, and the largest logit difference between
+  the two implementations is 0.25: one bf16 step at these magnitudes. 90% of
+  the blocks agree at every position. Read as rounding, not a porting error;
+  the tokens per cycle below say the same.
+- Tokens per cycle as nano counts them (AWQ target, c=1): 3.39 / 5.36 / 3.98
+  / 3.04 on alpaca / humaneval / gsm8k / long, against vLLM AWQ + DFlash on
+  the same prompts in M0: 3.38 / 5.44 / 3.90 / 3.04.
+- TTFT p50 with the drafter against without (AWQ, c=1): 9.46 / 14.99 / 14.79
+  / 104.25 ms against 9.51 / 14.69 / 14.41 / 102.56 ms: at most 2.6% slower.
+- Completions with identical text, drafter against none at c=1: 12 of 32.
+  The server without a drafter agrees with itself as often between one
+  request at a time and 16 at a time (12 of 32), so text equality cannot
+  tell a bug from rounding on the GPU; spec_check.py was written for that.
+
+### Run m2-20261112-043725-colab (same VM: spec_check, GPU tests, AWQ at every concurrency, BF16 pair)
+
+- tests/gpu and the nano unit tests: 1039 passed, none skipped (509 s).
+- spec_check.py (every emitted token against the argmax of one
+  teacher-forced pass; about 3,000 tokens per row):
+
+  | target, mode, batch | not argmax | largest margin |
+  |---|---:|---:|
+  | awq plain b=1 / b=16 | 0.43% / 0.33% | 0.250 / 0.250 |
+  | awq spec b=1 / b=16 | 0.30% / 0.40% | 0.125 / 0.250 |
+  | bf16 plain b=1 / b=16 | 0.27% / 0.17% | 0.250 / 0.250 |
+  | bf16 spec b=1 / b=16 | 0.14% / 0.21% | 0.125 / 0.125 |
+
+  No margin above 0.5 anywhere: with the drafter the engine emits the
+  target's own tokens exactly as often as without.
+- BF16 target, tokens per cycle at c=1: 3.48 / 5.35 / 4.03 / 3.04 against
+  vLLM BF16 + DFlash 3.53 / 5.28 / 4.15 / 3.03 (gsm8k 2.9% lower, the rest
+  within 1.4%). TTFT with the drafter is not higher (long: 91.6 ms against
+  94.1 ms).
+- Speed, which M2 does not aim at (output tok/s at c=1, alpaca / humaneval /
+  gsm8k / long): AWQ 207 / 316 / 238 / 144 against 207 / 205 / 205 / 183
+  without the drafter and vLLM AWQ + DFlash's 380 / 589 / 434 / 245; BF16
+  142 / 212 / 164 / 108 against 83 / 83 / 83 / 80 and vLLM BF16 + DFlash's
+  220 / 322 / 256 / 161. A cycle takes about 16 ms on AWQ and 24 ms on BF16
+  (TPOT x tokens per cycle): the verify pass plus about 11 ms of drafter,
+  context writes and host work that M3 and M4 are for.
+- With a fixed block the drafter costs throughput at high concurrency: AWQ
+  alpaca 736 / 1722 / 2259 at c=4 / 16 / 64 against 753 / 2567 / 6012
+  without (M0). M6's verify-length policy is for this.
+- M2 gates: output is the target's own (CPU exact, GPU by spec_check): met.
+  Tokens per cycle within 2% of the reference: 7 of 8 within 2.1% of vLLM's
+  counters on the same prompts, gsm8k on BF16 2.9% lower. Prefill at most
+  3% slower: met. Nothing changes without a drafter: the GPU tests pass and
+  nano AWQ at c=1 measures 206 / 205 / 205 / 183 (M0: 207 / 206 / 205 / 178).
+- Two runs, about 55 minutes of VM, ~3.5 CU. The VM is stopped.

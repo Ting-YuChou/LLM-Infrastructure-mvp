@@ -74,3 +74,25 @@ drafter; the cycle is an estimate until M3 measures it):
 On the BF16 target the verify pass (12 ms, the same weights read by every
 engine) is 84% of the cycle, so the projected margin is what the draft and
 the cycle overhead leave: about 1.3 ms of vLLM's 15.5 ms.
+
+### M1 and M2 on the GPU (runs `m2-smoke-20261112-041533-colab`, `m2-20261112-043725-colab`)
+
+| check | result |
+|---|---|
+| drafter parity with the checkpoint's code (top-1, 200 blocks, gate 99%) | 98.89%: not met; every disagreement is within one bf16 step of a tie |
+| tests/gpu + nano unit tests | 1039 passed, none skipped |
+| emitted tokens that are not the teacher-forced argmax, with the drafter | 0.14-0.40%, largest margin 0.25 (without: 0.17-0.43%, 0.25) |
+| tokens per cycle against vLLM + DFlash on the same prompts (c=1) | AWQ 3.39 / 5.36 / 3.98 / 3.04 vs 3.38 / 5.44 / 3.90 / 3.04; BF16 3.48 / 5.35 / 4.03 / 3.04 vs 3.53 / 5.28 / 4.15 / 3.03 |
+| TTFT with the drafter | at most 2.6% higher |
+
+Output tok/s at c=1 after M2 (the cycle is not optimized yet: about 16 ms on
+AWQ, 24 ms on BF16):
+
+| server | alpaca | humaneval | gsm8k | long |
+|---|---:|---:|---:|---:|
+| nano AWQ | 207 | 205 | 205 | 183 |
+| nano AWQ + DFlash (M2) | 207 | 316 | 238 | 144 |
+| vLLM AWQ + DFlash | 380 | 589 | 434 | 245 |
+| nano BF16 | 83 | 83 | 83 | 80 |
+| nano BF16 + DFlash (M2) | 142 | 212 | 164 | 108 |
+| vLLM BF16 + DFlash | 220 | 322 | 256 | 161 |
