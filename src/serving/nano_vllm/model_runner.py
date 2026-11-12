@@ -538,10 +538,17 @@ class ModelRunner:
 
     # --- CUDA graphs for the speculative cycle -----------------------------
 
+    @torch.inference_mode()
     def capture_spec_graphs(self, max_batch: int, max_model_len: int) -> None:
         """Capture the speculative cycle for each size in GRAPH_BATCH_SIZES up
         to ``max_batch`` sequences, when the proposer works from the batch's
         tensors alone (``Proposer.device_only``).
+
+        In inference mode, like the piecewise graphs and :meth:`_replay_spec`:
+        PyTorch keeps the default generator's graph state in tensors made by
+        the first capture and updates them in place at every capture and
+        replay, which an inference tensor only allows in inference mode. With
+        a proposer the piecewise capture comes first.
 
         Without the graph a cycle is the drafter's ~60 kernels, the target's
         piecewise graphs with an eager attention per layer, the context
@@ -659,6 +666,7 @@ class ModelRunner:
         ints[start:max_batch] = block
         ints[max_batch:].view(max_batch, graphs.width)[start:] = null
 
+    @torch.inference_mode()
     def _replay_spec(self, seqs: list[Sequence], bucket: int, slot: int) -> StepHandle:
         graphs, block = self._spec, self.block
         batch = len(seqs)

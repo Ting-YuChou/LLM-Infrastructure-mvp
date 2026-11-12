@@ -291,3 +291,55 @@ results/<run_id>/.
   Colab reclaimed it and its results are lost. No session is active now.
   For the next loop: decide on the driver's exit code, and stop the session
   when the run ends.
+
+## M4: the cycle as one CUDA graph (2026-11-12)
+
+- After M3 a cycle took about 14 ms on AWQ where the verify pass alone is
+  about 5 ms: the drafter's ~60 kernels, the target's 33 piecewise graphs
+  with an eager attention per layer, the context writes and the sampling
+  were each launched from the host.
+- `ModelRunner.capture_spec_graphs`: one graph per padded number of
+  sequences (the decode graphs' sizes) holding the whole cycle: draft, the
+  drafts into the verify rows, the target's pass with taps, the drafter's
+  context writes, sampling and the accepted counts. A step of verify rows
+  only fills two pinned buffers and the sampler's settings, replays, and
+  copies tokens and counts down. Steps with prompt rows next to the verify
+  rows, or more sequences than `cuda_graph_max_bs`, take the eager path as
+  before. A proposer opts in with `device_only` (it must read nothing but
+  the batch's tensors); on the CPU a "graph" is the same function run
+  eagerly, so the unit tests cover the staging, the padding and the
+  acceptance.
+- `Sampler.sample` is now `stage` (host: pack and upload the rows'
+  settings) plus `draw` (device only). In a graph `draw` runs all five
+  kernels; a row leaves the ones it does not need at once, and padded rows
+  are staged as greedy.
+- `size_kv_cache` with a drafter measures one eager cycle of max_num_seqs
+  sequences (logits for every verify and draft row) and keeps that much
+  twice: the graphs' pool, and an eager step next to it.
+- The 4-bit drafter (`speculative_weight_quant: w4a16`, RTN at load) was
+  already there from M1; M4 measures it.
+- `spec_check.py` times every engine step that has no prompt rows: a decode
+  step, or a whole cycle as the host sees it. This replaces the
+  `nano_bench.py --speculative` of the plan: it runs the real prompts and
+  needs no second harness.
+- Checked without a GPU: 326 nano unit tests (6 new in
+  `test_nano_vllm_spec_graph.py`; five deliberate bugs in the staging and
+  acceptance all caught).
+
+### Run m4-smoke-20261112-211212-colab (new VM: the new GPU tests, AWQ spec_check)
+
+- The ten tests of `tests/gpu/test_nano_vllm_spec_gpu.py` passed: a replay
+  gives the logits of the eager cycle (2e-2, as the decode graphs' test),
+  returns what its own logits and drafts say, launches without waiting for
+  the GPU, and samples per row.
+- The engine's own order failed: `capture_graphs` captures the piecewise
+  graphs first, in inference mode, and the cycle's capture after them was
+  not ("Inplace update to inference tensor outside InferenceMode" from
+  `capture_begin`). PyTorch keeps the default generator's graph state in
+  tensors made when the first live graph is captured and updates them in
+  place at every later capture and replay. Three warm-up tests failed on
+  it, two sampler tests after them on the state the failed capture left,
+  and spec_check stopped after its plain rows. `capture_spec_graphs` and
+  `_replay_spec` now run in inference mode like the piecewise ones.
+- A plain decode step as the host sees it (AWQ, one sequence): 5.00 ms
+  median.
