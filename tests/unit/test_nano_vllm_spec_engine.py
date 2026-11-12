@@ -143,6 +143,13 @@ def test_speculative_output_is_the_targets_own(scheduling, draft_tokens, accept)
     assert [r.token_ids for r in spec] == [r.token_ids for r in plain]
     assert all(len(r.token_ids) == 23 and r.finish_reason == "length" for r in spec)
     _assert_all_blocks_free(engine)
+    stats = engine.stats()
+    assert stats["spec_num_drafts"] == sum(proposer.cycles.values())
+    assert stats["spec_num_draft_tokens"] == stats["spec_num_drafts"] * draft_tokens
+    # Every token but each request's first came out of a cycle (the last
+    # cycle of a request may be cut short by max_tokens).
+    emitted = stats["spec_num_accepted_tokens"] + stats["spec_num_drafts"]
+    assert 3 * 22 <= emitted <= 3 * (22 + draft_tokens)
     # 22 tokens after the prefill's one, at accepted + 1 per cycle.
     per_cycle = [min(a, draft_tokens) + 1 for a in accept]
     if len(set(per_cycle)) == 1:

@@ -151,7 +151,7 @@ class EngineCore:
             )
         max_tokens = min(self.config.cuda_graph_max_tokens, self.config.max_num_batched_tokens)
         if max_tokens > 0:
-            self.model_runner.capture_piecewise_graphs(max_tokens, max_rows=self.model_runner.max_rows)
+            self.model_runner.capture_piecewise_graphs(max_tokens, max_rows=self.config.max_num_seqs)
 
     # --- frontend side (any thread) ------------------------------------------
 
@@ -309,8 +309,17 @@ class EngineCore:
         active = [*self.scheduler.running, *(s for s in self.scheduler.waiting if s.block_table)]
         allocated = sum(len(seq.block_table) for seq in active) * self.block_manager.block_size
         filled = sum(min(seq.num_tokens, len(seq.block_table) * seq.block_size) for seq in active)
+        spec = {}
+        if self.proposer is not None:
+            # As vLLM counts them: cycles, and the drafts the target accepted.
+            spec = {
+                "spec_num_drafts": self.scheduler.spec_cycles,
+                "spec_num_draft_tokens": self.scheduler.spec_cycles * self.proposer.num_draft_tokens,
+                "spec_num_accepted_tokens": self.scheduler.spec_accepted_tokens,
+            }
         return {
             **self.block_manager.stats_dict(),
+            **spec,
             # Allocated slots no token occupies: the tail of each last block.
             "kv_internal_fragmentation": 1 - filled / allocated if allocated else 0.0,
             "num_running": len(self.scheduler.running),

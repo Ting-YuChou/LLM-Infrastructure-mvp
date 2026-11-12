@@ -56,6 +56,9 @@ class Scheduler:
         self.max_num_batched_tokens = max(1, max_num_batched_tokens)
         self.policy = policy
         self.num_draft_tokens = num_draft_tokens
+        # Speculative cycles completed, and the drafts the target accepted in them.
+        self.spec_cycles = 0
+        self.spec_accepted_tokens = 0
         self.waiting: deque[Sequence] = deque()
         self.running: deque[Sequence] = deque()
 
@@ -178,6 +181,8 @@ class Scheduler:
         """
         seq = row.seq
         seq.num_inflight -= 1
+        self.spec_cycles += 1
+        self.spec_accepted_tokens += len(tokens) - 1
         finished = False
         for token_id in tokens:
             seq.append_token(token_id)

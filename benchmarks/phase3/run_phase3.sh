@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Phase 3 (speculative decoding) on one A100. M0, before any engine change:
-# vLLM and SGLang with and without the DFlash drafter, nano as it is, all
-# under the same real-prompt workloads, and the acceptance study of the
-# drafter in plain PyTorch. Every step logs to <run>/logs/<step>.log and
+# Phase 3 (speculative decoding) on one A100: vLLM and SGLang with and without
+# the DFlash drafter and nano with and without it, all under the same
+# real-prompt workloads; the acceptance study of the drafter in plain PyTorch
+# (M0); nano's tests on the GPU and the parity of its drafter with the
+# checkpoint's own code (M1). Every step logs to <run>/logs/<step>.log and
 # appends to status.tsv; a failed step does not stop the ones after it.
 #
 # On Colab: BENCH_PHASE=phase3 bash benchmarks/phase0/colab_phase0.sh [rerun]
@@ -15,6 +16,9 @@
 #            articles to summarize, 1000-2500 tokens) at c=1, 16; temperature 0
 #   sampled  alpaca and humaneval at c=1 and 16 with temperature 0.7, top-p 0.9
 #            (labels end in "s"), after "all" on the same server
+#   c1       every dataset at c=1 only
+#   texts    texts.py: 8 prompts per dataset at temperature 0, one at a time
+#            and 16 at a time, the completions kept to compare servers
 # Speculative servers are measured against the same server without a drafter;
 # their accepted tokens per draft come from /metrics around each run.
 #
@@ -27,6 +31,10 @@
 #   workloads  make_workloads.py into <root>/workloads (kept across reruns)
 #   accept     accept_study.py: accepted tokens per cycle by depth, BF16 and
 #              AWQ target, greedy and sampled, drafter bf16 and 4-bit
+#   tests      tests/gpu + tests/unit/test_nano_vllm_*.py; any SKIPPED fails it
+#              (not in the default)
+#   parity     parity.py: nano's DFlashDrafter against the checkpoint's own
+#              code, top-1 agreement over 200 blocks (not in the default)
 #   serve      each P3_RUNS entry: start its server, run its workloads, stop it
 #   summarize  summary.md
 #
@@ -35,7 +43,8 @@
 # server arguments for the others. Engines: vllm, vllmw4 (the AWQ checkpoint
 # served under the BF16 model's name), sglang, each also as <engine>_dflash,
 # nano (WEIGHT_QUANT=awq loads the AWQ checkpoint), and vllm019 (the pinned
-# vLLM of phases 0-2, no drafter).
+# vLLM of phases 0-2, no drafter), and nano_dflash (nano with
+# SPECULATIVE_MODEL set to the drafter).
 #
 # Env: P0_ROOT (default /workspace/p0), P0_RUN_ID (default: UTC timestamp),
 # P0_REPO_DIR, P3_STEPS, P3_RUNS, P3_MODEL, P3_W4_MODEL, P3_DRAFT_MODEL,
@@ -88,7 +97,7 @@ export HF_HOME="${ROOT}/hf_cache" UV_CACHE_DIR="${ROOT}/uv_cache" UV_PYTHON_INST
 export PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false MPLBACKEND=Agg
 export SERVE_TAG=P3_SERVE BENCH_TEMPERATURE=0 BENCH_IGNORE_EOS=0
 export NANO_EXT_DIR="${ROOT}/nano_ext"  # the C++ radix tree's build (radix_cpp.py)
-mkdir -p "${OUT}"/{logs,serve,accept}
+mkdir -p "${OUT}"/{logs,serve,accept,tests,parity}
 exec 3>&1  # console; step output goes to ${OUT}/logs/<step>.log
 
 log() { echo "[p3 $(date -u +%H:%M:%S)] $*" >&3; }
@@ -201,6 +210,17 @@ all() {  # name port
   return "${rc}"
 }
 
+c1() {  # name port
+  local dataset rc=0
+  for dataset in alpaca humaneval gsm8k long; do real "$1" "$2" "${dataset}" 1 || rc=1; done
+  return "${rc}"
+}
+
+texts() {  # name port
+  "${PY}" "${CODE_DIR}/texts.py" --base-url "http://127.0.0.1:$2" --model "${MODEL}" \
+    --workloads "${WORKLOADS}" --out "${OUT}/serve/$1_texts.json" >&3
+}
+
 sampled() {
   local dataset c rc=0
   for dataset in alpaca humaneval; do
@@ -273,6 +293,9 @@ run_server() {  # engine label workloads extra
     nano)
       port="${NANO_PORT}"; ready=/ready
       read -r -a cmd <<< "$(nano_cmd "${extra}")" ;;
+    nano_dflash)
+      port="${NANO_PORT}"; ready=/ready
+      read -r -a cmd <<< "$(nano_cmd "${extra:+${extra},}SPECULATIVE_MODEL=${DRAFT}")" ;;
     vllm019)
       port=8000; ready=/health
       cmd=("${VENVS}/vllm/bin/vllm" serve "${MODEL}" --host 127.0.0.1 --port 8000
@@ -350,6 +373,11 @@ accept() {
     ${awq[@]+"${awq[@]}"}
 }
 
+parity() {  # in the study venv: the drafter's remote code needs its transformers
+  PYTHONPATH="${REPO_DIR}" "${STUDY_PY}" "${CODE_DIR}/parity.py" --target "${MODEL}" --drafter "${DRAFT}" \
+    --out "${OUT}/parity/parity.json" ${P3_PARITY_ARGS:-}
+}
+
 summarize() {
   "${PY}" "${CODE_DIR}/summarize.py" "${OUT}" && cat "${OUT}/summary.md" >&3
 }
@@ -370,6 +398,8 @@ BASE_PATH="${PATH}"
 cat "${OUT}/environment.txt" >&3
 want workloads && run_step workloads workloads
 want accept && run_step accept accept
+want tests && run_step tests gpu_tests
+want parity && run_step parity parity
 want serve && run_step serve serve
 want summarize && run_step summarize summarize
 log "done; results in ${OUT}"

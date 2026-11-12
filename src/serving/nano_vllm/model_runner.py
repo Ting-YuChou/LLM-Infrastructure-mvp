@@ -308,10 +308,8 @@ class ModelRunner:
         when they cover it; ``observe`` hands every token's taps to the
         proposer."""
         tap_layers = self.proposer.tap_layers if observe else ()
-        indices = metadata.logits_indices
-        num_logits = input_ids.numel() if indices is None else indices.numel()
         bucket = None
-        if use_graphs and self._pieces is not None and num_logits <= self._pieces.max_rows:
+        if use_graphs and self._pieces is not None and metadata.logits_indices is not None:
             bucket = self._pieces.bucket(input_ids.numel())
         if bucket is not None and tap_layers:
             with nvtx_range("pieces"):
@@ -659,7 +657,12 @@ class ModelRunner:
     ) -> torch.Tensor:
         """The logits; ``taps``' keys are layers, filled in with the tokens'
         residual stream after each (piece ``layer + 1`` leaves it in the
-        ``residual`` buffer)."""
+        ``residual`` buffer).
+
+        The last piece's graph computes at most ``max_rows`` rows of logits
+        (one per sequence); a speculative step with more verify rows than
+        that runs the piece eagerly instead.
+        """
         pieces = self._pieces
         n, rows = input_ids.numel(), metadata.logits_indices.numel()
         tokens = pieces.tokens
@@ -668,8 +671,9 @@ class ModelRunner:
         tokens[2, :n].copy_(metadata.slot_mapping)
         if n < bucket:  # padded tokens (stale ids and positions are harmless) write nothing real
             tokens[2, n:bucket].fill_(self.cache.null_block * self.cache.block_size)
-        pieces.logits_indices[:rows].copy_(metadata.logits_indices)
         padded_rows = min(bucket, pieces.max_rows)
+        if rows <= pieces.max_rows:
+            pieces.logits_indices[:rows].copy_(metadata.logits_indices)
         if rows < padded_rows:  # stale indices could point past this size's rows
             pieces.logits_indices[rows:padded_rows].zero_()
         replays = pieces.graphs[bucket]
@@ -677,9 +681,14 @@ class ModelRunner:
         if taps:
             self.model.check_tap_layers(tuple(taps))
         replays[0]()
-        for layer_idx in range(len(replays) - 1):
+        last = len(replays) - 2
+        for layer_idx in range(last):
             self.model.attention(layer_idx, query, self.cache, metadata, out=attn)
             replays[layer_idx + 1]()
             if taps and layer_idx in taps:
                 taps[layer_idx] = pieces.residual[:n].clone()
+        self.model.attention(last, query, self.cache, metadata, out=attn)
+        if rows > pieces.max_rows:
+            return self.model.forward_tail(attn, pieces.residual[:n], metadata.logits_indices)
+        replays[last + 1]()
         return pieces.logits[:rows]

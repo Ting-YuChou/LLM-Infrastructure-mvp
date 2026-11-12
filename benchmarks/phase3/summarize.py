@@ -9,6 +9,9 @@ run (serve/*.metrics.txt), accept/accept.json and status.tsv, and writes:
   drafts    accepted tokens per draft as the servers count them
   accept    the acceptance study: tokens per cycle per arm, survival by depth
   gate      nano's projected tokens/s at c=1 against the best DFlash baseline
+  parity    nano's drafter against the checkpoint's own code (parity.json)
+  texts     completions of a drafter server against the same server without
+            one (texts.py), next to that server's own batch-size divergence
 
   python summarize.py <run dir>
 """
@@ -181,6 +184,59 @@ def accept(out: Path) -> tuple[list[str], list[dict]]:
     return lines, rows
 
 
+def parity(out: Path) -> list[str]:
+    path = out / "parity" / "parity.json"
+    if not path.exists():
+        return []
+    p = json.loads(path.read_text())
+    by_position = ", ".join(f"{v:.3f}" for v in p["top1_agreement_by_position"])
+    return [
+        "## Drafter parity (parity.py)", "",
+        f"nano's DFlashDrafter against the checkpoint's own code over {p['blocks']} blocks "
+        f"({p['draft_positions']} draft positions): top-1 agreement {p['top1_agreement']:.4f} "
+        f"(gate {p['gate']}: {'met' if p['passed'] else 'NOT met'}), blocks identical at every position "
+        f"{p['blocks_identical']:.3f}, largest logit difference {p['max_logit_diff']:.3f}, "
+        f"largest reference top-1 margin where they disagree {p['max_reference_margin_at_disagreement']:.3f}. "
+        f"By draft position: {by_position}. The reference accepted "
+        f"{p['reference_mean_accepted_per_cycle']:.2f} tokens per cycle.", "",
+    ]
+
+
+def texts(out: Path) -> list[str]:
+    """Identical completions between passes of texts.py."""
+    runs = {
+        path.name[: -len("_texts.json")]: json.loads(path.read_text())
+        for path in sorted((out / "serve").glob("*_texts.json"))
+    }
+    if not runs:
+        return []
+
+    def same(a: list[dict], b: list[dict]) -> str:
+        equal = sum(x["text"] == y["text"] for x, y in zip(a, b))
+        return f"{equal}/{len(a)}"
+
+    def speed(rows: list[dict]) -> str:
+        return fmt(sum(r["completion_tokens"] for r in rows) / sum(r["seconds"] for r in rows), 0)
+
+    body = []
+    for name, run in runs.items():
+        base = runs.get(base_of(name) or "")
+        body.append([
+            name,
+            same(run["c1"], run["c16"]),
+            same(run["c1"], base["c1"]) if base else "-",
+            same(run["c16"], base["c1"]) if base else "-",
+            speed(run["c1"]),
+        ])
+    return [
+        "## Completions at temperature 0 (texts.py)", "",
+        "Completions with identical text: a server's 16-at-a-time pass against its own one-at-a-time "
+        "pass (logits depend slightly on the batch size), and a drafter server's passes against the "
+        "one-at-a-time pass of the same server without a drafter. Last column: output tok/s of the "
+        "one-at-a-time pass.", "",
+    ] + table(["server", "c16 = own c1", "c1 = base c1", "c16 = base c1", "c1 tok/s"], body)
+
+
 def gate(serve_rows: list[dict], accept_rows: list[dict]) -> list[str]:
     """Projected nano tokens/s at c=1 against the best DFlash baseline."""
     runs = by_run(serve_rows)
@@ -256,7 +312,7 @@ def main() -> None:
     if serve_rows:
         lines += ["## Serving", ""] + serving(serve_rows) + drafts(out, serve_rows)
     accept_lines, accept_rows = accept(out)
-    lines += accept_lines + gate(serve_rows, accept_rows)
+    lines += texts(out) + parity(out) + accept_lines + gate(serve_rows, accept_rows)
     (out / "summary.md").write_text("\n".join(lines) + "\n")
 
 

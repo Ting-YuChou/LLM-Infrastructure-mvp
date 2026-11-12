@@ -191,7 +191,8 @@ def test_a_speculative_step_observes_every_token_with_and_without_piecewise_grap
     recorder = _Recorder()
     runner = ModelRunner(model, cache, manager, max_rows=4, proposer=recorder)
     if pieces:
-        runner.capture_piecewise_graphs(max_tokens=32, max_rows=runner.max_rows)
+        # One logits row per sequence in the graphs; the step below has five.
+        runner.capture_piecewise_graphs(max_tokens=32, max_rows=4)
     greedy = SamplingOptions(max_tokens=8, **GREEDY)
     decoding = Sequence(prompt_token_ids=list(PROMPTS["a"]), sampling=greedy)
     prefilling = Sequence(prompt_token_ids=list(PROMPTS["c"]), sampling=greedy)
