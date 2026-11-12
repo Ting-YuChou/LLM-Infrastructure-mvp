@@ -1,0 +1,12 @@
+install_venv	0	61
+install_study	0	15
+download_model	0	45
+download_w4_model	0	16
+download_drafter	0	7
+cuda129	0	43
+workloads	0	42
+tests	0	780
+spec_check	0	322
+kbench	0	59
+serve	0	662
+summarize	0	0

@@ -1,0 +1,50 @@
+[
+  {
+    "label": "bf16",
+    "mode": "plain",
+    "batch": 1,
+    "tokens": 2940,
+    "not_argmax": 8,
+    "max_margin": 0.25,
+    "margins_over_0.5": 0,
+    "margins_over_1": 0,
+    "tokens_per_cycle": null,
+    "out_tok_s": 80.90326113714531
+  },
+  {
+    "label": "bf16",
+    "mode": "plain",
+    "batch": 16,
+    "tokens": 2974,
+    "not_argmax": 5,
+    "max_margin": 0.25,
+    "margins_over_0.5": 0,
+    "margins_over_1": 0,
+    "tokens_per_cycle": null,
+    "out_tok_s": 869.6347157011334
+  },
+  {
+    "label": "bf16",
+    "mode": "spec",
+    "batch": 1,
+    "tokens": 3009,
+    "not_argmax": 5,
+    "max_margin": 0.25,
+    "margins_over_0.5": 0,
+    "margins_over_1": 0,
+    "tokens_per_cycle": 3.9827357237715804,
+    "out_tok_s": 195.6823174257516
+  },
+  {
+    "label": "bf16",
+    "mode": "spec",
+    "batch": 16,
+    "tokens": 2917,
+    "not_argmax": 5,
+    "max_margin": 0.25,
+    "margins_over_0.5": 0,
+    "margins_over_1": 0,
+    "tokens_per_cycle": 4.062849162011173,
+    "out_tok_s": 1557.9737752356323
+  }
+]

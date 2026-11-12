@@ -1,0 +1,50 @@
+[
+  {
+    "label": "awq",
+    "mode": "plain",
+    "batch": 1,
+    "tokens": 3035,
+    "not_argmax": 13,
+    "max_margin": 0.25,
+    "margins_over_0.5": 0,
+    "margins_over_1": 0,
+    "tokens_per_cycle": null,
+    "out_tok_s": 193.42375032527133
+  },
+  {
+    "label": "awq",
+    "mode": "plain",
+    "batch": 16,
+    "tokens": 3037,
+    "not_argmax": 10,
+    "max_margin": 0.25,
+    "margins_over_0.5": 0,
+    "margins_over_1": 0,
+    "tokens_per_cycle": null,
+    "out_tok_s": 1973.1338023509434
+  },
+  {
+    "label": "awq",
+    "mode": "spec",
+    "batch": 1,
+    "tokens": 3003,
+    "not_argmax": 15,
+    "max_margin": 0.25,
+    "margins_over_0.5": 0,
+    "margins_over_1": 0,
+    "tokens_per_cycle": 4.004005340453938,
+    "out_tok_s": 281.3229493277387
+  },
+  {
+    "label": "awq",
+    "mode": "spec",
+    "batch": 16,
+    "tokens": 3040,
+    "not_argmax": 8,
+    "max_margin": 0.25,
+    "margins_over_0.5": 0,
+    "margins_over_1": 0,
+    "tokens_per_cycle": 4.014550264550264,
+    "out_tok_s": 1924.6042319195992
+  }
+]

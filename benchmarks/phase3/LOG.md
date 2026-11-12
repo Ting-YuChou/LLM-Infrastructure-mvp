@@ -157,3 +157,137 @@ results/<run_id>/.
   3% slower: met. Nothing changes without a drafter: the GPU tests pass and
   nano AWQ at c=1 measures 206 / 205 / 205 / 183 (M0: 207 / 206 / 205 / 178).
 - Two runs, about 55 minutes of VM, ~3.5 CU. The VM is stopped.
+
+## M3: the block attention kernel (2026-11-12)
+
+- `kernels/block_attention.py`: the Triton kernel behind
+  `paged_block_attention`. It is the decode kernel with more rows: a program
+  owns one (sequence, kv head, split, row tile) and reads its slice of the
+  context once for `block_r` of the `q_max * group` queries of that kv head;
+  the mask is a per-row limit (causal for the target's verify rows, the
+  whole context for the drafter's block). A second kernel merges the splits.
+- `kernels/rope_cache.py`: `norm_rope_and_cache_write`, one kernel for the
+  drafter's q_norm / k_norm, RoPE and KV write per layer, also for context
+  tokens (K/V only), which went through the PyTorch reference before.
+- Wiring: a step's verify rows are block rows in `BatchMetadata`
+  (`num_block_rows`, `block_len`); `model._paged_attention` sends them to
+  the block kernel and any prefill rows after them to the prefill kernel
+  (with their own aligned fields, as after decode rows). The warm-up runs a
+  speculative cycle per number of verify rows, so no kernel compiles while
+  serving.
+- Checked without a GPU: 320 nano unit tests; the Triton interpreter
+  (`interp_check.py`, now with `INTERP_ONLY=<regex>`) on 96 block cases and
+  16 norm + RoPE cases against the references. Five deliberate bugs in the
+  kernel: four caught; the fifth (not clipping a row's limit to the split's
+  end) changes nothing, because a tile passes the end of a split only where
+  that end is the context length, so the clip was removed.
+
+### Run m3-kernel-20261112-064729-colab (new VM: installs, block tests, kbench, tune)
+
+- First version: one program per (sequence, kv head, split) with all 64
+  rows (40 real), the decode path's reduce kernel, the decode kernel's
+  launch tiers. Against the prefill kernel (the verify path of M2) it is
+  3.3 to 5.5 times faster on every shape and faster than vLLM's
+  flash-attention on all but one (B=1, 256 tokens), but against a decode
+  step's attention at the same context: 1.08x / 1.38x / 2.13x for one
+  sequence at 256 / 1024 / 4096 tokens, 1.67x / 1.49x / 1.50x for 64.
+- The drafter's norm + RoPE + KV write: 5 to 17 us against 45 to 206 us for
+  the PyTorch reference (1 to 640 tokens).
+- 8 of 340 tests failed, none a kernel bug: `block_n=128, num_stages=3` (the
+  decode kernel's tier from 64 sequences) needs more shared memory than a
+  program has with 64 fp32 rows; and my bf16 and fp8 tolerances were tighter
+  than what the existing fp8 tests allow (now compared the same way).
+
+### Run m3-tune-20261112-070917-colab (same VM: rows per program, a reduce kernel per sequence)
+
+- The reduce kernel had one program per (row, query head): 5,120 programs
+  at 16 sequences. A version with one program per (sequence, query head)
+  looping over the splits: 16 sequences at 256 tokens 56.5 -> 31.7 us, but
+  one sequence at 1024 tokens 19.7 -> 34 us. Each iteration waits for its
+  own load: about 0.5 us per split, 15 us at 32 splits.
+- Rows per program (`block_r` 16 / 32 / 64, the rest in further row tiles
+  that read the same context again): little difference at any batch size,
+  so the second and third read of a tile come from the L2 cache.
+- 241 block and warm-up tests passed.
+
+### Run m3-tune2-20261112-072015-colab (same VM: reduce per (row, kv head), all splits at once)
+
+- A reduce program per (row, kv head) that loads every split at once is as
+  fast as or faster than the loop on every shape, so the loop is gone.
+- Best static settings per batch size (us; decode is the decode kernel's
+  time from the first run):
+
+  | B, context | decode | block | block / decode | settings (block_r, block_n, warps, stages, splits) |
+  |---|---:|---:|---:|---|
+  | 1, 256 | 16.9 | 13.3 | 0.79 | 16, 64, 4, 2, half |
+  | 1, 1024 | 14.4 | 14.6 | 1.01 | same |
+  | 1, 4096 | 20.9 | 26.6 | 1.27 | same |
+  | 4, 1024 | 21.0 | 26.8 | 1.27 | 16, 64, 4, 2, quarter |
+  | 4, 4096 | 62.7 | 76.4 | 1.22 | same |
+  | 16, 256 | 21.8 | 25.0 | 1.15 | same (one split) |
+  | 16, 1024 | 61.4 | 75.6 | 1.23 | same |
+  | 16, 4096 | 208.8 | 274.3 | 1.31 | same |
+  | 64, 256 | 57.8 | 76.4 | 1.32 | 64, 64, 4, 2, one split |
+  | 64, 1024 | 198.8 | 249.0 | 1.25 | same |
+  | 64, 4096 | 764.6 | 930.4 | 1.22 | same |
+
+  Below 64 sequences the kernel is bound by a program's latency, not by
+  bandwidth: programs of 16 rows (the decode kernel's size) and fewer
+  splits win. From 64 a program takes the whole block. These are
+  `BLOCK_CONFIGS`.
+- The VM was reclaimed by Colab four minutes into the next run (kbench,
+  all tests, spec_check, serving); a new A100 was not available for a while
+  ("Service Unavailable").
+
+### Runs m3-20261112-085116-colab and m3-20261112-092848-colab (new VMs: all tests, spec_check, kbench gate, serving)
+
+- The same code and steps twice, the second by mistake (below). The two
+  agree within 2% everywhere but alpaca at c=16 (2055 / 1962 tok/s);
+  numbers here are the first run's.
+- tests/gpu and the nano unit tests: 1287 passed, none skipped (771 s).
+- G2, verify attention for Q=10 against a decode step's attention at the
+  same context (us, bf16):
+
+  | B, context | decode | vLLM flash-attn | prefill (M2) | block | block / decode |
+  |---|---:|---:|---:|---:|---:|
+  | 1, 256 | 16.7 | 11.4 | 20.7 | 13.3 | 0.79 |
+  | 1, 1024 | 14.4 | 29.6 | 65.3 | 14.6 | 1.02 |
+  | 1, 4096 | 20.8 | 103.8 | 243.2 | 26.4 | 1.27 |
+  | 16, 1024 | 61.5 | 115.0 | 229.6 | 75.6 | 1.23 |
+  | 16, 4096 | 206.8 | 439.9 | 875.0 | 274.6 | 1.33 |
+  | 64, 256 | 57.8 | 126.1 | 240.3 | 76.2 | 1.32 |
+  | 64, 1024 | 198.7 | 477.4 | 835.2 | 248.5 | 1.25 |
+  | 64, 4096 | 767.1 | 2499.6 | 3248.2 | 926.6 | 1.21 |
+
+  Gate (at most 1.3x for one sequence, 1.5x for 64): met on all six
+  shapes; the closest is one sequence at 4096 tokens, 1.27x. Shorter
+  blocks cost less: Q=3 / Q=5 at 1024 tokens are 0.87x / 0.95x for one
+  sequence and 1.11x / 1.06x for 64.
+- spec_check.py: emitted tokens that are not the teacher-forced argmax
+  0.17-0.50% with the drafter, 0.17-0.43% without; largest margin 0.25, none
+  above 0.5. Tokens per cycle at c=1 (AWQ): 3.50 / 5.32 / 3.97 / 3.02 (M2:
+  3.39 / 5.36 / 3.98 / 3.04).
+- Output tok/s at c=1 (alpaca / humaneval / gsm8k / long): AWQ + DFlash
+  246 / 359 / 276 / 182 (M2: 207 / 316 / 238 / 144; vLLM AWQ + DFlash:
+  380 / 589 / 434 / 245); BF16 + DFlash 172 / 266 / 203 / 138 (M2: 142 /
+  212 / 164 / 108; vLLM BF16 + DFlash: 220 / 322 / 256 / 161). A cycle is
+  now about 14 ms on AWQ and 20 ms on BF16 (16 and 24 after M2): the verify
+  pass is about 5 ms on AWQ, so some 9 ms are still the drafter in BF16,
+  eager kernels and host round trips, which is M4.
+- AWQ + DFlash at c=4 / 16 / 64: alpaca 963 / 2055 / 2739 (M2: 736 / 1722 /
+  2259), humaneval 1362 / 2898 / 4007; vLLM AWQ + DFlash at c=16 / 64 is
+  2084 / 2943 and 2950 / 4204. With the fixed block it is still below nano
+  without a drafter at c=16 and up (2567 / 6012 on alpaca), as is
+  spec_check at b=16 on AWQ (1901 against 1960 tok/s). M6.
+- Without a drafter nothing moved: nano AWQ at c=1 206 / 204 / 204 / 177
+  (second run 207 / 206 / 206 / 178; M0 207 / 206 / 205 / 178). TTFT at c=1
+  with the drafter is at most 3% higher (17.1 against 16.6 ms on humaneval).
+- Compute units: 16.0 CU between 08:28 and 20:54 UTC (435.80 -> 419.76),
+  of which one run of 35 minutes was needed. The retry loop I left waiting
+  for an A100 tested "did the run start" with `grep` on its log; in this
+  shell `grep` is a wrapper function that found no match in a log with
+  progress-bar bytes, so the loop started the whole run again twice. The
+  third was cut off when the laptop went to sleep; its VM stayed up until
+  Colab reclaimed it and its results are lost. No session is active now.
+  For the next loop: decide on the driver's exit code, and stop the session
+  when the run ends.

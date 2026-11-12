@@ -96,3 +96,44 @@ AWQ, 24 ms on BF16):
 | nano BF16 | 83 | 83 | 83 | 80 |
 | nano BF16 + DFlash (M2) | 142 | 212 | 164 | 108 |
 | vLLM BF16 + DFlash | 220 | 322 | 256 | 161 |
+
+### M3 (run `m3-20261112-085116-colab`, repeated as `m3-20261112-092848-colab`)
+
+Verify attention for a block of 10 against the attention of a plain decode
+step at the same context (microseconds per call, bf16; the gate is 1.3x for
+one sequence and 1.5x for 64):
+
+| sequences, context | decode | vLLM flash-attn | prefill kernel (M2) | block kernel | block / decode |
+|---|---:|---:|---:|---:|---:|
+| 1, 256 | 16.7 | 11.4 | 20.7 | 13.3 | 0.79 |
+| 1, 1024 | 14.4 | 29.6 | 65.3 | 14.6 | 1.02 |
+| 1, 4096 | 20.8 | 103.8 | 243.2 | 26.4 | 1.27 |
+| 16, 1024 | 61.5 | 115.0 | 229.6 | 75.6 | 1.23 |
+| 64, 256 | 57.8 | 126.1 | 240.3 | 76.2 | 1.32 |
+| 64, 1024 | 198.7 | 477.4 | 835.2 | 248.5 | 1.25 |
+| 64, 4096 | 767.1 | 2499.6 | 3248.2 | 926.6 | 1.21 |
+
+| check | result |
+|---|---|
+| gate G2 | met on all six shapes |
+| drafter norm + RoPE + KV write, one kernel | 5-17 us against 44-206 us in PyTorch |
+| tests/gpu + nano unit tests | 1287 passed, none skipped |
+| emitted tokens that are not the teacher-forced argmax, with the drafter | 0.17-0.50%, largest margin 0.25 (without: 0.17-0.43%, 0.25) |
+| nano AWQ without a drafter, c=1 | 206 / 204 / 204 / 177 (M0: 207 / 206 / 205 / 178) |
+
+Output tok/s at c=1 after M3 (a cycle is about 14 ms on AWQ and 20 ms on
+BF16; the verify pass is about 5 ms of the AWQ cycle, the rest is M4's):
+
+| server | alpaca | humaneval | gsm8k | long |
+|---|---:|---:|---:|---:|
+| nano AWQ + DFlash (M2) | 207 | 316 | 238 | 144 |
+| nano AWQ + DFlash (M3) | 246 | 359 | 276 | 182 |
+| vLLM AWQ + DFlash | 380 | 589 | 434 | 245 |
+| nano BF16 + DFlash (M2) | 142 | 212 | 164 | 108 |
+| nano BF16 + DFlash (M3) | 172 | 266 | 203 | 138 |
+| vLLM BF16 + DFlash | 220 | 322 | 256 | 161 |
+
+AWQ + DFlash at c=16 / c=64: alpaca 2055 / 2739 and humaneval 2898 / 4007,
+against vLLM AWQ + DFlash's 2084 / 2943 and 2950 / 4204 and nano AWQ
+without a drafter's 2567 / 6012 and 2516 / 5159. The block length is still
+fixed at 10 (M6).
