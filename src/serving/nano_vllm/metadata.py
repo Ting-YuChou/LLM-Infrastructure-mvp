@@ -35,6 +35,11 @@ class BatchMetadata:
     prefill_cu_seqlens_q: Optional[torch.Tensor] = None
     prefill_context_lens: Optional[torch.Tensor] = None
     prefill_block_tables: Optional[torch.Tensor] = None
+    # A speculative step puts its verify rows first instead: ``num_block_rows``
+    # sequences of ``block_len`` query tokens each, for the block kernel. The
+    # prefill rows after them get the same fields of their own.
+    num_block_rows: int = 0
+    block_len: int = 0
     # Every sequence has exactly one query token, so the batched decode
     # attention applies (also true for a prefill chunk of one token).
     decode_only: bool = field(init=False)
@@ -65,14 +70,14 @@ def build_batch(
     num_slots: int,
     device: torch.device,
     all_logits: bool = False,
-    all_logits_rows: int = 0,
+    block_rows: int = 0,
 ) -> tuple[torch.Tensor, torch.Tensor, BatchMetadata]:
     """Pack host-side batch lists into device tensors.
 
     Logits come out for the last token of each sequence, except that the
-    first ``all_logits_rows`` sequences (a speculative step's verify rows)
-    get them for every token; ``all_logits`` asks for every token of every
-    sequence.
+    first ``block_rows`` sequences (a speculative step's verify rows, all of
+    one query length) get them for every token; ``all_logits`` asks for
+    every token of every sequence.
 
     All int64 fields go in one buffer and all int32 fields in another, staged
     in pinned memory on CUDA, so a batch costs two asynchronous H2D copies.
@@ -81,8 +86,9 @@ def build_batch(
     whether each pointer argument is 16-byte aligned (and each integer one
     divisible by 16), so a field at an offset that depends on the batch shape
     compiles a new kernel variant (seconds, mid-serving) the first time its
-    alignment changes. For the same reason a mixed batch's prefill rows get
-    fields of their own instead of slices starting at row num_decode_rows.
+    alignment changes. For the same reason the prefill rows after a mixed
+    batch's decode rows (or a speculative step's verify rows) get fields of
+    their own instead of slices starting at their first row.
     """
     num_tokens = len(input_ids)
     num_seqs = len(query_lens)
@@ -94,13 +100,15 @@ def build_batch(
         raise ValueError("query_lens must sum to the flat token count")
     if slots and (min(slots) < 0 or max(slots) >= num_slots):
         raise ValueError("slot_mapping references a slot outside the KV cache")
+    if block_rows and len(set(query_lens[:block_rows])) != 1:
+        raise ValueError("a step's verify rows must come first and have one query length")
 
     cu_seqlens = [0]
     for query_len in query_lens:
         cu_seqlens.append(cu_seqlens[-1] + query_len)
     logits_indices = [] if all_logits else [
-        *range(cu_seqlens[all_logits_rows]),
-        *(end - 1 for end in cu_seqlens[all_logits_rows + 1 :]),
+        *range(cu_seqlens[block_rows]),
+        *(end - 1 for end in cu_seqlens[block_rows + 1 :]),
     ]
     num_decode_rows = next((i for i, n in enumerate(query_lens) if n != 1), num_seqs)
     # Rounded up to a multiple of 16: the width is the kernels' block-table
@@ -110,12 +118,13 @@ def build_batch(
     for table in block_tables:
         flat_tables.extend(table)
         flat_tables.extend([null_block] * (width - len(table)))
-    # The prefill rows' own fields when decode rows come first (a mixed batch).
-    mixed = 0 < num_decode_rows < num_seqs
-    num_prefill_rows = num_seqs - num_decode_rows if mixed else 0
-    prefill_cu = [c - cu_seqlens[num_decode_rows] for c in cu_seqlens[num_decode_rows:]] if mixed else []
-    prefill_ctx = context_lens[num_decode_rows:] if mixed else []
-    prefill_tables = flat_tables[num_decode_rows * width :] if mixed else []
+    # The prefill rows' own fields when decode or verify rows come first.
+    lead = block_rows or num_decode_rows
+    mixed = 0 < lead < num_seqs
+    num_prefill_rows = num_seqs - lead if mixed else 0
+    prefill_cu = [c - cu_seqlens[lead] for c in cu_seqlens[lead:]] if mixed else []
+    prefill_ctx = context_lens[lead:] if mixed else []
+    prefill_tables = flat_tables[lead * width :] if mixed else []
 
     pin = device.type == "cuda"
     input_ids_t, positions_t, slots_t, logits_t = _pack(
@@ -139,6 +148,8 @@ def build_batch(
         prefill_cu_seqlens_q=prefill_cu_t if mixed else None,
         prefill_context_lens=prefill_ctx_t if mixed else None,
         prefill_block_tables=prefill_tables_t.view(num_prefill_rows, width) if mixed else None,
+        num_block_rows=block_rows,
+        block_len=query_lens[0] if block_rows else 0,
     )
     return input_ids_t, positions_t, metadata
 

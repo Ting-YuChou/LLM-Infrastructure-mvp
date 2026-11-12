@@ -12,9 +12,12 @@ value vector is quantized to e4m3 with its own scale.
 
 from __future__ import annotations
 
+from typing import Optional
+
 import torch
 
 from .fp8 import fp8_quantize_reference
+from .rmsnorm import rms_norm_reference
 from .rotary import apply_rope_cos_sin
 
 try:  # pragma: no cover - exercised only in CUDA/Triton environments
@@ -109,6 +112,112 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
             row + (NUM_HEADS + NUM_KV_HEADS) * HEAD_DIM + kv_heads[:, None] * HEAD_DIM
             + offs_d[None, :]
         )
+        v = tl.load(v_src, mask=kv_mask, other=0.0)
+        v_dst = v_cache_ptr + slot * stride_v_slot + kv_heads[:, None] * stride_v_head + offs_d[None, :]
+        if KV_FP8:
+            v = v.to(tl.float32)
+            v_scale = _fp8_scale(tl.max(tl.abs(v), axis=1))
+            tl.store(v_scale_ptr + slot * stride_s_slot + kv_heads, v_scale, mask=kv_heads < NUM_KV_HEADS)
+            tl.store(v_dst, fp8_encode(v / v_scale[:, None]), mask=kv_mask)
+        else:
+            tl.store(v_dst, v.to(v_cache_ptr.dtype.element_ty), mask=kv_mask)
+
+
+    @triton.jit
+    def _head_rms_norm(x1, x2, w_ptr, eps, HEAD_DIM: tl.constexpr):
+        """RMSNorm over head_dim of [heads, HALF] halves x1, x2 (fp32), with
+        the rounding of kernels/rmsnorm.py: to the model dtype (the weight's)
+        before and after the weight multiply."""
+        HALF: tl.constexpr = HEAD_DIM // 2
+        model_type = w_ptr.dtype.element_ty
+        offs = tl.arange(0, HALF)
+        w1 = tl.load(w_ptr + offs).to(tl.float32)[None, :]
+        w2 = tl.load(w_ptr + HALF + offs).to(tl.float32)[None, :]
+        var = (tl.sum(x1 * x1, axis=1) + tl.sum(x2 * x2, axis=1)) / HEAD_DIM
+        inv = tl.rsqrt(var + eps)[:, None]
+        y1 = ((x1 * inv).to(model_type).to(tl.float32) * w1).to(model_type).to(tl.float32)
+        y2 = ((x2 * inv).to(model_type).to(tl.float32) * w2).to(model_type).to(tl.float32)
+        return y1, y2
+
+    @triton.jit
+    def _norm_rope_cache_write_kernel(
+        q_ptr,
+        kv_ptr,
+        q_norm_ptr,
+        k_norm_ptr,
+        cos_ptr,
+        sin_ptr,
+        slot_ptr,
+        q_out_ptr,
+        k_cache_ptr,
+        v_cache_ptr,
+        k_scale_ptr,
+        v_scale_ptr,
+        eps,
+        stride_q,
+        stride_kv,
+        stride_cos,
+        stride_qo_t,
+        stride_qo_h,
+        stride_k_slot,
+        stride_k_head,
+        stride_v_slot,
+        stride_v_head,
+        stride_s_slot,
+        NUM_HEADS: tl.constexpr,
+        NUM_KV_HEADS: tl.constexpr,
+        HEADS_P2: tl.constexpr,
+        KV_HEADS_P2: tl.constexpr,
+        HEAD_DIM: tl.constexpr,
+        KV_FP8: tl.constexpr,
+    ):
+        """_rope_cache_write_kernel for layers that normalize each query and
+        key head (RMSNorm over head_dim) before RoPE, with the query and the
+        fused K/V projections as separate inputs. NUM_HEADS == 0: no query."""
+        token = tl.program_id(0).to(tl.int64)
+        HALF: tl.constexpr = HEAD_DIM // 2
+        offs = tl.arange(0, HALF)
+        cos = tl.load(cos_ptr + token * stride_cos + offs).to(tl.float32)[None, :]
+        sin = tl.load(sin_ptr + token * stride_cos + offs).to(tl.float32)[None, :]
+        model_type = kv_ptr.dtype.element_ty
+
+        if NUM_HEADS > 0:
+            heads = tl.arange(0, HEADS_P2)
+            q_mask = (heads < NUM_HEADS)[:, None]
+            q_src = q_ptr + token * stride_q + heads[:, None] * HEAD_DIM + offs[None, :]
+            x1 = tl.load(q_src, mask=q_mask, other=0.0).to(tl.float32)
+            x2 = tl.load(q_src + HALF, mask=q_mask, other=0.0).to(tl.float32)
+            x1, x2 = _head_rms_norm(x1, x2, q_norm_ptr, eps, HEAD_DIM)
+            q_dst = q_out_ptr + token * stride_qo_t + heads[:, None] * stride_qo_h + offs[None, :]
+            out_type = q_out_ptr.dtype.element_ty
+            tl.store(q_dst, (x1 * cos - x2 * sin).to(out_type), mask=q_mask)
+            tl.store(q_dst + HALF, (x2 * cos + x1 * sin).to(out_type), mask=q_mask)
+
+        slot = tl.load(slot_ptr + token).to(tl.int64)
+        kv_heads = tl.arange(0, KV_HEADS_P2)
+        kv_mask = (kv_heads < NUM_KV_HEADS)[:, None]
+        row = kv_ptr + token * stride_kv
+        k_src = row + kv_heads[:, None] * HEAD_DIM + offs[None, :]
+        x1 = tl.load(k_src, mask=kv_mask, other=0.0).to(tl.float32)
+        x2 = tl.load(k_src + HALF, mask=kv_mask, other=0.0).to(tl.float32)
+        x1, x2 = _head_rms_norm(x1, x2, k_norm_ptr, eps, HEAD_DIM)
+        k_dst = k_cache_ptr + slot * stride_k_slot + kv_heads[:, None] * stride_k_head + offs[None, :]
+        k1 = x1 * cos - x2 * sin
+        k2 = x2 * cos + x1 * sin
+        if KV_FP8:
+            k1 = k1.to(model_type).to(tl.float32)
+            k2 = k2.to(model_type).to(tl.float32)
+            k_scale = _fp8_scale(tl.maximum(tl.max(tl.abs(k1), axis=1), tl.max(tl.abs(k2), axis=1)))
+            tl.store(k_scale_ptr + slot * stride_s_slot + kv_heads, k_scale, mask=kv_heads < NUM_KV_HEADS)
+            tl.store(k_dst, fp8_encode(k1 / k_scale[:, None]), mask=kv_mask)
+            tl.store(k_dst + HALF, fp8_encode(k2 / k_scale[:, None]), mask=kv_mask)
+        else:
+            cache_type = k_cache_ptr.dtype.element_ty
+            tl.store(k_dst, k1.to(cache_type), mask=kv_mask)
+            tl.store(k_dst + HALF, k2.to(cache_type), mask=kv_mask)
+
+        offs_d = tl.arange(0, HEAD_DIM)
+        v_src = row + NUM_KV_HEADS * HEAD_DIM + kv_heads[:, None] * HEAD_DIM + offs_d[None, :]
         v = tl.load(v_src, mask=kv_mask, other=0.0)
         v_dst = v_cache_ptr + slot * stride_v_slot + kv_heads[:, None] * stride_v_head + offs_d[None, :]
         if KV_FP8:
@@ -244,3 +353,145 @@ def _rope_and_cache_write_triton(  # pragma: no cover - depends on CUDA/Triton
         num_warps=4,
     )
     return query
+
+
+def norm_rope_and_cache_write_reference(
+    query: Optional[torch.Tensor],
+    kv: torch.Tensor,
+    q_norm: torch.Tensor,
+    k_norm: torch.Tensor,
+    eps: float,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+    key_cache: torch.Tensor,
+    value_cache: torch.Tensor,
+    slot_mapping: torch.Tensor,
+    num_heads: int,
+    num_kv_heads: int,
+    key_scales: torch.Tensor | None = None,
+    value_scales: torch.Tensor | None = None,
+) -> Optional[torch.Tensor]:
+    tokens = kv.shape[0]
+    head_dim = key_cache.shape[-1]
+    key, value = kv.split(num_kv_heads * head_dim, dim=-1)
+    key = rms_norm_reference(key.reshape(tokens, num_kv_heads, head_dim), k_norm, eps)
+    parts = [key.view(tokens, -1), value]
+    if query is not None:
+        query = rms_norm_reference(query.reshape(tokens, num_heads, head_dim), q_norm, eps)
+        parts.insert(0, query.view(tokens, -1))
+    # The fused-QKV layout of rope_and_cache_write, with no query heads when
+    # there is no query.
+    rotated = rope_and_cache_write_reference(
+        torch.cat(parts, dim=-1), cos, sin, key_cache, value_cache, slot_mapping,
+        num_heads if query is not None else 0, num_kv_heads, key_scales, value_scales,
+    )
+    return rotated if query is not None else None
+
+
+def norm_rope_and_cache_write(
+    query: Optional[torch.Tensor],
+    kv: torch.Tensor,
+    q_norm: torch.Tensor,
+    k_norm: torch.Tensor,
+    eps: float,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+    key_cache: torch.Tensor,
+    value_cache: torch.Tensor,
+    slot_mapping: torch.Tensor,
+    num_heads: int,
+    num_kv_heads: int,
+    use_triton: bool = False,
+    key_scales: torch.Tensor | None = None,
+    value_scales: torch.Tensor | None = None,
+) -> Optional[torch.Tensor]:
+    """:func:`rope_and_cache_write` for layers with a per-head RMSNorm on the
+    queries and keys (``q_norm``/``k_norm``, [head_dim]) before RoPE.
+
+    ``query`` is [num_tokens, num_heads * head_dim], or None for tokens that
+    only contribute K/V (then None is returned); ``kv`` is [num_tokens,
+    2 * num_kv_heads * head_dim], keys first.
+    """
+    if use_triton and TRITON_AVAILABLE and kv.is_cuda:  # pragma: no cover
+        return _norm_rope_and_cache_write_triton(
+            query, kv, q_norm, k_norm, eps, cos, sin, key_cache, value_cache, slot_mapping,
+            num_heads, num_kv_heads, key_scales, value_scales,
+        )
+    return norm_rope_and_cache_write_reference(
+        query, kv, q_norm, k_norm, eps, cos, sin, key_cache, value_cache, slot_mapping,
+        num_heads, num_kv_heads, key_scales, value_scales,
+    )
+
+
+def _norm_rope_and_cache_write_triton(  # pragma: no cover - depends on CUDA/Triton
+    query: Optional[torch.Tensor],
+    kv: torch.Tensor,
+    q_norm: torch.Tensor,
+    k_norm: torch.Tensor,
+    eps: float,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+    key_cache: torch.Tensor,
+    value_cache: torch.Tensor,
+    slot_mapping: torch.Tensor,
+    num_heads: int,
+    num_kv_heads: int,
+    key_scales: torch.Tensor | None = None,
+    value_scales: torch.Tensor | None = None,
+) -> Optional[torch.Tensor]:
+    num_tokens = kv.shape[0]
+    head_dim = key_cache.shape[-1]
+    inputs = [kv, cos, sin] + ([query] if query is not None else [])
+    if any(t.stride(-1) != 1 for t in inputs):
+        raise ValueError("query, kv and cos/sin must be contiguous in the last dimension")
+    if not (key_cache.is_contiguous() and value_cache.is_contiguous()):
+        raise ValueError("the KV cache must be contiguous")
+    if not (q_norm.is_contiguous() and k_norm.is_contiguous()):
+        raise ValueError("the norm weights must be contiguous")
+    if query is None:
+        num_heads = 0
+        rotated = None
+    else:
+        rotated = torch.empty(num_tokens, num_heads, head_dim, dtype=query.dtype, device=query.device)
+    if num_tokens == 0:
+        return rotated
+    fp8 = key_scales is not None
+    if fp8:  # Triton takes float8e4nv only from sm_89 on: uint8 codes
+        key_cache, value_cache = key_cache.view(torch.uint8), value_cache.view(torch.uint8)
+    flat_k = key_cache.view(-1, num_kv_heads, head_dim)
+    flat_v = value_cache.view(-1, num_kv_heads, head_dim)
+    k_scales = key_scales.view(-1, num_kv_heads) if fp8 else flat_k
+    v_scales = value_scales.view(-1, num_kv_heads) if fp8 else flat_v
+    _norm_rope_cache_write_kernel[(num_tokens,)](
+        query if query is not None else kv,  # unread without query heads
+        kv,
+        q_norm,
+        k_norm,
+        cos,
+        sin,
+        slot_mapping,
+        rotated if rotated is not None else kv,
+        flat_k,
+        flat_v,
+        k_scales,
+        v_scales,
+        eps,
+        query.stride(0) if query is not None else 0,
+        kv.stride(0),
+        cos.stride(0),
+        rotated.stride(0) if rotated is not None else 0,
+        rotated.stride(1) if rotated is not None else 0,
+        flat_k.stride(0),
+        flat_k.stride(1),
+        flat_v.stride(0),
+        flat_v.stride(1),
+        k_scales.stride(0) if fp8 else 0,
+        NUM_HEADS=num_heads,
+        NUM_KV_HEADS=num_kv_heads,
+        HEADS_P2=triton.next_power_of_2(max(num_heads, 1)),
+        KV_HEADS_P2=triton.next_power_of_2(num_kv_heads),
+        HEAD_DIM=head_dim,
+        KV_FP8=fp8,
+        num_warps=4,
+    )
+    return rotated

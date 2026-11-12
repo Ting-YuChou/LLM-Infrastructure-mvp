@@ -5,7 +5,8 @@ running request for seconds (Phase 2 LOG: the first M2 W1 sweep). After
 capture_graphs, which compiles the eager step's variants and captures the
 decode graphs, a mixed workload with every decode row count, eager and graph
 decode steps and several block-table widths must find every kernel in
-Triton's in-memory cache.
+Triton's in-memory cache. With a drafter the decode rows are verify rows:
+the same for every number of them, for the target and the drafter.
 """
 
 import random
@@ -24,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from serving.nano_vllm.config import NanoVLLMConfig  # noqa: E402
 from serving.nano_vllm.core import EngineCore, EngineRequest  # noqa: E402
 from serving.nano_vllm.sampling import SamplingOptions  # noqa: E402
+from test_nano_vllm_block_attention_gpu import drafter_checkpoint  # noqa: E402
 from test_nano_vllm_forward_gpu import _model  # noqa: E402
 
 
@@ -107,3 +109,51 @@ def test_no_kernel_compiles_after_warm_up(linear_backend, async_scheduling, kv_c
             steps += 1
     assert compiles.kernels == [], compiles.kernels
     assert len(decode_rows) > 8, sorted(decode_rows)  # the workload covered many row counts
+
+
+@pytest.mark.parametrize(
+    "linear_backend,kv_cache_dtype", [("torch", "auto"), ("triton", "auto"), ("triton", "fp8")]
+)
+def test_no_kernel_compiles_after_warm_up_with_a_drafter(tmp_path, linear_backend, kv_cache_dtype):
+    config = NanoVLLMConfig(
+        max_model_len=128,
+        kvcache_block_size=16,
+        num_kvcache_blocks=256,
+        max_num_seqs=16,
+        max_num_batched_tokens=96,  # 16 verify rows of 5 tokens fit
+        attention_backend="triton",
+        scheduling="mixed",
+        speculative_model=str(drafter_checkpoint(tmp_path / "drafter")),
+    )
+    model = _model("cuda", torch.bfloat16, use_triton=True, attention_backend="triton",
+                   linear_backend=linear_backend, kv_cache_dtype=kv_cache_dtype)
+    core = EngineCore(config, model)
+    assert core.proposer is not None and core.proposer.num_draft_tokens == 4
+    core.capture_graphs()
+
+    rng = random.Random(0)
+    pending = [
+        EngineRequest(i, [rng.randrange(1, 500) for _ in range(rng.randrange(2, 90))],
+                      SamplingOptions(max_tokens=rng.randrange(2, 28), temperature=0.0, ignore_eos=True))
+        for i in range(48)
+    ]
+    verify_rows = set()
+    launch_spec = core.model_runner._launch_spec
+
+    def spy(seqs, slot):
+        verify_rows.add(sum(not seq.is_prefill for seq in seqs))
+        return launch_spec(seqs, slot)
+
+    core.model_runner._launch_spec = spy
+    with _TritonCompiles() as compiles:
+        steps = 0
+        while pending or core.has_work():
+            if pending and steps % 3 == 0:
+                for _ in range(rng.randrange(1, 4)):
+                    if pending:
+                        core.add_request(pending.pop(0))
+            for output in core.step():
+                assert output.error is None, output.error
+            steps += 1
+    assert compiles.kernels == [], compiles.kernels
+    assert len(verify_rows) > 8, sorted(verify_rows)

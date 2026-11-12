@@ -26,6 +26,7 @@ from kbench import SCALE, _paged_inputs, copies_for, randn, time_us  # noqa: E40
 # the linear() function under the submodule's name.
 linear_mod = importlib.import_module("src.serving.nano_vllm.kernels.linear")
 attention = importlib.import_module("src.serving.nano_vllm.kernels.paged_attention")
+block_attention = importlib.import_module("src.serving.nano_vllm.kernels.block_attention")
 fp8 = importlib.import_module("src.serving.nano_vllm.kernels.fp8")
 
 L2_BYTES = 40 * 1024**2
@@ -143,6 +144,39 @@ def tune_prefill():
         return 3 * 2 * shape["seqs"] * shape["qlen"] * 32 * 128
 
     return sweep("prefill", shapes, configs, make_call, input_bytes, attention.PREFILL_CONFIG)
+
+
+def tune_block():
+    """The block kernel on a speculative step's verify rows (Q = 10): the
+    launch settings at the decode kernel's split count, and the current
+    settings with a half and a quarter of the splits (splits_shift)."""
+    shapes = [
+        {"B": b, "Q": 10, "ctx": c}
+        for b, c in ((1, 1024), (1, 4096), (4, 1024), (16, 1024), (16, 4096), (64, 1024), (64, 4096))
+    ]
+    configs = grid(block_n=[32, 64, 128], num_warps=[4, 8], num_stages=[1, 2, 3], splits_shift=[0])
+
+    def current(shape):
+        return {**block_attention.block_config(shape["B"]), "splits_shift": 0}
+
+    def make_call(shape, config):
+        i = _paged_inputs(shape["B"], shape["ctx"], [shape["Q"]] * shape["B"], "cuda")
+        splits = attention.decode_num_splits(shape["B"], 8, i["q"].device)
+        launch = {k: v for k, v in config.items() if k != "splits_shift"}
+        return lambda: block_attention.paged_block_attention(
+            i["q"], i["k_cache"], i["v_cache"], i["tables"], i["context_lens"], None, shape["Q"],
+            SCALE, True, use_triton=True, num_splits=max(1, splits >> config["splits_shift"]),
+            config=launch,
+        )
+
+    def input_bytes(shape):
+        return 2 * 2 * shape["B"] * shape["ctx"] * 8 * 128
+
+    rows = []
+    for shape in shapes:  # the fewer-splits variants of each shape's current settings
+        fewer = [{**current(shape), "splits_shift": shift} for shift in (1, 2)]
+        rows += sweep("block", [shape], configs + fewer, make_call, input_bytes, current)
+    return rows
 
 
 def tune_gemv():
@@ -296,6 +330,7 @@ def main() -> None:
             "decode": tune_decode,
             "decode_fp8": tune_decode_fp8,
             "prefill": tune_prefill,
+            "block": tune_block,
             "gemv": tune_gemv,
             "cuda_gemv": tune_cuda_gemv,
             "w4a16": tune_w4a16,

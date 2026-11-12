@@ -258,6 +258,69 @@ def spec_check(out: Path) -> list[str]:
     )
 
 
+def block_kernel(out: Path) -> list[str]:
+    """The verify rows' attention per kernel, and the M3 gate: the block
+    kernel within 1.3x (one sequence) and 1.5x (64) of a decode step's
+    attention at the same context, for a block of 10."""
+    path = out / "kbench" / "kbench.json"
+    if not path.exists():
+        return []
+    rows = [r for r in json.loads(path.read_text())["rows"] if r["kernel"] == "paged_block_attention"]
+    shapes: dict[str, dict[str, dict]] = {}
+    for r in rows:
+        shapes.setdefault(r["label"], {"shape": r["shape"]})[r["impl"]] = r
+    impls = ["decode", "vllm_fa2", "prefill", "block"]
+
+    def cell(r: dict | None) -> str:
+        if r is None:
+            return "-"
+        if "us" in r:
+            return fmt(r["us"])
+        return "skipped" if "skipped" in r else "FAILED"
+
+    body, gates = [], []
+    for label, by_impl in shapes.items():
+        decode, block = by_impl.get("decode", {}), by_impl.get("block", {})
+        ratio = block["us"] / decode["us"] if "us" in block and "us" in decode else None
+        body.append([label] + [cell(by_impl.get(i)) for i in impls] + [fmt(ratio, 2)])
+        shape = by_impl["shape"]
+        limit = {1: 1.3, 64: 1.5}.get(shape["B"]) if shape["Q"] == 10 else None
+        if limit is not None:
+            gates.append((label, ratio, limit))
+    lines = [
+        "## Verify attention (kbench paged_block_attention)", "",
+        "Microseconds per call for Q causal queries after each sequence's context, bf16. decode: the "
+        "decode kernel on one token per sequence at the same context, what a plain decode step "
+        "pays. vllm_fa2: vLLM's flash-attention. prefill: nano's varlen kernel, the verify path "
+        "before M3. block: the block kernel.", "",
+    ] + table(["shape", *impls, "block / decode"], body)
+    if gates:
+        met = all(ratio is not None and ratio <= limit for _, ratio, limit in gates)
+        lines += [f"Gate (block <= 1.3x decode at B=1, <= 1.5x at B=64, Q=10): {'met' if met else 'NOT met'}: "
+                  + ", ".join(f"{label} {fmt(ratio, 2)}x (limit {limit})" for label, ratio, limit in gates)
+                  + ".", ""]
+    write = [r for r in json.loads(path.read_text())["rows"] if r["kernel"] == "norm_rope_cache_write"]
+    if write:
+        labels = list(dict.fromkeys(r["label"] for r in write))
+        by = {(r["label"], r["impl"]): r for r in write}
+        lines += ["## Drafter norm + RoPE + KV write (kbench norm_rope_cache_write)", ""] + table(
+            ["shape", "torch us", "triton us"],
+            [[label, cell(by.get((label, "torch"))), cell(by.get((label, "triton")))] for label in labels],
+        )
+    tune = out / "tune" / "tune.json"
+    if tune.exists():
+        sweep = [r for r in json.loads(tune.read_text()) if r["kernel"] == "block"]
+        lines += ["## Block kernel launch settings (tune.py)", ""] + table(
+            ["shape", "best config", "best us", "current us", "current / best"],
+            [[" ".join(f"{k}={v}" for k, v in r["shape"].items()),
+              str(r["best"]["config"]) if r["best"] else "-",
+              fmt(r["best"]["us"]) if r["best"] else "-",
+              fmt(r["default"]["us"]) if r["default"] else "-",
+              fmt(r["speedup_vs_default"], 2)] for r in sweep],
+        )
+    return lines
+
+
 def gate(serve_rows: list[dict], accept_rows: list[dict]) -> list[str]:
     """Projected nano tokens/s at c=1 against the best DFlash baseline."""
     runs = by_run(serve_rows)
@@ -333,7 +396,8 @@ def main() -> None:
     if serve_rows:
         lines += ["## Serving", ""] + serving(serve_rows) + drafts(out, serve_rows)
     accept_lines, accept_rows = accept(out)
-    lines += texts(out) + spec_check(out) + parity(out) + accept_lines + gate(serve_rows, accept_rows)
+    lines += texts(out) + spec_check(out) + parity(out) + block_kernel(out)
+    lines += accept_lines + gate(serve_rows, accept_rows)
     (out / "summary.md").write_text("\n".join(lines) + "\n")
 
 

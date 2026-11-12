@@ -54,6 +54,10 @@ from bandwidth import copy_bandwidth  # noqa: E402
 from src.serving.nano_vllm.kernels.rmsnorm import TRITON_AVAILABLE  # noqa: E402
 from src.serving.nano_vllm.kernels.linear import linear, load_cuda_extension  # noqa: E402
 from src.serving.nano_vllm.kernels.fp8 import fp8_quantize_reference  # noqa: E402
+from src.serving.nano_vllm.kernels.block_attention import (  # noqa: E402
+    paged_block_attention,
+    paged_block_attention_reference,
+)
 from src.serving.nano_vllm.kernels.paged_attention import (  # noqa: E402
     paged_decode_attention,
     paged_decode_attention_reference,
@@ -67,6 +71,8 @@ from src.serving.nano_vllm.kernels.rmsnorm import (  # noqa: E402
     rms_norm_reference,
 )
 from src.serving.nano_vllm.kernels.rope_cache import (  # noqa: E402
+    norm_rope_and_cache_write,
+    norm_rope_and_cache_write_reference,
     rope_and_cache_write,
     rope_and_cache_write_reference,
 )
@@ -804,6 +810,106 @@ register(
             [i["context"]] * len(i["query_lens"]), SCALE),
         flops=_prefill_flops,
         ncu="_paged_prefill|flash_fwd",
+    )
+)
+
+
+# A speculative step's verify rows (Phase 3): Q tokens after each sequence's
+# context, causal. "decode" is the baseline, the decode kernel on the first
+# token of each block: what the attention of a plain decode step costs at the
+# same context. "prefill" is nano's varlen kernel on the same rows (a program
+# per query head), "block" the block kernel (a program per kv head and split).
+def _block_decode(i: dict):
+    if not TRITON_AVAILABLE or not i["q"].is_cuda:
+        raise Unavailable("needs Triton and a GPU")
+    q_max = i["query_lens"][0]
+    first = i["q"][::q_max].contiguous()
+    lens = i["context_lens"] - (q_max - 1)
+    return lambda: paged_decode_attention(
+        first, i["k_cache"], i["v_cache"], i["tables"], lens, SCALE, use_triton=True)
+
+
+def _block_check(outs: tuple, expected: tuple) -> dict:
+    out, want = outs[0], expected[0]
+    if out.shape[0] != want.shape[0]:  # the decode baseline: one row per block
+        want = want[:: want.shape[0] // out.shape[0]]
+    return compare((out,), (want,), 2e-2, 2e-2)
+
+
+def _block_reference(i: dict) -> torch.Tensor:
+    return paged_block_attention_reference(
+        i["q"], i["k_cache"], i["v_cache"], i["tables"], i["context_lens"], None,
+        i["query_lens"][0], SCALE, True)
+
+
+register(
+    Kernel(
+        name="paged_block_attention",
+        shapes=[{"B": b, "Q": 10, "ctx": c} for b in (1, 4, 16, 64) for c in (256, 1024, 4096)]
+        + [{"B": b, "Q": q, "ctx": 1024} for b in (1, 16, 64) for q in (3, 5)],
+        inputs=lambda s, dev: _paged_inputs(s["B"], s["ctx"], [s["Q"]] * s["B"], dev),
+        impls={
+            "decode": _block_decode,
+            "vllm_fa2": lambda i: _vllm_flash_attn(i, i["query_lens"][0]),
+            "prefill": triton_impl(lambda i: paged_prefill_attention(
+                i["q"], i["k_cache"], i["v_cache"], i["tables"], i["cu_seqlens"],
+                i["context_lens"], i["query_lens"], [i["context"]] * len(i["query_lens"]),
+                SCALE, use_triton=True)),
+            "block": triton_impl(lambda i: paged_block_attention(
+                i["q"], i["k_cache"], i["v_cache"], i["tables"], i["context_lens"], None,
+                i["query_lens"][0], SCALE, True, use_triton=True)),
+        },
+        reference=_block_reference,
+        bytes=lambda s: 2 * 2 * s["B"] * s["ctx"] * KV_HEADS * HEAD_DIM,  # read K and V once
+        ncu="_paged_block|_paged_decode|_paged_prefill|flash_fwd",
+        check=_block_check,
+    )
+)
+
+
+def _norm_rope_inputs(s: dict, dev: str) -> dict:
+    i = _rope_inputs(s, dev)
+    n = s["tokens"]
+    qkv = i.pop("qkv")
+    i["query"] = qkv[:, : Q_HEADS * HEAD_DIM].contiguous() if s["query"] else None
+    i["kv"] = qkv[:, Q_HEADS * HEAD_DIM :].contiguous()
+    i["q_norm"] = 1 + randn(HEAD_DIM, device=dev, scale=0.1)
+    i["k_norm"] = 1 + randn(HEAD_DIM, device=dev, scale=0.1)
+    assert i["kv"].shape == (n, 2 * KV_HEADS * HEAD_DIM)
+    return i
+
+
+def _norm_rope_call(fn, **kwargs):
+    def call(i):
+        q = fn(i["query"], i["kv"], i["q_norm"], i["k_norm"], 1e-6, i["cos"], i["sin"],
+               i["k_cache"], i["v_cache"], i["slots"], Q_HEADS, KV_HEADS, **kwargs)
+        flat = KV_HEADS * HEAD_DIM
+        written = (i["k_cache"].view(-1, flat)[i["slots"]], i["v_cache"].view(-1, flat)[i["slots"]])
+        return written if q is None else (q, *written)
+    return call
+
+
+# The DFlash drafter's layers: RMSNorm over head_dim on each query and key
+# head, RoPE, KV write. query=0 is a context token (K/V only), query=1 a
+# block token. The bf16 reference rotates op by op in bf16; the kernel
+# computes in fp32, so the tolerance is wider than a rounding.
+register(
+    Kernel(
+        name="norm_rope_cache_write",
+        shapes=[{"tokens": n, "query": q} for q in (1, 0) for n in (1, 10, 160, 640)],
+        inputs=_norm_rope_inputs,
+        impls={
+            "torch": op_impl(_norm_rope_call(norm_rope_and_cache_write_reference)),
+            "triton": triton_impl(_norm_rope_call(norm_rope_and_cache_write, use_triton=True)),
+        },
+        reference=_norm_rope_call(norm_rope_and_cache_write_reference),
+        # read q, kv, cos, sin, slots; write q, k, v
+        bytes=lambda s: s["tokens"] * (
+            2 * 2 * (s["query"] * Q_HEADS + 2 * KV_HEADS) * HEAD_DIM + 2 * 2 * HEAD_DIM + 8
+        ),
+        ncu="_norm_rope_cache_write_kernel",
+        atol=5e-2,
+        rtol=5e-2,
     )
 )
 

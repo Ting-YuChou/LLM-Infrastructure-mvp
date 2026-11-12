@@ -38,6 +38,12 @@
 #   spec_check spec_check.py: every token nano emits, with and without the
 #              drafter, against the target's argmax in one teacher-forced
 #              pass; AWQ and BF16 target (not in the default)
+#   kbench     phase1/kbench.py on P3_KERNELS (default: the verify rows'
+#              attention by the block, prefill and decode kernels and vLLM's
+#              flash-attention, and the drafter's norm + RoPE + KV write)
+#              (not in the default)
+#   tune       phase1/tune.py on P3_TUNE (default block): the block kernel's
+#              launch settings and split count (not in the default)
 #   serve      each P3_RUNS entry: start its server, run its workloads, stop it
 #   summarize  summary.md
 #
@@ -100,7 +106,7 @@ export HF_HOME="${ROOT}/hf_cache" UV_CACHE_DIR="${ROOT}/uv_cache" UV_PYTHON_INST
 export PYTHONUNBUFFERED=1 TOKENIZERS_PARALLELISM=false MPLBACKEND=Agg
 export SERVE_TAG=P3_SERVE BENCH_TEMPERATURE=0 BENCH_IGNORE_EOS=0
 export NANO_EXT_DIR="${ROOT}/nano_ext"  # the C++ radix tree's build (radix_cpp.py)
-mkdir -p "${OUT}"/{logs,serve,accept,tests,parity,spec_check}
+mkdir -p "${OUT}"/{logs,serve,accept,tests,parity,spec_check,kbench,tune}
 exec 3>&1  # console; step output goes to ${OUT}/logs/<step>.log
 
 log() { echo "[p3 $(date -u +%H:%M:%S)] $*" >&3; }
@@ -401,6 +407,21 @@ spec_check() {
   return "${rc}"
 }
 
+kbench() {  # vLLM's flash-attention comes from the load generator's venv
+  local rc=0
+  PYTHONPATH="${REPO_DIR}" "${PY}" "${CODE_DIR}/../phase1/kbench.py" --out "${OUT}/kbench" \
+    --kernels "${P3_KERNELS:-paged_block_attention,norm_rope_cache_write}" \
+    ${P3_KBENCH_SHAPES:+--shapes "${P3_KBENCH_SHAPES}"} || rc=1
+  cat "${OUT}/kbench/kbench.md" >&3
+  return "${rc}"
+}
+
+tune() {
+  PYTHONPATH="${REPO_DIR}" "${PY}" "${CODE_DIR}/../phase1/tune.py" --out "${OUT}/tune" \
+    --kernels "${P3_TUNE:-block}" &&
+  cat "${OUT}/tune/tune.md" >&3
+}
+
 summarize() {
   "${PY}" "${CODE_DIR}/summarize.py" "${OUT}" && cat "${OUT}/summary.md" >&3
 }
@@ -424,6 +445,8 @@ want accept && run_step accept accept
 want tests && run_step tests gpu_tests
 want parity && run_step parity parity
 want spec_check && run_step spec_check spec_check
+want kbench && run_step kbench kbench
+want tune && run_step tune tune
 want serve && run_step serve serve
 want summarize && run_step summarize summarize
 log "done; results in ${OUT}"

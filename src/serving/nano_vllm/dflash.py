@@ -43,11 +43,10 @@ from .kernels import (
     W4A16Weight,
     linear,
     load_cuda_extension,
+    norm_rope_and_cache_write,
     paged_block_attention,
     quantize_w4a16,
     rms_norm,
-    rope_and_cache_write,
-    rope_and_cache_write_reference,
     rope_cos_sin,
     silu_and_mul,
 )
@@ -325,7 +324,6 @@ class DFlashDrafter:
         rope = (self.rope_cos[positions], self.rope_sin[positions])
         # The block is in the cache by the time each layer attends.
         total_lens = context_lens + q_max
-        q_lens = torch.full_like(total_lens, q_max)
         for layer_idx, layer in enumerate(self.layers):
             x_norm = self._norm(x, layer.input_norm)
             query = self._rope_and_write(
@@ -334,7 +332,7 @@ class DFlashDrafter:
             )
             attn = paged_block_attention(
                 query, dcache.keys[layer_idx], dcache.values[layer_idx], block_tables,
-                total_lens, q_lens, q_max, self.scale, causal=False,
+                total_lens, None, q_max, self.scale, causal=False,
                 use_triton=self.attention_backend == "triton",
                 key_scales=dcache.key_scales[layer_idx], value_scales=dcache.value_scales[layer_idx],
             )
@@ -357,26 +355,13 @@ class DFlashDrafter:
         """q_norm/k_norm, RoPE, and K/V into the cache: the rotated query
         [tokens, heads, head_dim] (None for context tokens, which have none)."""
         config, layer = self.config, self.layers[layer_idx]
-        tokens, kv_heads, head_dim = kv.shape[0], config.num_key_value_heads, config.head_dim
-        key, value = kv.split(kv_heads * head_dim, dim=-1)
-        parts = [self._norm(key.reshape(tokens, kv_heads, head_dim), layer.k_norm).view(tokens, -1), value]
-        if query is not None:
-            query = self._norm(query.view(tokens, config.num_attention_heads, head_dim), layer.q_norm)
-            parts.insert(0, query.view(tokens, -1))
-        # The target's fused-QKV layout, so its RoPE + cache-write routine
-        # (and fp8 quantization) serves; with no query heads, the reference.
-        qkv = torch.cat(parts, dim=-1)
-        args = (
-            qkv, rope[0], rope[1], dcache.keys[layer_idx], dcache.values[layer_idx], slot_mapping,
-            config.num_attention_heads if query is not None else 0, kv_heads,
+        return norm_rope_and_cache_write(
+            query, kv, layer.q_norm, layer.k_norm, config.rms_norm_eps, rope[0], rope[1],
+            dcache.keys[layer_idx], dcache.values[layer_idx], slot_mapping,
+            config.num_attention_heads, config.num_key_value_heads,
+            use_triton=self.attention_backend == "triton",
+            key_scales=dcache.key_scales[layer_idx], value_scales=dcache.value_scales[layer_idx],
         )
-        scales = dict(
-            key_scales=dcache.key_scales[layer_idx], value_scales=dcache.value_scales[layer_idx]
-        )
-        if query is None:
-            rope_and_cache_write_reference(*args, **scales)
-            return None
-        return rope_and_cache_write(*args, use_triton=self.attention_backend == "triton", **scales)
 
     def _norm(self, x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
         return rms_norm(x, weight, eps=self.config.rms_norm_eps, use_triton=self.use_triton)

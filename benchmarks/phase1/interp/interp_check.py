@@ -5,6 +5,8 @@ macOS has no Triton wheel, so this runs in a linux/arm64 container:
   docker build -t nano-triton-interp benchmarks/phase1/interp
   docker run --rm -v "$PWD":/repo:ro nano-triton-interp python /repo/benchmarks/phase1/interp/interp_check.py
 
+INTERP_ONLY=<regex> (docker run -e) runs only the cases whose name matches.
+
 It launches the @triton.jit kernels directly (the nano_vllm wrappers fall back
 to PyTorch on CPU tensors) and catches indexing and masking bugs before a GPU
 run. It cannot measure speed, and the interpreter's bf16 tl.dot is broken
@@ -12,6 +14,8 @@ run. It cannot measure speed, and the interpreter's bf16 tl.dot is broken
 """
 import importlib.util
 import math
+import os
+import re
 import sys
 import traceback
 
@@ -25,13 +29,15 @@ K = importlib.util.module_from_spec(spec)
 sys.modules["kernels"] = K
 spec.loader.exec_module(K)
 # By module: kernels/__init__ re-exports functions named like linear and silu_mul.
-L, PA, RN, RC, SM, F8 = (
-    sys.modules[f"kernels.{m}"] for m in ("linear", "paged_attention", "rmsnorm", "rope_cache", "silu_mul", "fp8")
+L, PA, RN, RC, SM, F8, BA = (
+    sys.modules[f"kernels.{m}"]
+    for m in ("linear", "paged_attention", "rmsnorm", "rope_cache", "silu_mul", "fp8", "block_attention")
 )
 
 assert PA.TRITON_AVAILABLE, "triton not importable"
 torch.manual_seed(0)
 results = []
+ONLY = os.environ.get("INTERP_ONLY", "")  # regex on the case names passed to run()
 
 
 def check(name, out, ref, atol, rtol):
@@ -47,6 +53,8 @@ def check(name, out, ref, atol, rtol):
 
 
 def run(name, fn):
+    if not re.search(ONLY, name):
+        return
     try:
         fn()
     except Exception:
@@ -204,6 +212,96 @@ def fp8_rope_case(heads, n, dtype):
           f"max code distance {worst}", flush=True)
 
 
+def block_case(heads, page, q_max, shapes, splits, dtype, causal, varlen=True, config=None, fp8=False):
+    """Block attention: shapes are (q_len, context_len) per sequence, the
+    block's tokens counted in the context. Padding query rows hold NaN."""
+    qh, kvh, d = heads
+    qlens = [q for q, _ in shapes]
+    ctxs = [c for _, c in shapes]
+    nb = sum((c + page - 1) // page for c in ctxs) + 2
+    if fp8:
+        k, ks, v, vs = fp8_cache(nb, page, kvh, d)
+    else:
+        (k, v), ks, vs = cache(nb, page, kvh, d, dtype), None, None
+    t = tables(ctxs, page, nb)
+    q = torch.randn(len(shapes) * q_max, qh, d).to(dtype)
+    padding = torch.tensor([j >= n for n in qlens for j in range(q_max)])
+    q[padding] = float("nan")
+    lens = torch.tensor(ctxs, dtype=torch.int32)
+    q_lens = torch.tensor(qlens, dtype=torch.int32) if varlen else None
+    scale = 1 / math.sqrt(d)
+    out = BA._paged_block_attention_triton(
+        q, k, v, t, lens, q_lens, q_max, scale, causal, splits,
+        config or BA.block_config(len(shapes), fp8), None, ks, vs,
+    )
+    ref = BA.paged_block_attention_reference(q, k, v, t, lens, q_lens, q_max, scale, causal, ks, vs)
+    tol = 1e-4 if dtype == torch.float32 else 2e-2
+    if fp8:  # values up to ~30 and scores of tens: fp32 rounding of a score alone moves an output by 1e-4
+        tol = 5e-4
+    name = (f"block{' fp8' if fp8 else ''} heads={heads} page={page} Q={q_max} shapes={shapes} S={splits} "
+            f"causal={causal} varlen={varlen} {dtype} {config or ''}")
+    check(name, out, ref, tol, tol)
+    if not bool((out[padding] == 0).all()):
+        results.append((name + " padding rows", False, float("nan")))
+        print(f"FAIL {name}: padding rows are not zero", flush=True)
+
+
+def norm_rope_case(heads, n, dtype, with_query):
+    qh, kvh, d = heads
+    inv = K.rotary.compute_inv_freq(d, 10000.0)
+    cos_t, sin_t = K.rotary.rope_cos_sin(inv, 256, dtype)
+    pos = torch.randint(0, 256, (n,))
+    cos, sin = cos_t[pos], sin_t[pos]
+    query = (torch.randn(n, qh * d) * 3).to(dtype) if with_query else None
+    kv = (torch.randn(n, 2 * kvh * d) * 3).to(dtype)
+    q_norm = (1 + 0.1 * torch.randn(d)).to(dtype)
+    k_norm = (1 + 0.1 * torch.randn(d)).to(dtype)
+    nb, page = 8, 4
+    slots = torch.randperm(nb * page)[:n]
+    slots[-1] = nb * page  # null block
+    outs = []
+    for fn in (RC._norm_rope_and_cache_write_triton, RC.norm_rope_and_cache_write_reference):
+        torch.manual_seed(1)
+        k, v = cache(nb, page, kvh, d, dtype)
+        rotated = fn(query, kv, q_norm, k_norm, 1e-6, cos, sin, k, v, slots, qh, kvh)
+        assert (rotated is None) == (not with_query)
+        outs.append((k, v) if rotated is None else (rotated, k, v))
+    tol = 1e-5 if dtype == torch.float32 else 2e-2
+    check(f"norm_rope_cache heads={heads} n={n} query={with_query} {dtype}", outs[0], outs[1], tol, tol)
+
+
+def fp8_norm_rope_case(heads, n):
+    """fp32 inputs into an fp8 cache: codes at most one apart from the reference's."""
+    qh, kvh, d = heads
+    inv = K.rotary.compute_inv_freq(d, 10000.0)
+    cos_t, sin_t = K.rotary.rope_cos_sin(inv, 256, torch.float32)
+    pos = torch.randint(0, 256, (n,))
+    cos, sin = cos_t[pos], sin_t[pos]
+    query = torch.randn(n, qh * d) * 3
+    kv = torch.randn(n, 2 * kvh * d) * 3
+    q_norm, k_norm = 1 + 0.1 * torch.randn(d), 1 + 0.1 * torch.randn(d)
+    nb, page = 8, 4
+    slots = torch.randperm(nb * page)[:n]
+    got = []
+    for fn in (RC._norm_rope_and_cache_write_triton, RC.norm_rope_and_cache_write_reference):
+        k = torch.zeros(nb + 1, page, kvh, d, dtype=torch.float8_e4m3fn)
+        v = torch.zeros_like(k)
+        ks, vs = torch.zeros(nb + 1, page, kvh), torch.zeros(nb + 1, page, kvh)
+        rotated = fn(query, kv, q_norm, k_norm, 1e-6, cos, sin, k, v, slots, qh, kvh, ks, vs)
+        got.append((rotated, ks.view(-1, kvh)[slots], vs.view(-1, kvh)[slots], k, v))
+    check(f"fp8 norm_rope_cache q and scales heads={heads} n={n}", got[0][:3], got[1][:3], 1e-5, 1e-5)
+    worst = 0
+    for mine, want in zip(got[0][3:], got[1][3:]):
+        a = mine.view(torch.uint8).view(-1, kvh, d)[slots].int()
+        b = want.view(torch.uint8).view(-1, kvh, d)[slots].int()
+        distance = ((a & 0x7F) - (b & 0x7F)).abs()
+        sign_flip = ((a ^ b) & 0x80).bool() & (((a & 0x7F) > 1) | ((b & 0x7F) > 1))
+        worst = max(worst, int(distance.max()), 99 * int(sign_flip.any()))
+    results.append((f"fp8 norm_rope_cache codes heads={heads} n={n}", worst <= 1, worst))
+    print(f"{'OK  ' if worst <= 1 else 'FAIL'} fp8 norm_rope_cache codes heads={heads} n={n}: "
+          f"max code distance {worst}", flush=True)
+
+
 def rope_case(heads, n, dtype):
     qh, kvh, d = heads
     inv = K.rotary.compute_inv_freq(d, 500000.0)
@@ -277,6 +375,28 @@ for heads in (TINY, LLAMA):
         run("fp8 attention", lambda: fp8_attention_case(heads, page, [1, 15, 70, 0], [(5, 12), (20, 20), (70, 70)]))
     run("fp8 rope", lambda: fp8_rope_case(heads, 5, torch.float32))
     run("fp8 rope bf16", lambda: fp8_rope_case(heads, 5, torch.bfloat16))
+    # Block attention: q_len from 0 to q_max, a block that is the whole
+    # context, contexts ending inside, at and across pages and tiles.
+    block_shapes = [(5, 5), (5, 13), (3, 10), (0, 6), (1, 8), (4, 16), (5, 70), (2, 150)]
+    for causal in (True, False):
+        for page in (4, 16):
+            for splits in (1, 4):
+                run("block", lambda: block_case(heads, page, 5, block_shapes, splits, torch.float32, causal))
+        run("block full", lambda: block_case(
+            heads, 16, 10, [(10, 10), (10, 37), (10, 300)], 4, torch.float32, causal, varlen=False))
+        run("block Q=3", lambda: block_case(heads, 16, 3, [(3, 3), (2, 40), (3, 129)], 2, torch.float32, causal))
+        run("block fp16", lambda: block_case(heads, 16, 10, [(10, 20), (7, 130)], 2, torch.float16, causal))
+        for _, config in BA.BLOCK_CONFIGS:
+            run("block config", lambda: block_case(
+                heads, 16, 10, [(10, 10), (4, 129), (10, 300), (0, 0)], 2, torch.float32, causal, config=config))
+        for splits in (1, 4):
+            run("block fp8", lambda: block_case(
+                heads, 16, 5, block_shapes, splits, torch.float32, causal, fp8=True))
+    for with_query in (True, False):
+        for n in (1, 5):
+            run("norm rope", lambda: norm_rope_case(heads, n, torch.float32, with_query))
+        run("norm rope bf16", lambda: norm_rope_case(heads, 3, torch.bfloat16, with_query))
+    run("fp8 norm rope", lambda: fp8_norm_rope_case(heads, 5))
 for dtype in (torch.float32, torch.bfloat16):
     run("norm", lambda: norm_case(3, 256, dtype))
     run("silu", lambda: silu_case(3, 200, dtype))

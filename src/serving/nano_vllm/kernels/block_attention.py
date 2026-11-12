@@ -11,8 +11,11 @@ Shapes are static: every sequence owns ``q_max`` query rows (row
 prefill path the block's own K/V are already in the cache: ``context_lens``
 counts them, and query ``t`` sits at position ``context_len - q_len + t``.
 
-Only the PyTorch reference exists so far; it is the ground truth for the
-Triton kernel that follows.
+The Triton kernel is the decode kernel (paged_attention.py) with more rows:
+a program owns one (sequence, kv head, split) and reads its slice of the
+context once for all ``q_max * group`` queries of that kv head, where the
+prefill kernel would launch a program per query head and read the context
+``group`` times. The splits are merged by the decode path's reduce kernel.
 """
 
 from __future__ import annotations
@@ -21,7 +24,202 @@ from typing import Optional
 
 import torch
 
-from .paged_attention import _gather_kv
+from .fp8 import FP8_HALF_SCALE
+from .paged_attention import TRITON_AVAILABLE, _fp8_operands, _gather_kv, decode_num_splits
+
+if TRITON_AVAILABLE:  # pragma: no cover - exercised only in CUDA/Triton environments
+    import triton
+    import triton.language as tl
+
+# Launch settings per batch size, as DECODE_CONFIGS: block_n is the context
+# tokens per inner-loop tile. Not tuned yet: the decode kernel's tiers.
+BLOCK_CONFIGS = (  # (smallest batch, config)
+    (1, {"block_n": 64, "num_warps": 8, "num_stages": 1}),
+    (16, {"block_n": 32, "num_warps": 4, "num_stages": 2}),
+    (64, {"block_n": 128, "num_warps": 4, "num_stages": 3}),
+)
+BLOCK_CONFIGS_FP8 = (
+    (1, {"block_n": 32, "num_warps": 4, "num_stages": 2}),
+    (16, {"block_n": 128, "num_warps": 4, "num_stages": 3}),
+)
+
+if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
+    from .fp8 import fp8_decode_scaled, fp8_prescale_query
+    from .paged_attention import _paged_decode_reduce_kernel
+
+    _FP8_HALF = tl.constexpr(FP8_HALF_SCALE)
+    # The running maximum starts here, not at -inf: a causal row can see no
+    # key of a whole split, and exp2(-inf - -inf) would be NaN. Any real
+    # score is far above it, and it still gives an empty row lse = -inf.
+    _NO_SCORE = tl.constexpr(-1.0e30)
+
+    @triton.jit
+    def _paged_block_split_kernel(
+        q_ptr,
+        k_cache_ptr,
+        v_cache_ptr,
+        block_tables_ptr,
+        context_lens_ptr,
+        q_lens_ptr,
+        out_ptr,
+        part_out_ptr,
+        part_lse_ptr,
+        k_scale_ptr,
+        v_scale_ptr,
+        scale_log2e,
+        stride_qb,
+        stride_qh,
+        stride_kb,
+        stride_kt,
+        stride_kh,
+        stride_vb,
+        stride_vt,
+        stride_vh,
+        stride_sb,
+        stride_st,
+        stride_bt,
+        stride_ob,
+        stride_oh,
+        stride_pb,
+        stride_ph,
+        stride_ps,
+        stride_lb,
+        stride_lh,
+        Q_MAX: tl.constexpr,
+        GROUP: tl.constexpr,
+        BLOCK_R: tl.constexpr,
+        HEAD_DIM: tl.constexpr,
+        PAGE_SIZE: tl.constexpr,
+        BLOCK_N: tl.constexpr,
+        NUM_SPLITS: tl.constexpr,
+        CAUSAL: tl.constexpr,
+        VARLEN: tl.constexpr,
+        INPUT_PRECISION: tl.constexpr,
+        KV_FP8: tl.constexpr,
+    ):
+        seq = tl.program_id(0)
+        kv_head = tl.program_id(1)
+        split = tl.program_id(2)
+
+        # This split's context range, as in the decode kernel: a multiple of
+        # BLOCK_N and at least two tiles long; splits past the end do no work.
+        context_len = tl.load(context_lens_ptr + seq)
+        if VARLEN:
+            q_len = tl.load(q_lens_ptr + seq)
+        else:
+            q_len = Q_MAX
+        split_len = (context_len + NUM_SPLITS - 1) // NUM_SPLITS
+        split_len = tl.maximum(split_len, 2 * BLOCK_N)
+        split_len = (split_len + BLOCK_N - 1) // BLOCK_N * BLOCK_N
+        start = split * split_len
+        end = tl.minimum(start + split_len, context_len)
+
+        # Row r is block token r // GROUP under query head r % GROUP of this
+        # kv head, padded to BLOCK_R rows so tl.dot can use tensor cores.
+        offs_r = tl.arange(0, BLOCK_R)
+        offs_t = offs_r // GROUP
+        heads = kv_head * GROUP + offs_r % GROUP
+        row_mask = offs_r < Q_MAX * GROUP
+        live = offs_t < q_len
+        rows = (seq * Q_MAX + offs_t).to(tl.int64)
+        offs_d = tl.arange(0, HEAD_DIM)
+        q = tl.load(
+            q_ptr + rows[:, None] * stride_qb + heads[:, None] * stride_qh + offs_d[None, :],
+            mask=(row_mask & live)[:, None],
+            other=0.0,
+        )
+        if KV_FP8:  # decoded keys are their values times 2**-120
+            q = fp8_prescale_query(q)
+        # Keys below a row's limit are visible to it: through its own position
+        # when causal, else the whole context; none for a row with no query.
+        # The limit never passes context_len, and a tile reaches past this
+        # split's end only where the end is context_len.
+        if CAUSAL:
+            limit = context_len - q_len + offs_t + 1
+        else:
+            limit = context_len + offs_t * 0
+        limit = tl.where(live, limit, 0)
+
+        m_i = tl.full([BLOCK_R], _NO_SCORE, dtype=tl.float32)
+        l_i = tl.zeros([BLOCK_R], dtype=tl.float32)
+        acc = tl.zeros([BLOCK_R, HEAD_DIM], dtype=tl.float32)
+        table = block_tables_ptr + seq.to(tl.int64) * stride_bt
+        for tile_start in range(start, end, BLOCK_N):
+            offs_n = tile_start + tl.arange(0, BLOCK_N)
+            n_mask = offs_n < end
+            blocks = tl.load(table + offs_n // PAGE_SIZE, mask=n_mask, other=0)
+            within = (offs_n % PAGE_SIZE).to(tl.int64)
+            k_rows = blocks.to(tl.int64) * stride_kb + within * stride_kt + kv_head * stride_kh
+            v_rows = blocks.to(tl.int64) * stride_vb + within * stride_vt + kv_head * stride_vh
+            k = tl.load(
+                k_cache_ptr + k_rows[:, None] + offs_d[None, :],
+                mask=n_mask[:, None],
+                other=0.0,
+            )
+            if KV_FP8:
+                s_rows = blocks.to(tl.int64) * stride_sb + within * stride_st + kv_head
+                k_scale = tl.load(k_scale_ptr + s_rows, mask=n_mask, other=0.0)
+                v_scale = tl.load(v_scale_ptr + s_rows, mask=n_mask, other=0.0)
+                scores = tl.dot(q, tl.trans(fp8_decode_scaled(k, q)), input_precision=INPUT_PRECISION)
+                scores = scores * (k_scale * (scale_log2e * _FP8_HALF))[None, :]
+            else:
+                scores = tl.dot(q, tl.trans(k), input_precision=INPUT_PRECISION)
+                scores = scores * scale_log2e
+            scores = tl.where(offs_n[None, :] < limit[:, None], scores, float("-inf"))
+            m_new = tl.maximum(m_i, tl.max(scores, axis=1))
+            alpha = tl.exp2(m_i - m_new)
+            p = tl.exp2(scores - m_new[:, None])
+            l_i = l_i * alpha + tl.sum(p, axis=1)
+            v = tl.load(
+                v_cache_ptr + v_rows[:, None] + offs_d[None, :],
+                mask=n_mask[:, None],
+                other=0.0,
+            )
+            if KV_FP8:
+                pv = (p * (v_scale * _FP8_HALF)[None, :]).to(q.dtype)
+                acc = acc * alpha[:, None] + tl.dot(
+                    pv, fp8_decode_scaled(v, q), input_precision=INPUT_PRECISION
+                )
+            else:
+                acc = acc * alpha[:, None] + tl.dot(
+                    p.to(v.dtype), v, input_precision=INPUT_PRECISION
+                )
+            m_i = m_new
+
+        if KV_FP8:
+            acc = acc * _FP8_HALF
+        # A row that saw nothing (no query, or a split after its position)
+        # has l_i == 0: write 0, not 0/0.
+        inv_l = tl.where(l_i > 0, 1.0 / l_i, 0.0)
+        result = acc * inv_l[:, None]
+        if NUM_SPLITS == 1:
+            tl.store(
+                out_ptr + rows[:, None] * stride_ob + heads[:, None] * stride_oh + offs_d[None, :],
+                result.to(out_ptr.dtype.element_ty),
+                mask=row_mask[:, None],
+            )
+        else:
+            tl.store(
+                part_out_ptr
+                + rows[:, None] * stride_pb
+                + heads[:, None] * stride_ph
+                + split * stride_ps
+                + offs_d[None, :],
+                result,
+                mask=row_mask[:, None],
+            )
+            # Base-2 log-sum-exp of the scores this row saw; -inf for none.
+            tl.store(
+                part_lse_ptr + rows * stride_lb + heads * stride_lh + split,
+                m_i + tl.log2(l_i),
+                mask=row_mask,
+            )
+
+
+def block_config(batch_size: int, kv_fp8: bool = False) -> dict:
+    """Launch settings of the Triton block kernel for a batch size (and cache dtype)."""
+    tiers = BLOCK_CONFIGS_FP8 if kv_fp8 else BLOCK_CONFIGS
+    return next(c for smallest, c in reversed(tiers) if batch_size >= smallest)
 
 
 def paged_block_attention_reference(
@@ -30,7 +228,7 @@ def paged_block_attention_reference(
     value_cache: torch.Tensor,
     block_tables: torch.Tensor,
     context_lens: torch.Tensor,
-    q_lens: torch.Tensor,
+    q_lens: Optional[torch.Tensor],
     q_max: int,
     scale: float,
     causal: bool,
@@ -41,9 +239,10 @@ def paged_block_attention_reference(
 
     ``causal=True`` lets query ``t`` see the keys up to its own position;
     ``causal=False`` lets every query of a sequence see all ``context_len``
-    keys. Rows with ``t >= q_lens[seq]`` return 0. Like the decode reference
-    this reads the full block-table width and masks, so no size depends on
-    the lengths and nothing is read back to the host.
+    keys. Rows with ``t >= q_lens[seq]`` return 0; ``q_lens=None`` means
+    every sequence has ``q_max`` queries. Like the decode reference this
+    reads the full block-table width and masks, so no size depends on the
+    lengths and nothing is read back to the host.
     """
     rows, q_heads, head_dim = query.shape
     batch = block_tables.shape[0]
@@ -56,6 +255,8 @@ def paged_block_attention_reference(
 
     key_pos = torch.arange(keys.shape[1], device=query.device).view(1, 1, -1)
     context = context_lens.long().view(batch, 1, 1)
+    if q_lens is None:
+        q_lens = torch.full_like(context_lens, q_max)
     q_len = q_lens.long().view(batch, 1, 1)
     offsets = torch.arange(q_max, device=query.device).view(1, q_max, 1)
     # Keys below ``limit`` are visible: through the query's own position when
@@ -80,23 +281,141 @@ def paged_block_attention(
     value_cache: torch.Tensor,
     block_tables: torch.Tensor,
     context_lens: torch.Tensor,
-    q_lens: torch.Tensor,
+    q_lens: Optional[torch.Tensor],
     q_max: int,
     scale: float,
     causal: bool,
     use_triton: bool = False,
+    num_splits: Optional[int] = None,
+    config: Optional[dict] = None,
     out: Optional[torch.Tensor] = None,
     key_scales: Optional[torch.Tensor] = None,
     value_scales: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     """Block attention (see the module docstring), into ``out`` when given.
 
-    ``key_scales``/``value_scales``: the cache holds e4m3 codes (kernels/fp8.py).
-    There is no Triton kernel yet: ``use_triton`` is accepted and ignored.
+    ``q_lens=None``: every sequence has ``q_max`` queries (what the engine
+    runs). ``key_scales``/``value_scales``: the cache holds e4m3 codes
+    (kernels/fp8.py).
     """
-    del use_triton
+    if use_triton and TRITON_AVAILABLE and query.is_cuda:  # pragma: no cover
+        return _paged_block_attention_triton(
+            query, key_cache, value_cache, block_tables, context_lens, q_lens, q_max, scale,
+            causal, num_splits, config or block_config(block_tables.shape[0], key_scales is not None),
+            out, key_scales, value_scales,
+        )
     result = paged_block_attention_reference(
         query, key_cache, value_cache, block_tables, context_lens, q_lens, q_max, scale, causal,
         key_scales, value_scales,
     )
     return result if out is None else out.copy_(result)
+
+
+def _paged_block_attention_triton(  # pragma: no cover - depends on CUDA/Triton
+    query: torch.Tensor,
+    key_cache: torch.Tensor,
+    value_cache: torch.Tensor,
+    block_tables: torch.Tensor,
+    context_lens: torch.Tensor,
+    q_lens: Optional[torch.Tensor],
+    q_max: int,
+    scale: float,
+    causal: bool,
+    num_splits: Optional[int],
+    config: dict,
+    out: Optional[torch.Tensor] = None,
+    key_scales: Optional[torch.Tensor] = None,
+    value_scales: Optional[torch.Tensor] = None,
+) -> torch.Tensor:
+    rows, q_heads, head_dim = query.shape
+    batch = block_tables.shape[0]
+    _, page_size, kv_heads, cache_head_dim = key_cache.shape
+    if rows != batch * q_max:
+        raise ValueError(f"query has {rows} rows, expected batch * q_max = {batch * q_max}")
+    if cache_head_dim != head_dim or q_heads % kv_heads != 0:
+        raise ValueError("query and KV cache head layouts do not match")
+    if head_dim & (head_dim - 1) or head_dim < 16:
+        raise ValueError("the Triton block kernel needs a power-of-two head_dim >= 16")
+    if query.stride(-1) != 1 or key_cache.stride(-1) != 1 or value_cache.stride(-1) != 1:
+        raise ValueError("head_dim must be the contiguous dimension")
+    group = q_heads // kv_heads
+    if num_splits is None:
+        num_splits = decode_num_splits(batch, kv_heads, query.device)
+    if num_splits & (num_splits - 1):
+        raise ValueError("num_splits must be a power of two")
+
+    if out is None:
+        out = torch.empty_like(query)
+    if rows == 0:
+        return out
+    if num_splits == 1:
+        part_out = part_lse = out  # unused
+        part_strides = (0, 0, 0)
+        lse_strides = (0, 0)
+    else:
+        part_out = torch.empty(
+            rows, q_heads, num_splits, head_dim, dtype=torch.float32, device=query.device
+        )
+        part_lse = torch.empty(rows, q_heads, num_splits, dtype=torch.float32, device=query.device)
+        part_strides = part_out.stride()[:3]
+        lse_strides = part_lse.stride()[:2]
+
+    key_cache, value_cache, k_scales, v_scales, scale_strides = _fp8_operands(
+        key_cache, value_cache, key_scales, value_scales
+    )
+    _paged_block_split_kernel[(batch, kv_heads, num_splits)](
+        query,
+        key_cache,
+        value_cache,
+        block_tables,
+        context_lens,
+        context_lens if q_lens is None else q_lens,
+        out,
+        part_out,
+        part_lse,
+        k_scales,
+        v_scales,
+        scale * 1.4426950408889634,  # log2(e): the kernel uses exp2
+        query.stride(0),
+        query.stride(1),
+        key_cache.stride(0),
+        key_cache.stride(1),
+        key_cache.stride(2),
+        value_cache.stride(0),
+        value_cache.stride(1),
+        value_cache.stride(2),
+        *scale_strides,
+        block_tables.stride(0),
+        out.stride(0),
+        out.stride(1),
+        *part_strides,
+        *lse_strides,
+        Q_MAX=q_max,
+        GROUP=group,
+        BLOCK_R=max(16, triton.next_power_of_2(q_max * group)),
+        HEAD_DIM=head_dim,
+        PAGE_SIZE=page_size,
+        BLOCK_N=config["block_n"],
+        NUM_SPLITS=num_splits,
+        CAUSAL=causal,
+        VARLEN=q_lens is not None,
+        INPUT_PRECISION="ieee" if query.dtype == torch.float32 else "tf32",
+        KV_FP8=key_scales is not None,
+        num_warps=config["num_warps"],
+        num_stages=config["num_stages"],
+    )
+    if num_splits > 1:
+        # One row per (sequence, block token): the decode path's merge.
+        _paged_decode_reduce_kernel[(rows, q_heads)](
+            part_out,
+            part_lse,
+            out,
+            *part_strides,
+            *lse_strides,
+            out.stride(0),
+            out.stride(1),
+            HEAD_DIM=head_dim,
+            NUM_SPLITS=num_splits,
+            num_warps=4,
+        )
+    return out

@@ -21,6 +21,7 @@ from .kernels import (
     W4A16Weight,
     W8A16Weight,
     load_cuda_extension,
+    paged_block_attention,
     paged_decode_attention,
     paged_prefill_attention,
     rms_norm,
@@ -768,6 +769,45 @@ class NanoLlamaForCausalLM:
                 out=out,
                 **scales,
             )
+        block_rows = metadata.num_block_rows
+        if block_rows:
+            # A speculative step: its verify rows come first, a block of
+            # block_len tokens each, and take the block kernel (one read of
+            # the context per kv head for the whole block); any prefill rows
+            # after them take the varlen prefill kernel, as below.
+            tokens = block_rows * metadata.block_len
+            if out is None:
+                out = torch.empty_like(query)
+            paged_block_attention(
+                query[:tokens],
+                key_cache,
+                value_cache,
+                metadata.block_tables[:block_rows],
+                metadata.context_lens[:block_rows],
+                None,
+                metadata.block_len,
+                scale,
+                causal=True,
+                use_triton=use_triton,
+                out=out[:tokens],
+                **scales,
+            )
+            if block_rows < metadata.num_seqs:
+                paged_prefill_attention(
+                    query[tokens:],
+                    key_cache,
+                    value_cache,
+                    metadata.prefill_block_tables,
+                    metadata.prefill_cu_seqlens_q,
+                    metadata.prefill_context_lens,
+                    metadata.query_lens[block_rows:],
+                    metadata.context_lens_host[block_rows:],
+                    scale,
+                    use_triton=use_triton,
+                    out=out[tokens:],
+                    **scales,
+                )
+            return out
         decode_rows = metadata.num_decode_rows
         if decode_rows == 0:
             return paged_prefill_attention(

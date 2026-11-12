@@ -383,7 +383,7 @@ class ModelRunner:
             null_block=self.cache.null_block,
             num_slots=self.cache.total_slots,
             device=self.model.device,
-            all_logits_rows=spec_rows,
+            block_rows=spec_rows,
         )
 
     def _gather_inputs(
@@ -439,6 +439,47 @@ class ModelRunner:
         torch.cuda.synchronize(self.model.device)
         logger.info(
             "nano-vLLM compiled the eager step's kernels for 0-%d decode rows in %.1f s",
+            max_seqs,
+            time.perf_counter() - start,
+        )
+        if self.proposer is not None:
+            self._warm_up_spec(max_seqs)
+
+    def _warm_up_spec(self, max_seqs: int) -> None:
+        """A speculative cycle per number of verify rows, on the null block:
+        the block kernel's split count and launch settings are chosen from
+        the rows, like the decode kernel's, for the target and the proposer."""
+        null, block, proposer = self.cache.null_block, self.block, self.proposer
+        start = time.perf_counter()
+        for rows in range(1, max_seqs + 1):
+            tokens = rows * block
+            input_ids, positions, metadata = build_batch(
+                input_ids=[0] * tokens,
+                positions=list(range(block)) * rows,
+                slots=[null * self.cache.block_size] * tokens,
+                block_tables=[[null]] * rows,
+                context_lens=[block] * rows,
+                query_lens=[block] * rows,
+                is_prefill=True,
+                null_block=null,
+                num_slots=self.cache.total_slots,
+                device=self.model.device,
+                block_rows=rows,
+            )
+            proposer.propose(
+                DraftBatch(
+                    seqs=[None] * rows,
+                    anchor_ids=input_ids.view(rows, block)[:, 0],
+                    positions=positions,
+                    slot_mapping=metadata.slot_mapping,
+                    block_tables=metadata.block_tables,
+                    context_lens=metadata.context_lens - block,
+                )
+            )
+            self._forward_prepared(input_ids, positions, metadata, use_graphs=False, observe=True)
+        torch.cuda.synchronize(self.model.device)
+        logger.info(
+            "nano-vLLM compiled the speculative step's kernels for 1-%d verify rows in %.1f s",
             max_seqs,
             time.perf_counter() - start,
         )
