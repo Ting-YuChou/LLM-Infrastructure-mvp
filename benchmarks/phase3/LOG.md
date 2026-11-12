@@ -421,3 +421,33 @@ results/<run_id>/.
   target too (its logits only pick proposals), about 0.4 ms of the 15.45.
 - Three runs, 69 minutes of VM, 7.4 CU (419.76 -> 412.37): an A100 is about
   6.4 CU per hour now, not the 3.5 of earlier entries. The VM is stopped.
+
+## M5: coupled sampling (2026-11-12)
+
+- Before M5 a sampled request was already lossless: a verify row draws
+  with the noise of its position (seed, sequence id, position), so its
+  token is the one a plain decode step draws there, whatever was drafted.
+  But the drafts were the drafter's argmax, which the target's draw only
+  matches when it lands on the most likely token.
+- Now the drafts are drawn too, by a second `Sampler` with the same seed:
+  draft `j` of a sequence gets the sequence's settings and the position
+  `num_tokens + j`, the one verify row `j` samples. `DraftBatch.draw` hands
+  the proposer that draw; in the cycle's graph it is the same five kernels
+  on staged settings (`_graph_draft_draw`). `speculative_coupled_sampling:
+  false` keeps argmax drafts. Greedy requests are unchanged: their draw is
+  the argmax.
+- `sampling.philox_log_exponential`: the draw kernel's noise in PyTorch
+  (Philox4x32-10 on int64 tensors, checked against Random123's known
+  answers; the same 23-bit uniform and -log1p). The sampler's PyTorch path
+  (CPU, fp32 logits) used the default generator before, so on the CPU a
+  sampled stream could not be reproduced or coupled; now it is keyed like
+  the kernels.
+- Checked without a GPU (341 nano unit tests, 15 new): with one seed a
+  sampled request's tokens are the same with and without a drafter (random
+  DFlash drafter; coupled and argmax drafts; eager steps and graphs; greedy
+  and sampled requests in one batch); a drafter that returns the target's
+  own logits has every coupled draft accepted at temperature 0.9 and under
+  70% of its argmax drafts; a draft is the token a sampler of the test's
+  own draws for (seed, sequence id, position). Five deliberate bugs (draft
+  positions off by one, another seed, no staging in the graph, a wrong
+  sequence id, no draw) each fail at least one test.
