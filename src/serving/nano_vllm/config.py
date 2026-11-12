@@ -105,6 +105,12 @@ class NanoVLLMConfig:
     num_speculative_tokens: int = 0
     # "w4a16": quantize the drafter's projections to 4 bits at load.
     speculative_weight_quant: str = "none"
+    # A sampled request's drafts are drawn like the target's tokens, with the
+    # noise of the position each one proposes (seed, sequence id, position),
+    # so a draft matches whenever the two models' logits agree closely
+    # enough. False: drafts are the drafter's argmax whatever the request
+    # samples with. The output is the same either way.
+    speculative_coupled_sampling: bool = True
     # Run the engine core (scheduler + model) in its own process; the server
     # process keeps tokenization, detokenization, stop strings and HTTP.
     multiprocess: bool = False
@@ -290,6 +296,10 @@ class NanoVLLMConfig:
                     "SPECULATIVE_WEIGHT_QUANT",
                     engine.get("speculative_weight_quant", cls.speculative_weight_quant),
                 )
+            ),
+            speculative_coupled_sampling=_bool_value(
+                _env("SPECULATIVE_COUPLED_SAMPLING", engine.get("speculative_coupled_sampling")),
+                default=cls.speculative_coupled_sampling,
             ),
             multiprocess=_bool_value(
                 _env("ENGINE_MULTIPROCESS", engine.get("multiprocess")),

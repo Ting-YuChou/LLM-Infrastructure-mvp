@@ -56,6 +56,9 @@ engine:
   num_speculative_tokens: 0
   # "w4a16": quantize the drafter's projections to 4 bits at load.
   speculative_weight_quant: "none"
+  # Draw a sampled request's drafts with the target's noise for the same
+  # positions (false: the drafter's argmax). The output is the same either way.
+  speculative_coupled_sampling: true
   # Engine core (scheduler + model) in its own process; this one keeps
   # tokenization, detokenization and HTTP off the model steps' GIL.
   multiprocess: false

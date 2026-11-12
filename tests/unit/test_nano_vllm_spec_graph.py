@@ -78,8 +78,12 @@ def _core(path, proposer=None, graphs=None, **overrides) -> EngineCore:
     return core
 
 
-def _run(core: EngineCore, prompts: list[list[int]], arrive_every: int = 0):
-    """Token ids per request, and how many cycles took the graph / the eager path."""
+def _run(core: EngineCore, prompts: list[list[int]], arrive_every: int = 0, sampling=None):
+    """Token ids per request, and how many cycles took the graph / the eager
+    path. ``sampling``: one SamplingOptions or one per request (default greedy)."""
+    sampling = sampling or SamplingOptions(max_tokens=MAX_TOKENS, **GREEDY)
+    if not isinstance(sampling, list):
+        sampling = [sampling] * len(prompts)
     runner = core.model_runner
     paths = {"graph": 0, "eager": 0}
     replay, forward = runner._replay_spec, runner._forward_prepared
@@ -100,9 +104,7 @@ def _run(core: EngineCore, prompts: list[list[int]], arrive_every: int = 0):
     while pending or core.has_work():
         if pending and (not arrive_every or steps % arrive_every == 0):
             for req_id, prompt in pending[: 1 if arrive_every else len(pending)]:
-                core.add_request(
-                    EngineRequest(req_id, list(prompt), SamplingOptions(max_tokens=MAX_TOKENS, **GREEDY))
-                )
+                core.add_request(EngineRequest(req_id, list(prompt), sampling[req_id]))
             pending = pending[1:] if arrive_every else []
         for output in core.step():
             assert output.error is None, output.error

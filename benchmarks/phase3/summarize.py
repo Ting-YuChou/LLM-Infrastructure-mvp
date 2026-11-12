@@ -75,8 +75,9 @@ def by_run(rows: list[dict]) -> dict[tuple[str, str, bool], dict[str, dict[int, 
 
 
 def base_of(engine: str) -> str | None:
-    """The same server without a drafter (``_dflash4``: a 4-bit drafter)."""
-    for suffix in ("_dflash", "_dflash4"):
+    """The same server without a drafter (``_dflash4``: a 4-bit drafter; a
+    final ``g``: drafts are the drafter's argmax for sampled requests too)."""
+    for suffix in ("_dflash", "_dflash4", "_dflashg", "_dflash4g"):
         if engine.endswith(suffix):
             return engine[: -len(suffix)]
     return None
@@ -137,22 +138,58 @@ def metrics(path: Path) -> dict[str, float]:
     return values
 
 
+def draft_counts(out: Path, row: dict) -> tuple[float, float]:
+    """(drafts, accepted tokens) a server counted during one run."""
+    stem = f"{row['engine']}_{row['run']}"
+    before = metrics(out / "serve" / f"{stem}_before.metrics.txt")
+    after = metrics(out / "serve" / f"{stem}_after.metrics.txt")
+    delta = {name: after[name] - before.get(name, 0.0) for name in after}
+    num = next((v for k, v in delta.items() if "num_drafts" in k), 0.0)
+    accepted = next((v for k, v in delta.items() if "num_accepted_tokens" in k and "per_pos" not in k), 0.0)
+    return num, accepted
+
+
 def drafts(out: Path, rows: list[dict]) -> list[str]:
     """Accepted tokens per draft from the counters around each run."""
     body = []
     for row in rows:
-        stem = f"{row['engine']}_{row['run']}"
-        before = metrics(out / "serve" / f"{stem}_before.metrics.txt")
-        after = metrics(out / "serve" / f"{stem}_after.metrics.txt")
-        delta = {name: after[name] - before.get(name, 0.0) for name in after}
-        num = next((v for k, v in delta.items() if "num_drafts" in k), 0.0)
-        accepted = next((v for k, v in delta.items() if "num_accepted_tokens" in k and "per_pos" not in k), 0.0)
+        num, accepted = draft_counts(out, row)
         if num > 0:
             body.append([row["engine"], row["run"], f"{int(num)}", f"{accepted / num:.2f}", f"{accepted / num + 1:.2f}"])
     if not body:
         return []
     return ["## Drafts as the servers count them", ""] + table(
         ["server", "run", "drafts", "accepted per draft", "tokens per cycle"], body
+    )
+
+
+def coupling(out: Path, rows: list[dict]) -> list[str]:
+    """M5: tokens per cycle of sampled requests with coupled drafts against
+    the same server drafting its argmax (label + ``g``)."""
+    by_engine = {(row["engine"], row["run"]): row for row in rows}
+    body = []
+    for (engine, run), row in by_engine.items():
+        other = by_engine.get((engine + "g", run))
+        if other is None or not run.endswith("s"):
+            continue
+        (num, accepted), (other_num, other_accepted) = draft_counts(out, row), draft_counts(out, other)
+        if not num or not other_num:
+            continue
+        coupled, argmax = accepted / num + 1, other_accepted / other_num + 1
+        body.append([
+            f"{engine} {run}", f"{coupled:.2f}", f"{argmax:.2f}", f"{coupled / argmax:.3f}x",
+            fmt(row["out_tok_s"], 0), fmt(other["out_tok_s"], 0),
+        ])
+    if not body:
+        return []
+    return [
+        "## Coupled sampling (temperature 0.7, top-p 0.9)", "",
+        "Tokens per cycle and output tok/s with the drafts drawn with the target's noise (coupled) and "
+        "with the drafter's argmax as drafts, same seed: the emitted tokens are the same requests' same "
+        "streams up to the logits' batch noise.", "",
+    ] + table(
+        ["server, run", "coupled tokens/cycle", "argmax tokens/cycle", "ratio", "coupled tok/s", "argmax tok/s"],
+        body,
     )
 
 
@@ -298,25 +335,27 @@ def m4_gates(out: Path, serve_rows: list[dict], baseline_rows: list[dict], basel
         ]
         lines += [f"G3 (AWQ target, batch 1, a cycle within {CYCLE_GATE_MS} ms, median): " + "; ".join(verdicts) + ".", ""]
     runs = by_run(serve_rows + baseline_rows)
-    body = []
-    for dataset in DATASETS:
-        engines = runs.get((dataset, False), {})
-        for engine in sorted(engines):
-            names = BASELINES.get(base_of(engine) or "")
-            mine = engines[engine].get(1, {}).get("out_tok_s")
-            theirs = {n: engines[n][1]["out_tok_s"] for n in names or () if 1 in engines.get(n, {})}
-            if not engine.startswith("nano") or mine is None or not theirs:
-                continue
-            best = max(theirs, key=theirs.get)
-            body.append([
-                f"{dataset} / {engine}", fmt(mine, 0), f"{best} {theirs[best]:.0f}",
-                f"{mine / theirs[best]:.2f}x", "met" if mine > theirs[best] else "NOT met",
-            ])
-    if body:
-        source = f" (baselines from {baseline_name})" if baseline_rows else ""
-        lines += [f"G4: output tok/s at c=1, temperature 0, against the fastest DFlash server on the same weights{source}:", ""]
-        lines += table(["dataset / server", "nano tok/s", "best baseline", "ratio", "G4"], body)
-    return ["## M4 gates", ""] + lines if lines else []
+    source = f" (baselines from {baseline_name})" if baseline_rows else ""
+    for sampled, name in ((False, "G4: output tok/s at c=1, temperature 0"),
+                          (True, "M5: output tok/s at c=1, temperature 0.7, top-p 0.9")):
+        body = []
+        for dataset in DATASETS:
+            engines = runs.get((dataset, sampled), {})
+            for engine in sorted(engines):
+                names = BASELINES.get(base_of(engine) or "")
+                mine = engines[engine].get(1, {}).get("out_tok_s")
+                theirs = {n: engines[n][1]["out_tok_s"] for n in names or () if 1 in engines.get(n, {})}
+                if not engine.startswith("nano") or mine is None or not theirs:
+                    continue
+                best = max(theirs, key=theirs.get)
+                body.append([
+                    f"{dataset} / {engine}", fmt(mine, 0), f"{best} {theirs[best]:.0f}",
+                    f"{mine / theirs[best]:.2f}x", "met" if mine > theirs[best] else "NOT met",
+                ])
+        if body:
+            lines += [f"{name}, against the fastest DFlash server on the same weights{source}:", ""]
+            lines += table(["dataset / server", "nano tok/s", "best baseline", "ratio", "above"], body)
+    return ["## M4 and M5 gates", ""] + lines if lines else []
 
 
 def block_kernel(out: Path) -> list[str]:
@@ -461,7 +500,7 @@ def main() -> None:
         lines += ["Every server tokenizes the prompts the same." if same else
                   "The servers do NOT count the same prompt tokens: the runs are not comparable as they are.", ""]
     if serve_rows:
-        lines += ["## Serving", ""] + serving(serve_rows) + drafts(out, serve_rows)
+        lines += ["## Serving", ""] + serving(serve_rows) + drafts(out, serve_rows) + coupling(out, serve_rows)
     accept_lines, accept_rows = accept(out)
     lines += texts(out) + spec_check(out) + parity(out) + block_kernel(out)
     lines += accept_lines + gate(serve_rows, accept_rows)

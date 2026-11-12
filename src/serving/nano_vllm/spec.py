@@ -10,12 +10,18 @@ would have produced one at a time.
 
 A :class:`Proposer` supplies the drafts. It may read the target through
 feature taps (:meth:`Proposer.observe`), as the DFlash drafter does.
+
+The target's token at a position is drawn with noise that depends only on
+(seed, sequence id, position), so it is the token a plain decode step would
+draw there, at any temperature. Coupled sampling draws the drafts with the
+same noise from the drafter's logits: where the two distributions are close
+the draws agree, which a draft drawn independently would only do by chance.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Callable, Optional, Protocol
 
 import torch
 
@@ -51,6 +57,12 @@ class DraftBatch:
     slot_mapping: torch.Tensor  # [B * Q] their KV slots (the lookahead slots)
     block_tables: torch.Tensor  # [B, width]
     context_lens: torch.Tensor  # [B] tokens before the anchor
+    # Draft logits [B * K, vocab] (row ``b * K + j``: the token ``j + 1``
+    # positions after sequence ``b``'s anchor) -> a token per row [B * K]:
+    # the engine's sampler with each sequence's settings and the noise of
+    # the position the row proposes, the one the target's own draw there
+    # will use (coupled sampling). None: the argmax.
+    draw: Optional[Callable[[torch.Tensor], torch.Tensor]] = None
 
 
 class Proposer(Protocol):
@@ -76,7 +88,8 @@ class Proposer(Protocol):
 
 
 class DFlashProposer:
-    """A DFlash drafter with its KV pool, drafting greedily.
+    """A DFlash drafter with its KV pool: a draft is the argmax of its
+    logits, or what ``DraftBatch.draw`` makes of them.
 
     The pool shares block ids with the target's cache, so the target's slot
     mapping and block tables address it and a prefix-cache hit covers both.
@@ -103,4 +116,5 @@ class DFlashProposer:
             batch.anchor_ids, batch.positions, self.cache, batch.block_tables,
             batch.context_lens, batch.slot_mapping,
         )
-        return logits.argmax(dim=-1).view(len(batch.seqs), self.num_draft_tokens)
+        tokens = logits.argmax(dim=-1) if batch.draw is None else batch.draw(logits)
+        return tokens.view(len(batch.seqs), self.num_draft_tokens)

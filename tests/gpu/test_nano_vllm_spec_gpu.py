@@ -187,3 +187,33 @@ def test_sampled_rows_in_a_graph_cycle_follow_their_settings(tmp_path):
     assert first[1] == choices[1, : len(first[1])].tolist()
     # The same state again: the same draws.
     assert runner.run(seqs, is_prefill=False) == first
+
+
+@pytest.mark.parametrize("graph", [False, True], ids=["eager", "graph"])
+def test_a_draft_row_and_the_verify_row_of_its_position_draw_alike(tmp_path, graph):
+    """Coupled sampling: from the same logits, the draft for a position is
+    the token the target's verify row draws there."""
+    runner, manager = _runner(tmp_path, max_graph_batch=4)
+    seqs = _prefilled(runner, manager, 3)
+    seqs[0].sampling = SamplingOptions(max_tokens=64, temperature=1.0, top_p=1.0)
+    seqs[2].sampling = SamplingOptions(max_tokens=64, temperature=0.8, top_p=0.9, top_k=50)
+    block, drafted = runner.block, runner.proposer.num_draft_tokens
+    vocab = runner._spec.vocab
+    generator = torch.Generator(device="cuda").manual_seed(0)
+    logits = (3 * torch.randn(3, block, vocab, device="cuda", generator=generator)).to(torch.bfloat16)
+
+    verify = torch.zeros(3 * block, dtype=torch.long, device="cuda")
+    runner.sampler.sample(logits.view(3 * block, vocab), *runner._spec_sampling(seqs, 3), verify)
+    draft_logits = logits[:, :drafted].reshape(3 * drafted, vocab).contiguous()
+    if graph:  # as _replay_spec stages it, with a padded fourth sequence
+        runner.draft_sampler.stage(*runner._draft_sampling(seqs), vocab, padded_rows=4 * drafted)
+        drafts = runner._graph_draft_draw(draft_logits)
+    else:
+        drafts = runner._draft_draw(seqs, slot=0)(draft_logits)
+
+    verify, drafts = verify.view(3, block).cpu(), drafts.view(3, drafted).cpu()
+    assert torch.equal(drafts, verify[:, :drafted])
+    # The sampled rows drew: not every token is its row's largest logit.
+    values = logits.float().cpu()
+    is_max = values.gather(-1, verify.unsqueeze(-1)).squeeze(-1) == values.max(dim=-1).values
+    assert is_max[1].all() and not is_max[0].all()

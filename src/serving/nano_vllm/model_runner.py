@@ -184,6 +184,7 @@ class ModelRunner:
         max_rows: int = 256,
         seed: int = 0,
         proposer: Optional[Proposer] = None,
+        coupled_sampling: bool = True,
     ):
         self.model = model
         self.cache = cache
@@ -203,6 +204,14 @@ class ModelRunner:
         # The sampled tokens, then a speculative step's accepted counts.
         self.host_out = torch.zeros(2, max_rows + self.max_seqs, dtype=torch.long, pin_memory=cuda)
         self.sampler = Sampler(max_rows, device, seed=seed)
+        # Coupled sampling (spec.py): the drafts are drawn by a sampler with
+        # the same seed, so a draft row and the verify row for its position
+        # use the same noise.
+        self.draft_sampler: Optional[Sampler] = None
+        if proposer is not None and coupled_sampling:
+            draft_rows = self.max_seqs * proposer.num_draft_tokens
+            self.draft_sampler = Sampler(draft_rows, device, seed=seed)
+            self.drafted = torch.zeros(draft_rows, dtype=torch.long, device=device)
         self._events = [torch.cuda.Event() for _ in range(2)] if cuda else [None, None]
         self._slot = 0
 
@@ -291,6 +300,7 @@ class ModelRunner:
                     slot_mapping=metadata.slot_mapping[:spec_tokens],
                     block_tables=metadata.block_tables[:num_spec],
                     context_lens=metadata.context_lens[:num_spec] - block,
+                    draw=self._draft_draw(seqs[:num_spec], slot),
                 )
             )
             block_ids[:, 1:] = drafts
@@ -306,6 +316,36 @@ class ModelRunner:
             if event is not None:
                 event.record()
         return StepHandle(rows, slot, event, spec_seqs=num_spec, block=block)
+
+    def _draft_sampling(self, seqs: list[Sequence]) -> tuple[list, list[int], list[int]]:
+        """Per draft row: the sequence's sampling options and id, and the
+        position the draft proposes a token for. Draft ``j`` (from 0) stands
+        at ``num_tokens + j``, where verify row ``j`` samples."""
+        drafted = self.proposer.num_draft_tokens
+        options, seq_ids, positions = [], [], []
+        for seq in seqs:
+            options += [seq.sampling] * drafted
+            seq_ids += [seq.seq_id] * drafted
+            positions += range(seq.num_tokens, seq.num_tokens + drafted)
+        return options, seq_ids, positions
+
+    def _draft_draw(self, seqs: list[Sequence], slot: int):
+        """``DraftBatch.draw`` for an eager step's verify rows ``seqs``."""
+        if self.draft_sampler is None:
+            return None
+        rows = self._draft_sampling(seqs)
+
+        def draw(logits: torch.Tensor) -> torch.Tensor:
+            self.draft_sampler.sample(logits, *rows, self.drafted, slot=slot)
+            return self.drafted[: logits.shape[0]]
+
+        return draw
+
+    def _graph_draft_draw(self, logits: torch.Tensor) -> torch.Tensor:
+        """``DraftBatch.draw`` inside a graph: the settings are staged before
+        the replay."""
+        self.draft_sampler.draw(logits, self.drafted)
+        return self.drafted[: logits.shape[0]]
 
     def _spec_sampling(
         self, seqs: list[Sequence], num_spec: int
@@ -576,6 +616,8 @@ class ModelRunner:
         graphs.ints.copy_(graphs.host_ints[0])
         # Capture-time draws: greedy for every row.
         self.sampler.stage([], [], [], 0, slot=0, padded_rows=max_batch * block)
+        if self.draft_sampler is not None:
+            self.draft_sampler.stage([], [], [], 0, slot=0, padded_rows=max_batch * (block - 1))
 
         start = time.perf_counter()
         pool = torch.cuda.graph_pool_handle() if cuda else None
@@ -623,6 +665,7 @@ class ModelRunner:
                 slot_mapping=slots,
                 block_tables=tables,
                 context_lens=context_lens - block,
+                draw=self._graph_draft_draw if self.draft_sampler is not None else None,
             )
         )
         input_ids = torch.cat([anchors, drafts], dim=1).view(-1)
@@ -691,6 +734,10 @@ class ModelRunner:
         self.sampler.stage(
             *self._spec_sampling(seqs, batch), graphs.vocab, slot=slot, padded_rows=bucket * block
         )
+        if self.draft_sampler is not None:
+            self.draft_sampler.stage(
+                *self._draft_sampling(seqs), graphs.vocab, slot=slot, padded_rows=bucket * (block - 1)
+            )
         graphs.longs.copy_(graphs.host_longs[slot], non_blocking=True)
         graphs.ints.copy_(graphs.host_ints[slot], non_blocking=True)
         graphs.graphs[bucket]()
