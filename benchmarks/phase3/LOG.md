@@ -433,9 +433,10 @@ results/<run_id>/.
   draft `j` of a sequence gets the sequence's settings and the position
   `num_tokens + j`, the one verify row `j` samples. `DraftBatch.draw` hands
   the proposer that draw; in the cycle's graph it is the same five kernels
-  on staged settings (`_graph_draft_draw`). `speculative_coupled_sampling:
-  false` keeps argmax drafts. Greedy requests are unchanged: their draw is
-  the argmax.
+  on staged settings (`_graph_draft_draw`). Greedy requests are unchanged:
+  their draw is the argmax. (The first run below still had an on/off
+  setting, `speculative_coupled_sampling`; it became
+  `speculative_draft_temperature` after it.)
 - `sampling.philox_log_exponential`: the draw kernel's noise in PyTorch
   (Philox4x32-10 on int64 tensors, checked against Random123's known
   answers; the same 23-bit uniform and -log1p). The sampler's PyTorch path
@@ -451,3 +452,39 @@ results/<run_id>/.
   own draws for (seed, sequence id, position). Five deliberate bugs (draft
   positions off by one, another seed, no staging in the graph, a wrong
   sequence id, no draw) each fail at least one test.
+
+### Run m5-20261112-231250-colab (new VM: all tests, AWQ spec_check, sampled serving)
+
+- tests/gpu and the nano unit tests: 1324 passed, none skipped (976 s).
+  New on the GPU: racing the tokens the kernels kept with
+  `philox_log_exponential` picks the kernels' token (4 settings, 64 rows
+  each), and a draft row draws what the verify row of its position draws
+  from the same logits, eagerly and as the graph stages it.
+- Temperature 0 is unchanged: an AWQ cycle 7.74 ms; c=1 423 / 637 / 483 /
+  288 tok/s (M4: 428 / 641 / 484 / 289).
+- Temperature 0.7, top-p 0.9, c=1, the same seed (so the same streams):
+  tokens per cycle with coupled drafts against argmax drafts
+
+  | target | alpaca | humaneval |
+  |---|---|---|
+  | AWQ | 3.16 against 3.40 (0.93x) | 4.95 against 5.14 (0.96x) |
+  | BF16 | 3.35 against 3.47 (0.97x) | 5.12 against 5.21 (0.98x) |
+
+  Coupled drafts are accepted less often than the drafter's argmax, 2 to
+  7%; at c=16 the two are within 2%. The M5 gate (at least the argmax
+  drafts' tokens per cycle) is not met. M0's study had the two within 2.1%
+  either way on 16 prompts. A draft drawn at the request's temperature
+  follows the drafter's own uncertainty, and this drafter's distribution is
+  further from the target's than its argmax is from the target's draw.
+- Output tok/s at c=1, sampled (alpaca / humaneval), against M0's
+  baselines (vLLM AWQ + DFlash 371 / 556, vLLM BF16 + DFlash 208 / 310,
+  SGLang BF16 + DFlash 186 / 287):
+
+  | server | coupled | argmax drafts | 4-bit drafter, coupled |
+  |---|---|---|---|
+  | nano AWQ + DFlash | 383 / 602 | 419 / 616 | 448 / 684 |
+  | nano BF16 + DFlash | 210 / 315 | 216 / 321 | 219 / 332 |
+
+  Every one is above the baselines (1.01x to 1.23x); nano AWQ without a
+  drafter is 206 / 205 (M0: 206 / 206).
+- 58 minutes of VM, 4.6 CU (412.37 -> 407.78). The VM is stopped.
