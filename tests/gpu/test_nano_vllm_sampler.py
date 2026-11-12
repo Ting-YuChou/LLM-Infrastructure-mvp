@@ -237,10 +237,13 @@ def test_sampler_replays_in_a_cuda_graph():
         run()
     torch.cuda.current_stream().wait_stream(stream)
     graph = torch.cuda.CUDAGraph()
-    with torch.cuda.graph(graph):
-        run()
-    out.fill_(-1)
-    graph.replay()
+    # In inference mode, as the model runner captures and replays (see
+    # ModelRunner.capture_decode_graphs): another test's graph may be alive.
+    with torch.inference_mode():
+        with torch.cuda.graph(graph):
+            run()
+        out.fill_(-1)
+        graph.replay()
     torch.cuda.synchronize()
     assert torch.equal(out, eager)
 

@@ -544,11 +544,7 @@ class ModelRunner:
         to ``max_batch`` sequences, when the proposer works from the batch's
         tensors alone (``Proposer.device_only``).
 
-        In inference mode, like the piecewise graphs and :meth:`_replay_spec`:
-        PyTorch keeps the default generator's graph state in tensors made by
-        the first capture and updates them in place at every capture and
-        replay, which an inference tensor only allows in inference mode. With
-        a proposer the piecewise capture comes first.
+        In inference mode, as :meth:`capture_decode_graphs` explains.
 
         Without the graph a cycle is the drafter's ~60 kernels, the target's
         piecewise graphs with an eager attention per layer, the context
@@ -708,11 +704,19 @@ class ModelRunner:
 
     # --- CUDA graphs for decode ------------------------------------------
 
+    @torch.inference_mode()
     def capture_decode_graphs(self, max_batch: int, max_model_len: int) -> None:
         """Capture one decode graph per size in GRAPH_BATCH_SIZES up to max_batch.
 
         Every graph reads the same static buffers, so a step only refills them.
         Padded rows decode token 0 into the null block with a context of 1.
+
+        Every capture and replay in this class runs in inference mode.
+        PyTorch keeps the default generator's graph state in tensors made
+        when the first live graph is captured and updates them in place at
+        each later capture and replay; if that first capture was in
+        inference mode (the piecewise graphs', say), an update outside it
+        raises. Inside inference mode either kind of tensor can be updated.
         """
         device = self.model.device
         sizes = [size for size in GRAPH_BATCH_SIZES if size < max_batch] + [max_batch]
@@ -793,6 +797,7 @@ class ModelRunner:
         tables = ints[max_batch:].view(max_batch, graphs.width)
         tables[start:] = null
 
+    @torch.inference_mode()
     def _replay(
         self, seqs: list[Sequence], bucket: int, gather_rows: Optional[list[int]], slot: int
     ) -> torch.Tensor:
