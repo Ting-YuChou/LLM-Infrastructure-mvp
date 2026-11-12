@@ -47,6 +47,15 @@ engine:
   async_scheduling: true
   # Seeds the sampler: each draw comes from (seed, sequence id, position).
   seed: 0
+  # Speculative decoding: the path of a DFlash drafter checkpoint (for
+  # example z-lab/LLaMA3.1-8B-Instruct-DFlash-UltraChat, downloaded); null is
+  # off. The output stays the target's own.
+  speculative_model: null
+  speculative_method: "dflash"
+  # Drafts per cycle; 0: the drafter's block size - 1.
+  num_speculative_tokens: 0
+  # "w4a16": quantize the drafter's projections to 4 bits at load.
+  speculative_weight_quant: "none"
   # Engine core (scheduler + model) in its own process; this one keeps
   # tokenization, detokenization and HTTP off the model steps' GIL.
   multiprocess: false

@@ -65,8 +65,14 @@ def build_batch(
     num_slots: int,
     device: torch.device,
     all_logits: bool = False,
+    all_logits_rows: int = 0,
 ) -> tuple[torch.Tensor, torch.Tensor, BatchMetadata]:
     """Pack host-side batch lists into device tensors.
+
+    Logits come out for the last token of each sequence, except that the
+    first ``all_logits_rows`` sequences (a speculative step's verify rows)
+    get them for every token; ``all_logits`` asks for every token of every
+    sequence.
 
     All int64 fields go in one buffer and all int32 fields in another, staged
     in pinned memory on CUDA, so a batch costs two asynchronous H2D copies.
@@ -92,7 +98,10 @@ def build_batch(
     cu_seqlens = [0]
     for query_len in query_lens:
         cu_seqlens.append(cu_seqlens[-1] + query_len)
-    logits_indices = [] if all_logits else [end - 1 for end in cu_seqlens[1:]]
+    logits_indices = [] if all_logits else [
+        *range(cu_seqlens[all_logits_rows]),
+        *(end - 1 for end in cu_seqlens[all_logits_rows + 1 :]),
+    ]
     num_decode_rows = next((i for i, n in enumerate(query_lens) if n != 1), num_seqs)
     # Rounded up to a multiple of 16: the width is the kernels' block-table
     # stride, and Triton specializes integer arguments on divisibility by 16.

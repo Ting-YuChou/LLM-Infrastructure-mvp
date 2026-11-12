@@ -142,11 +142,13 @@ class BlockManager:
         seq.num_shared_blocks = 0
         seq.num_cached_tokens = 0
 
-    def can_append(self, seq: Sequence) -> bool:
-        return self.num_free_blocks >= self._blocks_to_append(seq)
+    def can_append(self, seq: Sequence, lookahead: int = 0) -> bool:
+        return self.num_free_blocks >= self._blocks_to_append(seq, lookahead)
 
-    def may_append(self, seq: Sequence) -> None:
-        count = self._blocks_to_append(seq)
+    def may_append(self, seq: Sequence, lookahead: int = 0) -> None:
+        """Blocks for the token about to be decoded and ``lookahead`` more
+        positions after it (a speculative step writes a whole block of them)."""
+        count = self._blocks_to_append(seq, lookahead)
         self._reserve(count)
         for _ in range(count):
             seq.block_table.append(self.free_block_ids.popleft())
@@ -314,11 +316,11 @@ class BlockManager:
             count = len(walk.blocks) if walk is not None else 0
         return seq.num_blocks - len(hit_blocks) + revived
 
-    def _blocks_to_append(self, seq: Sequence) -> int:
+    def _blocks_to_append(self, seq: Sequence, lookahead: int = 0) -> int:
         # Blocks needed so every token, including the one about to be decoded
-        # (possibly still in flight), has a KV slot (block_size == 1 needs a
-        # block on every step).
-        needed = -(-seq.num_logical_tokens // self.block_size)
+        # (possibly still in flight) and the lookahead positions after it,
+        # has a KV slot (block_size == 1 needs a block on every step).
+        needed = -(-(seq.num_logical_tokens + lookahead) // self.block_size)
         return max(0, needed - len(seq.block_table))
 
     def _split(self, node: RadixNode, matched: int) -> RadixNode:

@@ -18,6 +18,7 @@ from .metadata import BatchMetadata, build_batch
 from .nvtx import nvtx_range
 from .sampling import Sampler
 from .sequence import Sequence
+from .spec import DraftBatch, Proposer, accept_prefix
 
 logger = logging.getLogger(__name__)
 
@@ -107,11 +108,18 @@ class _PiecewiseGraphs:
 
 @dataclass
 class StepHandle:
-    """A launched step: its sampled tokens arrive in ``host_out[slot][:rows]``."""
+    """A launched step: its sampled tokens arrive in ``host_out[slot][:rows]``.
+
+    A speculative step has ``spec_seqs`` sequences of ``block`` rows each
+    first, then one row per prefill sequence; the accepted-draft count of
+    each speculative sequence follows the tokens in ``host_out``.
+    """
 
     rows: int
     slot: int
     event: Optional[torch.cuda.Event]
+    spec_seqs: int = 0
+    block: int = 1
 
 
 class ModelRunner:
@@ -129,6 +137,10 @@ class ModelRunner:
     the tokens). Between the two the host may schedule and launch the next
     step: a row whose input token is still in flight names the previous
     step's row in ``gather_rows`` and reads it from ``sampled`` on the device.
+
+    With a ``proposer`` every step that has decode rows is a speculative
+    cycle (:meth:`_launch_spec`, spec.py): the decode rows become verify rows
+    of K + 1 tokens, and :meth:`collect` returns a list of tokens for each.
     """
 
     def __init__(
@@ -138,17 +150,24 @@ class ModelRunner:
         block_manager: BlockManager,
         max_rows: int = 256,
         seed: int = 0,
+        proposer: Optional[Proposer] = None,
     ):
         self.model = model
         self.cache = cache
         self.block_manager = block_manager
+        self.proposer = proposer
+        # Rows a step samples per sequence: a verify row's whole block.
+        self.block = proposer.num_draft_tokens + 1 if proposer is not None else 1
+        self.max_seqs = max_rows
+        max_rows *= self.block
         self._graphs: Optional[_DecodeGraphs] = None
         self._pieces: Optional[_PiecewiseGraphs] = None
         device = model.device
         cuda = device.type == "cuda"
         self.max_rows = max_rows
         self.sampled = torch.zeros(max_rows, dtype=torch.long, device=device)
-        self.host_out = torch.zeros(2, max_rows, dtype=torch.long, pin_memory=cuda)
+        # The sampled tokens, then a speculative step's accepted counts.
+        self.host_out = torch.zeros(2, max_rows + self.max_seqs, dtype=torch.long, pin_memory=cuda)
         self.sampler = Sampler(max_rows, device, seed=seed)
         self._events = [torch.cuda.Event() for _ in range(2)] if cuda else [None, None]
         self._slot = 0
@@ -165,10 +184,14 @@ class ModelRunner:
     ) -> StepHandle:
         """Enqueue the forward pass and sampling; nothing here waits for the GPU."""
         rows = len(seqs)
-        if rows > self.max_rows:
-            raise ValueError(f"{rows} rows exceed the runner's {self.max_rows}")
+        if rows > self.max_seqs:
+            raise ValueError(f"{rows} rows exceed the runner's {self.max_seqs}")
         slot = self._slot
         self._slot ^= 1
+        if self.proposer is not None and not seqs[0].is_prefill:
+            if gather_rows is not None and any(row >= 0 for row in gather_rows):
+                raise ValueError("a speculative step cannot take in-flight input tokens")
+            return self._launch_spec(seqs, slot)
         logits = self.forward(seqs, is_prefill, gather_rows=gather_rows, slot=slot)
         with nvtx_range("sample"):
             # A row samples the token at position num_tokens + num_inflight
@@ -187,12 +210,69 @@ class ModelRunner:
                 event.record()
         return StepHandle(rows, slot, event)
 
-    def collect(self, handle: StepHandle) -> list[int]:
-        """Wait for a launched step and return its sampled token ids."""
+    def collect(self, handle: StepHandle) -> list[int | list[int]]:
+        """Wait for a launched step and return its sampled token ids: one per
+        row, or for a speculative sequence the list of its cycle's tokens."""
         with nvtx_range("collect"):
             if handle.event is not None:
                 handle.event.synchronize()
-            return self.host_out[handle.slot, : handle.rows].tolist()
+            spec, block = handle.spec_seqs, handle.block
+            flat = self.host_out[handle.slot, : handle.rows + spec].tolist()
+            if not spec:
+                return flat
+            accepted = flat[handle.rows :]
+            tokens: list[int | list[int]] = [
+                flat[row * block : row * block + accepted[row] + 1] for row in range(spec)
+            ]
+            return tokens + flat[spec * block : handle.rows]
+
+    # --- the speculative cycle ---------------------------------------------
+
+    def _launch_spec(self, seqs: list[Sequence], slot: int) -> StepHandle:
+        """Draft, verify and accept for the decode rows of ``seqs`` (they come
+        first), in the same forward pass as any prefill rows.
+
+        A decode row holds its last accepted token (the anchor, whose KV is
+        not computed yet) and K drafts at the positions after it, with
+        logits for every one of them; the target's token at each position is
+        sampled as a plain decode step would sample it there.
+        """
+        proposer, block = self.proposer, self.block
+        num_spec = next((i for i, seq in enumerate(seqs) if seq.is_prefill), len(seqs))
+        with nvtx_range("prepare"):
+            input_ids, positions, metadata = self.prepare(seqs, True, spec_rows=num_spec)
+        spec_tokens = num_spec * block
+        with nvtx_range("draft"):
+            block_ids = input_ids[:spec_tokens].view(num_spec, block)
+            drafts = proposer.propose(
+                DraftBatch(
+                    seqs=seqs[:num_spec],
+                    anchor_ids=block_ids[:, 0],
+                    positions=positions[:spec_tokens],
+                    slot_mapping=metadata.slot_mapping[:spec_tokens],
+                    block_tables=metadata.block_tables[:num_spec],
+                    context_lens=metadata.context_lens[:num_spec] - block,
+                )
+            )
+            block_ids[:, 1:] = drafts
+        logits = self._forward_prepared(input_ids, positions, metadata, observe=True)
+        rows = logits.shape[0]
+        with nvtx_range("sample"):
+            options, seq_ids, sample_positions = [], [], []
+            for index, seq in enumerate(seqs):
+                count = block if index < num_spec else 1
+                options += [seq.sampling] * count
+                seq_ids += [seq.seq_id] * count
+                sample_positions += range(seq.num_tokens, seq.num_tokens + count)
+            self.sampler.sample(logits, options, seq_ids, sample_positions, self.sampled, slot=slot)
+            target = self.sampled[:spec_tokens].view(num_spec, block)
+            host = self.host_out[slot]
+            host[:rows].copy_(self.sampled[:rows], non_blocking=True)
+            host[rows : rows + num_spec].copy_(accept_prefix(drafts, target), non_blocking=True)
+            event = self._events[slot]
+            if event is not None:
+                event.record()
+        return StepHandle(rows, slot, event, spec_seqs=num_spec, block=block)
 
     def forward(
         self,
@@ -212,32 +292,75 @@ class ModelRunner:
             input_ids, positions, metadata = self.prepare(seqs, is_prefill)
             if gather_rows is not None and any(row >= 0 for row in gather_rows):
                 input_ids = self._gather_inputs(input_ids, seqs, gather_rows)
-        if use_graphs and self._pieces is not None and len(seqs) <= self._pieces.max_rows:
+        # Prompt tokens are context for the proposer too.
+        observe = self.proposer is not None and is_prefill
+        return self._forward_prepared(input_ids, positions, metadata, use_graphs, observe)
+
+    def _forward_prepared(
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        metadata: BatchMetadata,
+        use_graphs: bool = True,
+        observe: bool = False,
+    ) -> torch.Tensor:
+        """The forward pass of a packed batch, through the piecewise graphs
+        when they cover it; ``observe`` hands every token's taps to the
+        proposer."""
+        tap_layers = self.proposer.tap_layers if observe else ()
+        indices = metadata.logits_indices
+        num_logits = input_ids.numel() if indices is None else indices.numel()
+        bucket = None
+        if use_graphs and self._pieces is not None and num_logits <= self._pieces.max_rows:
             bucket = self._pieces.bucket(input_ids.numel())
-            if bucket is not None:
-                with nvtx_range("pieces"):
-                    return self._replay_pieces(input_ids, positions, metadata, bucket)
-        with nvtx_range("forward"):
-            return self.model.forward_batch(input_ids, positions, self.cache, metadata)
+        if bucket is not None and tap_layers:
+            with nvtx_range("pieces"):
+                per_layer = dict.fromkeys(tap_layers)
+                logits = self._replay_pieces(input_ids, positions, metadata, bucket, per_layer)
+                taps = torch.cat([per_layer[layer] for layer in tap_layers], dim=-1)
+        elif bucket is not None:
+            with nvtx_range("pieces"):
+                logits, taps = self._replay_pieces(input_ids, positions, metadata, bucket), None
+        elif tap_layers:
+            with nvtx_range("forward"):
+                logits, taps = self.model.forward_batch_taps(
+                    input_ids, positions, self.cache, metadata, tap_layers
+                )
+        else:
+            with nvtx_range("forward"):
+                logits, taps = self.model.forward_batch(input_ids, positions, self.cache, metadata), None
+        if taps is not None:
+            with nvtx_range("observe"):
+                self.proposer.observe(taps, positions, metadata.slot_mapping)
+        return logits
 
     def prepare(
-        self, seqs: list[Sequence], is_prefill: bool
+        self, seqs: list[Sequence], is_prefill: bool, spec_rows: int = 0
     ) -> tuple[torch.Tensor, torch.Tensor, BatchMetadata]:
         """Pack the rows; ``is_prefill`` says the batch has prefill rows (a mixed
         batch lists its decode rows first), each row follows ``seq.is_prefill``.
 
         Every row starts at ``num_cached_tokens``. A decode row's input token
         is the one at that position, unless it is still in flight (then a
-        placeholder that :meth:`_gather_inputs` replaces).
+        placeholder that :meth:`_gather_inputs` replaces). The first
+        ``spec_rows`` rows are a speculative step's: the same input token
+        followed by placeholders for the drafts, with logits for all of them.
         """
+        block = self.block
         input_ids: list[int] = []
         positions: list[int] = []
         slots: list[int] = []
         context_lens: list[int] = []
         query_lens: list[int] = []
-        for seq in seqs:
+        for index, seq in enumerate(seqs):
             start = seq.num_cached_tokens
-            if seq.is_prefill:
+            if index < spec_rows:
+                if start != seq.num_tokens - 1:
+                    raise ValueError("a speculative row needs all KV but its last token's")
+                end = start + block
+                input_ids.append(seq.token_ids[start])
+                input_ids.extend([0] * (block - 1))
+            elif seq.is_prefill:
                 # Uncached prompt tokens (or this chunk of them).
                 end = start + seq.num_scheduled_tokens
                 input_ids.extend(seq[start:end])
@@ -262,6 +385,7 @@ class ModelRunner:
             null_block=self.cache.null_block,
             num_slots=self.cache.total_slots,
             device=self.model.device,
+            all_logits_rows=spec_rows,
         )
 
     def _gather_inputs(
@@ -526,10 +650,18 @@ class ModelRunner:
 
     @torch.inference_mode()
     def _replay_pieces(
-        self, input_ids: torch.Tensor, positions: torch.Tensor, metadata: BatchMetadata, bucket: int
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        metadata: BatchMetadata,
+        bucket: int,
+        taps: Optional[dict[int, Optional[torch.Tensor]]] = None,
     ) -> torch.Tensor:
+        """The logits; ``taps``' keys are layers, filled in with the tokens'
+        residual stream after each (piece ``layer + 1`` leaves it in the
+        ``residual`` buffer)."""
         pieces = self._pieces
-        n, rows = input_ids.numel(), metadata.num_seqs
+        n, rows = input_ids.numel(), metadata.logits_indices.numel()
         tokens = pieces.tokens
         tokens[0, :n].copy_(input_ids)
         tokens[1, :n].copy_(positions)
@@ -542,8 +674,12 @@ class ModelRunner:
             pieces.logits_indices[rows:padded_rows].zero_()
         replays = pieces.graphs[bucket]
         query, attn = pieces.query[:n], pieces.attn[:n]
+        if taps:
+            self.model.check_tap_layers(tuple(taps))
         replays[0]()
         for layer_idx in range(len(replays) - 1):
             self.model.attention(layer_idx, query, self.cache, metadata, out=attn)
             replays[layer_idx + 1]()
+            if taps and layer_idx in taps:
+                taps[layer_idx] = pieces.residual[:n].clone()
         return pieces.logits[:rows]

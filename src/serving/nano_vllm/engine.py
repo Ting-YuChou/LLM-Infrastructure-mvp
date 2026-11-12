@@ -192,6 +192,9 @@ class NanoLlamaEngine:
         self.tokenizer = None
         self.initialized = False
         self.core: Optional[EngineCore] = None
+        # Draft tokens from something other than config.speculative_model
+        # (a spec.Proposer; in-process core only).
+        self.proposer = None
         self._core_process: Optional[_CoreProcess] = None
         self._scheduler_task: Optional[asyncio.Task] = None
         self._scheduler_event: Optional[asyncio.Event] = None
@@ -393,11 +396,14 @@ class NanoLlamaEngine:
 
     @property
     def kv_capacity(self) -> int:
-        """KV slots in the core's cache."""
+        """KV slots a request can use: the core's cache, less the positions a
+        speculative step writes past the last token."""
         if self.core is not None:
-            return self.core.block_manager.num_blocks * self.core.block_manager.block_size
+            manager = self.core.block_manager
+            return manager.num_blocks * manager.block_size - self.core.scheduler.num_draft_tokens
         if self._core_process is not None:
-            return self._core_process.num_blocks * self.config.kvcache_block_size
+            process = self._core_process
+            return process.num_blocks * self.config.kvcache_block_size - process.num_draft_tokens
         return self.config.num_kvcache_blocks * self.config.kvcache_block_size
 
     async def stream_request(self, seq: Sequence) -> AsyncIterator[StreamOutput]:
@@ -556,7 +562,7 @@ class NanoLlamaEngine:
     def _initialize_batching_state(self) -> None:
         if self.model is None:
             return
-        self.core = EngineCore(self.config, self.model)
+        self.core = EngineCore(self.config, self.model, proposer=self.proposer)
 
     def _ensure_batching_state(self) -> None:
         if self.core is None and self._core_process is None:
@@ -665,6 +671,7 @@ class _CoreProcess:
         self._send_lock = threading.Lock()
         self._reader: Optional[threading.Thread] = None
         self.num_blocks = 0
+        self.num_draft_tokens = 0
         self.stats: dict = {}
 
     def start(self, timeout_s: float = 1800.0) -> None:
@@ -681,6 +688,7 @@ class _CoreProcess:
             detail = message[1] if message[0] == "dead" else message
             raise RuntimeError(f"nano-vLLM engine core failed to start:\n{detail}")
         self.num_blocks = message[1]["num_blocks"]
+        self.num_draft_tokens = message[1].get("num_draft_tokens", 0)
 
     def send(self, message: tuple) -> None:
         with self._send_lock:

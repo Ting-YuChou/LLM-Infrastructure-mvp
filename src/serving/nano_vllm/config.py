@@ -96,6 +96,15 @@ class NanoVLLMConfig:
     # Seeds the sampler's random draws (each comes from this seed, the
     # sequence id and the token's position), like vLLM's --seed.
     seed: int = 0
+    # Speculative decoding (spec.py): the path of a drafter checkpoint; None
+    # is off. The output is the target's own, whatever the drafter proposes.
+    speculative_model: Optional[str] = None
+    # "dflash": a DFlash block-diffusion drafter (dflash.py).
+    speculative_method: str = "dflash"
+    # Drafts per cycle; 0: the drafter's block size - 1.
+    num_speculative_tokens: int = 0
+    # "w4a16": quantize the drafter's projections to 4 bits at load.
+    speculative_weight_quant: str = "none"
     # Run the engine core (scheduler + model) in its own process; the server
     # process keeps tokenization, detokenization, stop strings and HTTP.
     multiprocess: bool = False
@@ -136,6 +145,12 @@ class NanoVLLMConfig:
             raise ValueError("kv_cache_dtype must be one of: auto, fp8")
         if self.kv_cache_dtype == "fp8" and self.attention_backend == "flash_attn":
             raise ValueError("kv_cache_dtype fp8 needs the triton or torch attention backend")
+        if self.speculative_method not in {"dflash"}:
+            raise ValueError("speculative_method must be: dflash")
+        if self.num_speculative_tokens < 0:
+            raise ValueError("num_speculative_tokens must be 0 (the drafter's block) or positive")
+        if self.speculative_weight_quant not in {"none", "w4a16"}:
+            raise ValueError("speculative_weight_quant must be one of: none, w4a16")
 
     @classmethod
     def from_yaml(cls, config_path: str | None) -> "NanoVLLMConfig":
@@ -255,6 +270,27 @@ class NanoVLLMConfig:
                 default=cls.async_scheduling,
             ),
             seed=int(_env("SEED", engine.get("seed", cls.seed))),
+            speculative_model=_optional_str(
+                _env("SPECULATIVE_MODEL", engine.get("speculative_model"))
+            ),
+            speculative_method=str(
+                _env(
+                    "SPECULATIVE_METHOD",
+                    engine.get("speculative_method", cls.speculative_method),
+                )
+            ),
+            num_speculative_tokens=int(
+                _env(
+                    "NUM_SPECULATIVE_TOKENS",
+                    engine.get("num_speculative_tokens", cls.num_speculative_tokens),
+                )
+            ),
+            speculative_weight_quant=str(
+                _env(
+                    "SPECULATIVE_WEIGHT_QUANT",
+                    engine.get("speculative_weight_quant", cls.speculative_weight_quant),
+                )
+            ),
             multiprocess=_bool_value(
                 _env("ENGINE_MULTIPROCESS", engine.get("multiprocess")),
                 default=cls.multiprocess,

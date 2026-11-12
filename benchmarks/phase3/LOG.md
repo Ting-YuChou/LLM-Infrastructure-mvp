@@ -71,3 +71,34 @@ results/<run_id>/.
 - Not done in M0: kbench of the prefill kernel at verify shapes, nano's
   b=1 against b=16 stream divergence, vLLM adaptive verification on the
   A100, spec_sim.py.
+
+## M2: the synchronous cycle (2026-11-11, CPU only)
+
+- A step with decode rows is a cycle when the engine has a proposer
+  (`speculative_model`, or one handed to EngineCore): each decode row is the
+  last accepted token plus K drafts, verified in the same forward pass as
+  any prefill rows (`ModelRunner._launch_spec`); the scheduler appends the
+  accepted drafts and the target's next token, and counts the KV behind them
+  (`Scheduler._complete_spec`).
+- Every computed token's taps go to the drafter's KV pool (prompt chunks and
+  verify rows), which shares block ids with the target's cache; KV slots for
+  K positions past the last token are reserved, and a request needs room for
+  them (`kv_capacity`, the RoPE table and the admission check are K larger).
+- Fixed: a request that finished inside a step that emitted several of its
+  tokens had the finish reason on every one, and the frontend dropped the
+  rest after the first (`EngineCore._complete`).
+- Async scheduling is off while speculating (M7), drafts are greedy (M5),
+  and the decode CUDA graphs are not captured (M4 replaces them); the verify
+  pass goes through the piecewise graphs.
+- Tests (CPU, fp32): `test_nano_vllm_spec_engine.py` (scripted target and
+  proposer: accept lengths 0..K, EOS inside a block, max_tokens mid-block,
+  stop strings, aborts, preemption, the prefix cache on both backends) and
+  `test_nano_vllm_spec_exact.py` (tiny Llama + random DFlash drafters: the
+  output equals transformers' greedy decode for two drafters, the drafter's
+  KV equals `write_context` of transformers' hidden states). Each was run
+  against seven deliberate bugs; all are caught.
+- Not run on the GPU yet (the VM is gone): M1's `parity.py`, M2's gates on
+  the real model (tokens per cycle within 2% of M0, prefill at most 3%
+  slower), and a warm-up of the prefill kernel at verify shapes. On the GPU
+  a batch of more than 6 sequences has more than 64 verify rows, where the
+  lm_head switches from int8 to dense: to settle before M6.

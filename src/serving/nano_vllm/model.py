@@ -571,6 +571,42 @@ class NanoLlamaForCausalLM:
         CUDA graphs per token count and runs the attention eagerly between
         them (piecewise graphs, for steps with prefill rows).
         """
+        return self._forward_batch(input_ids, positions, cache, metadata, None)
+
+    @torch.inference_mode()
+    def forward_batch_taps(
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        cache: PagedKVCache,
+        metadata: BatchMetadata,
+        tap_layers: tuple[int, ...],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """:meth:`forward_batch` plus, for every token, the residual stream
+        after each layer in ``tap_layers`` (transformers' ``hidden_states[layer
+        + 1]``), concatenated in that order: [tokens, len(tap_layers) * hidden].
+        A speculative drafter reads the target through these."""
+        self.check_tap_layers(tap_layers)
+        taps: dict[int, torch.Tensor] = {}
+        logits = self._forward_batch(input_ids, positions, cache, metadata, taps)
+        return logits, torch.cat([taps[layer] for layer in tap_layers], dim=-1)
+
+    def check_tap_layers(self, tap_layers: tuple[int, ...]) -> None:
+        """Taps come out of :meth:`forward_between`, which the last layer does
+        not go through."""
+        if not all(0 <= layer < len(self.layers) - 1 for layer in tap_layers):
+            raise ValueError(
+                f"tap layers {list(tap_layers)} must be before the last of {len(self.layers)} layers"
+            )
+
+    def _forward_batch(
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        cache: PagedKVCache,
+        metadata: BatchMetadata,
+        taps: Optional[dict[int, torch.Tensor]],
+    ) -> torch.Tensor:
         query, residual, rope = self.forward_head(input_ids, positions, cache, metadata.slot_mapping)
         last = len(self.layers) - 1
         for layer_idx in range(last):
@@ -578,8 +614,16 @@ class NanoLlamaForCausalLM:
             query, residual = self.forward_between(
                 layer_idx, attn, residual, rope, cache, metadata.slot_mapping
             )
+            if taps is not None:
+                taps[layer_idx] = residual  # the stream after layer layer_idx
         attn = self.attention(last, query, cache, metadata)
         return self.forward_tail(attn, residual, metadata.logits_indices)
+
+    def extend_rope_table(self, num_positions: int) -> None:
+        """Make the RoPE table cover ``num_positions`` (speculative decoding
+        verifies up to a block of tokens past max_model_len)."""
+        if num_positions > self.rope_cos.shape[0]:
+            self.rope_cos, self.rope_sin = rope_cos_sin(self.inv_freq, num_positions, self.dtype)
 
     def forward_head(
         self,

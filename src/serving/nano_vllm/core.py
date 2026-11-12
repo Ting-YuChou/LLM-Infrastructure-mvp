@@ -38,6 +38,7 @@ from .nvtx import nvtx_range
 from .sampling import SamplingOptions
 from .scheduler import Row, Scheduler
 from .sequence import Sequence, SequenceStatus
+from .spec import DFlashProposer, Proposer
 
 logger = logging.getLogger(__name__)
 
@@ -76,11 +77,29 @@ class RequestOutput:
 class EngineCore:
     """Continuous batching over one model; drive it with :meth:`step`."""
 
-    def __init__(self, config: NanoVLLMConfig, model) -> None:
+    def __init__(
+        self, config: NanoVLLMConfig, model, proposer: Optional[Proposer] = None
+    ) -> None:
+        """``proposer``: draft tokens for speculative decoding from something
+        other than config.speculative_model (tests script one)."""
         self.config = config
         self.model = model
+        drafter = None
+        if proposer is None and config.speculative_model:
+            drafter = load_drafter(config, model)
         if config.num_kvcache_blocks == 0:
-            config.num_kvcache_blocks = size_kv_cache(config, model)
+            config.num_kvcache_blocks = size_kv_cache(config, model, drafter)
+        if drafter is not None:
+            proposer = DFlashProposer(
+                drafter,
+                drafter.new_paged_cache(config.num_kvcache_blocks, config.kvcache_block_size),
+                config.num_speculative_tokens,
+            )
+        self.proposer = proposer
+        num_draft_tokens = proposer.num_draft_tokens if proposer is not None else 0
+        if proposer is not None and hasattr(model, "extend_rope_table"):
+            # A verify pass reaches num_draft_tokens positions past the last token.
+            model.extend_rope_table(config.max_model_len + num_draft_tokens)
         Sequence.block_size = config.kvcache_block_size
         manager_cls = BlockManager
         if config.prefix_cache_backend == "cpp":
@@ -95,6 +114,7 @@ class EngineCore:
             max_num_seqs=config.max_num_seqs,
             max_num_batched_tokens=config.max_num_batched_tokens,
             policy=config.scheduling,
+            num_draft_tokens=num_draft_tokens,
         )
         self.paged_cache = model.new_paged_cache(
             num_blocks=config.num_kvcache_blocks, block_size=config.kvcache_block_size
@@ -105,8 +125,11 @@ class EngineCore:
             self.block_manager,
             max_rows=config.max_num_seqs,
             seed=config.seed,
+            proposer=proposer,
         )
-        self.async_scheduling = config.async_scheduling
+        # A speculative step's tokens are known only when it is collected, so
+        # the next one cannot launch before.
+        self.async_scheduling = config.async_scheduling and proposer is None
         self.requests: dict[int, Sequence] = {}
         self._inbox: deque[tuple[str, object]] = deque()
         self._inflight: Optional[tuple[StepHandle, list[Row]]] = None
@@ -121,13 +144,14 @@ class EngineCore:
         self.model_runner.warm_up_eager(self.config.max_num_seqs)
         if self.config.enforce_eager:
             return
-        self.model_runner.capture_decode_graphs(
-            max_batch=min(self.config.max_num_seqs, self.config.cuda_graph_max_bs),
-            max_model_len=self.config.max_model_len,
-        )
+        if self.proposer is None:  # speculative steps never decode one token per row
+            self.model_runner.capture_decode_graphs(
+                max_batch=min(self.config.max_num_seqs, self.config.cuda_graph_max_bs),
+                max_model_len=self.config.max_model_len,
+            )
         max_tokens = min(self.config.cuda_graph_max_tokens, self.config.max_num_batched_tokens)
         if max_tokens > 0:
-            self.model_runner.capture_piecewise_graphs(max_tokens, max_rows=self.config.max_num_seqs)
+            self.model_runner.capture_piecewise_graphs(max_tokens, max_rows=self.model_runner.max_rows)
 
     # --- frontend side (any thread) ------------------------------------------
 
@@ -251,8 +275,11 @@ class EngineCore:
             logger.exception("nano-vLLM model step failed")
             return self._fail([row.seq for row in rows if not row.seq.is_finished], exc)
         outputs = []
-        for seq, token_id in emitted:
-            finish = seq.finish_reason if seq.is_finished else None
+        # A speculative row emits several tokens: the finish goes on the last.
+        last = {seq.seq_id: index for index, (seq, _) in enumerate(emitted)}
+        for index, (seq, token_id) in enumerate(emitted):
+            ends = seq.is_finished and last[seq.seq_id] == index
+            finish = seq.finish_reason if ends else None
             outputs.append(RequestOutput(seq.seq_id, token_id, finish))
             if finish is not None:
                 self.requests.pop(seq.seq_id, None)
@@ -304,8 +331,11 @@ class EngineCore:
 
 
 @torch.inference_mode()
-def size_kv_cache(config: NanoVLLMConfig, model) -> int:
+def size_kv_cache(config: NanoVLLMConfig, model, drafter=None) -> int:
     """KV blocks that fit in gpu_memory_utilization of the GPU.
+
+    With a ``drafter`` (already loaded) every block also holds its layers'
+    K/V in the drafter's pool.
 
     One eager prefill of max_num_batched_tokens tokens on a scratch cache
     measures the activation peak (and JIT-compiles the prefill kernels); the
@@ -350,6 +380,15 @@ def size_kv_cache(config: NanoVLLMConfig, model) -> int:
         model.dtype,
         model.kv_cache_dtype,
     )
+    if drafter is not None:
+        per_block += PagedKVCache.bytes_per_block(
+            drafter.config.num_hidden_layers,
+            block_size,
+            drafter.config.num_key_value_heads,
+            drafter.config.head_dim,
+            drafter.dtype,
+            drafter.kv_cache_dtype,
+        )
     num_blocks = int(budget // per_block)
     needed = -(-config.max_model_len // block_size)
     if num_blocks < needed:
@@ -395,11 +434,22 @@ def load_model(config: NanoVLLMConfig):
     )
 
 
+def load_drafter(config: NanoVLLMConfig, model):
+    """config.speculative_model next to the loaded target ``model``."""
+    from .dflash import DFlashDrafter
+
+    drafter = DFlashDrafter.from_pretrained(
+        config.speculative_model, model, weight_quant=config.speculative_weight_quant
+    )
+    model.check_tap_layers(tuple(drafter.config.target_layer_ids))
+    return drafter
+
+
 # --- the core in its own process ---------------------------------------------
 #
 # Frontend -> core: ("add", EngineRequest), ("abort", [req_id]),
 #                   ("utility", call_id, name), ("shutdown",)
-# Core -> frontend: ("ready", {"num_blocks": n}), ("outputs", [RequestOutput], stats | None),
+# Core -> frontend: ("ready", {"num_blocks": n, "num_draft_tokens": k}), ("outputs", [RequestOutput], stats | None),
 #                   ("utility", call_id, result), ("dead", traceback text)
 
 STATS_INTERVAL_S = 0.25
@@ -420,7 +470,13 @@ def run_core_process(config: NanoVLLMConfig, inbox, outbox) -> None:
     try:
         core = EngineCore(config, load_model(config))
         core.capture_graphs()
-        outbox.send(("ready", {"num_blocks": core.block_manager.num_blocks}))
+        outbox.send((
+            "ready",
+            {
+                "num_blocks": core.block_manager.num_blocks,
+                "num_draft_tokens": core.scheduler.num_draft_tokens,
+            },
+        ))
         last_stats = 0.0
         while True:
             # Block for the next message only when there is nothing to step.
