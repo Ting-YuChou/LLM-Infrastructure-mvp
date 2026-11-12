@@ -37,7 +37,9 @@
 #              code, top-1 agreement over 200 blocks (not in the default)
 #   spec_check spec_check.py: every token nano emits, with and without the
 #              drafter, against the target's argmax in one teacher-forced
-#              pass; AWQ and BF16 target (not in the default)
+#              pass, and the wall time of a decode step and of a speculative
+#              cycle; AWQ and BF16 target, the drafter as it is and in 4 bits
+#              (P3_DRAFTER_QUANTS, default none,w4a16) (not in the default)
 #   kbench     phase1/kbench.py on P3_KERNELS (default: the verify rows'
 #              attention by the block, prefill and decode kernels and vLLM's
 #              flash-attention, and the drafter's norm + RoPE + KV write)
@@ -53,7 +55,8 @@
 # served under the BF16 model's name), sglang, each also as <engine>_dflash,
 # nano (WEIGHT_QUANT=awq loads the AWQ checkpoint), and vllm019 (the pinned
 # vLLM of phases 0-2, no drafter), and nano_dflash (nano with
-# SPECULATIVE_MODEL set to the drafter).
+# SPECULATIVE_MODEL set to the drafter; SPECULATIVE_WEIGHT_QUANT=w4a16 in
+# extra quantizes it, by convention under a label ending in _dflash4).
 #
 # Env: P0_ROOT (default /workspace/p0), P0_RUN_ID (default: UTC timestamp),
 # P0_REPO_DIR, P3_STEPS, P3_RUNS, P3_MODEL, P3_W4_MODEL, P3_DRAFT_MODEL,
@@ -402,6 +405,7 @@ spec_check() {
     if [[ "${label}" == awq ]]; then model="${W4_MODEL}"; quant=awq; fi
     "${cmd[@]}" "${PY}" "${CODE_DIR}/spec_check.py" --model "${model}" --weight-quant "${quant}" \
       --drafter "${DRAFT}" --workloads "${WORKLOADS}" --label "${label}" \
+      --drafter-quants "${P3_DRAFTER_QUANTS:-none,w4a16}" \
       --out "${OUT}/spec_check/${label}.json" | tee /dev/fd/3 || rc=1
   done
   return "${rc}"

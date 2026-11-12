@@ -220,6 +220,22 @@ class Sampler:
         rows, vocab = logits.shape
         if rows != len(options):
             raise ValueError("sample expects one row of logits per option")
+        self.draw(logits, out, self.stage(options, seq_ids, positions, vocab, slot=slot))
+
+    def stage(
+        self,
+        options: list[SamplingOptions],
+        seq_ids: list[int],
+        positions: list[int],
+        vocab: int,
+        slot: int = 0,
+        padded_rows: int = 0,
+    ) -> tuple[bool, bool, bool]:
+        """Upload the rows' settings for the next :meth:`draw`: the host half
+        of :meth:`sample`. Rows from ``len(options)`` up to ``padded_rows``
+        (a CUDA graph's padding) are set to greedy. Returns whether any row
+        samples (temperature > 0), has top-k or top-p, and has both."""
+        rows = len(options)
         temperature, top_p, top_k = encode_options(options, vocab)
         host = self.host[slot].numpy()
         floats = host[:2].view(np.float32)
@@ -230,17 +246,34 @@ class Sampler:
         ids = np.asarray(seq_ids, dtype=np.int64)
         host[self.SEQ_LO, :rows] = (ids & 0xFFFFFFFF).astype(np.uint32).view(np.int32)
         host[self.SEQ_HI, :rows] = (ids >> 32).astype(np.int32)
+        if padded_rows > rows:
+            floats[self.TEMPERATURE, rows:padded_rows] = 0.0
         self.params.copy_(self.host[slot], non_blocking=True)
 
         sampled = [t > 0 for t in temperature]
         filtered = [s and (p < 1.0 or k > 0) for s, p, k in zip(sampled, top_p, top_k)]
         both = [s and p < 1.0 and k > 0 for s, p, k in zip(sampled, top_p, top_k)]
+        return any(sampled), any(filtered), any(both)
+
+    def draw(
+        self,
+        logits: torch.Tensor,
+        out: torch.Tensor,
+        flags: tuple[bool, bool, bool] = (True, True, True),
+    ) -> None:
+        """One token per row of ``logits`` into ``out[:rows]`` with the staged
+        settings: device work only, so a CUDA graph can hold it. ``flags``
+        (from :meth:`stage`) skip the kernels no row needs; the default runs
+        them all, each row leaving a kernel it does not need at once, for a
+        graph that serves any settings."""
+        rows = logits.shape[0]
+        any_sampled, any_filter, any_both = flags
         if self._cuda is not None and self._cuda(
             logits, self.params, out, self.seed,
-            any_sampled=any(sampled), any_filter=any(filtered), any_both=any(both),
+            any_sampled=any_sampled, any_filter=any_filter, any_both=any_both,
         ):
             return
-        if not any(sampled):
+        if not any_sampled:
             out[:rows].copy_(logits.argmax(dim=-1))
             return
         params = self.params[:, :rows]

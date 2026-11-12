@@ -12,8 +12,11 @@ run (serve/*.metrics.txt), accept/accept.json and status.tsv, and writes:
   parity    nano's drafter against the checkpoint's own code (parity.json)
   texts     completions of a drafter server against the same server without
             one (texts.py), next to that server's own batch-size divergence
+  M4 gates  the measured cycle at batch 1 (spec_check.py) and nano with the
+            drafter at c=1 against the DFlash baselines, which are this run's
+            or, with a second argument, another run's (the M0 run)
 
-  python summarize.py <run dir>
+  python summarize.py <run dir> [<baseline run dir>]
 """
 
 from __future__ import annotations
@@ -72,7 +75,11 @@ def by_run(rows: list[dict]) -> dict[tuple[str, str, bool], dict[str, dict[int, 
 
 
 def base_of(engine: str) -> str | None:
-    return engine[: -len("_dflash")] if engine.endswith("_dflash") else None
+    """The same server without a drafter (``_dflash4``: a 4-bit drafter)."""
+    for suffix in ("_dflash", "_dflash4"):
+        if engine.endswith(suffix):
+            return engine[: -len(suffix)]
+    return None
 
 
 def serving(rows: list[dict]) -> list[str]:
@@ -244,18 +251,72 @@ def spec_check(out: Path) -> list[str]:
     body = [
         [f"{r['label']} {r['mode']} b={r['batch']}", str(r["tokens"]), str(r["not_argmax"]),
          f"{100 * r['not_argmax'] / r['tokens']:.2f}%", fmt(r["max_margin"], 3), str(r["margins_over_0.5"]),
-         str(r["margins_over_1"]), fmt(r["tokens_per_cycle"], 2), fmt(r["out_tok_s"], 0)]
+         str(r["margins_over_1"]), fmt(r["tokens_per_cycle"], 2), fmt(r["out_tok_s"], 0),
+         fmt(r.get("step_ms_median"), 2), fmt(r.get("step_ms_mean"), 2)]
         for r in rows
     ]
-    return [
+    lines = [
         "## Emitted tokens against the target's argmax (spec_check.py)", "",
         "Every generated token against the argmax of one teacher-forced pass of the target over the "
-        "finished sequence; the margin is the top logit minus the emitted token's.", "",
+        "finished sequence; the margin is the top logit minus the emitted token's. ms/step: the wall "
+        "time of an engine step with no prompt rows (a decode step, or a whole speculative cycle).", "",
     ] + table(
         ["target, mode, batch", "tokens", "not argmax", "share", "largest margin", "margins > 0.5",
-         "margins > 1", "tokens/cycle", "tok/s"],
+         "margins > 1", "tokens/cycle", "tok/s", "ms/step median", "ms/step mean"],
         body,
     )
+    single = [r for r in rows if r["batch"] == 1 and r.get("step_ms_median_by_dataset")]
+    if single:
+        lines += ["Median ms/step at batch 1 per dataset:", ""] + table(
+            ["target, mode", *DATASETS],
+            [[f"{r['label']} {r['mode']}"] + [fmt(r["step_ms_median_by_dataset"].get(d), 2) for d in DATASETS]
+             for r in single],
+        )
+    return lines
+
+
+CYCLE_GATE_MS = 8.0  # G3: an AWQ cycle at batch 1
+BASELINES = {  # nano's servers with a drafter -> the DFlash servers on the same weights
+    "nano_awq": ("vllmw4_dflash",),
+    "nano": ("vllm_dflash", "sglang_dflash"),
+}
+
+
+def m4_gates(out: Path, serve_rows: list[dict], baseline_rows: list[dict], baseline_name: str) -> list[str]:
+    """G3: the AWQ cycle at batch 1 within CYCLE_GATE_MS. G4: nano with the
+    drafter above every DFlash baseline at c=1, temperature 0."""
+    lines = []
+    checks = [row for path in sorted((out / "spec_check").glob("*.json")) for row in json.loads(path.read_text())]
+    cycles = [
+        r for r in checks
+        if r["label"] == "awq" and r["mode"].startswith("spec") and r["batch"] == 1 and r.get("step_ms_median")
+    ]
+    if cycles:
+        verdicts = [
+            f"{r['mode']}: {r['step_ms_median']:.2f} ms ({'met' if r['step_ms_median'] <= CYCLE_GATE_MS else 'NOT met'})"
+            for r in cycles
+        ]
+        lines += [f"G3 (AWQ target, batch 1, a cycle within {CYCLE_GATE_MS} ms, median): " + "; ".join(verdicts) + ".", ""]
+    runs = by_run(serve_rows + baseline_rows)
+    body = []
+    for dataset in DATASETS:
+        engines = runs.get((dataset, False), {})
+        for engine in sorted(engines):
+            names = BASELINES.get(base_of(engine) or "")
+            mine = engines[engine].get(1, {}).get("out_tok_s")
+            theirs = {n: engines[n][1]["out_tok_s"] for n in names or () if 1 in engines.get(n, {})}
+            if not engine.startswith("nano") or mine is None or not theirs:
+                continue
+            best = max(theirs, key=theirs.get)
+            body.append([
+                f"{dataset} / {engine}", fmt(mine, 0), f"{best} {theirs[best]:.0f}",
+                f"{mine / theirs[best]:.2f}x", "met" if mine > theirs[best] else "NOT met",
+            ])
+    if body:
+        source = f" (baselines from {baseline_name})" if baseline_rows else ""
+        lines += [f"G4: output tok/s at c=1, temperature 0, against the fastest DFlash server on the same weights{source}:", ""]
+        lines += table(["dataset / server", "nano tok/s", "best baseline", "ratio", "G4"], body)
+    return ["## M4 gates", ""] + lines if lines else []
 
 
 def block_kernel(out: Path) -> list[str]:
@@ -378,6 +439,12 @@ def gate(serve_rows: list[dict], accept_rows: list[dict]) -> list[str]:
 def main() -> None:
     out = Path(sys.argv[1])
     serve_rows = console_rows(out, "P3_SERVE")
+    # Baseline servers this run did not start, from another run's console.
+    baseline = Path(sys.argv[2]) if len(sys.argv) > 2 else None
+    mine = {row["engine"] for row in serve_rows}
+    baseline_rows = [] if baseline is None else [
+        row for row in console_rows(baseline, "P3_SERVE") if row["engine"] not in mine
+    ]
     lines = [f"# Phase 3 run {out.name}", ""]
     environment = out / "environment.txt"
     if environment.exists():
@@ -398,6 +465,7 @@ def main() -> None:
     accept_lines, accept_rows = accept(out)
     lines += texts(out) + spec_check(out) + parity(out) + block_kernel(out)
     lines += accept_lines + gate(serve_rows, accept_rows)
+    lines += m4_gates(out, serve_rows, baseline_rows, baseline.name if baseline else "")
     (out / "summary.md").write_text("\n".join(lines) + "\n")
 
 

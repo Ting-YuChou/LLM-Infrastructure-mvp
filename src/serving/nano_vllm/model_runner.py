@@ -107,6 +107,37 @@ class _PiecewiseGraphs:
 
 
 @dataclass
+class _SpecGraphs:
+    """A whole speculative cycle per padded number of sequences: draft,
+    verify, the proposer's context writes, sampling and acceptance, as one
+    CUDA graph, so a cycle is one launch from the host.
+
+    The static buffers are :class:`_DecodeGraphs`' with a block of tokens
+    per row, staged in two slots the same way. Padded rows run a block on
+    the null block. On the CPU (tests) a "graph" is the cycle run eagerly.
+    """
+
+    max_batch: int
+    width: int  # block-table width: max_model_len plus the lookahead
+    vocab: int
+    # pinned [2, 3, max_batch * block]: input ids (only each row's first, the
+    # anchor, is read), positions, slots
+    host_longs: torch.Tensor
+    host_ints: torch.Tensor  # pinned [2, max_batch * (1 + width)]: context_lens, tables
+    longs: torch.Tensor
+    ints: torch.Tensor
+    cu_seqlens: torch.Tensor  # [max_batch + 1] int32: each row's first token
+    accepted: torch.Tensor  # [max_batch] long: the drafts each row accepted
+    graphs: dict[int, Callable[[], None]]
+    # Per size, what its last cycle left: the verify logits [size * block,
+    # vocab] and the drafts [size, block - 1] (tests compare them).
+    outputs: dict[int, tuple[torch.Tensor, torch.Tensor]]
+
+    def bucket(self, batch: int) -> Optional[int]:
+        return next((size for size in sorted(self.graphs) if size >= batch), None)
+
+
+@dataclass
 class StepHandle:
     """A launched step: its sampled tokens arrive in ``host_out[slot][:rows]``.
 
@@ -141,6 +172,8 @@ class ModelRunner:
     With a ``proposer`` every step that has decode rows is a speculative
     cycle (:meth:`_launch_spec`, spec.py): the decode rows become verify rows
     of K + 1 tokens, and :meth:`collect` returns a list of tokens for each.
+    A cycle with no prefill rows replays one CUDA graph once
+    :meth:`capture_spec_graphs` has run.
     """
 
     def __init__(
@@ -162,6 +195,7 @@ class ModelRunner:
         max_rows *= self.block
         self._graphs: Optional[_DecodeGraphs] = None
         self._pieces: Optional[_PiecewiseGraphs] = None
+        self._spec: Optional[_SpecGraphs] = None
         device = model.device
         cuda = device.type == "cuda"
         self.max_rows = max_rows
@@ -239,6 +273,11 @@ class ModelRunner:
         """
         proposer, block = self.proposer, self.block
         num_spec = next((i for i, seq in enumerate(seqs) if seq.is_prefill), len(seqs))
+        if self._spec is not None and num_spec == len(seqs):
+            bucket = self._spec.bucket(num_spec)
+            if bucket is not None:
+                with nvtx_range("spec_replay"):
+                    return self._replay_spec(seqs, bucket, slot)
         with nvtx_range("prepare"):
             input_ids, positions, metadata = self.prepare(seqs, True, spec_rows=num_spec)
         spec_tokens = num_spec * block
@@ -258,13 +297,7 @@ class ModelRunner:
         logits = self._forward_prepared(input_ids, positions, metadata, observe=True)
         rows = logits.shape[0]
         with nvtx_range("sample"):
-            options, seq_ids, sample_positions = [], [], []
-            for index, seq in enumerate(seqs):
-                count = block if index < num_spec else 1
-                options += [seq.sampling] * count
-                seq_ids += [seq.seq_id] * count
-                sample_positions += range(seq.num_tokens, seq.num_tokens + count)
-            self.sampler.sample(logits, options, seq_ids, sample_positions, self.sampled, slot=slot)
+            self.sampler.sample(logits, *self._spec_sampling(seqs, num_spec), self.sampled, slot=slot)
             target = self.sampled[:spec_tokens].view(num_spec, block)
             host = self.host_out[slot]
             host[:rows].copy_(self.sampled[:rows], non_blocking=True)
@@ -273,6 +306,20 @@ class ModelRunner:
             if event is not None:
                 event.record()
         return StepHandle(rows, slot, event, spec_seqs=num_spec, block=block)
+
+    def _spec_sampling(
+        self, seqs: list[Sequence], num_spec: int
+    ) -> tuple[list, list[int], list[int]]:
+        """Per logits row of a speculative step: sampling options, sequence
+        id and the position of the token the row samples (a verify row's
+        token ``t`` samples the one at ``num_tokens + t``)."""
+        options, seq_ids, positions = [], [], []
+        for index, seq in enumerate(seqs):
+            count = self.block if index < num_spec else 1
+            options += [seq.sampling] * count
+            seq_ids += [seq.seq_id] * count
+            positions += range(seq.num_tokens, seq.num_tokens + count)
+        return options, seq_ids, positions
 
     def forward(
         self,
@@ -449,40 +496,207 @@ class ModelRunner:
         """A speculative cycle per number of verify rows, on the null block:
         the block kernel's split count and launch settings are chosen from
         the rows, like the decode kernel's, for the target and the proposer."""
-        null, block, proposer = self.cache.null_block, self.block, self.proposer
         start = time.perf_counter()
         for rows in range(1, max_seqs + 1):
-            tokens = rows * block
-            input_ids, positions, metadata = build_batch(
-                input_ids=[0] * tokens,
-                positions=list(range(block)) * rows,
-                slots=[null * self.cache.block_size] * tokens,
-                block_tables=[[null]] * rows,
-                context_lens=[block] * rows,
-                query_lens=[block] * rows,
-                is_prefill=True,
-                null_block=null,
-                num_slots=self.cache.total_slots,
-                device=self.model.device,
-                block_rows=rows,
-            )
-            proposer.propose(
-                DraftBatch(
-                    seqs=[None] * rows,
-                    anchor_ids=input_ids.view(rows, block)[:, 0],
-                    positions=positions,
-                    slot_mapping=metadata.slot_mapping,
-                    block_tables=metadata.block_tables,
-                    context_lens=metadata.context_lens - block,
-                )
-            )
-            self._forward_prepared(input_ids, positions, metadata, use_graphs=False, observe=True)
+            self.null_spec_cycle(rows)
         torch.cuda.synchronize(self.model.device)
         logger.info(
             "nano-vLLM compiled the speculative step's kernels for 1-%d verify rows in %.1f s",
             max_seqs,
             time.perf_counter() - start,
         )
+
+    def null_spec_cycle(self, rows: int) -> None:
+        """Draft and verify ``rows`` blocks on the null block, eagerly (to
+        compile the kernels of that row count, or to measure its memory)."""
+        null, block = self.cache.null_block, self.block
+        tokens = rows * block
+        input_ids, positions, metadata = build_batch(
+            input_ids=[0] * tokens,
+            positions=list(range(block)) * rows,
+            slots=[null * self.cache.block_size] * tokens,
+            block_tables=[[null]] * rows,
+            context_lens=[block] * rows,
+            query_lens=[block] * rows,
+            is_prefill=True,
+            null_block=null,
+            num_slots=self.cache.total_slots,
+            device=self.model.device,
+            block_rows=rows,
+        )
+        self.proposer.propose(
+            DraftBatch(
+                seqs=[None] * rows,
+                anchor_ids=input_ids.view(rows, block)[:, 0],
+                positions=positions,
+                slot_mapping=metadata.slot_mapping,
+                block_tables=metadata.block_tables,
+                context_lens=metadata.context_lens - block,
+            )
+        )
+        self._forward_prepared(input_ids, positions, metadata, use_graphs=False, observe=True)
+
+    # --- CUDA graphs for the speculative cycle -----------------------------
+
+    def capture_spec_graphs(self, max_batch: int, max_model_len: int) -> None:
+        """Capture the speculative cycle for each size in GRAPH_BATCH_SIZES up
+        to ``max_batch`` sequences, when the proposer works from the batch's
+        tensors alone (``Proposer.device_only``).
+
+        Without the graph a cycle is the drafter's ~60 kernels, the target's
+        piecewise graphs with an eager attention per layer, the context
+        writes and the sampling, each launched from the host.
+        """
+        proposer, block = self.proposer, self.block
+        if proposer is None or not getattr(proposer, "device_only", False):
+            return
+        device = self.model.device
+        cuda = device.type == "cuda"
+        sizes = [size for size in GRAPH_BATCH_SIZES if size < max_batch] + [max_batch]
+        # A verify row's block reaches block - 1 tokens past max_model_len.
+        width = -(-(max_model_len + block - 1) // self.cache.block_size)
+        graphs = _SpecGraphs(
+            max_batch=max_batch,
+            width=width,
+            vocab=0,
+            host_longs=torch.zeros(2, 3, max_batch * block, dtype=torch.long, pin_memory=cuda),
+            host_ints=torch.zeros(2, max_batch * (1 + width), dtype=torch.int32, pin_memory=cuda),
+            longs=torch.zeros(3, max_batch * block, dtype=torch.long, device=device),
+            ints=torch.zeros(max_batch * (1 + width), dtype=torch.int32, device=device),
+            cu_seqlens=torch.arange(max_batch + 1, dtype=torch.int32, device=device) * block,
+            accepted=torch.zeros(max_batch, dtype=torch.long, device=device),
+            graphs={},
+            outputs={},
+        )
+        self._fill_spec_padding(graphs, 0, slot=0)
+        graphs.longs.copy_(graphs.host_longs[0])
+        graphs.ints.copy_(graphs.host_ints[0])
+        # Capture-time draws: greedy for every row.
+        self.sampler.stage([], [], [], 0, slot=0, padded_rows=max_batch * block)
+
+        start = time.perf_counter()
+        pool = torch.cuda.graph_pool_handle() if cuda else None
+        with _no_gc_while_capturing():
+            for size in sorted(sizes, reverse=True):  # largest first: the pool fits all
+                # Eager run first: Triton JIT and cuBLAS setup must not happen
+                # inside the capture.
+                graphs.vocab = self._spec_cycle(graphs, size)[0].shape[-1]
+                if not cuda:
+                    graphs.graphs[size] = functools.partial(self._record_spec_cycle, graphs, size)
+                    continue
+                torch.cuda.synchronize(device)
+                graph = torch.cuda.CUDAGraph()
+                with torch.cuda.graph(graph, pool=pool):
+                    self._record_spec_cycle(graphs, size)
+                graphs.graphs[size] = graph.replay
+        if cuda:
+            torch.cuda.synchronize(device)
+        self._spec = graphs
+        logger.info(
+            "nano-vLLM captured speculative-cycle CUDA graphs for %s sequences in %.1f s",
+            sorted(sizes),
+            time.perf_counter() - start,
+        )
+
+    def _record_spec_cycle(self, graphs: _SpecGraphs, size: int) -> None:
+        graphs.outputs[size] = self._spec_cycle(graphs, size)
+
+    def _spec_cycle(self, graphs: _SpecGraphs, size: int) -> tuple[torch.Tensor, torch.Tensor]:
+        """The cycle a graph records for ``size`` sequences, from the static
+        buffers only: the target's tokens into ``sampled``, the accepted
+        counts into ``graphs.accepted``. Returns the verify logits and the
+        drafts."""
+        proposer, block = self.proposer, self.block
+        tokens = size * block
+        anchors = graphs.longs[0, :tokens].view(size, block)[:, :1]
+        positions, slots = graphs.longs[1, :tokens], graphs.longs[2, :tokens]
+        context_lens = graphs.ints[:size]
+        tables = graphs.ints[graphs.max_batch :].view(graphs.max_batch, graphs.width)[:size]
+        drafts = proposer.propose(
+            DraftBatch(
+                seqs=[None] * size,
+                anchor_ids=anchors[:, 0],
+                positions=positions,
+                slot_mapping=slots,
+                block_tables=tables,
+                context_lens=context_lens - block,
+            )
+        )
+        input_ids = torch.cat([anchors, drafts], dim=1).view(-1)
+        metadata = BatchMetadata(
+            slot_mapping=slots,
+            block_tables=tables,
+            context_lens=context_lens,
+            cu_seqlens_q=graphs.cu_seqlens[: size + 1],
+            query_lens=[block] * size,
+            context_lens_host=[block] * size,
+            is_prefill=True,
+            logits_indices=None,  # every row
+            num_block_rows=size,
+            block_len=block,
+        )
+        if proposer.tap_layers:
+            logits, taps = self.model.forward_batch_taps(
+                input_ids, positions, self.cache, metadata, proposer.tap_layers
+            )
+            proposer.observe(taps, positions, slots)
+        else:
+            logits = self.model.forward_batch(input_ids, positions, self.cache, metadata)
+        self.sampler.draw(logits, self.sampled)
+        target = self.sampled[:tokens].view(size, block)
+        graphs.accepted[:size].copy_(accept_prefix(drafts, target))
+        return logits, drafts
+
+    def _fill_spec_padding(self, graphs: _SpecGraphs, start: int, slot: int) -> None:
+        """Rows from ``start`` on: a block of token 0 at position 0 in the
+        null block, whose context is that block."""
+        null, block = self.cache.null_block, self.block
+        longs = graphs.host_longs[slot]
+        longs[:2, start * block :] = 0
+        longs[2, start * block :] = null * self.cache.block_size
+        max_batch = graphs.max_batch
+        ints = graphs.host_ints[slot]
+        ints[start:max_batch] = block
+        ints[max_batch:].view(max_batch, graphs.width)[start:] = null
+
+    def _replay_spec(self, seqs: list[Sequence], bucket: int, slot: int) -> StepHandle:
+        graphs, block = self._spec, self.block
+        batch = len(seqs)
+        tokens = batch * block
+        longs = graphs.host_longs[slot].numpy()
+        ints = graphs.host_ints[slot].numpy()
+        tables = ints[graphs.max_batch :].reshape(graphs.max_batch, graphs.width)
+        null = self.cache.null_block
+        for row, seq in enumerate(seqs):
+            start = seq.num_cached_tokens
+            if start != seq.num_tokens - 1:
+                raise ValueError("a speculative row needs all KV but its last token's")
+            first = row * block
+            longs[0, first] = seq.token_ids[start]
+            longs[1, first : first + block] = range(start, start + block)
+            longs[2, first : first + block] = [
+                self.block_manager.slot_for_position(seq, pos) for pos in range(start, start + block)
+            ]
+            ints[row] = start + block
+            table = seq.block_table
+            if len(table) > graphs.width:
+                raise ValueError("sequence is longer than max_model_len allows")
+            tables[row, : len(table)] = table
+            tables[row, len(table) :] = null
+        self._fill_spec_padding(graphs, batch, slot)
+        self.sampler.stage(
+            *self._spec_sampling(seqs, batch), graphs.vocab, slot=slot, padded_rows=bucket * block
+        )
+        graphs.longs.copy_(graphs.host_longs[slot], non_blocking=True)
+        graphs.ints.copy_(graphs.host_ints[slot], non_blocking=True)
+        graphs.graphs[bucket]()
+        host = self.host_out[slot]
+        host[:tokens].copy_(self.sampled[:tokens], non_blocking=True)
+        host[tokens : tokens + batch].copy_(graphs.accepted[:batch], non_blocking=True)
+        event = self._events[slot]
+        if event is not None:
+            event.record()
+        return StepHandle(tokens, slot, event, spec_seqs=batch, block=block)
 
     # --- CUDA graphs for decode ------------------------------------------
 

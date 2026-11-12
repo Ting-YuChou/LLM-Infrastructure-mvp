@@ -137,8 +137,9 @@ class EngineCore:
 
     def capture_graphs(self) -> None:
         """Before serving on CUDA: compile the eager step's kernel variants,
-        then capture the decode CUDA graphs and the piecewise graphs for the
-        other steps (unless enforce_eager)."""
+        then capture the decode CUDA graphs (with a proposer: the speculative
+        cycle's) and the piecewise graphs for the other steps (unless
+        enforce_eager)."""
         if self.model.device.type != "cuda":
             return
         self.model_runner.warm_up_eager(self.config.max_num_seqs)
@@ -152,6 +153,11 @@ class EngineCore:
         max_tokens = min(self.config.cuda_graph_max_tokens, self.config.max_num_batched_tokens)
         if max_tokens > 0:
             self.model_runner.capture_piecewise_graphs(max_tokens, max_rows=self.config.max_num_seqs)
+        if self.proposer is not None:
+            self.model_runner.capture_spec_graphs(
+                max_batch=min(self.config.max_num_seqs, self.config.cuda_graph_max_bs),
+                max_model_len=self.config.max_model_len,
+            )
 
     # --- frontend side (any thread) ------------------------------------------
 
@@ -378,9 +384,20 @@ def size_kv_cache(config: NanoVLLMConfig, model, drafter=None) -> int:
     torch.cuda.synchronize()
     activation_peak = torch.cuda.max_memory_allocated() - with_cache
     del cache, input_ids, positions, metadata
+    graph_pool = 0
+    if drafter is not None:
+        # A speculative cycle has logits for every verify and draft row. The
+        # cycle's CUDA graphs keep one cycle's activations in their pool for
+        # good; a step they do not cover needs the same again while it runs.
+        spec_peak = _spec_cycle_peak(config, model, drafter)
+        activation_peak = max(activation_peak, spec_peak)
+        graph_pool = 0 if config.enforce_eager else spec_peak
     torch.cuda.empty_cache()
     free, total = torch.cuda.mem_get_info()
-    budget = config.gpu_memory_utilization * total - (total - free) - activation_peak - KV_RESERVE_BYTES
+    budget = (
+        config.gpu_memory_utilization * total
+        - (total - free) - activation_peak - graph_pool - KV_RESERVE_BYTES
+    )
     per_block = PagedKVCache.bytes_per_block(
         model.config.num_hidden_layers,
         block_size,
@@ -424,6 +441,25 @@ def size_kv_cache(config: NanoVLLMConfig, model, drafter=None) -> int:
         before / 1024**3,
     )
     return num_blocks
+
+
+def _spec_cycle_peak(config: NanoVLLMConfig, model, drafter) -> int:
+    """Peak activation bytes of one eager speculative cycle of max_num_seqs
+    sequences, on scratch caches (it also compiles that cycle's kernels)."""
+    block_size = config.kvcache_block_size
+    proposer = DFlashProposer(
+        drafter, drafter.new_paged_cache(1, block_size), config.num_speculative_tokens
+    )
+    runner = ModelRunner(
+        model, model.new_paged_cache(num_blocks=1, block_size=block_size), None,
+        max_rows=config.max_num_seqs, proposer=proposer,
+    )
+    torch.cuda.synchronize()
+    torch.cuda.reset_peak_memory_stats()
+    before = torch.cuda.memory_allocated()
+    runner.null_spec_cycle(config.max_num_seqs)
+    torch.cuda.synchronize()
+    return torch.cuda.max_memory_allocated() - before
 
 
 def load_model(config: NanoVLLMConfig):

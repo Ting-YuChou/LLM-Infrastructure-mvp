@@ -60,6 +60,10 @@ class Proposer(Protocol):
     num_draft_tokens: int
     # Target layers whose output residual :meth:`observe` gets; () for none.
     tap_layers: tuple[int, ...]
+    # True when propose and observe read only the tensors they are given
+    # (never ``DraftBatch.seqs`` or the host): the model runner then captures
+    # the whole cycle in a CUDA graph. Optional; absent means False.
+    device_only: bool
 
     def observe(self, taps: torch.Tensor, positions: torch.Tensor, slot_mapping: torch.Tensor) -> None:
         """Every token the target just computed (prompt chunks and verify
@@ -79,6 +83,8 @@ class DFlashProposer:
     A draft writes the block's own K/V into the lookahead slots; the verify
     pass's :meth:`observe` then overwrites them with context K/V.
     """
+
+    device_only = True
 
     def __init__(self, drafter: DFlashDrafter, cache: PagedKVCache, num_draft_tokens: int = 0):
         full = drafter.config.num_draft_tokens
