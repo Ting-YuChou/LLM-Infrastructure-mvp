@@ -17,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "unit"))
 from serving.nano_vllm.dflash import DFlashDrafter  # noqa: E402
 from serving.nano_vllm.kernels.block_attention import (  # noqa: E402
     BLOCK_CONFIGS,
-    BLOCK_CONFIGS_FP8,
     paged_block_attention,
     paged_block_attention_reference,
 )
@@ -112,8 +111,16 @@ def test_block_kernel_fp32_is_exact_to_tolerance(q_max, page_size, causal):
     torch.testing.assert_close(out, expected, rtol=1e-4, atol=1e-4)
 
 
+# Every tier, and the settings tune.py sweeps: rows per program (row tiles
+# re-reading the context), tile sizes, fewer splits.
+LAUNCH_CONFIGS = [c for _, c in BLOCK_CONFIGS] + [
+    {"block_n": n, "num_warps": w, "num_stages": st, "block_r": r}
+    for r in (16, 32, 64) for n, w, st in ((64, 8, 1), (64, 4, 2), (32, 4, 2))
+]
+
+
 @pytest.mark.parametrize("causal", [True, False], ids=["causal", "bidirectional"])
-@pytest.mark.parametrize("config", [c for _, c in BLOCK_CONFIGS + BLOCK_CONFIGS_FP8], ids=str)
+@pytest.mark.parametrize("config", LAUNCH_CONFIGS, ids=str)
 def test_every_launch_config_matches_reference(config, causal):
     query, keys, values, tables, lens, q_lens, _ = _block_case(
         5, 10, 16, LLAMA_8B, torch.float32, varlen=True, seed=2
@@ -129,6 +136,27 @@ def test_every_launch_config_matches_reference(config, causal):
     )
 
     torch.testing.assert_close(out, expected, rtol=1e-4, atol=1e-4)
+
+
+@pytest.mark.parametrize("causal", [True, False], ids=["causal", "bidirectional"])
+@pytest.mark.parametrize("q_max", [10, 3, 1])
+@pytest.mark.parametrize("splits_shift", [0, 1, 5])
+def test_row_tiles_and_fewer_splits_give_the_same_attention(splits_shift, q_max, causal):
+    query, keys, values, tables, lens, q_lens, padding = _block_case(
+        3, q_max, 16, LLAMA_8B, torch.float32, varlen=True, seed=5
+    )
+    scale = 1.0 / math.sqrt(128)
+    launch = {"block_n": 64, "num_warps": 4, "num_stages": 2, "splits_shift": splits_shift}
+    args = (query, keys, values, tables, lens, q_lens, q_max, scale, causal)
+
+    whole = paged_block_attention(*args, use_triton=True, config=launch)
+    for block_r in (16, 32):
+        tiled = paged_block_attention(*args, use_triton=True, config={**launch, "block_r": block_r})
+        torch.testing.assert_close(tiled, whole, rtol=1e-5, atol=1e-5)
+        assert (tiled[padding] == 0).all()
+    torch.testing.assert_close(
+        whole, paged_block_attention_reference(*args), rtol=1e-4, atol=1e-4
+    )
 
 
 @pytest.mark.parametrize("causal", [True, False], ids=["causal", "bidirectional"])
@@ -388,8 +416,16 @@ def test_verify_step_triton_matches_the_reference(kv_cache_dtype, with_prefill_r
         with_prefill_row,
     )
 
-    torch.testing.assert_close(triton_fp32, reference, rtol=1e-4, atol=1e-4)
-    torch.testing.assert_close(triton_bf16, reference, rtol=0.05, atol=0.05)
+    if kv_cache_dtype == "fp8":
+        # As test_fp8_kv_cache_triton_matches_the_reference: the kernel's
+        # division can round a code differently, and a bf16 model quantizes
+        # bf16-rounded keys, so it is compared by direction.
+        torch.testing.assert_close(triton_fp32, reference, rtol=2e-3, atol=2e-3)
+        cosine = torch.nn.functional.cosine_similarity(triton_bf16, reference, dim=-1)
+        assert cosine.min() > 0.998, cosine
+    else:
+        torch.testing.assert_close(triton_fp32, reference, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(triton_bf16, reference, rtol=0.05, atol=0.05)
 
 
 def test_verify_rows_give_the_logits_of_decoding_the_same_tokens_one_by_one():
@@ -487,5 +523,9 @@ def test_drafter_triton_matches_the_reference(tmp_path, kv_cache_dtype):
     triton_fp32 = run(torch.float32, False, "triton")
     triton_bf16 = run(torch.bfloat16, True, "triton")
 
-    torch.testing.assert_close(triton_fp32, reference, rtol=1e-4, atol=1e-4)
-    torch.testing.assert_close(triton_bf16, reference, rtol=0.05, atol=0.05)
+    # Logits of several units through norm weights of 0.5-1.5: bf16 is
+    # compared by direction (and on an fp8 cache codes can sit a step apart).
+    tol = 2e-3 if kv_cache_dtype == "fp8" else 1e-4
+    torch.testing.assert_close(triton_fp32, reference, rtol=tol, atol=tol)
+    cosine = torch.nn.functional.cosine_similarity(triton_bf16, reference, dim=-1)
+    assert cosine.min() > 0.998, cosine

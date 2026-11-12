@@ -1,0 +1,1758 @@
+{
+  "env": {
+    "device_type": "cuda",
+    "torch": "2.10.0+cu128",
+    "triton": "3.6.0",
+    "device": "NVIDIA A100-SXM4-40GB",
+    "l2_bytes": 41943040,
+    "peak_GBps": 1555.0,
+    "peak_TFLOPs": 312.0,
+    "copy_GBps": 1378.4809746195833
+  },
+  "rows": [
+    {
+      "kernel": "paged_block_attention",
+      "impl": "decode",
+      "shape": {
+        "B": 1,
+        "Q": 10,
+        "ctx": 256
+      },
+      "label": "B=1 Q=10 ctx=256",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 16.867492140534196,
+      "timing": "graph",
+      "copies": 449,
+      "calls": 449,
+      "GBps": 62.16549509930831,
+      "pct_peak": 3.997781035325293,
+      "pct_copy": 4.50971005359461,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 1,
+        "Q": 10,
+        "ctx": 256
+      },
+      "label": "B=1 Q=10 ctx=256",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 11.318734600177587,
+      "timing": "graph",
+      "copies": 449,
+      "calls": 449,
+      "GBps": 92.64074448600891,
+      "pct_peak": 5.95760414701022,
+      "pct_copy": 6.720494964507929,
+      "x_base": 1.4902277274236602
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "prefill",
+      "shape": {
+        "B": 1,
+        "Q": 10,
+        "ctx": 256
+      },
+      "label": "B=1 Q=10 ctx=256",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 20.580346971949385,
+      "timing": "graph",
+      "copies": 449,
+      "calls": 449,
+      "GBps": 50.950355765584945,
+      "pct_peak": 3.2765502100054626,
+      "pct_copy": 3.696123247522195,
+      "x_base": 0.8195922140440227
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "block",
+      "shape": {
+        "B": 1,
+        "Q": 10,
+        "ctx": 256
+      },
+      "label": "B=1 Q=10 ctx=256",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 18.252971708641816,
+      "timing": "graph",
+      "copies": 449,
+      "calls": 449,
+      "GBps": 57.44686491260789,
+      "pct_peak": 3.6943321487207648,
+      "pct_copy": 4.1674035384101975,
+      "x_base": 0.9240956710927422
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "decode",
+      "shape": {
+        "B": 1,
+        "Q": 10,
+        "ctx": 1024
+      },
+      "label": "B=1 Q=10 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 14.360773947931104,
+      "timing": "graph",
+      "copies": 124,
+      "calls": 124,
+      "GBps": 292.0667099981931,
+      "pct_peak": 18.782425080269654,
+      "pct_copy": 21.187576424752194,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 1,
+        "Q": 10,
+        "ctx": 1024
+      },
+      "label": "B=1 Q=10 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 29.638194268749608,
+      "timing": "graph",
+      "copies": 124,
+      "calls": 124,
+      "GBps": 141.516853623652,
+      "pct_peak": 9.100762290910097,
+      "pct_copy": 10.266144852866477,
+      "x_base": 0.4845360624102881
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "prefill",
+      "shape": {
+        "B": 1,
+        "Q": 10,
+        "ctx": 1024
+      },
+      "label": "B=1 Q=10 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 65.09006407953078,
+      "timing": "graph",
+      "copies": 124,
+      "calls": 124,
+      "GBps": 64.43846782629004,
+      "pct_peak": 4.143952914873958,
+      "pct_copy": 4.674599723371082,
+      "x_base": 0.22062927961453974
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "block",
+      "shape": {
+        "B": 1,
+        "Q": 10,
+        "ctx": 1024
+      },
+      "label": "B=1 Q=10 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 19.7945813978872,
+      "timing": "graph",
+      "copies": 124,
+      "calls": 124,
+      "GBps": 211.89152302294633,
+      "pct_peak": 13.626464503083367,
+      "pct_copy": 15.371378127392845,
+      "x_base": 0.7254901560820033
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "decode",
+      "shape": {
+        "B": 1,
+        "Q": 10,
+        "ctx": 4096
+      },
+      "label": "B=1 Q=10 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 20.919999107718468,
+      "timing": "graph",
+      "copies": 32,
+      "calls": 128,
+      "GBps": 801.9702062898281,
+      "pct_peak": 51.57364670674136,
+      "pct_copy": 58.177821896391876,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 1,
+        "Q": 10,
+        "ctx": 4096
+      },
+      "label": "B=1 Q=10 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 104.14399951696396,
+      "timing": "graph",
+      "copies": 32,
+      "calls": 128,
+      "GBps": 161.09632890819762,
+      "pct_peak": 10.359892534289235,
+      "pct_copy": 11.686510867707481,
+      "x_base": 0.20087570291854231
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "prefill",
+      "shape": {
+        "B": 1,
+        "Q": 10,
+        "ctx": 4096
+      },
+      "label": "B=1 Q=10 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 242.5840049982071,
+      "timing": "graph",
+      "copies": 32,
+      "calls": 128,
+      "GBps": 69.16043784553726,
+      "pct_peak": 4.447616581706576,
+      "pct_copy": 5.017148522098633,
+      "x_base": 0.08623816359150754
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "block",
+      "shape": {
+        "B": 1,
+        "Q": 10,
+        "ctx": 4096
+      },
+      "label": "B=1 Q=10 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 44.495999813079834,
+      "timing": "graph",
+      "copies": 32,
+      "calls": 128,
+      "GBps": 377.049983604779,
+      "pct_peak": 24.247587370082254,
+      "pct_copy": 27.35257073162238,
+      "x_base": 0.47015460256202457
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "decode",
+      "shape": {
+        "B": 4,
+        "Q": 10,
+        "ctx": 256
+      },
+      "label": "B=4 Q=10 ctx=256",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 14.778576665005442,
+      "timing": "graph",
+      "copies": 118,
+      "calls": 118,
+      "GBps": 283.8097399414516,
+      "pct_peak": 18.251430221315214,
+      "pct_copy": 20.588585926604754,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 4,
+        "Q": 10,
+        "ctx": 256
+      },
+      "label": "B=4 Q=10 ctx=256",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 16.427389645980575,
+      "timing": "graph",
+      "copies": 118,
+      "calls": 118,
+      "GBps": 255.3238274850475,
+      "pct_peak": 16.419538745019132,
+      "pct_copy": 18.522114718014787,
+      "x_base": 0.8996302506662365
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "prefill",
+      "shape": {
+        "B": 4,
+        "Q": 10,
+        "ctx": 256
+      },
+      "label": "B=4 Q=10 ctx=256",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 27.30955915935969,
+      "timing": "graph",
+      "copies": 118,
+      "calls": 118,
+      "GBps": 153.58373145186798,
+      "pct_peak": 9.876767295940063,
+      "pct_copy": 11.141519852622716,
+      "x_base": 0.5411503195188138
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "block",
+      "shape": {
+        "B": 4,
+        "Q": 10,
+        "ctx": 256
+      },
+      "label": "B=4 Q=10 ctx=256",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 29.834848339274778,
+      "timing": "graph",
+      "copies": 118,
+      "calls": 118,
+      "GBps": 140.58405634590045,
+      "pct_peak": 9.040775327710639,
+      "pct_copy": 10.198476361612256,
+      "x_base": 0.4953461300338112
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "decode",
+      "shape": {
+        "B": 4,
+        "Q": 10,
+        "ctx": 1024
+      },
+      "label": "B=4 Q=10 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 20.975999534130096,
+      "timing": "graph",
+      "copies": 32,
+      "calls": 128,
+      "GBps": 799.8291558264842,
+      "pct_peak": 51.43595857405043,
+      "pct_copy": 58.02250234517828,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 4,
+        "Q": 10,
+        "ctx": 1024
+      },
+      "label": "B=4 Q=10 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 45.368000864982605,
+      "timing": "graph",
+      "copies": 32,
+      "calls": 128,
+      "GBps": 369.8028495884097,
+      "pct_peak": 23.781533735589047,
+      "pct_copy": 26.826837395449974,
+      "x_base": 0.46235229973116293
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "prefill",
+      "shape": {
+        "B": 4,
+        "Q": 10,
+        "ctx": 1024
+      },
+      "label": "B=4 Q=10 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 87.18399703502655,
+      "timing": "graph",
+      "copies": 32,
+      "calls": 128,
+      "GBps": 192.4345816957633,
+      "pct_peak": 12.37521425696227,
+      "pct_copy": 13.959901169391843,
+      "x_base": 0.24059460735326113
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "block",
+      "shape": {
+        "B": 4,
+        "Q": 10,
+        "ctx": 1024
+      },
+      "label": "B=4 Q=10 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 49.97199960052967,
+      "timing": "graph",
+      "copies": 32,
+      "calls": 128,
+      "GBps": 335.73233278866377,
+      "pct_peak": 21.59050371631278,
+      "pct_copy": 24.355238771526402,
+      "x_base": 0.4197550568680418
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "decode",
+      "shape": {
+        "B": 4,
+        "Q": 10,
+        "ctx": 4096
+      },
+      "label": "B=4 Q=10 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 62.71999845137963,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 1069.9755366228621,
+      "pct_peak": 68.80871618153454,
+      "pct_copy": 77.61989873803961,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 4,
+        "Q": 10,
+        "ctx": 4096
+      },
+      "label": "B=4 Q=10 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 159.38953252939078,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 421.03683306571844,
+      "pct_peak": 27.07632366982112,
+      "pct_copy": 30.543536023912928,
+      "x_base": 0.39350136396073765
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "prefill",
+      "shape": {
+        "B": 4,
+        "Q": 10,
+        "ctx": 4096
+      },
+      "label": "B=4 Q=10 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 325.22339087266187,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 206.34697836440628,
+      "pct_peak": 13.269902145620982,
+      "pct_copy": 14.969156786610816,
+      "x_base": 0.19285205250177423
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "block",
+      "shape": {
+        "B": 4,
+        "Q": 10,
+        "ctx": 4096
+      },
+      "label": "B=4 Q=10 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 130.2203077536363,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 515.3486822267631,
+      "pct_peak": 33.14139435541885,
+      "pct_copy": 37.385258970946836,
+      "x_base": 0.48164529429648983
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "decode",
+      "shape": {
+        "B": 16,
+        "Q": 10,
+        "ctx": 256
+      },
+      "label": "B=16 Q=10 ctx=256",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 21.806932489077248,
+      "timing": "graph",
+      "copies": 30,
+      "calls": 120,
+      "GBps": 769.3524070110936,
+      "pct_peak": 49.476039036083186,
+      "pct_copy": 55.81160866027986,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 16,
+        "Q": 10,
+        "ctx": 256
+      },
+      "label": "B=16 Q=10 ctx=256",
+      "ok": true,
+      "max_abs_err": 0.00390625,
+      "us": 37.55946755409241,
+      "timing": "graph",
+      "copies": 30,
+      "calls": 120,
+      "GBps": 446.68407441713026,
+      "pct_peak": 28.725663949654678,
+      "pct_copy": 32.40407975455742,
+      "x_base": 0.580597487375755
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "prefill",
+      "shape": {
+        "B": 16,
+        "Q": 10,
+        "ctx": 256
+      },
+      "label": "B=16 Q=10 ctx=256",
+      "ok": true,
+      "max_abs_err": 0.00390625,
+      "us": 69.18826897939046,
+      "timing": "graph",
+      "copies": 30,
+      "calls": 120,
+      "GBps": 242.48642504696184,
+      "pct_peak": 15.593982318132595,
+      "pct_copy": 17.59084307375953,
+      "x_base": 0.3151825130293839
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "block",
+      "shape": {
+        "B": 16,
+        "Q": 10,
+        "ctx": 256
+      },
+      "label": "B=16 Q=10 ctx=256",
+      "ok": true,
+      "max_abs_err": 0.00390625,
+      "us": 56.49493336677551,
+      "timing": "graph",
+      "copies": 30,
+      "calls": 120,
+      "GBps": 296.96850673456373,
+      "pct_peak": 19.097653166209888,
+      "pct_copy": 21.543170504512588,
+      "x_base": 0.3859980212296672
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "decode",
+      "shape": {
+        "B": 16,
+        "Q": 10,
+        "ctx": 1024
+      },
+      "label": "B=16 Q=10 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 61.38092508682838,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 1093.3178981103492,
+      "pct_peak": 70.3098326759067,
+      "pct_copy": 79.31323813968996,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 16,
+        "Q": 10,
+        "ctx": 1024
+      },
+      "label": "B=16 Q=10 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 114.30400151472824,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 587.1086148401631,
+      "pct_peak": 37.75618101866001,
+      "pct_copy": 42.59098425367723,
+      "x_base": 0.5369971678456013
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "prefill",
+      "shape": {
+        "B": 16,
+        "Q": 10,
+        "ctx": 1024
+      },
+      "label": "B=16 Q=10 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 230.22277538593,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 291.49533050109056,
+      "pct_peak": 18.745680418076564,
+      "pct_copy": 21.14612648763861,
+      "x_base": 0.2666153467394072
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "block",
+      "shape": {
+        "B": 16,
+        "Q": 10,
+        "ctx": 1024
+      },
+      "label": "B=16 Q=10 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 111.33046333606427,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 602.7897665118297,
+      "pct_peak": 38.76461520976397,
+      "pct_copy": 43.7285517617086,
+      "x_base": 0.5513398871029822
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "decode",
+      "shape": {
+        "B": 16,
+        "Q": 10,
+        "ctx": 4096
+      },
+      "label": "B=16 Q=10 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 208.788480758667,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1285.6813509279632,
+      "pct_peak": 82.68047272848638,
+      "pct_copy": 93.26797936277431,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 16,
+        "Q": 10,
+        "ctx": 4096
+      },
+      "label": "B=16 Q=10 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 434.385929107666,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 617.9653575598811,
+      "pct_peak": 39.74053746365795,
+      "pct_copy": 44.829444071973484,
+      "x_base": 0.4806520349026248
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "prefill",
+      "shape": {
+        "B": 16,
+        "Q": 10,
+        "ctx": 4096
+      },
+      "label": "B=16 Q=10 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 877.4348831176758,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 305.93205395049154,
+      "pct_peak": 19.67408707077116,
+      "pct_copy": 22.1934186675967,
+      "x_base": 0.23795324846991028
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "block",
+      "shape": {
+        "B": 16,
+        "Q": 10,
+        "ctx": 4096
+      },
+      "label": "B=16 Q=10 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 305.60768127441406,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 878.3661944640847,
+      "pct_peak": 56.48657199125947,
+      "pct_copy": 63.71986343202783,
+      "x_base": 0.6831912073937361
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "decode",
+      "shape": {
+        "B": 64,
+        "Q": 10,
+        "ctx": 256
+      },
+      "label": "B=64 Q=10 ctx=256",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 57.806766950167145,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 1160.9170957070098,
+      "pct_peak": 74.65704795543472,
+      "pct_copy": 84.21712864244542,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 64,
+        "Q": 10,
+        "ctx": 256
+      },
+      "label": "B=64 Q=10 ctx=256",
+      "ok": true,
+      "max_abs_err": 0.00390625,
+      "us": 125.24800117199237,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 535.8078641737775,
+      "pct_peak": 34.45709737451945,
+      "pct_copy": 38.869442091621416,
+      "x_base": 0.4615384390109831
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "prefill",
+      "shape": {
+        "B": 64,
+        "Q": 10,
+        "ctx": 256
+      },
+      "label": "B=64 Q=10 ctx=256",
+      "ok": true,
+      "max_abs_err": 0.00390625,
+      "us": 241.00922621213473,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 278.4493567102333,
+      "pct_peak": 17.90671104245873,
+      "pct_copy": 20.19972432242501,
+      "x_base": 0.23985292122918983
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "block",
+      "shape": {
+        "B": 64,
+        "Q": 10,
+        "ctx": 256
+      },
+      "label": "B=64 Q=10 ctx=256",
+      "ok": true,
+      "max_abs_err": 0.00390625,
+      "us": 96.33476917560284,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 696.6214231299117,
+      "pct_peak": 44.798805345975026,
+      "pct_copy": 50.535439803379,
+      "x_base": 0.6000613012815205
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "decode",
+      "shape": {
+        "B": 64,
+        "Q": 10,
+        "ctx": 1024
+      },
+      "label": "B=64 Q=10 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 198.77888679504395,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1350.4223729594444,
+      "pct_peak": 86.84388250543051,
+      "pct_copy": 97.96452746343618,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 64,
+        "Q": 10,
+        "ctx": 1024
+      },
+      "label": "B=64 Q=10 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 474.7110366821289,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 565.4712767500853,
+      "pct_peak": 36.3647123311952,
+      "pct_copy": 41.02133342145961,
+      "x_base": 0.41873660276440594
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "prefill",
+      "shape": {
+        "B": 64,
+        "Q": 10,
+        "ctx": 1024
+      },
+      "label": "B=64 Q=10 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 837.0688247680664,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 320.6850477012779,
+      "pct_peak": 20.622832649599864,
+      "pct_copy": 23.26365424011577,
+      "x_base": 0.23747018275363588
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "block",
+      "shape": {
+        "B": 64,
+        "Q": 10,
+        "ctx": 1024
+      },
+      "label": "B=64 Q=10 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 296.82687759399414,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 904.350233293804,
+      "pct_peak": 58.15757127291344,
+      "pct_copy": 65.60483967095561,
+      "x_base": 0.6696795398256952
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "decode",
+      "shape": {
+        "B": 64,
+        "Q": 10,
+        "ctx": 4096
+      },
+      "label": "B=64 Q=10 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 764.5798492431641,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1404.3553790527787,
+      "pct_peak": 90.31224302590218,
+      "pct_copy": 101.87702296292744,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 64,
+        "Q": 10,
+        "ctx": 4096
+      },
+      "label": "B=64 Q=10 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.00048828125,
+      "us": 2499.8758697509766,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 429.5180560733042,
+      "pct_peak": 27.621739940405412,
+      "pct_copy": 31.158794642910284,
+      "x_base": 0.3058471256492136
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "prefill",
+      "shape": {
+        "B": 64,
+        "Q": 10,
+        "ctx": 4096
+      },
+      "label": "B=64 Q=10 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 3212.999725341797,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 334.18671515316606,
+      "pct_peak": 21.49110708380489,
+      "pct_copy": 24.243114073111595,
+      "x_base": 0.2379644925621114
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "block",
+      "shape": {
+        "B": 64,
+        "Q": 10,
+        "ctx": 4096
+      },
+      "label": "B=64 Q=10 ctx=4096",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 1144.565773010254,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 938.1215560692646,
+      "pct_peak": 60.32936051892377,
+      "pct_copy": 68.05473367727518,
+      "x_base": 0.6680086608149118
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "decode",
+      "shape": {
+        "B": 1,
+        "Q": 3,
+        "ctx": 1024
+      },
+      "label": "B=1 Q=3 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 14.401015781220936,
+      "timing": "graph",
+      "copies": 126,
+      "calls": 126,
+      "GBps": 291.2505661905748,
+      "pct_peak": 18.729939947946928,
+      "pct_copy": 21.128370398506995,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 1,
+        "Q": 3,
+        "ctx": 1024
+      },
+      "label": "B=1 Q=3 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 29.630984578813827,
+      "timing": "graph",
+      "copies": 126,
+      "calls": 126,
+      "GBps": 141.55128692547498,
+      "pct_peak": 9.102976651155947,
+      "pct_copy": 10.268642769229267,
+      "x_base": 0.48601205751082843
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "prefill",
+      "shape": {
+        "B": 1,
+        "Q": 3,
+        "ctx": 1024
+      },
+      "label": "B=1 Q=3 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 64.88584336780366,
+      "timing": "graph",
+      "copies": 126,
+      "calls": 126,
+      "GBps": 64.64128047507529,
+      "pct_peak": 4.156995528943749,
+      "pct_copy": 4.689312487095748,
+      "x_base": 0.22194387918469619
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "block",
+      "shape": {
+        "B": 1,
+        "Q": 3,
+        "ctx": 1024
+      },
+      "label": "B=1 Q=3 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 14.547301663292778,
+      "timing": "graph",
+      "copies": 126,
+      "calls": 126,
+      "GBps": 288.32178620338175,
+      "pct_peak": 18.541593968063136,
+      "pct_copy": 20.915906096052527,
+      "x_base": 0.9899441225969098
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "decode",
+      "shape": {
+        "B": 1,
+        "Q": 5,
+        "ctx": 1024
+      },
+      "label": "B=1 Q=5 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 14.405632019042969,
+      "timing": "graph",
+      "copies": 125,
+      "calls": 125,
+      "GBps": 291.15723589603715,
+      "pct_peak": 18.723937999745154,
+      "pct_copy": 21.121599881085572,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 1,
+        "Q": 5,
+        "ctx": 1024
+      },
+      "label": "B=1 Q=5 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 29.638656616210938,
+      "timing": "graph",
+      "copies": 125,
+      "calls": 125,
+      "GBps": 141.51464603513492,
+      "pct_peak": 9.10062032380289,
+      "pct_copy": 10.265984706403978,
+      "x_base": 0.4860420026987246
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "prefill",
+      "shape": {
+        "B": 1,
+        "Q": 5,
+        "ctx": 1024
+      },
+      "label": "B=1 Q=5 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 64.98713684082031,
+      "timing": "graph",
+      "copies": 125,
+      "calls": 125,
+      "GBps": 64.54052607785354,
+      "pct_peak": 4.150516146485758,
+      "pct_copy": 4.682003398390367,
+      "x_base": 0.2216689751131546
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "block",
+      "shape": {
+        "B": 1,
+        "Q": 5,
+        "ctx": 1024
+      },
+      "label": "B=1 Q=5 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 17.09260845184326,
+      "timing": "graph",
+      "copies": 125,
+      "calls": 125,
+      "GBps": 245.38700525534406,
+      "pct_peak": 15.780514807417624,
+      "pct_copy": 17.80126166217586,
+      "x_base": 0.8427989244373916
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "decode",
+      "shape": {
+        "B": 16,
+        "Q": 3,
+        "ctx": 1024
+      },
+      "label": "B=16 Q=3 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 61.93230702326848,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 1083.5841134544955,
+      "pct_peak": 69.68386581700936,
+      "pct_copy": 78.6071141644541,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 16,
+        "Q": 3,
+        "ctx": 1024
+      },
+      "label": "B=16 Q=3 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 114.31876971171452,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 587.0327695900946,
+      "pct_peak": 37.751303510617014,
+      "pct_copy": 42.58548216467746,
+      "x_base": 0.5417509931172931
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "prefill",
+      "shape": {
+        "B": 16,
+        "Q": 3,
+        "ctx": 1024
+      },
+      "label": "B=16 Q=3 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 229.68123509333685,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 292.18261549633604,
+      "pct_peak": 18.789878810053764,
+      "pct_copy": 21.195984629165384,
+      "x_base": 0.2696446098354561
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "block",
+      "shape": {
+        "B": 16,
+        "Q": 3,
+        "ctx": 1024
+      },
+      "label": "B=16 Q=3 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 69.17415444667523,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 970.1436112490929,
+      "pct_peak": 62.38865667196739,
+      "pct_copy": 70.37772947985891,
+      "x_base": 0.8953099249085968
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "decode",
+      "shape": {
+        "B": 16,
+        "Q": 5,
+        "ctx": 1024
+      },
+      "label": "B=16 Q=5 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 61.341540171549866,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 1094.0198731939408,
+      "pct_peak": 70.3549757680991,
+      "pct_copy": 79.36416195340348,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 16,
+        "Q": 5,
+        "ctx": 1024
+      },
+      "label": "B=16 Q=5 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 114.52061396378737,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 585.998115773467,
+      "pct_peak": 37.68476628768276,
+      "pct_copy": 42.510424631372494,
+      "x_base": 0.5356375419969955
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "prefill",
+      "shape": {
+        "B": 16,
+        "Q": 5,
+        "ctx": 1024
+      },
+      "label": "B=16 Q=5 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 229.86337771782507,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 291.9510914103998,
+      "pct_peak": 18.774989801311882,
+      "pct_copy": 21.17918903385438,
+      "x_base": 0.26686086657462815
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "block",
+      "shape": {
+        "B": 16,
+        "Q": 5,
+        "ctx": 1024
+      },
+      "label": "B=16 Q=5 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.0009765625,
+      "us": 77.62708113743709,
+      "timing": "graph",
+      "copies": 8,
+      "calls": 104,
+      "GBps": 864.503250884639,
+      "pct_peak": 55.59506436557164,
+      "pct_copy": 62.71419532091941,
+      "x_base": 0.7902079953637053
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "decode",
+      "shape": {
+        "B": 64,
+        "Q": 3,
+        "ctx": 1024
+      },
+      "label": "B=64 Q=3 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 199.7977638244629,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1343.5358377476157,
+      "pct_peak": 86.4010185046698,
+      "pct_copy": 97.46495326991281,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 64,
+        "Q": 3,
+        "ctx": 1024
+      },
+      "label": "B=64 Q=3 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 470.60991287231445,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 570.3990686503702,
+      "pct_peak": 36.6816121318566,
+      "pct_copy": 41.37881328451284,
+      "x_base": 0.42455069126151596
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "prefill",
+      "shape": {
+        "B": 64,
+        "Q": 3,
+        "ctx": 1024
+      },
+      "label": "B=64 Q=3 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 833.2851409912109,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 322.1411768853698,
+      "pct_peak": 20.71647439777298,
+      "pct_copy": 23.36928712231741,
+      "x_base": 0.23977118275119974
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "block",
+      "shape": {
+        "B": 64,
+        "Q": 3,
+        "ctx": 1024
+      },
+      "label": "B=64 Q=3 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 205.56288719177246,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1305.85564187748,
+      "pct_peak": 83.97785478311768,
+      "pct_copy": 94.73149545918501,
+      "x_base": 0.9719544542010095
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "decode",
+      "shape": {
+        "B": 64,
+        "Q": 5,
+        "ctx": 1024
+      },
+      "label": "B=64 Q=5 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 199.51616287231445,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1345.4321300865847,
+      "pct_peak": 86.52296656505368,
+      "pct_copy": 97.60251718075985,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "vllm_fa2",
+      "shape": {
+        "B": 64,
+        "Q": 5,
+        "ctx": 1024
+      },
+      "label": "B=64 Q=5 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 472.4275207519531,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 568.204527062134,
+      "pct_peak": 36.540484055442704,
+      "pct_copy": 41.21961329346169,
+      "x_base": 0.42232121142042844
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "prefill",
+      "shape": {
+        "B": 64,
+        "Q": 5,
+        "ctx": 1024
+      },
+      "label": "B=64 Q=5 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 833.9251327514648,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 321.89395121636414,
+      "pct_peak": 20.700575640923738,
+      "pct_copy": 23.351352477330824,
+      "x_base": 0.23924949019587394
+    },
+    {
+      "kernel": "paged_block_attention",
+      "impl": "block",
+      "shape": {
+        "B": 64,
+        "Q": 5,
+        "ctx": 1024
+      },
+      "label": "B=64 Q=5 ctx=1024",
+      "ok": true,
+      "max_abs_err": 0.001953125,
+      "us": 211.83488845825195,
+      "timing": "graph",
+      "copies": 1,
+      "calls": 100,
+      "GBps": 1267.191905703969,
+      "pct_peak": 81.49144088128419,
+      "pct_copy": 91.92668807443451,
+      "x_base": 0.941847513053237
+    },
+    {
+      "kernel": "norm_rope_cache_write",
+      "impl": "torch",
+      "shape": {
+        "tokens": 1,
+        "query": 1
+      },
+      "label": "tokens=1 query=1",
+      "ok": true,
+      "max_abs_err": 0.0,
+      "us": 77.84025252811493,
+      "timing": "graph",
+      "copies": 126,
+      "calls": 126,
+      "GBps": 0.32240388725531993,
+      "pct_peak": 0.02073336895532604,
+      "pct_copy": 0.023388345083565125,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "norm_rope_cache_write",
+      "impl": "triton",
+      "shape": {
+        "tokens": 1,
+        "query": 1
+      },
+      "label": "tokens=1 query=1",
+      "ok": true,
+      "max_abs_err": 0.015625,
+      "us": 9.825523883577377,
+      "timing": "graph",
+      "copies": 126,
+      "calls": 126,
+      "GBps": 2.554164062635487,
+      "pct_peak": 0.16425492364215352,
+      "pct_copy": 0.1852883071774244,
+      "x_base": 7.9222495869374505
+    },
+    {
+      "kernel": "norm_rope_cache_write",
+      "impl": "torch",
+      "shape": {
+        "tokens": 10,
+        "query": 1
+      },
+      "label": "tokens=10 query=1",
+      "ok": true,
+      "max_abs_err": 0.0,
+      "us": 81.82010030358788,
+      "timing": "graph",
+      "copies": 123,
+      "calls": 123,
+      "GBps": 3.067216968310111,
+      "pct_peak": 0.19724867963409076,
+      "pct_copy": 0.22250702220656798,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "norm_rope_cache_write",
+      "impl": "triton",
+      "shape": {
+        "tokens": 10,
+        "query": 1
+      },
+      "label": "tokens=10 query=1",
+      "ok": true,
+      "max_abs_err": 0.03125,
+      "us": 6.676812966664632,
+      "timing": "graph",
+      "copies": 123,
+      "calls": 123,
+      "GBps": 37.58679496534794,
+      "pct_peak": 2.4171572324982598,
+      "pct_copy": 2.7266821709832225,
+      "x_base": 12.254364576646319
+    },
+    {
+      "kernel": "norm_rope_cache_write",
+      "impl": "torch",
+      "shape": {
+        "tokens": 160,
+        "query": 1
+      },
+      "label": "tokens=160 query=1",
+      "ok": true,
+      "max_abs_err": 0.0,
+      "us": 106.75497387730798,
+      "timing": "graph",
+      "copies": 86,
+      "calls": 172,
+      "GBps": 37.61286106083262,
+      "pct_peak": 2.418833508735217,
+      "pct_copy": 2.7285730999089464,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "norm_rope_cache_write",
+      "impl": "triton",
+      "shape": {
+        "tokens": 160,
+        "query": 1
+      },
+      "label": "tokens=160 query=1",
+      "ok": true,
+      "max_abs_err": 0.03125,
+      "us": 9.602976399798726,
+      "timing": "graph",
+      "copies": 86,
+      "calls": 172,
+      "GBps": 418.1370267747571,
+      "pct_peak": 26.889840950145153,
+      "pct_copy": 30.333173578267886,
+      "x_base": 11.116863088359304
+    },
+    {
+      "kernel": "norm_rope_cache_write",
+      "impl": "torch",
+      "shape": {
+        "tokens": 640,
+        "query": 1
+      },
+      "label": "tokens=640 query=1",
+      "ok": true,
+      "max_abs_err": 0.0,
+      "us": 206.058669090271,
+      "timing": "graph",
+      "copies": 40,
+      "calls": 120,
+      "GBps": 77.94595622164162,
+      "pct_peak": 5.012601686279204,
+      "pct_copy": 5.654481828677557,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "norm_rope_cache_write",
+      "impl": "triton",
+      "shape": {
+        "tokens": 640,
+        "query": 1
+      },
+      "label": "tokens=640 query=1",
+      "ok": true,
+      "max_abs_err": 0.03125,
+      "us": 16.887466112772625,
+      "timing": "graph",
+      "copies": 40,
+      "calls": 120,
+      "GBps": 951.0864384712002,
+      "pct_peak": 61.163115014225085,
+      "pct_copy": 68.99525317958556,
+      "x_base": 12.201870174852406
+    },
+    {
+      "kernel": "norm_rope_cache_write",
+      "impl": "torch",
+      "shape": {
+        "tokens": 1,
+        "query": 0
+      },
+      "label": "tokens=1 query=0",
+      "ok": true,
+      "max_abs_err": 0.0,
+      "us": 44.50336335197328,
+      "timing": "graph",
+      "copies": 126,
+      "calls": 126,
+      "GBps": 0.1957604851367646,
+      "pct_peak": 0.012589098722621518,
+      "pct_copy": 0.014201174244772456,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "norm_rope_cache_write",
+      "impl": "triton",
+      "shape": {
+        "tokens": 1,
+        "query": 0
+      },
+      "label": "tokens=1 query=0",
+      "ok": true,
+      "max_abs_err": 0.015625,
+      "us": 8.850285931239052,
+      "timing": "graph",
+      "copies": 126,
+      "calls": 126,
+      "GBps": 0.9843749758693173,
+      "pct_peak": 0.06330385696908793,
+      "pct_copy": 0.07141012418694957,
+      "x_base": 5.028466164566363
+    },
+    {
+      "kernel": "norm_rope_cache_write",
+      "impl": "torch",
+      "shape": {
+        "tokens": 10,
+        "query": 0
+      },
+      "label": "tokens=10 query=0",
+      "ok": true,
+      "max_abs_err": 0.0,
+      "us": 48.02969741821289,
+      "timing": "graph",
+      "copies": 125,
+      "calls": 125,
+      "GBps": 1.8138777606990306,
+      "pct_peak": 0.1166480875047608,
+      "pct_copy": 0.13158525899855839,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "norm_rope_cache_write",
+      "impl": "triton",
+      "shape": {
+        "tokens": 10,
+        "query": 0
+      },
+      "label": "tokens=10 query=0",
+      "ok": true,
+      "max_abs_err": 0.015625,
+      "us": 5.128191947937012,
+      "timing": "graph",
+      "copies": 125,
+      "calls": 125,
+      "GBps": 16.98844366288726,
+      "pct_peak": 1.0925044156197594,
+      "pct_copy": 1.2324032014714985,
+      "x_base": 9.36581506812249
+    },
+    {
+      "kernel": "norm_rope_cache_write",
+      "impl": "torch",
+      "shape": {
+        "tokens": 160,
+        "query": 0
+      },
+      "label": "tokens=160 query=0",
+      "ok": true,
+      "max_abs_err": 0.0,
+      "us": 55.92177973853217,
+      "timing": "graph",
+      "copies": 108,
+      "calls": 108,
+      "GBps": 24.92624531117234,
+      "pct_peak": 1.602973974995006,
+      "pct_copy": 1.808240067879877,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "norm_rope_cache_write",
+      "impl": "triton",
+      "shape": {
+        "tokens": 160,
+        "query": 0
+      },
+      "label": "tokens=160 query=0",
+      "ok": true,
+      "max_abs_err": 0.03125,
+      "us": 7.253333374306008,
+      "timing": "graph",
+      "copies": 108,
+      "calls": 108,
+      "GBps": 192.17646950266766,
+      "pct_peak": 12.358615402100813,
+      "pct_copy": 13.941176776538551,
+      "x_base": 7.709804148342033
+    },
+    {
+      "kernel": "norm_rope_cache_write",
+      "impl": "torch",
+      "shape": {
+        "tokens": 640,
+        "query": 0
+      },
+      "label": "tokens=640 query=0",
+      "ok": true,
+      "max_abs_err": 0.0,
+      "us": 77.41440259493314,
+      "timing": "graph",
+      "copies": 65,
+      "calls": 130,
+      "GBps": 72.02380710956925,
+      "pct_peak": 4.631756084216671,
+      "pct_copy": 5.224867693908181,
+      "x_base": 1.0
+    },
+    {
+      "kernel": "norm_rope_cache_write",
+      "impl": "triton",
+      "shape": {
+        "tokens": 640,
+        "query": 0
+      },
+      "label": "tokens=640 query=0",
+      "ok": true,
+      "max_abs_err": 0.03125,
+      "us": 10.842584646665133,
+      "timing": "graph",
+      "copies": 65,
+      "calls": 130,
+      "GBps": 514.23901050336,
+      "pct_peak": 33.070032829798066,
+      "pct_copy": 37.30475936711956,
+      "x_base": 7.139847657886958
+    }
+  ]
+}

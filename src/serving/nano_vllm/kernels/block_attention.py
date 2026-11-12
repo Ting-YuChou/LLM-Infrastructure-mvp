@@ -12,10 +12,11 @@ prefill path the block's own K/V are already in the cache: ``context_lens``
 counts them, and query ``t`` sits at position ``context_len - q_len + t``.
 
 The Triton kernel is the decode kernel (paged_attention.py) with more rows:
-a program owns one (sequence, kv head, split) and reads its slice of the
-context once for all ``q_max * group`` queries of that kv head, where the
-prefill kernel would launch a program per query head and read the context
-``group`` times. The splits are merged by the decode path's reduce kernel.
+a program owns one (sequence, kv head, split, row tile) and reads its slice
+of the context once for ``block_r`` of the ``q_max * group`` queries of that
+kv head (all of them when one row tile covers them), where the prefill
+kernel launches a program per query head and reads the whole context in
+each. A second kernel merges the splits.
 """
 
 from __future__ import annotations
@@ -31,21 +32,27 @@ if TRITON_AVAILABLE:  # pragma: no cover - exercised only in CUDA/Triton environ
     import triton
     import triton.language as tl
 
-# Launch settings per batch size, as DECODE_CONFIGS: block_n is the context
-# tokens per inner-loop tile. Not tuned yet: the decode kernel's tiers.
+# Launch settings per batch size, from benchmarks/phase1/tune.py on an A100
+# for a block of 10 (phase3 LOG.md, M3). block_n is the context tokens per
+# inner-loop tile. block_r (optional) caps the query rows of a program, the
+# rest going to further row tiles that read the same context again (from the
+# L2 cache, mostly); splits_shift (optional) halves the decode kernel's
+# split count that many times. Below 64 sequences the kernel is bound by a
+# program's latency, not by memory bandwidth: decode-sized programs of 16
+# rows win, with half the splits for up to three sequences and a quarter
+# from four (one split from 16). From 64 a program takes the whole block
+# and reads the context once. Each tier is within 3% of the best swept
+# config of every swept context, except 256 and 1024 tokens for one
+# sequence (38% and 8% off; the tier is the one that holds 4096). The fp8
+# cache was not swept and uses the same tiers.
 BLOCK_CONFIGS = (  # (smallest batch, config)
-    (1, {"block_n": 64, "num_warps": 8, "num_stages": 1}),
-    (16, {"block_n": 32, "num_warps": 4, "num_stages": 2}),
-    (64, {"block_n": 128, "num_warps": 4, "num_stages": 3}),
-)
-BLOCK_CONFIGS_FP8 = (
-    (1, {"block_n": 32, "num_warps": 4, "num_stages": 2}),
-    (16, {"block_n": 128, "num_warps": 4, "num_stages": 3}),
+    (1, {"block_n": 64, "num_warps": 4, "num_stages": 2, "block_r": 16, "splits_shift": 1}),
+    (4, {"block_n": 64, "num_warps": 4, "num_stages": 2, "block_r": 16, "splits_shift": 2}),
+    (64, {"block_n": 64, "num_warps": 4, "num_stages": 2}),
 )
 
 if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
     from .fp8 import fp8_decode_scaled, fp8_prescale_query
-    from .paged_attention import _paged_decode_reduce_kernel
 
     _FP8_HALF = tl.constexpr(FP8_HALF_SCALE)
     # The running maximum starts here, not at -inf: a causal row can see no
@@ -88,6 +95,7 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
         Q_MAX: tl.constexpr,
         GROUP: tl.constexpr,
         BLOCK_R: tl.constexpr,
+        ROW_TILES: tl.constexpr,
         HEAD_DIM: tl.constexpr,
         PAGE_SIZE: tl.constexpr,
         BLOCK_N: tl.constexpr,
@@ -99,7 +107,8 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
     ):
         seq = tl.program_id(0)
         kv_head = tl.program_id(1)
-        split = tl.program_id(2)
+        split = tl.program_id(2) // ROW_TILES
+        row_tile = tl.program_id(2) % ROW_TILES
 
         # This split's context range, as in the decode kernel: a multiple of
         # BLOCK_N and at least two tiles long; splits past the end do no work.
@@ -115,8 +124,9 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
         end = tl.minimum(start + split_len, context_len)
 
         # Row r is block token r // GROUP under query head r % GROUP of this
-        # kv head, padded to BLOCK_R rows so tl.dot can use tensor cores.
-        offs_r = tl.arange(0, BLOCK_R)
+        # kv head; this program has BLOCK_R of them (a power of two >= 16, so
+        # tl.dot can use tensor cores), the last row tile padded.
+        offs_r = row_tile * BLOCK_R + tl.arange(0, BLOCK_R)
         offs_t = offs_r // GROUP
         heads = kv_head * GROUP + offs_r % GROUP
         row_mask = offs_r < Q_MAX * GROUP
@@ -216,10 +226,64 @@ if TRITON_AVAILABLE:  # pragma: no cover - depends on CUDA/Triton
             )
 
 
-def block_config(batch_size: int, kv_fp8: bool = False) -> dict:
-    """Launch settings of the Triton block kernel for a batch size (and cache dtype)."""
-    tiers = BLOCK_CONFIGS_FP8 if kv_fp8 else BLOCK_CONFIGS
-    return next(c for smallest, c in reversed(tiers) if batch_size >= smallest)
+    @triton.jit
+    def _paged_block_reduce_kernel(
+        part_out_ptr,
+        part_lse_ptr,
+        out_ptr,
+        stride_pb,
+        stride_ph,
+        stride_ps,
+        stride_lb,
+        stride_lh,
+        stride_ob,
+        stride_oh,
+        GROUP: tl.constexpr,
+        GROUP_P2: tl.constexpr,
+        HEAD_DIM: tl.constexpr,
+        NUM_SPLITS: tl.constexpr,
+    ):
+        """Merge the splits of one (row, kv head) for its GROUP query heads.
+        All splits are loaded at once: a loop over them, with a program per
+        (sequence, query head), waits on one load after another and is
+        slower from four splits on (LOG.md, M3)."""
+        row = tl.program_id(0).to(tl.int64)
+        kv_head = tl.program_id(1)
+        offs_g = tl.arange(0, GROUP_P2)
+        g_mask = offs_g < GROUP
+        heads = kv_head * GROUP + offs_g
+        offs_s = tl.arange(0, NUM_SPLITS)
+        offs_d = tl.arange(0, HEAD_DIM)
+        lse = tl.load(
+            part_lse_ptr + row * stride_lb + heads[:, None] * stride_lh + offs_s[None, :],
+            mask=g_mask[:, None],
+            other=float("-inf"),
+        )
+        lse_max = tl.max(lse, axis=1)
+        lse_max = tl.where(lse_max == float("-inf"), 0.0, lse_max)
+        weights = tl.exp2(lse - lse_max[:, None])
+        parts = tl.load(
+            part_out_ptr
+            + row * stride_pb
+            + heads[:, None, None] * stride_ph
+            + offs_s[None, :, None] * stride_ps
+            + offs_d[None, None, :],
+            mask=g_mask[:, None, None],
+            other=0.0,
+        )
+        total = tl.sum(weights, axis=1)
+        inv_total = tl.where(total > 0, 1.0 / total, 0.0)
+        out = tl.sum(parts * weights[:, :, None], axis=1) * inv_total[:, None]
+        tl.store(
+            out_ptr + row * stride_ob + heads[:, None] * stride_oh + offs_d[None, :],
+            out.to(out_ptr.dtype.element_ty),
+            mask=g_mask[:, None],
+        )
+
+
+def block_config(batch_size: int) -> dict:
+    """Launch settings of the Triton block kernel for a batch size."""
+    return next(c for smallest, c in reversed(BLOCK_CONFIGS) if batch_size >= smallest)
 
 
 def paged_block_attention_reference(
@@ -301,7 +365,7 @@ def paged_block_attention(
     if use_triton and TRITON_AVAILABLE and query.is_cuda:  # pragma: no cover
         return _paged_block_attention_triton(
             query, key_cache, value_cache, block_tables, context_lens, q_lens, q_max, scale,
-            causal, num_splits, config or block_config(block_tables.shape[0], key_scales is not None),
+            causal, num_splits, config or block_config(block_tables.shape[0]),
             out, key_scales, value_scales,
         )
     result = paged_block_attention_reference(
@@ -341,6 +405,7 @@ def _paged_block_attention_triton(  # pragma: no cover - depends on CUDA/Triton
     group = q_heads // kv_heads
     if num_splits is None:
         num_splits = decode_num_splits(batch, kv_heads, query.device)
+        num_splits = max(1, num_splits >> config.get("splits_shift", 0))
     if num_splits & (num_splits - 1):
         raise ValueError("num_splits must be a power of two")
 
@@ -363,7 +428,12 @@ def _paged_block_attention_triton(  # pragma: no cover - depends on CUDA/Triton
     key_cache, value_cache, k_scales, v_scales, scale_strides = _fp8_operands(
         key_cache, value_cache, key_scales, value_scales
     )
-    _paged_block_split_kernel[(batch, kv_heads, num_splits)](
+    # Rows per program: all of a kv head's q_max * group queries, or
+    # config["block_r"] of them with the rest in further row tiles.
+    block_r = max(16, triton.next_power_of_2(q_max * group))
+    block_r = min(block_r, config.get("block_r", block_r))
+    row_tiles = triton.cdiv(q_max * group, block_r)
+    _paged_block_split_kernel[(batch, kv_heads, num_splits * row_tiles)](
         query,
         key_cache,
         value_cache,
@@ -392,7 +462,8 @@ def _paged_block_attention_triton(  # pragma: no cover - depends on CUDA/Triton
         *lse_strides,
         Q_MAX=q_max,
         GROUP=group,
-        BLOCK_R=max(16, triton.next_power_of_2(q_max * group)),
+        BLOCK_R=block_r,
+        ROW_TILES=row_tiles,
         HEAD_DIM=head_dim,
         PAGE_SIZE=page_size,
         BLOCK_N=config["block_n"],
@@ -405,8 +476,7 @@ def _paged_block_attention_triton(  # pragma: no cover - depends on CUDA/Triton
         num_stages=config["num_stages"],
     )
     if num_splits > 1:
-        # One row per (sequence, block token): the decode path's merge.
-        _paged_decode_reduce_kernel[(rows, q_heads)](
+        _paged_block_reduce_kernel[(rows, kv_heads)](
             part_out,
             part_lse,
             out,
@@ -414,6 +484,8 @@ def _paged_block_attention_triton(  # pragma: no cover - depends on CUDA/Triton
             *lse_strides,
             out.stride(0),
             out.stride(1),
+            GROUP=group,
+            GROUP_P2=triton.next_power_of_2(group),
             HEAD_DIM=head_dim,
             NUM_SPLITS=num_splits,
             num_warps=4,

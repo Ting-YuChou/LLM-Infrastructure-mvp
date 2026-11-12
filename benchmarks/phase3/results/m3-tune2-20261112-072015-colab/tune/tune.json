@@ -1,0 +1,4721 @@
+[
+  {
+    "kernel": "block",
+    "shape": {
+      "B": 1,
+      "Q": 10,
+      "ctx": 256
+    },
+    "best": {
+      "config": {
+        "block_n": 32,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 16,
+        "splits_shift": 2,
+        "reduce": "heads"
+      },
+      "us": 9.626000188291073
+    },
+    "default": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 64,
+        "splits_shift": 0,
+        "reduce": "heads"
+      },
+      "us": 19.207999110221863
+    },
+    "speedup_vs_default": 1.9954289148660307,
+    "all": [
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 30.937000177800655
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 14.423000160604715
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 22.11499959230423
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 13.151999562978745
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 13.163999654352665
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 11.256000027060509
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 31.25699982047081
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 14.820999931544065
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 22.218000143766403
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 13.299999758601189
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 13.055999763309956
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 11.165999807417393
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 28.850000351667404
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 12.360000051558018
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 19.807999953627586
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 10.893999598920345
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 11.57000008970499
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 9.626000188291073
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 34.1970007866621
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 17.508000135421753
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 25.33400058746338
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 16.29599928855896
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 17.961999401450157
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 15.97600057721138
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 36.2359993159771
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 19.207999110221863
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 24.52700026333332
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 15.337999910116196
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 16.347000375390053
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 14.150000177323818
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 34.32200103998184
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 17.3179991543293
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 22.59499952197075
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 13.542000204324722
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 14.556999783962965
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 12.513000052422285
+      }
+    ]
+  },
+  {
+    "kernel": "block",
+    "shape": {
+      "B": 1,
+      "Q": 10,
+      "ctx": 1024
+    },
+    "best": {
+      "config": {
+        "block_n": 32,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 16,
+        "splits_shift": 1,
+        "reduce": "heads"
+      },
+      "us": 13.512000441551208
+    },
+    "default": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 64,
+        "splits_shift": 0,
+        "reduce": "heads"
+      },
+      "us": 20.40800079703331
+    },
+    "speedup_vs_default": 1.5103611700807809,
+    "all": [
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 34.54799950122833
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 17.775999382138252
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 23.78800045698881
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 14.391999691724777
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 16.087999567389488
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 14.10400029271841
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 33.423999324440956
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 16.656000167131424
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 23.971999995410442
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 14.60800040513277
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 16.12399984151125
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 14.063999988138676
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 31.984001398086548
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 15.224000439047813
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 21.743999794125557
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 13.512000441551208
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 17.56799966096878
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 15.596000012010336
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 35.72800010442734
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 19.071999937295914
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 27.26800087839365
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 17.720000818371773
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 19.50399950146675
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 17.472000792622566
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 37.58399933576584
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 20.40800079703331
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 24.776000529527664
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 16.37599989771843
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 18.360000103712082
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 16.24000072479248
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 35.367999225854874
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 18.47199909389019
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 24.820000864565372
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 16.50799997150898
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 21.43999934196472
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 19.416000694036484
+      }
+    ]
+  },
+  {
+    "kernel": "block",
+    "shape": {
+      "B": 1,
+      "Q": 10,
+      "ctx": 4096
+    },
+    "best": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 16,
+        "splits_shift": 1,
+        "reduce": "heads"
+      },
+      "us": 26.56799927353859
+    },
+    "default": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 64,
+        "splits_shift": 0,
+        "reduce": "heads"
+      },
+      "us": 31.440000981092453
+    },
+    "speedup_vs_default": 1.1833785697369512,
+    "all": [
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 57.735998183488846
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 41.120000183582306
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 47.59200103580952
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 38.179999217391014
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 39.25199992954731
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 37.30800002813339
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 48.94799925386906
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 32.02800080180168
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 35.816000774502754
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 26.56799927353859
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 34.967999905347824
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 33.00800174474716
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 48.72800037264824
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 32.020000740885735
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 39.448000490665436
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 30.031999573111534
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 43.63999888300896
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 41.68799892067909
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 60.364000499248505
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 43.79599913954735
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 58.003999292850494
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 48.48000034689903
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 48.528000712394714
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 46.49600014090538
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 47.836000099778175
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 31.440000981092453
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 39.955999702215195
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 30.632000416517258
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 42.11999848484993
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 39.85600173473358
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 47.95200005173683
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 31.540000811219215
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 47.04799875617027
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 37.93199919164181
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 55.59999868273735
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 53.6080002784729
+      }
+    ]
+  },
+  {
+    "kernel": "block",
+    "shape": {
+      "B": 4,
+      "Q": 10,
+      "ctx": 1024
+    },
+    "best": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 16,
+        "splits_shift": 2,
+        "reduce": "heads"
+      },
+      "us": 26.75200067460537
+    },
+    "default": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 64,
+        "splits_shift": 0,
+        "reduce": "heads"
+      },
+      "us": 34.9080003798008
+    },
+    "speedup_vs_default": 1.3048743832059484,
+    "all": [
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 52.21999995410442
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 43.01600158214569
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 41.69999994337559
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 39.85600173473358
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 39.20000046491623
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 38.02799992263317
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 44.11200061440468
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 35.60800105333328
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 32.75600075721741
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 31.007999554276466
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 28.008000925183296
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 26.75200067460537
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 44.73600164055824
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 35.20800173282623
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 33.615998923778534
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 32.01200067996979
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 31.675999984145164
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 30.491999350488186
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 53.599998354911804
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 44.968001544475555
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 44.808000326156616
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 42.85600036382675
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 49.240000545978546
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 48.11999946832657
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 43.46800036728382
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 34.9080003798008
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 33.52800011634827
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 31.61199949681759
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 31.640000641345978
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 30.491999350488186
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 42.95999929308891
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 34.40000116825104
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 32.59199857711792
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 30.924000777304173
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 38.79600018262863
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 37.59999945759773
+      }
+    ]
+  },
+  {
+    "kernel": "block",
+    "shape": {
+      "B": 4,
+      "Q": 10,
+      "ctx": 4096
+    },
+    "best": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 16,
+        "splits_shift": 2,
+        "reduce": "heads"
+      },
+      "us": 76.40615564126234
+    },
+    "default": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 64,
+        "splits_shift": 0,
+        "reduce": "heads"
+      },
+      "us": 88.06892541738657
+    },
+    "speedup_vs_default": 1.152641756128689,
+    "all": [
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 140.4652320421659
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 128.22153935065637
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 133.62707541539118
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 131.524920463562
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 130.06276809252225
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 128.52185047589816
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 103.67507659471951
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 90.683075097891
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 86.84800221369817
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 85.28738296948947
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 78.14400012676532
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 76.40615564126234
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 106.41230986668513
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 94.88738500154935
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 103.719385770651
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 101.7747658949632
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 96.00000198070819
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 94.56245715801532
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 138.24984660515418
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 125.84861425253061
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 135.73907888852634
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 133.3218446144691
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 164.33231647198016
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 163.09169622567984
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 99.18030408712534
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 88.06892541738657
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 91.4166157062237
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 90.15138332660382
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 89.43261550023006
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 88.67446275857779
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 103.74892674959622
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 91.59384324000432
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 87.054770726424
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 84.89353840167706
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 120.9255365224985
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 119.67015266418457
+      }
+    ]
+  },
+  {
+    "kernel": "block",
+    "shape": {
+      "B": 16,
+      "Q": 10,
+      "ctx": 256
+    },
+    "best": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 16,
+        "splits_shift": 2,
+        "reduce": "heads"
+      },
+      "us": 25.01200046390295
+    },
+    "default": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 64,
+        "splits_shift": 0,
+        "reduce": "loop"
+      },
+      "us": 35.67600063979626
+    },
+    "speedup_vs_default": 1.4263553485569247,
+    "all": [
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 45.36399990320206
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 44.09999959170818
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 41.00799933075905
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 40.324000641703606
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 38.63999992609024
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 38.45600038766861
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 38.43199834227562
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 37.2919999063015
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 32.948000356554985
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 32.53600001335144
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 25.119999423623085
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 25.01200046390295
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 37.58800029754639
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 36.30400076508522
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 34.5040000975132
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 34.00000184774399
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 27.024000883102417
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 27.03999914228916
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 46.19999974966049
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 45.236000791192055
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 43.700000271201134
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 43.143998831510544
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 44.319998472929
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 44.3120002746582
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 35.67600063979626
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 34.78400036692619
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 33.40400010347366
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 32.80399926006794
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 26.387999765574932
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 26.492000557482243
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 35.68800166249275
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 34.61199998855591
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 31.775999814271927
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 31.063999980688095
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 34.01999920606613
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 34.01599824428558
+      }
+    ]
+  },
+  {
+    "kernel": "block",
+    "shape": {
+      "B": 16,
+      "Q": 10,
+      "ctx": 1024
+    },
+    "best": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 16,
+        "splits_shift": 2,
+        "reduce": "heads"
+      },
+      "us": 75.63323011765112
+    },
+    "default": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 64,
+        "splits_shift": 0,
+        "reduce": "loop"
+      },
+      "us": 89.24553944514348
+    },
+    "speedup_vs_default": 1.1799778920762443,
+    "all": [
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 138.86030820699838
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 137.0289234014658
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 152.1673844410823
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 151.414155960083
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 146.60430871523346
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 146.6092329758864
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 105.62461614608765
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 104.53169162456805
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 89.33415779700645
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 88.53661097013034
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 75.76615535295926
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 75.63323011765112
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 106.77661345555232
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 105.25045945094182
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 112.25107999948355
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 111.33538759671725
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 88.53661097013034
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 88.39876835162823
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 126.81846435253436
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 125.34153461456299
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 134.1095383350666
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 133.095383644104
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 159.82277576739972
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 159.96061838590182
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 89.24553944514348
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 87.95077067155104
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 90.58954165532039
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 89.53599746410663
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 81.67876647068904
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 81.15692322070782
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 93.2923096876878
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 92.06646222334642
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 85.75015801649828
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 84.92799905630258
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 115.2886152267456
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 115.14584376261784
+      }
+    ]
+  },
+  {
+    "kernel": "block",
+    "shape": {
+      "B": 16,
+      "Q": 10,
+      "ctx": 4096
+    },
+    "best": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 64,
+        "splits_shift": 0,
+        "reduce": "loop"
+      },
+      "us": 268.8358402252197
+    },
+    "default": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 64,
+        "splits_shift": 0,
+        "reduce": "loop"
+      },
+      "us": 268.8358402252197
+    },
+    "speedup_vs_default": 1.0,
+    "all": [
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 569.2262268066406
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 567.6697731018066
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 546.6726493835449
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 547.4252700805664
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 566.3539123535156
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 566.7174339294434
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 353.96095275878906
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 353.16736221313477
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 288.25087547302246
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 286.75071716308594
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 274.26304817199707
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 276.21376037597656
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 342.3539352416992
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 341.1763381958008
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 390.8915138244629
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 389.0124702453613
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 331.3612747192383
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 331.33056640625
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 416.8396759033203
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 415.5596923828125
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 476.70270919799805
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 476.2623977661133
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 619.0284729003906
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 618.895378112793
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 268.8358402252197
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 271.2831974029541
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 309.29408073425293
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 310.3539276123047
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 292.71039962768555
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 292.37247467041016
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 287.4828815460205
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 289.4950485229492
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 281.5743923187256
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 279.5110321044922
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 431.6057586669922
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 432.0307159423828
+      }
+    ]
+  },
+  {
+    "kernel": "block",
+    "shape": {
+      "B": 64,
+      "Q": 10,
+      "ctx": 256
+    },
+    "best": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 64,
+        "splits_shift": 2,
+        "reduce": "loop"
+      },
+      "us": 76.24369171949533
+    },
+    "default": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 64,
+        "splits_shift": 0,
+        "reduce": "loop"
+      },
+      "us": 76.40615334877602
+    },
+    "speedup_vs_default": 1.0021308206045214,
+    "all": [
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 163.52492112379807
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 162.91445952195386
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 163.53476964510403
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 163.03753852844238
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 163.15076901362494
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 163.09169622567984
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 161.3833812566904
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 161.37353273538443
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 161.60984222705548
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 161.84122745807355
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 161.61969074836145
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 161.41785108126126
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 163.36245720203107
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 162.96369295853833
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 163.37722998399
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 162.7716926427988
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 162.47138610252966
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 163.36738146268402
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 112.11815247168909
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 112.05907968374399
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 112.05907968374399
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 112.03938264113206
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 112.09846459902249
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 112.07876755641057
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 76.40615334877602
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 76.6227703828078
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 76.55876874923706
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 76.33723203952496
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 76.24369171949533
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 76.40615334877602
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 81.49661467625545
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 81.43261762765738
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 81.2898461635296
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 81.31938714247484
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 81.64923007671649
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 81.40307664871216
+      }
+    ]
+  },
+  {
+    "kernel": "block",
+    "shape": {
+      "B": 64,
+      "Q": 10,
+      "ctx": 1024
+    },
+    "best": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 64,
+        "splits_shift": 1,
+        "reduce": "loop"
+      },
+      "us": 247.70047187805176
+    },
+    "default": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 64,
+        "splits_shift": 0,
+        "reduce": "loop"
+      },
+      "us": 249.0163230895996
+    },
+    "speedup_vs_default": 1.0053122676818946,
+    "all": [
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 591.4368057250977
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 596.1062431335449
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 594.0070343017578
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 592.993278503418
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 592.4966430664062
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 593.6281585693359
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 584.2995262145996
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 586.639347076416
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 586.8953704833984
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 589.8291206359863
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 585.2620697021484
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 582.7839851379395
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 598.2515144348145
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 597.1711921691895
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 592.5887870788574
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 594.1606330871582
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 598.548469543457
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 592.5785636901855
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 402.88257598876953
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 402.83647537231445
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 402.6419258117676
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 402.7238464355469
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 402.9030227661133
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 402.61632919311523
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 249.0163230895996
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 247.96671867370605
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 247.70047187805176
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 247.82848358154297
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 249.46687698364258
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 250.78784942626953
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 273.32608222961426
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 274.4115161895752
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 272.99840927124023
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 274.20159339904785
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 273.3619213104248
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 273.5411262512207
+      }
+    ]
+  },
+  {
+    "kernel": "block",
+    "shape": {
+      "B": 64,
+      "Q": 10,
+      "ctx": 4096
+    },
+    "best": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 64,
+        "splits_shift": 2,
+        "reduce": "loop"
+      },
+      "us": 928.90625
+    },
+    "default": {
+      "config": {
+        "block_n": 64,
+        "num_warps": 4,
+        "num_stages": 2,
+        "block_r": 64,
+        "splits_shift": 0,
+        "reduce": "loop"
+      },
+      "us": 930.4064178466797
+    },
+    "speedup_vs_default": 1.0016149830477292,
+    "all": [
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 2302.382049560547
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 2304.8038482666016
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 2305.3260803222656
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 2306.0326385498047
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 2301.593551635742
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 2314.833984375
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 2254.1516876220703
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 2261.5245056152344
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 2253.4911346435547
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 2254.5458984375
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 2256.117706298828
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 2254.4127655029297
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 2290.4678344726562
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 2303.29345703125
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 2296.3967895507812
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 2297.12890625
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 2292.275161743164
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 16,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 2301.7266845703125
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 1561.8099212646484
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 1562.0454406738281
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 1561.8150329589844
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 1561.8816375732422
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 1561.8201446533203
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 8,
+          "num_stages": 1,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 1561.8150329589844
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 930.4064178466797
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 934.3999862670898
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 929.8585891723633
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 936.4582443237305
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 928.90625
+      },
+      {
+        "config": {
+          "block_n": 64,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 935.9257507324219
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "loop"
+        },
+        "us": 994.150390625
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 0,
+          "reduce": "heads"
+        },
+        "us": 997.8828811645508
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "loop"
+        },
+        "us": 991.0322952270508
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 1,
+          "reduce": "heads"
+        },
+        "us": 1002.0863723754883
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "loop"
+        },
+        "us": 995.4150390625
+      },
+      {
+        "config": {
+          "block_n": 32,
+          "num_warps": 4,
+          "num_stages": 2,
+          "block_r": 64,
+          "splits_shift": 2,
+          "reduce": "heads"
+        },
+        "us": 1002.874870300293
+      }
+    ]
+  }
+]

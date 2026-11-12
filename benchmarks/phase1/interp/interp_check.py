@@ -232,7 +232,7 @@ def block_case(heads, page, q_max, shapes, splits, dtype, causal, varlen=True, c
     scale = 1 / math.sqrt(d)
     out = BA._paged_block_attention_triton(
         q, k, v, t, lens, q_lens, q_max, scale, causal, splits,
-        config or BA.block_config(len(shapes), fp8), None, ks, vs,
+        config or BA.block_config(len(shapes)), None, ks, vs,
     )
     ref = BA.paged_block_attention_reference(q, k, v, t, lens, q_lens, q_max, scale, causal, ks, vs)
     tol = 1e-4 if dtype == torch.float32 else 2e-2
@@ -386,9 +386,14 @@ for heads in (TINY, LLAMA):
             heads, 16, 10, [(10, 10), (10, 37), (10, 300)], 4, torch.float32, causal, varlen=False))
         run("block Q=3", lambda: block_case(heads, 16, 3, [(3, 3), (2, 40), (3, 129)], 2, torch.float32, causal))
         run("block fp16", lambda: block_case(heads, 16, 10, [(10, 20), (7, 130)], 2, torch.float16, causal))
-        for _, config in BA.BLOCK_CONFIGS:
-            run("block config", lambda: block_case(
-                heads, 16, 10, [(10, 10), (4, 129), (10, 300), (0, 0)], 2, torch.float32, causal, config=config))
+        for config in [c for _, c in BA.BLOCK_CONFIGS] + [
+            {"block_n": 64, "num_warps": 8, "num_stages": 1, "block_r": 16},
+            {"block_n": 32, "num_warps": 4, "num_stages": 2, "block_r": 32},
+        ]:
+            for splits in (1, 2, 8):
+                run("block config", lambda: block_case(
+                    heads, 16, 10, [(10, 10), (4, 129), (10, 300), (0, 0)], splits, torch.float32, causal,
+                    config=config))
         for splits in (1, 4):
             run("block fp8", lambda: block_case(
                 heads, 16, 5, block_shapes, splits, torch.float32, causal, fp8=True))

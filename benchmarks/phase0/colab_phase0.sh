@@ -48,6 +48,8 @@ fetch() {
 upload_code() {
   local tarball paths=(benchmarks/phase0 src/serving/nano_vllm)
   [[ "${PHASE}" == phase0 ]] || paths+=("benchmarks/${PHASE}")
+  # Phase 3's kbench and tune steps run phase 1's kbench.py and tune.py.
+  if [[ "${PHASE}" == phase3 ]]; then paths+=(benchmarks/phase1); fi
   # The nano_vllm tests and the repo files they import or read outside nano_vllm.
   paths+=(tests/unit/tiny_llama.py src/monitoring/metrics.py src/api/model_routing.py
     config/model_routing.nano.json config/nano_vllm_config.yaml)

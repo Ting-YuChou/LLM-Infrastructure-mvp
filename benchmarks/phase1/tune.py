@@ -147,36 +147,34 @@ def tune_prefill():
 
 
 def tune_block():
-    """The block kernel on a speculative step's verify rows (Q = 10): the
-    launch settings at the decode kernel's split count, and the current
-    settings with a half and a quarter of the splits (splits_shift)."""
+    """The block kernel on a speculative step's verify rows (Q = 10): rows
+    per program (block_r), launch settings, and the decode kernel's split
+    count halved splits_shift times."""
     shapes = [
         {"B": b, "Q": 10, "ctx": c}
-        for b, c in ((1, 1024), (1, 4096), (4, 1024), (16, 1024), (16, 4096), (64, 1024), (64, 4096))
+        for b, c in ((1, 256), (1, 1024), (1, 4096), (4, 1024), (4, 4096), (16, 256), (16, 1024),
+                     (16, 4096), (64, 256), (64, 1024), (64, 4096))
     ]
-    configs = grid(block_n=[32, 64, 128], num_warps=[4, 8], num_stages=[1, 2, 3], splits_shift=[0])
+    launches = [(64, 8, 1), (64, 4, 2), (32, 4, 2)]
+    configs = [
+        {"block_n": n, "num_warps": w, "num_stages": st, "block_r": r, "splits_shift": shift}
+        for r in (16, 64) for n, w, st in launches for shift in (0, 1, 2)
+    ]
 
     def current(shape):
-        return {**block_attention.block_config(shape["B"]), "splits_shift": 0}
+        return {"block_r": 64, "splits_shift": 0, **block_attention.block_config(shape["B"])}
 
     def make_call(shape, config):
         i = _paged_inputs(shape["B"], shape["ctx"], [shape["Q"]] * shape["B"], "cuda")
-        splits = attention.decode_num_splits(shape["B"], 8, i["q"].device)
-        launch = {k: v for k, v in config.items() if k != "splits_shift"}
         return lambda: block_attention.paged_block_attention(
             i["q"], i["k_cache"], i["v_cache"], i["tables"], i["context_lens"], None, shape["Q"],
-            SCALE, True, use_triton=True, num_splits=max(1, splits >> config["splits_shift"]),
-            config=launch,
+            SCALE, True, use_triton=True, config=config,
         )
 
     def input_bytes(shape):
         return 2 * 2 * shape["B"] * shape["ctx"] * 8 * 128
 
-    rows = []
-    for shape in shapes:  # the fewer-splits variants of each shape's current settings
-        fewer = [{**current(shape), "splits_shift": shift} for shift in (1, 2)]
-        rows += sweep("block", [shape], configs + fewer, make_call, input_bytes, current)
-    return rows
+    return sweep("block", shapes, configs, make_call, input_bytes, current)
 
 
 def tune_gemv():
