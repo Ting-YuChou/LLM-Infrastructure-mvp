@@ -276,3 +276,13 @@ def test_cpu_sampler_draws_from_the_truncated_softmax_with_keyed_noise():
     assert draw(3, [4, 9, 4], [0, 77, 1])[1] == tokens[77]
     assert (draw(4, [9] * rows, list(range(rows))) != tokens).float().mean() > 0.3
     assert (draw(3, [8] * rows, list(range(rows))) != tokens).float().mean() > 0.3
+
+
+def test_sampler_temperature_scale_lowers_sampled_rows_and_leaves_greedy_rows():
+    from serving.nano_vllm.sampling import Sampler, SamplingOptions
+
+    sampler = Sampler(max_rows=3, device="cpu", seed=0, temperature_scale=0.5)
+    options = [SamplingOptions(temperature=0.8), SamplingOptions(temperature=0.0), SamplingOptions(temperature=1.2)]
+    assert sampler.stage(options, [1, 2, 3], [0, 0, 0], vocab=8) == (True, True, False)
+    staged = sampler.params[Sampler.TEMPERATURE].view(torch.float32).tolist()
+    assert staged == pytest.approx([0.4, 0.0, 0.6])

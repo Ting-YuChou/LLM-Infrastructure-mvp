@@ -184,7 +184,7 @@ class ModelRunner:
         max_rows: int = 256,
         seed: int = 0,
         proposer: Optional[Proposer] = None,
-        coupled_sampling: bool = True,
+        draft_temperature: float = 1.0,
     ):
         self.model = model
         self.cache = cache
@@ -206,11 +206,14 @@ class ModelRunner:
         self.sampler = Sampler(max_rows, device, seed=seed)
         # Coupled sampling (spec.py): the drafts are drawn by a sampler with
         # the same seed, so a draft row and the verify row for its position
-        # use the same noise.
+        # use the same noise, at ``draft_temperature`` times the request's
+        # temperature (0: the proposer takes its argmax).
         self.draft_sampler: Optional[Sampler] = None
-        if proposer is not None and coupled_sampling:
+        if proposer is not None and draft_temperature > 0:
             draft_rows = self.max_seqs * proposer.num_draft_tokens
-            self.draft_sampler = Sampler(draft_rows, device, seed=seed)
+            self.draft_sampler = Sampler(
+                draft_rows, device, seed=seed, temperature_scale=draft_temperature
+            )
             self.drafted = torch.zeros(draft_rows, dtype=torch.long, device=device)
         self._events = [torch.cuda.Event() for _ in range(2)] if cuda else [None, None]
         self._slot = 0

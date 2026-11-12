@@ -107,10 +107,12 @@ class NanoVLLMConfig:
     speculative_weight_quant: str = "none"
     # A sampled request's drafts are drawn like the target's tokens, with the
     # noise of the position each one proposes (seed, sequence id, position),
-    # so a draft matches whenever the two models' logits agree closely
-    # enough. False: drafts are the drafter's argmax whatever the request
-    # samples with. The output is the same either way.
-    speculative_coupled_sampling: bool = True
+    # at this fraction of the request's temperature. 1: the request's own
+    # temperature (coupled sampling: a draft matches whenever the two models'
+    # logits agree closely enough); 0: the drafter's argmax, whatever the
+    # request samples with; in between, the noise decides only where the
+    # drafter's leading tokens are close. The output is the same for any value.
+    speculative_draft_temperature: float = 1.0
     # Run the engine core (scheduler + model) in its own process; the server
     # process keeps tokenization, detokenization, stop strings and HTTP.
     multiprocess: bool = False
@@ -157,6 +159,8 @@ class NanoVLLMConfig:
             raise ValueError("num_speculative_tokens must be 0 (the drafter's block) or positive")
         if self.speculative_weight_quant not in {"none", "w4a16"}:
             raise ValueError("speculative_weight_quant must be one of: none, w4a16")
+        if not 0.0 <= self.speculative_draft_temperature <= 1.0:
+            raise ValueError("speculative_draft_temperature must be between 0 (argmax drafts) and 1")
 
     @classmethod
     def from_yaml(cls, config_path: str | None) -> "NanoVLLMConfig":
@@ -297,9 +301,11 @@ class NanoVLLMConfig:
                     engine.get("speculative_weight_quant", cls.speculative_weight_quant),
                 )
             ),
-            speculative_coupled_sampling=_bool_value(
-                _env("SPECULATIVE_COUPLED_SAMPLING", engine.get("speculative_coupled_sampling")),
-                default=cls.speculative_coupled_sampling,
+            speculative_draft_temperature=float(
+                _env(
+                    "SPECULATIVE_DRAFT_TEMPERATURE",
+                    engine.get("speculative_draft_temperature", cls.speculative_draft_temperature),
+                )
             ),
             multiprocess=_bool_value(
                 _env("ENGINE_MULTIPROCESS", engine.get("multiprocess")),

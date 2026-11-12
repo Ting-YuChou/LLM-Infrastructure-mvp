@@ -83,19 +83,19 @@ def test_sampled_output_is_not_the_greedy_one(target):
 
 
 @pytest.mark.parametrize("graphs", [None, 4], ids=["eager", "graphs"])
-@pytest.mark.parametrize("coupled", [True, False], ids=["coupled", "argmax drafts"])
-def test_sampled_tokens_with_a_drafter_are_the_tokens_without(tmp_path, target, coupled, graphs):
+@pytest.mark.parametrize("draft_temperature", [1.0, 0.5, 0.0], ids=["coupled", "half", "argmax drafts"])
+def test_sampled_tokens_with_a_drafter_are_the_tokens_without(tmp_path, target, draft_temperature, graphs):
     _, path = target
     prompts = list(PROMPTS.values())
     expected = _plain(path, prompts)
     core = _core(
         path, graphs=graphs, speculative_model=_drafter_path(tmp_path, 0),
-        speculative_coupled_sampling=coupled, max_num_batched_tokens=8,
+        speculative_draft_temperature=draft_temperature, max_num_batched_tokens=8,
     )
     # An arrival every third step: verify rows next to prompt chunks too.
     outputs, paths = _run(core, prompts, arrive_every=3, sampling=SAMPLED)
     assert outputs == expected
-    assert (core.model_runner.draft_sampler is not None) == coupled
+    assert (core.model_runner.draft_sampler is not None) == (draft_temperature > 0)
     assert paths["eager"] > 0 and (paths["graph"] > 0) == bool(graphs)
 
 
@@ -130,22 +130,25 @@ def test_a_drafter_with_the_targets_logits_has_every_coupled_draft_accepted(targ
     prompts = list(PROMPTS.values())
     expected = _plain(path, prompts)
 
-    def run(coupled):
+    def run(draft_temperature):
         core = _core(
-            path, _TargetAsDrafter(hf_model, DRAFTED), speculative_coupled_sampling=coupled,
-            max_new_tokens=MAX_TOKENS,
+            path, _TargetAsDrafter(hf_model, DRAFTED),
+            speculative_draft_temperature=draft_temperature, max_new_tokens=MAX_TOKENS,
         )
         outputs, _ = _run(core, prompts, sampling=SAMPLED)
         assert outputs == expected
         stats = core.stats()
         return stats["spec_num_accepted_tokens"], stats["spec_num_drafts"]
 
-    accepted, cycles = run(True)
+    accepted, cycles = run(1.0)
     # MAX_TOKENS is a multiple of a cycle's DRAFTED + 1 tokens: no cycle is cut short.
     assert MAX_TOKENS % (DRAFTED + 1) == 0
     assert (accepted, cycles) == (DRAFTED * cycles, len(prompts) * MAX_TOKENS // (DRAFTED + 1))
-    argmax_accepted, argmax_cycles = run(False)
+    argmax_accepted, argmax_cycles = run(0.0)
     assert argmax_accepted / argmax_cycles < 0.7 * DRAFTED
+    # Between the two: more than the argmax, less than everything.
+    half_accepted, half_cycles = run(0.5)
+    assert argmax_accepted / argmax_cycles < half_accepted / half_cycles < DRAFTED
 
 
 class _TableDrafter:
@@ -168,13 +171,14 @@ class _TableDrafter:
 
 
 @pytest.mark.parametrize("graphs", [None, 4], ids=["eager", "graphs"])
-def test_drafts_are_drawn_with_the_noise_of_the_positions_they_propose(target, graphs):
+@pytest.mark.parametrize("draft_temperature", [1.0, 0.6])
+def test_drafts_are_drawn_with_the_noise_of_the_positions_they_propose(target, graphs, draft_temperature):
     from serving.nano_vllm.sampling import Sampler
 
     _, path = target
     prompts = list(PROMPTS.values())
     proposer = _TableDrafter(TINY_CONFIG["vocab_size"], DRAFTED)
-    core = _core(path, proposer, graphs, seed=11)
+    core = _core(path, proposer, graphs, seed=11, speculative_draft_temperature=draft_temperature)
     runner = core.model_runner
     cycles = []  # (sequence id, tokens before the cycle) per verify row, and the drafts
     launch, propose = runner._launch_spec, proposer.propose
@@ -192,8 +196,9 @@ def test_drafts_are_drawn_with_the_noise_of_the_positions_they_propose(target, g
     settings = [SAMPLED, SamplingOptions(max_tokens=MAX_TOKENS, temperature=0.0), SAMPLED]
     _run(core, prompts, sampling=settings)
 
-    # The same draws from a sampler of our own: seed, sequence id, position.
-    reference = Sampler(max_rows=DRAFTED, device="cpu", seed=11)
+    # The same draws from a sampler of our own: seed, sequence id, position,
+    # at the fraction of each request's temperature.
+    reference = Sampler(max_rows=DRAFTED, device="cpu", seed=11, temperature_scale=draft_temperature)
     out = torch.zeros(DRAFTED, dtype=torch.long)
     checked = 0
     for rows, drafts in cycles:

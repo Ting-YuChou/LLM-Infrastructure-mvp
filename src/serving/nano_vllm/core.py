@@ -126,7 +126,7 @@ class EngineCore:
             max_rows=config.max_num_seqs,
             seed=config.seed,
             proposer=proposer,
-            coupled_sampling=config.speculative_coupled_sampling,
+            draft_temperature=config.speculative_draft_temperature,
         )
         # A speculative step's tokens are known only when it is collected, so
         # the next one cannot launch before.

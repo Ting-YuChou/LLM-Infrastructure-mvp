@@ -248,9 +248,14 @@ class Sampler:
     # off), the token's position, the sequence id's low and high words.
     TEMPERATURE, TOP_P, TOP_K, POSITION, SEQ_LO, SEQ_HI = range(6)
 
-    def __init__(self, max_rows: int, device: torch.device, seed: int = 0):
+    def __init__(
+        self, max_rows: int, device: torch.device, seed: int = 0, temperature_scale: float = 1.0
+    ):
+        """``temperature_scale`` multiplies every row's temperature (a
+        speculative drafter's sampler draws below the request's)."""
         self.device = torch.device(device)
         self.seed = seed
+        self.temperature_scale = temperature_scale
         cuda = self.device.type == "cuda"
         self.host = torch.zeros(2, 6, max_rows, dtype=torch.int32, pin_memory=cuda)
         self.params = torch.zeros(6, max_rows, dtype=torch.int32, device=self.device)
@@ -295,6 +300,8 @@ class Sampler:
         host = self.host[slot].numpy()
         floats = host[:2].view(np.float32)
         floats[self.TEMPERATURE, :rows] = temperature
+        if self.temperature_scale != 1.0:
+            floats[self.TEMPERATURE, :rows] *= self.temperature_scale
         floats[self.TOP_P, :rows] = top_p
         host[self.TOP_K, :rows] = top_k
         host[self.POSITION, :rows] = positions
