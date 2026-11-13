@@ -54,6 +54,9 @@ CPU_KV_BLOCKS = 1024
 # sampler's buffers (fp32 logits and a sort on its PyTorch path) and
 # cuBLAS/Triton workspaces.
 KV_RESERVE_BYTES = 512 * 1024**2
+# The host goes from one step's tokens to the next step's launch in well under
+# this; a longer gap means the engine waited for requests.
+IDLE_GAP_S = 0.005
 
 
 @dataclass
@@ -330,10 +333,17 @@ class EngineCore:
 
     def _observe_step(self, handle: StepHandle, token_ids: list, launched: float) -> None:
         """What a collected step tells the speculative policy: the drafts
-        each cycle accepted, and what a step that was one graph took. An
-        overlapped step started when the one before it was collected."""
+        each cycle accepted, and what a step that was one graph took.
+
+        A step's time runs from the collection of the step before it: an
+        overlapped step starts on the GPU then, and for the others it adds
+        the host's work between two steps (finishing one, scheduling the
+        next), which a cycle pays once for all its tokens. After an idle
+        spell it runs from the launch.
+        """
         now = time.perf_counter()
-        started, self._last_collected = max(launched, self._last_collected), now
+        idle = launched - self._last_collected > IDLE_GAP_S
+        started, self._last_collected = (launched if idle else self._last_collected), now
         policy = self.spec_policy
         if handle.spec_seqs:
             policy.update(
