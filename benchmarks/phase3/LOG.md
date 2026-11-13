@@ -1096,3 +1096,21 @@ results/<run_id>/.
   in all of them): the workload opens with 16 prompts of two chunks each,
   and the median falls where that queue happens to split.
 - 48 minutes of VM, 4.2 CU (367.78 -> 363.63). The VM is stopped.
+
+### Run m7-fix-20261113-120835-colab (new VM: the same, with the margin)
+
+- 98 tests passed. AWQ target: at least 0.98x of the server without a
+  drafter on 16 of 16 workloads with the BF16 drafter (alpaca c=64 5946
+  against 5978, 0.99x) and 12 of 12 with the 4-bit one (5974, 1.00x);
+  above vLLM AWQ + DFlash on all (1.09x to 2.02x). At alpaca c=64 the
+  steps are now 663 plain at 9.0 ms, 110 plain with prompt rows at 12.6,
+  55 cycles and 14 cycles with prompt rows (the policy's probes and the
+  smaller batches at the run's ends).
+- BF16 target: 224 / 754 / 2041 / 5190 on alpaca, 344 / 1125 / 2772 / 5537
+  on humaneval, 259 / 2242 on gsm8k, 174 / 868 on the long prompts. Against
+  vLLM + DFlash above on 13 of 16 this time; alpaca c=4 0.98x, humaneval
+  c=16 0.99x, sampled humaneval c=16 0.99x. Over the four chained BF16
+  runs of today these points and gsm8k c=16 move between 0.98x and 1.02x
+  of vLLM's M0 numbers: level, as in M6.
+- 48 minutes of VM, 4.5 CU (363.63 -> 359.15). The VM is stopped. M7 in
+  all: five VMs, 24.7 CU (383.85 -> 359.15).

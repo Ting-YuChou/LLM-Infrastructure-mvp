@@ -14,6 +14,7 @@ A100-SXM4-40GB with Llama 3.1 8B Instruct (BF16 and the AWQ INT4 checkpoint).
 | M4 | the cycle as CUDA graphs, 4-bit drafter |
 | M5 | sampled requests: drafts drawn with the target's noise (coupled sampling), a keyed PyTorch reference of the sampler |
 | M6 | every step picks its verify length (1 to 10 tokens per decode row) from measured step times and acceptance; plain steps keep the drafter's context, written in batches |
+| M7 | a cycle is launched behind the cycle still in flight (its anchors and positions come from the device), so the host's work between cycles overlaps the GPU's; the policy times steps with prompt rows apart |
 
 ## How to run
 
@@ -272,6 +273,100 @@ Costs and what is left:
   20.8 at c=16, 68.5 against 48.1 at c=64): a new request waits for the
   step in flight, and a cycle is two to three plain steps long.
 - A cycle is collected before the next step is scheduled, so the host's
-  work per step is not overlapped as a plain step's is (M7).
+  work per step is not overlapped as a plain step's is (M7, below).
 - On the BF16 target nano is level with vLLM where the policy keeps the
   whole block: the same algorithm on the same dense GEMMs.
+
+### M7 (runs `m7-checks-20261113-091259-colab`, `m7-awq-20261113-093737-colab`, `m7-bf16-20261113-100554-colab`, `m7-fix-20261113-120835-colab`; baselines from the M0 run)
+
+How many drafts a cycle accepts is known on the device first, so a cycle
+graph now computes its rows' positions, KV slots and sampling positions
+there from each row's anchor, and leaves the next anchor behind. With async
+scheduling the next cycle is launched before the one in flight is collected
+(`speculative_chain`, on by default): the scheduler gives its rows KV slots
+for wherever that cycle may end, and a row whose sequence ended meanwhile is
+discarded. The graph's own time is unchanged (7.19 ms for one AWQ sequence
+at Q=10).
+
+One process, the same requests, each cycle collected before the next (sync)
+and launched behind it (async), tok/s:
+
+| target, drafter | one at a time: sync | async | | 16 at once: sync | async | |
+|---|---:|---:|---:|---:|---:|---:|
+| AWQ, BF16 drafter | 475 | 490 | 1.03x | 2761 | 2876 | 1.04x |
+| AWQ, 4-bit drafter | 526 | 547 | 1.04x | 2944 | 3072 | 1.04x |
+| BF16, BF16 drafter | 247 | 251 | 1.02x | 1721 | 1774 | 1.03x |
+| BF16, 4-bit drafter | 263 | 267 | 1.02x | 1781 | 1848 | 1.04x |
+
+Serving, the same server with `SPECULATIVE_CHAIN=0` and as it is (one VM,
+before the policy changes below), output tok/s at temperature 0:
+
+| workload | AWQ: collected | chained | | BF16: collected | chained | |
+|---|---:|---:|---:|---:|---:|---:|
+| alpaca c=1 | 426 | 451 | 1.06x | 218 | 223 | 1.02x |
+| alpaca c=4 | 1361 | 1371 | 1.01x | 758 | 778 | 1.03x |
+| alpaca c=16 | 3116 | 3240 | 1.04x | 1976 | 2064 | 1.04x |
+| alpaca c=64 | 5962 | 5576 | 0.94x | 4937 | 5219 | 1.06x |
+| humaneval c=1 | 640 | 678 | 1.06x | 333 | 344 | 1.03x |
+| humaneval c=4 | 1799 | 1866 | 1.04x | 1108 | 1124 | 1.01x |
+| humaneval c=16 | 3414 | 3588 | 1.05x | 2763 | 2839 | 1.03x |
+| humaneval c=64 | 5486 | 5664 | 1.03x | 5347 | 5587 | 1.04x |
+| gsm8k c=1 | 483 | 510 | 1.06x | 251 | 259 | 1.03x |
+| gsm8k c=16 | 2983 | 3254 | 1.09x | 2160 | 2240 | 1.04x |
+| long c=1 | 290 | 304 | 1.05x | 170 | 174 | 1.02x |
+| long c=16 | 933 | 946 | 1.01x | 863 | 888 | 1.03x |
+
+The one loss, AWQ alpaca at c=64, was the policy's: there a plain step and a
+short cycle are even, chained cycles measure a little cheaper alone, and it
+started drafting, but a prompt arrives every few steps and a cycle next to
+prompt rows is not one graph and waits for the cycle in flight (27.9 ms
+against 13.4 for a plain step with the same prompts). Three changes to
+`spec.SpecPolicy`, each after a serving run (LOG.md): steps with prompt rows
+are timed apart and chosen by `tokens - rate * milliseconds`; their times
+are fitted on their prompt tokens, so a burst of prompts does not count
+against the kind of step that carried it; and a cycle must beat a plain step
+by 10% to run in its place. After them (run `m7-fix-20261113-120835`):
+
+| workload | AWQ: nano + DFlash | no drafter | vLLM AWQ + DFlash | 4-bit drafter | BF16: nano + DFlash | vLLM + DFlash | SGLang + DFlash |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| alpaca c=1 | 455 | 207 | 380 | 512 | 224 | 220 | 196 |
+| alpaca c=4 | 1393 | 748 | 1211 | 1550 | 754 | 770 | 670 |
+| alpaca c=16 | 3252 | 2538 | 2084 | 3367 | 2041 | 1910 | 1652 |
+| alpaca c=64 | 5946 | 5978 | 2943 | 5974 | 5190 | 3327 | 2915 |
+| humaneval c=1 | 677 | 206 | 589 | 764 | 344 | 322 | 295 |
+| humaneval c=4 | 1848 | 737 | 1701 | 2034 | 1125 | 1120 | 985 |
+| humaneval c=16 | 3607 | 2523 | 2950 | 3771 | 2772 | 2806 | 2456 |
+| humaneval c=64 | 5697 | 5150 | 4204 | 5668 | 5537 | 4576 | 4168 |
+| gsm8k c=1 | 511 | 206 | 434 | 576 | 259 | 256 | 222 |
+| gsm8k c=16 | 3223 | 2206 | 2312 | 3380 | 2242 | 2229 | 1748 |
+| long c=1 | 304 | 177 | 245 | 333 | 174 | 161 | 157 |
+| long c=16 | 943 | 856 | 750 | 948 | 868 | 838 | 797 |
+
+| gate | result |
+|---|---|
+| chained cycles yield the tokens of cycles collected one by one | CPU: equal, greedy and sampled (21 tests). GPU: a cycle launched behind one in flight returns the tokens, drafts and state of the same cycle launched after it landed; one request's tokens are equal bit for bit; with several requests streams split only at near-ties (not-argmax share 0.29-0.50%, largest margin 0.25, as without chaining) |
+| a measured gain | 1.02x to 1.04x in one process; 1.01x to 1.09x serving, but for AWQ alpaca c=64 before the policy changes |
+| never below 0.98x nano without a drafter (M6's gate) | AWQ: 16 of 16 (lowest 0.99x, alpaca c=64); 4-bit drafter 12 of 12 (lowest 1.00x). BF16: all |
+| above both DFlash baselines (M6's gate) | AWQ: 16 of 16 (1.09x to 2.02x). BF16: above SGLang everywhere; against vLLM 0.98x to 1.02x where the policy keeps the whole block (alpaca c=4, humaneval c=4 and c=16, gsm8k c=16: 13 to 16 of 16 "above" over four runs), 1.04x to 1.56x elsewhere |
+| tests/gpu + nano unit tests | 1402 passed in the checks run; 98 passed (the spec and warm-up GPU tests and the two new unit files) after the policy changes; 411 unit tests on the CPU |
+
+Costs and what is left:
+
+- A request that arrives while one cycle runs and the next is queued waits
+  for both: TTFT p50 on alpaca with the AWQ target is 9.6 / 28.4 / 41.7 /
+  56.6 ms at c=1 / 4 / 16 / 64 against 9.4 / 20.3 / 29.0 / 58.3 with every
+  cycle collected and 9.7 / 15.9 / 18.9 / 47.5 without a drafter (vLLM AWQ +
+  DFlash: 24.1 / 31.0 / 71.8 / 214.3). On the BF16 target 17.9 / 53.4 /
+  69.1 / 102.7 against 17.6 / 37.8 / 50.0 / 79.7 collected (vLLM + DFlash:
+  32.0 / 52.5 / 73.8 / 191.1). `speculative_chain: false` gives the
+  collected numbers back.
+- A cycle next to prompt rows still waits for the cycle in flight and runs
+  through the piecewise graphs (15.9 ms against 10.8 alone at 16 AWQ
+  sequences, 56 against 24.5 for humaneval at 64, where 64 rows of 4
+  tokens and the prompts pass the 512 tokens those graphs cover). Staging
+  its verify rows from the device as well would let it follow a cycle in
+  flight too.
+- A request that ends at EOS has one discarded cycle behind its last (about
+  7 ms a request when it runs alone).
+- On the BF16 target nano is still level with vLLM where the policy keeps
+  the whole block.
