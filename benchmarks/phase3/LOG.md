@@ -820,3 +820,69 @@ results/<run_id>/.
   against 17.8 / 38.6 / 43.0 / 59.2 without a drafter.
 - Second VM of the day: checks, AWQ and BF16 serving, 96 minutes, 10.3 CU
   (394.11 -> 383.85). The VM is stopped. M6 in all: 20.5 CU.
+
+## M7: a cycle launched behind the cycle in flight (2026-11-13)
+
+- What there was to overlap, from M6's runs: a cycle was collected before
+  the next was scheduled, so the GPU idled through the host's work between
+  two cycles (finish checks and appends, the outputs to the frontend, the
+  policy, the scheduler, staging the next graph's inputs). Serving alpaca
+  at c=1 on the AWQ target took 7.94 ms per cycle (24 requests, 1333
+  cycles, the prompts' TTFT taken out) against 7.17 ms for the graph on an
+  empty context; in one process (spec_check) the policy measured 0.65 ms
+  on top of the graph at one sequence and 1.9 ms at 16. Part of that is
+  the sequences' KV, the rest is the host: 5 to 10% of a cycle, over the
+  plan's 3% bar.
+- What stood in the way: how many drafts a cycle accepts is known on the
+  device only, and the next cycle's anchor token, positions, KV slots and
+  sampling positions follow from it. The plan's device state:
+  - a cycle graph now reads one entry per sequence (anchor id, the
+    anchor's position, block table) and computes the block's positions,
+    slots (`table[position // block_size] * block_size + position %
+    block_size`), context lengths and the samplers' positions itself; at
+    its end it leaves each row's next anchor (the target's token after
+    the accepted drafts) and position in `_SpecGraphs.state`;
+  - a row of the next cycle names a row of the cycle in flight
+    (`gather_rows`, as a plain step names the row whose token it reads)
+    and starts from that row's state instead of the host's entry. The
+    host stages less than before (no per-token positions and slots).
+- The host's side:
+  - the scheduler gives a row behind a cycle in flight KV slots for
+    wherever that cycle may end: its drafts further (`Sequence.
+    inflight_drafts`), so a sequence can hold blocks for 2K + 1 positions
+    past its last known token; the capacity check, the block tables and
+    both RoPE tables (the drafter's own was a block past the target's)
+    reach that far;
+  - `EngineCore._chains`: a cycle is launched behind the one in flight
+    when it will be one graph (no prompts waiting, a size the graphs
+    cover) and not every row of the cycle in flight may be its sequence's
+    last (its drafts could reach max_tokens: one request alone then waits
+    instead of spending a cycle on a sequence that is likely over). A
+    plain step, or a step with prompt rows, first collects the cycle in
+    flight;
+  - a row whose sequence ended while it was in flight (EOS, max_tokens
+    with other sequences still going, an abort) is discarded when it
+    lands, as a plain step's is; `spec_num_discarded` counts them and the
+    policy's acceptance rates leave them out. A landed row's computed KV
+    counts from the sequence's KV at that moment, not at its launch.
+  - `speculative_chain: false` (SPECULATIVE_CHAIN=0) keeps every cycle
+    collected before the next, with plain steps still overlapped.
+- The cost: a request that arrives while one cycle runs and the next is
+  queued behind it waits for both before its prompt is scheduled, so its
+  first token comes up to a cycle later.
+- Checked without a GPU: 406 nano unit tests, 21 new in
+  `test_nano_vllm_spec_chain.py`: chained cycles yield the tokens of
+  cycles collected one by one (greedy and sampled, the DFlash drafter and
+  a scripted one, all at once and with arrivals, lengths changing with
+  plain steps in between, under preemption, up to max_model_len) and the
+  same cycles per sequence; a chained row's anchor is the token the host
+  later appends at that position, its slots its sequence's own blocks, its
+  drafts drawn with the noise of their positions; the row behind a cycle
+  that hits EOS is discarded and its blocks come back; no cycle follows
+  one that may be the last; blocks committed to the prefix cache hold the
+  appended tokens. 28 deliberate bugs (stale host entries for chained
+  rows, the next position or anchor off, wrong slots, stale sampling
+  positions, the lookahead or its capacity, table and RoPE sizes for one
+  cycle's drafts, computed KV from the launch, discarded rows counted or
+  told to the policy, chaining next to prompts, behind a last cycle or a
+  plain step) each fail at least one test.

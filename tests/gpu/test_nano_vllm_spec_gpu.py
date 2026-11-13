@@ -33,9 +33,36 @@ PROMPT_LENS = [17, 30, 5, 64, 33]
 MAX_MODEL_LEN = 128
 
 
+class _Hinted:
+    """The DFlash proposer, but where ``hints[row, position]`` holds a token
+    (>= 0) that token is the draft for the position: a drafter with random
+    weights is hardly ever right, and what a cycle does with accepted drafts
+    needs some. It reads the batch's tensors only, so it runs in the graphs."""
+
+    device_only = True
+
+    def __init__(self, inner, rows, positions):
+        self.inner = inner
+        self.num_draft_tokens, self.tap_layers = inner.num_draft_tokens, inner.tap_layers
+        self.cache, self.drafter = inner.cache, inner.drafter
+        device = inner.drafter.device
+        self.hints = torch.full((rows, positions), -1, dtype=torch.long, device=device)
+        self.rows = torch.arange(rows, device=device).view(rows, 1)
+
+    def observe(self, taps, positions, slot_mapping):
+        self.inner.observe(taps, positions, slot_mapping)
+
+    def propose(self, batch):
+        drafts = self.inner.propose(batch)
+        size, drafted = drafts.shape
+        positions = batch.positions.view(size, drafted + 1)[:, 1:]
+        hints = self.hints[self.rows[:size], positions]
+        return torch.where(hints >= 0, hints, drafts)
+
+
 def _runner(
     tmp_path, max_graph_batch, weight_quant="none", kv_cache_dtype="auto", drafter_quant="none",
-    verify_lens=None,
+    verify_lens=None, hinted=False,
 ):
     lm_head_quant = "int8" if weight_quant == "awq_int8head" else "none"
     weight_quant = "awq" if weight_quant == "awq_int8head" else weight_quant
@@ -53,6 +80,8 @@ def _runner(
     # As EngineCore: a chained block starts up to a cycle's drafts further on.
     model.extend_rope_table(MAX_MODEL_LEN + 2 * proposer.num_draft_tokens)
     drafter.extend_rope_table(MAX_MODEL_LEN + 2 * proposer.num_draft_tokens)
+    if hinted:
+        proposer = _Hinted(proposer, max_graph_batch, MAX_MODEL_LEN + 2 * proposer.num_draft_tokens)
     runner = ModelRunner(model, cache, manager, max_rows=8, proposer=proposer, verify_lens=verify_lens)
     runner.capture_spec_graphs(
         max_batch=max_graph_batch, max_model_len=MAX_MODEL_LEN, keep_outputs=True
@@ -347,12 +376,31 @@ def test_a_cycle_behind_one_in_flight_is_the_cycle_launched_after_it_landed(
     # One split: the W4A16 kernels then sum in a fixed order (as in test_nano_vllm_async).
     monkeypatch.setitem(w4a16.W4A16_CONFIG, "splits", 1)
     monkeypatch.setitem(w4a16.W4A16_CONFIG, "layout", "tiled")
-    runner, manager = _runner(tmp_path, 4, weight_quant, kv_cache_dtype, drafter_quant, verify_lens=blocks)
+    runner, manager = _runner(
+        tmp_path, 4, weight_quant, kv_cache_dtype, drafter_quant, verify_lens=blocks, hinted=True
+    )
     seqs = _prefilled(runner, manager, 3)
     # A sampled row: its draws depend on the positions the graph computes.
     seqs[1].sampling = SamplingOptions(max_tokens=64, temperature=1.2, top_p=0.95, top_k=50)
     rows = list(range(len(seqs)))
-    moved = 0
+
+    # The target's own next tokens, one cycle at a time, then back to where
+    # the sequences were: cycles only write KV past the cached tokens. They
+    # become the drafts, but for every fourth position.
+    lengths = [seq.num_tokens for seq in seqs]
+    for cycle in range(40):
+        for seq in seqs:
+            manager.may_append(seq, lookahead=blocks[0] - 1)
+        _append(seqs, _cycle(runner, seqs, blocks[0]))
+    hints = runner.proposer.hints
+    for row, seq in enumerate(seqs):
+        known = torch.tensor(seq.token_ids, device="cuda")
+        wrong = torch.arange(seq.num_tokens, device="cuda") % 4 == 0
+        hints[row, : seq.num_tokens] = torch.where(wrong, (known + 1) % 500, known)
+        del seq.token_ids[lengths[row] :]
+        seq.num_cached_tokens = seq.num_tokens - 1
+
+    moved = further = 0
     for cycle in range(8):
         first, second = blocks[cycle % len(blocks)], blocks[(cycle + 1) % len(blocks)]
         for seq in seqs:
@@ -373,6 +421,7 @@ def test_a_cycle_behind_one_in_flight_is_the_cycle_launched_after_it_landed(
         logits, drafts, choices = _graph_outputs(runner, 3, second)
         state = runner._spec.state[:, :3].clone()
         moved += sum(len(tokens) > 1 for tokens in landed)
+        further += sum(len(tokens) > 1 for tokens in behind)
 
         _append(seqs, landed)
         again = _cycle(runner, seqs, second)
@@ -385,13 +434,16 @@ def test_a_cycle_behind_one_in_flight_is_the_cycle_launched_after_it_landed(
         _append(seqs, again)
         assert state[0].tolist() == [seq.last_token for seq in seqs]
         assert state[1].tolist() == [seq.num_tokens - 1 for seq in seqs]
-    assert moved > 0  # some cycle in flight accepted a draft: the host was behind
+    # Cycles in flight accepted drafts (the host was behind), and so did
+    # the ones launched behind them.
+    assert moved >= 6 and further >= 6, (moved, further)
 
 
 def _serve(tmp_path, async_scheduling, prompts, sampling, late=None, weight_quant="none"):
     """Token ids per request from an engine core with the drafter (every
     cycle the whole block), how many cycle graphs it launched behind a cycle
-    in flight, and its stats."""
+    in flight, and its stats. ``sampling``: one SamplingOptions or one per
+    request (the late one included)."""
     config = NanoVLLMConfig(
         max_model_len=MAX_MODEL_LEN,
         kvcache_block_size=BLOCK_SIZE,
@@ -419,16 +471,19 @@ def _serve(tmp_path, async_scheduling, prompts, sampling, late=None, weight_quan
         return replay(seqs, bucket, slot, block, chain)
 
     core.model_runner._replay_spec = spy
+    count = len(prompts) + (late is not None)
+    if not isinstance(sampling, list):
+        sampling = [sampling] * count
     for req_id, prompt in enumerate(prompts):
-        core.add_request(EngineRequest(req_id, prompt, sampling))
-    tokens = {index: [] for index in range(len(prompts) + (late is not None))}
+        core.add_request(EngineRequest(req_id, prompt, sampling[req_id]))
+    tokens = {index: [] for index in range(count)}
     steps = 0
     try:
         while core.has_work():
             if steps == 3:  # past the first prefill: no host sync but collecting
                 torch.cuda.set_sync_debug_mode("error")
             if late is not None and steps == 6:
-                core.add_request(EngineRequest(len(prompts), late, sampling))
+                core.add_request(EngineRequest(len(prompts), late, sampling[-1]))
             for output in core.step():
                 assert output.error is None, output.error
                 tokens[output.req_id].append(output.token_id)
@@ -458,17 +513,32 @@ def test_one_requests_tokens_with_chained_cycles(tmp_path, sampled):
 
 
 def test_many_requests_tokens_with_chained_cycles(tmp_path, monkeypatch):
-    """Requests of different lengths with a late arrival: sequences end
+    """Requests that end at a stop token, with a late arrival: sequences end
     while a row of theirs is in flight (discarded), prompt rows make a step
     wait for the cycle in flight, and the rest chain."""
     monkeypatch.setitem(w4a16.W4A16_CONFIG, "splits", 1)
     monkeypatch.setitem(w4a16.W4A16_CONFIG, "layout", "tiled")
-    sampling = SamplingOptions(max_tokens=40, temperature=0.0, ignore_eos=True)
+    free = SamplingOptions(max_tokens=40, temperature=0.0, ignore_eos=True)
     prompts = [[(11 * i + j) % 500 + 1 for j in range(12 + 5 * i)] for i in range(5)]
     late = [(13 * j) % 500 + 1 for j in range(40)]
-    expected, _, _ = _serve(tmp_path, False, prompts, sampling, late)
+    unstopped, _, _ = _serve(tmp_path, False, prompts, free, late)
+    assert all(len(row) == 40 for row in unstopped)
+    # Each request stops at a token it first emits some steps in, at a
+    # different step each: nothing the host can see coming.
+    sampling, stops = [], []
+    for index, row in enumerate(unstopped):
+        at = next((i for i in range(8 + 4 * index, 40) if row[i] not in row[:i]), None)
+        stops.append(None if at is None else row[at])
+        sampling.append(free if at is None else SamplingOptions(
+            max_tokens=40, temperature=0.0, ignore_eos=True, stop_token_ids=[row[at]]
+        ))
+    assert sum(stop is not None for stop in stops) >= 4
+    expected, none, _ = _serve(tmp_path, False, prompts, sampling, late)
+    assert none == 0
+    for row, stop in zip(expected, stops):
+        assert len(row) == 40 or row[-1] == stop
+    assert sum(len(row) < 40 for row in expected) >= 4
     tokens, chained, stats = _serve(tmp_path, True, prompts, sampling, late)
-    assert all(len(row) == 40 for row in tokens)
     assert chained > 5
     assert stats["spec_num_discarded"] > 0
     # A discarded row changes how many rows its step pads to, and a kernel's
