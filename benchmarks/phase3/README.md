@@ -13,6 +13,7 @@ A100-SXM4-40GB with Llama 3.1 8B Instruct (BF16 and the AWQ INT4 checkpoint).
 | M3 | block attention kernel: one KV read for all of a sequence's verify rows |
 | M4 | the cycle as CUDA graphs, 4-bit drafter |
 | M5 | sampled requests: drafts drawn with the target's noise (coupled sampling), a keyed PyTorch reference of the sampler |
+| M6 | every step picks its verify length (1 to 10 tokens per decode row) from measured step times and acceptance; plain steps keep the drafter's context, written in batches |
 
 ## How to run
 
@@ -208,3 +209,69 @@ Output tok/s at c=1, temperature 0.7, top-p 0.9 (alpaca / humaneval):
 | sampled c=1 above both baselines | met in every configuration measured (1.01x to 1.23x) |
 | one seed, with and without a drafter: the same tokens (CPU) | met, for any draft temperature, eager steps and graphs |
 | tests/gpu + nano unit tests | 1324 passed, none skipped |
+
+### M6 (runs `m6-checks-20261113-044714-colab`, `m6-awq-20261113-052436-colab`, `m6-bf16-20261113-055414-colab`; baselines from the M0 run)
+
+A verify row yields at most one token, so drafts pay only where a step's
+time grows slower than its rows. Each step now runs the verify length Q (the
+anchor and Q - 1 drafts; 1 is a plain decode step) with the most expected
+tokens per millisecond (`spec.SpecPolicy`): the time of every CUDA graph is
+measured at startup, what real steps take on top while serving, and the
+acceptance of each draft depth as cycles complete. Step time of each graph
+on an empty context (ms, AWQ target, BF16 drafter):
+
+| sequences | Q=1 | Q=2 | Q=3 | Q=4 | Q=6 | Q=10 |
+|---|---:|---:|---:|---:|---:|---:|
+| 1 | 4.64 | 6.91 | 6.94 | 6.98 | 7.06 | 7.19 |
+| 4 | 4.73 | 7.00 | 7.08 | 7.15 | 8.02 | 9.28 |
+| 16 | 4.91 | 7.91 | 9.23 | 10.30 | 13.58 | 20.43 |
+| 64 | 8.11 | 15.32 | 20.76 | 25.37 | 36.09 | 69.19 |
+
+Output tok/s, temperature 0, AWQ target (the lengths are the ones most of
+the decode rows ran at):
+
+| workload | nano + DFlash | lengths | whole block (M5) | nano, no drafter | vLLM AWQ + DFlash |
+|---|---:|---|---:|---:|---:|
+| alpaca c=1 | 423 | 10 | 434 | 207 | 380 |
+| alpaca c=4 | 1294 | 6 | 1243 | 753 | 1211 |
+| alpaca c=16 | 3045 | 4 | 2263 | 2429 | 2084 |
+| alpaca c=64 | 5971 | 1 | 2744 | 6001 | 2943 |
+| humaneval c=1 | 641 | 10 | 645 | 206 | 589 |
+| humaneval c=4 | 1786 | 10 | 1793 | 737 | 1701 |
+| humaneval c=16 | 3434 | 6 | 3030 | 2532 | 2950 |
+| humaneval c=64 | 5523 | 4 | 3974 | 5158 | 4204 |
+| gsm8k c=16 | 3170 | 4 | 2439 | 2209 | 2312 |
+| long c=16 | 934 | 4 | 805 | 869 | 750 |
+
+BF16 target:
+
+| workload | nano + DFlash | lengths | nano, no drafter | vLLM + DFlash | SGLang + DFlash |
+|---|---:|---|---:|---:|---:|
+| alpaca c=1 | 218 | 10 | 83 | 220 | 196 |
+| alpaca c=4 | 759 | 10 | 311 | 770 | 670 |
+| alpaca c=16 | 2034 | 6 | 1048 | 1910 | 1652 |
+| alpaca c=64 | 4933 | 4 | 3218 | 3327 | 2915 |
+| humaneval c=1 | 334 | 10 | 83 | 322 | 295 |
+| humaneval c=4 | 1111 | 10 | 301 | 1120 | 985 |
+| humaneval c=16 | 2768 | 10 | 1165 | 2806 | 2456 |
+| humaneval c=64 | 5394 | 6 | 2952 | 4576 | 4168 |
+| gsm8k c=16 | 2191 | 6 | 986 | 2229 | 1923 |
+| long c=16 | 871 | 6 | 663 | 838 | 797 |
+
+| gate | result |
+|---|---|
+| never below 0.98x nano without a drafter, c=1 to 64 | AWQ: met on 16 of 16 workloads (lowest 0.99x, alpaca c=64); with the 4-bit drafter 11 of 12 (alpaca c=64 0.96x). BF16: met on all (1.31x to 4.03x) |
+| above both DFlash baselines, c=1 to 64 | AWQ: met on 16 of 16 (1.05x to 2.03x). BF16: above SGLang everywhere; above vLLM on 9 of 16 (c=64 1.18x and 1.48x), within 1-4% below on 7; with the 4-bit drafter above on 10 of 12 |
+| tests/gpu + nano unit tests | 1361 passed and 13 failed on the test's own code in the checks run; the file passes after the fix (18 tests); 385 unit tests on the CPU |
+| emitted tokens that are not the teacher-forced argmax, with the drafter | 0.17-0.50%, largest margin 0.25 (without: 0.17-0.43%, 0.25) |
+
+Costs and what is left:
+
+- Time to first token is longer with a drafter when requests run next to
+  each other (AWQ alpaca p50: 20.5 against 15.9 ms at c=4, 30.2 against
+  20.8 at c=16, 68.5 against 48.1 at c=64): a new request waits for the
+  step in flight, and a cycle is two to three plain steps long.
+- A cycle is collected before the next step is scheduled, so the host's
+  work per step is not overlapped as a plain step's is (M7).
+- On the BF16 target nano is level with vLLM where the policy keeps the
+  whole block: the same algorithm on the same dense GEMMs.

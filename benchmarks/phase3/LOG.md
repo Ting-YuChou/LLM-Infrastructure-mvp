@@ -782,3 +782,41 @@ results/<run_id>/.
 - Startup with the drafter: 10.6 s for the eager cycles' kernels of every
   length, 5.6 s for the cycle and draft graphs (9 sizes x 5 lengths), 13.8
   s for the timing.
+
+### Run m6-bf16-20261113-055414-colab (same VM: BF16 target, every concurrency)
+
+- Output tok/s, temperature 0 (vLLM and SGLang BF16 + DFlash from M0):
+
+  | workload | policy | 4-bit drafter, policy | no drafter | vLLM + DFlash | SGLang + DFlash |
+  |---|---:|---:|---:|---:|---:|
+  | alpaca c=1 | 218 | 228 | 83 | 220 | 196 |
+  | alpaca c=4 | 759 | 785 | 311 | 770 | 670 |
+  | alpaca c=16 | 2034 | 2025 | 1048 | 1910 | 1652 |
+  | alpaca c=64 | 4933 | 4929 | 3218 | 3327 | 2915 |
+  | humaneval c=1 | 334 | 356 | 83 | 322 | 295 |
+  | humaneval c=4 | 1111 | 1168 | 301 | 1120 | 985 |
+  | humaneval c=16 | 2768 | 2734 | 1165 | 2806 | 2456 |
+  | humaneval c=64 | 5394 | 5249 | 2952 | 4576 | 4168 |
+  | gsm8k c=1 | 254 | 270 | 83 | 256 | 222 |
+  | gsm8k c=16 | 2191 | 2214 | 986 | 2229 | 1923 |
+  | long c=1 | 170 | 180 | 79 | 161 | 157 |
+  | long c=16 | 871 | 882 | 663 | 838 | 797 |
+
+  Sampled, policy: alpaca 221 / 1922 at c=1 / c=16 (vLLM 208 / 1817),
+  humaneval 312 / 2609 (vLLM 310 / 2714).
+- Against nano without a drafter: 1.31x to 4.03x on all 16 workloads; the
+  drafter pays at every concurrency on the dense weights, and at c=64 the
+  policy still drafts (alpaca Q=4 for 96% of the rows, humaneval Q=6 for
+  73%), where the whole block would be 640 verify rows.
+- Against the baselines: above SGLang + DFlash on every workload. Against
+  vLLM + DFlash: above on 9 of 16 (c=64 1.48x and 1.18x, alpaca c=16
+  1.06x, long 1.04-1.06x), within 1-4% below on 7 (alpaca c=1 and c=4,
+  humaneval c=4 and c=16, gsm8k c=1 and c=16, humaneval sampled c=16).
+  With the 4-bit drafter above on 10 of 12; humaneval c=16 0.97x and gsm8k
+  c=16 0.99x. Where the policy keeps the whole block (humaneval c=16:
+  Q=10 for every row) nano runs vLLM's algorithm on the same dense GEMMs
+  and lands where vLLM does; the baselines are M0's, from another VM.
+- TTFT p50 on alpaca (ms): 17.8 / 37.7 / 47.7 / 77.5 at c=1 / 4 / 16 / 64
+  against 17.8 / 38.6 / 43.0 / 59.2 without a drafter.
+- Second VM of the day: checks, AWQ and BF16 serving, 96 minutes, 10.3 CU
+  (394.11 -> 383.85). The VM is stopped. M6 in all: 20.5 CU.
