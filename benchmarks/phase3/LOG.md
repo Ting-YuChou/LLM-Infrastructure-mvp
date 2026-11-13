@@ -518,3 +518,65 @@ results/<run_id>/.
   (407.78 -> 404.88). The VM is stopped. An earlier start of this run
   failed in my shell before it reached Colab (zsh read `$t:sampled` as a
   modifier); it is a bash script now.
+
+## M6: the verify length of each step (2026-11-13)
+
+- Why a block of 10 loses with many sequences: a verify row yields at most
+  one token, so drafts pay only where a step's time grows slower than its
+  rows: one pass over the weights shared by few rows (the W4A16 GEMMs cost
+  about the same for 1 to 16 rows), and a sequence's KV read once for all
+  its verify rows. At 16 sequences a block of 10 is 160 rows and 26 ms for
+  about 3.4 tokens per sequence, where 16 plain rows take about 6 ms.
+- The M0 study already says shorter cycles lose nothing per draft: a block
+  of 6 or 4 yields what the first 5 or 3 drafts of a block of 10 do (alpaca
+  3.31 and 2.86 against 3.29 and 2.80 from the survival by depth; humaneval
+  4.26 and 3.37 against 4.31 and 3.33). So a cycle drafts only what it
+  verifies, and one set of acceptance rates by depth serves every length.
+- `spec.SpecPolicy` picks each step's verify length Q (the anchor and Q - 1
+  drafts) from `speculative_verify_lens` (default 1, 2, 3, 4, 6, 10; 1 is a
+  plain decode step): the Q with the most expected tokens per millisecond.
+  - Expected tokens: 1 + s_1 + ... + s_{Q-1}, s_j the product of the
+    acceptance rates of drafts 1..j, each a running average over the cycles
+    that reached its depth. One step in 64 runs the next longer length so
+    the depths past the current Q keep getting cycles.
+  - Milliseconds: `ModelRunner.profile_graphs` replays every CUDA graph on
+    the null block at startup, a table per (sequences, Q). What a real step
+    takes on top (the sequences' KV, the host) is measured while serving,
+    launch to collected tokens, per graph size and apart for plain steps
+    and cycles; it does not grow with Q, so long contexts move the choice
+    toward longer cycles without a model of the attention.
+- The engine around it:
+  - cycle graphs per (sequences, Q); the static buffers are sized for the
+    longest block and a graph of Q uses the first `size * Q` entries. The
+    graphs keep no outputs any more (tests ask for them), so their shared
+    pool is as large as the largest cycle, not as the sum of every graph's
+    logits (about 0.5 GiB of logits were held before).
+  - Q = 1 runs the decode graphs again (they were not captured with a
+    drafter since M2), now with the drafter's context writes inside: every
+    token the target computes stays context for the drafter, so the next
+    step can be a cycle. A plain step is overlapped with the next one
+    (async scheduling) as without a drafter; a step that drafts first
+    collects the step in flight.
+  - the scheduler takes the step's draft count (token budget, lookahead
+    blocks, speculative rows); `speculative_policy: fixed` is M5's behavior.
+  - counters: `spec_num_draft_tokens` is now what was drafted, and
+    `spec_rows_len_<Q>` counts decode rows by the verify length of their
+    step.
+- Not done from the plan: `speculative_max_bs` (the step times decide
+  instead), and the per-sequence length ("by confidence") simulation: a
+  verify row never yields more than one token, so giving some sequences
+  longer blocks only helps through the same sub-linear terms the policy
+  already measures per step.
+- Checked without a GPU: 375 nano unit tests, 29 new in
+  `test_nano_vllm_spec_policy.py`: the policy's arithmetic; with the verify
+  length scripted to change every step (plain steps in a row, cycles of
+  every length), greedy and sampled streams are the tokens of the engine
+  without a drafter, eagerly and through the graphs, sync and async, with
+  prompt chunks next to the decode rows; the drafter's context after plain
+  steps is what its reference computes from the target's hidden states;
+  drafts of any length are drawn with the noise of their positions. Ten
+  deliberate bugs (plain steps skipping the context writes, draft or verify
+  rows staged for the whole block, padding of the wrong length, the
+  scheduler booking the whole block or no lookahead, a cycle launched over
+  an in-flight step, rates counting unreached depths, the policy never
+  told, draft tokens miscounted) each fail at least one test.
