@@ -1,0 +1,4 @@
+llm_engine_spec_num_drafts{model="nano-llm-local"} 20548.0
+llm_engine_spec_num_draft_tokens{model="nano-llm-local"} 184932.0
+llm_engine_spec_num_accepted_tokens{model="nano-llm-local"} 52164.0
+llm_engine_spec_rows_len_10{model="nano-llm-local"} 20548.0

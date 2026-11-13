@@ -724,3 +724,61 @@ results/<run_id>/.
   a graph's rows staged at the wrong pending rows, plain probes never run).
 - Checks and AWQ serving: 61 minutes of VM, 7.6 CU (401.67 -> 394.11). The
   VM is stopped.
+
+### Run m6-checks-20261113-044714-colab (new VM: all tests, spec_check on both targets)
+
+- tests: 1361 passed, 13 failed, all in `test_nano_vllm_spec_gpu.py` and
+  all in the test's own code: the new check of the draft graph staged the
+  static buffers outside inference mode (12), and the decode-graph test
+  did not expect the prompts' rows among the pending ones (1). Fixed; the
+  file passes in the next run (18 tests).
+- The Q=1 column of the time table now equals the engine without a
+  drafter at every size (AWQ 4.63-4.89 ms against 4.62-4.88; BF16
+  11.84-12.24 against 11.83-12.23).
+- spec_check as before: 16 at once 2750 (AWQ) and 1695 (BF16) tok/s
+  against 1968 and 870 without a drafter; 0.17-0.50% of the tokens are not
+  the teacher-forced argmax, largest margin 0.25.
+
+### Run m6-awq-20261113-052436-colab (same VM: AWQ target, every concurrency, after the three changes)
+
+- Output tok/s, temperature 0 (vLLM AWQ + DFlash from M0):
+
+  | workload | policy | 4-bit drafter, policy | whole block | no drafter | vLLM + DFlash |
+  |---|---:|---:|---:|---:|---:|
+  | alpaca c=1 | 423 | 480 | 434 | 207 | 380 |
+  | alpaca c=4 | 1294 | 1491 | 1243 | 753 | 1211 |
+  | alpaca c=16 | 3045 | 3218 | 2263 | 2429 | 2084 |
+  | alpaca c=64 | 5971 | 5786 | 2744 | 6001 | 2943 |
+  | humaneval c=1 | 641 | 716 | 645 | 206 | 589 |
+  | humaneval c=4 | 1786 | 1956 | 1793 | 737 | 1701 |
+  | humaneval c=16 | 3434 | 3529 | 3030 | 2532 | 2950 |
+  | humaneval c=64 | 5523 | 5425 | 3974 | 5158 | 4204 |
+  | gsm8k c=1 | 486 | 545 | 490 | 206 | 434 |
+  | gsm8k c=16 | 3170 | 3254 | 2439 | 2209 | 2312 |
+  | long c=1 | 289 | 318 | 292 | 178 | 245 |
+  | long c=16 | 934 | 939 | 805 | 869 | 750 |
+
+  Sampled (temperature 0.7, top-p 0.9), policy: alpaca 410 / 3042 at c=1 /
+  c=16 (no drafter 206 / 2528, vLLM + DFlash 371 / 2040), humaneval 630 /
+  3293 (206 / 2775, 556 / 2869).
+- The gate, BF16 drafter: at least 0.98x nano without a drafter on 16 of
+  16 workloads (lowest: alpaca c=64, 0.99x) and above vLLM AWQ + DFlash on
+  16 of 16 (1.05x to 2.03x). 4-bit drafter: above vLLM on 12 of 12; alpaca
+  c=64 is 0.96x of no drafter, the other 11 at least 1.05x.
+- The lengths the policy ran (share of decode rows): c=1 Q=10; c=4 Q=6
+  on alpaca, Q=10 on humaneval; c=16 Q=4 (alpaca, gsm8k, long) or Q=6
+  (humaneval), 2-5% plain rows from the probes; c=64 plain steps on
+  alpaca (96%) and Q=4 on humaneval (91%). With the 4-bit drafter alpaca
+  c=64 is 79% plain, 19% Q=2 or 3: the two are within a few percent
+  there and the policy moves between them.
+- The draft graphs also help where the policy drafts: c=16 is 3-7% above
+  the previous run (alpaca 2967 -> 3045, humaneval 3262 -> 3434, gsm8k
+  2965 -> 3170), the whole-block server 2-3%.
+- Time to first token is longer with a drafter when requests run next to
+  each other (alpaca p50, ms: 20.5 against 15.9 at c=4, 30.2 against 20.8
+  at c=16, 68.5 against 48.1 at c=64; long c=16 293 against 211): a new
+  request waits for the step in flight, and a cycle is two to three plain
+  steps long. At c=1 it is the same (9.6).
+- Startup with the drafter: 10.6 s for the eager cycles' kernels of every
+  length, 5.6 s for the cycle and draft graphs (9 sizes x 5 lengths), 13.8
+  s for the timing.
