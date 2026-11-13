@@ -923,3 +923,109 @@ results/<run_id>/.
   against 0.29%, largest margin 0.25 in both.
 - 26 minutes of VM, 1.7 CU for the run (383.85 -> 382.16 at its end; the
   VM stays up for the next runs).
+
+### Run m7-checks-20261113-091259-colab (same VM: all tests, spec_check on both targets and drafters, sync and async)
+
+- 1402 passed, none failed (the GPU and unit suites; 971 s). The chain
+  tests now have accepted drafts in every runner case and discarded rows
+  in the engine case.
+- spec_check, async over sync in one process (tok/s; ms per step):
+
+  | target, drafter, requests | sync | async | | sync ms | async ms |
+  |---|---:|---:|---:|---:|---:|
+  | AWQ, BF16 drafter, one at a time | 475 | 490 | 1.033x | 7.72 | 7.34 |
+  | AWQ, BF16 drafter, 16 at once | 2761 | 2876 | 1.042x | 13.31 | 12.63 |
+  | AWQ, 4-bit drafter, one at a time | 526 | 547 | 1.041x | 6.75 | 6.37 |
+  | AWQ, 4-bit drafter, 16 at once | 2944 | 3072 | 1.044x | 12.87 | 12.09 |
+  | BF16, BF16 drafter, one at a time | 247 | 251 | 1.017x | 15.42 | 15.01 |
+  | BF16, BF16 drafter, 16 at once | 1721 | 1774 | 1.030x | 23.57 | 22.74 |
+  | BF16, 4-bit drafter, one at a time | 263 | 267 | 1.016x | 14.43 | 14.04 |
+  | BF16, 4-bit drafter, 16 at once | 1781 | 1848 | 1.037x | 23.00 | 22.21 |
+
+  The host's 0.4 ms (0.8 for 16 sequences) per cycle is the same on both
+  targets; on BF16 it is a smaller share of a 15 ms cycle. One at a time
+  15 or 16 of 16 requests have the sync run's tokens; 9 or 10 rows
+  discarded (requests that end at EOS).
+
+### Run m7-awq-20261113-093737-colab (same VM: AWQ target; no drafter, chained, SPECULATIVE_CHAIN=0, 4-bit drafter)
+
+- Output tok/s, temperature 0 (chained / each cycle collected / no
+  drafter / vLLM AWQ + DFlash from M0):
+
+  | workload | chained | collected | | no drafter | vLLM | 4-bit drafter, chained |
+  |---|---:|---:|---:|---:|---:|---:|
+  | alpaca c=1 | 451 | 426 | 1.06x | 207 | 380 | 511 |
+  | alpaca c=4 | 1371 | 1361 | 1.01x | 747 | 1211 | 1567 |
+  | alpaca c=16 | 3240 | 3116 | 1.04x | 2567 | 2084 | 3458 |
+  | alpaca c=64 | 5576 | 5962 | 0.94x | 6001 | 2943 | 6040 |
+  | humaneval c=1 | 678 | 640 | 1.06x | 206 | 589 | 764 |
+  | humaneval c=4 | 1866 | 1799 | 1.04x | 737 | 1701 | 2083 |
+  | humaneval c=16 | 3588 | 3414 | 1.05x | 2530 | 2950 | 3695 |
+  | humaneval c=64 | 5664 | 5486 | 1.03x | 5192 | 4204 | 5712 |
+  | gsm8k c=1 | 510 | 483 | 1.06x | 206 | 434 | 577 |
+  | gsm8k c=16 | 3254 | 2983 | 1.09x | 2226 | 2312 | 3391 |
+  | long c=1 | 304 | 290 | 1.05x | 178 | 245 | 334 |
+  | long c=16 | 946 | 933 | 1.01x | 870 | 750 | 947 |
+
+  Sampled (0.7, top-p 0.9): alpaca 436 / 3148 at c=1 / 16 against 412 /
+  3016 collected; humaneval 667 / 3494 against 627 / 3378.
+- alpaca c=64 fell to 0.93x of the server without a drafter. The policy
+  ran cycles there (Q=2 for 13828 decode rows, Q=3 for 7996, plain for
+  987) where the collected server ran plain steps (47408 of 48906 rows):
+  a chained cycle alone measures a host's share cheaper than before, which
+  tipped a choice that was even. But about half the steps at c=64 have
+  prompt rows; a cycle there is not one graph and waits for the cycle in
+  flight, while a plain step with prompt rows overlaps the step before
+  it, and the policy timed neither. Fixed after this run: steps with
+  prompt rows are timed per kind and chosen apart (see below).
+- TTFT p50 (ms), chained / collected / no drafter: alpaca 9.6 / 9.4 / 9.9
+  at c=1, 28.8 / 20.3 / 16.0 at c=4, 41.8 / 29.0 / 23.3 at c=16, 81.1 /
+  58.3 / 50.1 at c=64; vLLM + DFlash 24.1 / 31.0 / 71.8 / 214.3.
+
+### Run m7-bf16-20261113-100554-colab (same VM: BF16 target; no drafter, chained, SPECULATIVE_CHAIN=0, 4-bit drafter)
+
+- Output tok/s, temperature 0 (vLLM and SGLang + DFlash from M0):
+
+  | workload | chained | collected | | no drafter | vLLM | SGLang | 4-bit drafter, chained |
+  |---|---:|---:|---:|---:|---:|---:|---:|
+  | alpaca c=1 | 223 | 218 | 1.02x | 83 | 220 | 196 | 236 |
+  | alpaca c=4 | 778 | 758 | 1.03x | 311 | 770 | 670 | 805 |
+  | alpaca c=16 | 2064 | 1976 | 1.04x | 1051 | 1910 | 1652 | 2101 |
+  | alpaca c=64 | 5219 | 4937 | 1.06x | 3272 | 3327 | 2915 | 5075 |
+  | humaneval c=1 | 344 | 333 | 1.03x | 83 | 322 | 295 | 366 |
+  | humaneval c=4 | 1124 | 1108 | 1.01x | 296 | 1120 | 985 | 1193 |
+  | humaneval c=16 | 2839 | 2763 | 1.03x | 1159 | 2806 | 2456 | 2791 |
+  | humaneval c=64 | 5587 | 5347 | 1.04x | 2943 | 4576 | 4168 | 5614 |
+  | gsm8k c=1 | 259 | 251 | 1.03x | 83 | 256 | 222 | 276 |
+  | gsm8k c=16 | 2240 | 2160 | 1.04x | 976 | 2229 | 1748 | 2201 |
+  | long c=1 | 174 | 170 | 1.02x | 79 | 161 | 157 | 184 |
+  | long c=16 | 888 | 863 | 1.03x | 662 | 838 | 797 | 886 |
+
+  Sampled: alpaca 227 / 1974 against 221 / 1981 collected; humaneval 322 /
+  2731 against 313 / 2656.
+- Against vLLM + DFlash the chained server is above on 16 of 16 workloads
+  where the collected one is on 9 (M6: 9); on six of them by 1% or less
+  (humaneval c=4 1124 against 1120, gsm8k c=16 2240 against 2229), which
+  is within what two VMs differ by: level with vLLM there, not ahead.
+  Above SGLang + DFlash everywhere (1.05x to 1.79x).
+- TTFT p50 (ms), chained / collected / no drafter: alpaca 17.9 / 17.6 /
+  17.9 at c=1, 53.8 / 37.8 / 38.5 at c=4, 68.3 / 50.0 / 42.3 at c=16,
+  99.3 / 79.7 / 60.1 at c=64; vLLM + DFlash 32.0 / 52.5 / 73.8 / 191.1.
+- The first VM of M7: smoke, checks, AWQ and BF16 serving, 113 minutes,
+  11.8 CU (383.85 -> 372.07). The VM is stopped.
+
+### The policy after the AWQ run: steps with prompt rows
+
+- `SpecPolicy` times a step with prompt rows next to its decode rows
+  apart (`mixed`, per graph size and kind, a mean of the first samples
+  then a running average). The prompt's own share is in both kinds' times
+  and is paid once per prompt whatever the step drafts, so such a step is
+  not chosen by tokens per millisecond: it takes the length with the
+  largest `tokens - rate * milliseconds`, `rate` being what the best step
+  without prompt rows yields per millisecond. One such step in 16 runs
+  the other kind. The engine asks with `mixed` when prompts wait.
+- The stats count steps and their milliseconds by kind (`spec_steps_*`,
+  `spec_step_ms_*`: plain, cycle, prompt, and the first two `_mixed` or
+  `_eager`).
+- 409 nano unit tests; 12 more deliberate bugs in this part each fail a
+  test.
