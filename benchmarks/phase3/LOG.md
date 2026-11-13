@@ -886,3 +886,40 @@ results/<run_id>/.
   cycle's drafts, computed KV from the launch, discarded rows counted or
   told to the policy, chaining next to prompts, behind a last cycle or a
   plain step) each fail at least one test.
+
+### Run m7-smoke-20261113-085232-colab (new VM: the spec, warm-up and async GPU tests, AWQ spec_check sync and async)
+
+- 64 passed, 4 failed, all four on what the new tests expected of their
+  own workload, not on the engine: with the drafter's random weights no
+  cycle in flight accepted a draft in three of the four runner cases (the
+  chained row then starts one token on, never further), and with one
+  max_tokens for every request no row was discarded. Every comparison
+  before those lines held: a cycle launched behind one in flight returned
+  the tokens, drafts and state of the same cycle launched after it had
+  landed, at every verify length, with FP8 KV and the AWQ target; one
+  request's tokens were the same bit for bit with and without chaining;
+  no kernel compiled after warm-up with chained cycles. The tests now
+  give the drafter the target's own tokens as drafts (wrong at every
+  fourth position) and end requests at a stop token.
+- The graphs' step times are what they were (the arithmetic a cycle graph
+  now does on the device adds about 0.03 ms: 7.19 ms for one sequence at
+  Q=10 against 7.17).
+- spec_check, AWQ target, BF16 drafter, the same requests in one process:
+
+  | | sync | async | |
+  |---|---:|---:|---:|
+  | one request at a time, tok/s | 473 | 490 | 1.036x |
+  | ms per step (median) | 7.76 | 7.34 | graph 7.19 |
+  | measured on top of the graph (policy), ms | 0.64 | 0.25 | |
+  | 16 at once, tok/s | 2749 | 2876 | 1.046x |
+  | ms per step (median) | 13.42 | 12.62 | |
+
+  One at a time the 16 requests' tokens are the sync run's; 10 rows were
+  discarded (a request that ends at EOS has a cycle behind its last one,
+  about 7 ms a request). 16 at once 6 of 16 streams are the sync run's:
+  the steps differ between the two runs (the policy's lengths follow its
+  timings, discarded rows change a step's size), and greedy streams split
+  at near-ties as between any two batch sizes; not-argmax tokens 0.43%
+  against 0.29%, largest margin 0.25 in both.
+- 26 minutes of VM, 1.7 CU for the run (383.85 -> 382.16 at its end; the
+  VM stays up for the next runs).
