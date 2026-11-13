@@ -628,3 +628,39 @@ results/<run_id>/.
   pending slot written twice in one flush, flushed rows left staged, the
   graph's padded rows counted as pending) each fail at least one.
 - 25 minutes of VM, 2.65 CU (404.32 -> 401.67). The VM is stopped.
+
+### Run m6-checks-20261113-033910-colab (new VM: all tests, spec_check on both targets and drafters)
+
+- tests/gpu and the nano unit tests: 1369 passed, none skipped (1052 s).
+- spec_check, 16 requests at once (4 per dataset, the policy choosing) and
+  one at a time (tok/s; decode rows by verify length):
+
+  | target, drafter | 16 at once | no drafter | rows by length | one at a time | no drafter |
+  |---|---:|---:|---|---:|---:|
+  | AWQ, BF16 drafter | 2752 | 1954 | Q=4: 892, Q=6: 83, Q=10: 8 | 469 | 191 |
+  | AWQ, 4-bit drafter | 2884 | 1954 | Q=3: 16, Q=4: 895, Q=6: 81, Q=10: 3 | 522 | 191 |
+  | BF16, BF16 drafter | 1687 | 862 | Q=6: 326, Q=10: 430 | 244 | 80 |
+  | BF16, 4-bit drafter | 1745 | 862 | Q=6: 708, Q=10: 98 | 260 | 80 |
+
+  One at a time every cycle is Q=10 (7.83 and 6.83 ms on AWQ, 15.60 and
+  14.64 on BF16, as M4). Emitted tokens that are not the teacher-forced
+  argmax: 0.17-0.50% with a drafter, 0.17-0.43% without; largest margin
+  0.25 in every row.
+- With the context writes pending, a decode graph with the drafter loaded
+  takes what it takes without: 4.64 and 4.70 ms for one and two sequences
+  (4.64 and 4.69 without).
+- The other Q=1 entries of the table were 0.5 ms high, and which ones
+  depended on the order of measurement: the first 150-250 ms of timing
+  after the captures run slow (AWQ: the three largest sizes; 4-bit
+  drafter: all five; BF16 target: the first). `profile_graphs` now runs
+  the GPU for half a second first and keeps the faster of two passes over
+  all the graphs. A Q=1 entry that is too high matters: the policy then
+  never runs a plain step at that size and so never measures one.
+- BF16 target: a cycle of 16 sequences at Q=10 is 23.1 ms where a plain
+  step is 12.7 (AWQ: 22.5 against 4.9), so with the dense weights long
+  cycles keep paying at 16 sequences, as vLLM's and SGLang's numbers at
+  c=16 and c=64 already showed.
+- What a real cycle takes over its graph's time on an empty context
+  (`SpecPolicy.extra`): 0.5-0.9 ms for one or two sequences, 2.1 ms for 16
+  on AWQ and 3.8 ms on BF16 (the sequences' KV and the host's work per
+  row).
