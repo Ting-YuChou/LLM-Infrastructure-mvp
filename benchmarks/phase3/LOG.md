@@ -1065,3 +1065,34 @@ results/<run_id>/.
   sequences 55 ms against 24.9: 64 rows of 4 tokens and the prompts are
   past the 512 tokens the piecewise graphs cover.
 - 48 minutes of VM, 4.3 CU (372.07 -> 367.78). The VM is stopped.
+
+### Run m7-fix-20261113-112654-colab (new VM: the same, with mixed steps' times fitted on their prompt tokens)
+
+- 97 tests passed. Steps with prompt rows now go the right way: alpaca
+  c=64 on the AWQ target ran 108 plain steps with prompt rows and 13
+  cycles (40 and 69 before), and the server is at 5891 tok/s against 6012
+  without a drafter: 0.98x (0.9799), from 0.96x.
+- The 4-bit drafter at the same point fell to 5760, 0.96x (1.01x in the
+  first AWQ run): its policy now runs cycles of 2 for most steps without
+  prompt rows (418 cycles at 16.0 ms, 16 plain steps at 9.2 ms) where it
+  ran plain steps before. By its own times the cycle is about 5% ahead
+  (1.82 tokens a row in 16.0 ms against 1 in 9.2); the server ends 4%
+  behind the one without a drafter. What the cycle's own time leaves out
+  is what it does to the steps around it at this arrival rate (a prompt
+  every five steps): the step with prompt rows first waits for the cycle
+  in flight (a plain step would overlap it), the cycle after it starts
+  with nothing to follow, so the host's 3 ms at 64 rows is back twice per
+  arrival, and 91 rows were discarded. With plain steps none of this
+  happens.
+- So a cycle now has to beat a plain step by a margin to run in its place
+  (`SpecPolicy.PLAIN_MARGIN`, 1.1 in tokens per millisecond; between
+  cycle lengths there is none). Everywhere else measured, cycles are 25%
+  or more ahead of plain steps and the margin changes nothing.
+- The rest as before: AWQ above vLLM on 16 of 16; BF16 level with or
+  above vLLM on 14 of 16 (alpaca c=4 753 against 770 and gsm8k c=16 2189
+  against 2229, both 0.98x; the first M7 run had 778 and 2240).
+- TTFT p50 of the long prompts at c=16 moves between runs (229 to 462 ms
+  on the AWQ target with a drafter, p90 1145 to 1167 and p99 1750 to 1830
+  in all of them): the workload opens with 16 prompts of two chunks each,
+  and the median falls where that queue happens to split.
+- 48 minutes of VM, 4.2 CU (367.78 -> 363.63). The VM is stopped.

@@ -223,6 +223,21 @@ def test_time_measured_while_serving_favors_longer_cycles():
     assert (3, False) not in policy.extra
 
 
+def test_a_cycle_must_beat_a_plain_step_by_a_margin():
+    """5 ms for a plain step; a cycle of 2 yields 1.8 tokens: at 8.5 ms
+    that is 6% more per millisecond (not enough), at 8 ms 12.5% more."""
+    policy = SpecPolicy((1, 2), {(4, 1): 5.0, (4, 2): 8.5}, probe_every=0)
+    policy.rates = [0.8]
+    assert policy.choose(4) == 1
+    policy.set_times({(4, 1): 5.0, (4, 2): 8.0})
+    assert policy.choose(4) == 2
+    # Between cycle lengths there is no margin: the better one.
+    policy = SpecPolicy((2, 3), {(4, 2): 8.0, (4, 3): 10.8}, probe_every=0)
+    policy.rates = [0.8, 0.8]
+    assert policy.expected_tokens(3) / 10.8 > policy.expected_tokens(2) / 8.0
+    assert policy.choose(4) == 3
+
+
 def test_steps_with_prompt_rows_are_timed_and_chosen_apart():
     """Alone, a cycle of 2 beats a plain step for 64 sequences; next to
     prompt rows it takes 8 ms more than a plain step does there, more than

@@ -191,6 +191,14 @@ class SpecPolicy:
     # at least this share of the best length's, PLAIN_PROBE_STEPS in a row.
     PLAIN_PROBE_SHARE = 0.6
     PLAIN_PROBE_STEPS = 4
+    # A cycle runs in a plain step's place when it yields this much more per
+    # millisecond. Its own time does not show all it costs next to
+    # arriving prompts: a step with prompt rows waits for the cycle in
+    # flight where it would overlap a plain step, the cycle after it starts
+    # with nothing to follow, and rows launched behind a sequence's last
+    # cycle are discarded. Measured at 64 sequences with a prompt every few
+    # steps: cycles the step times put 5% ahead ended 3% behind.
+    PLAIN_MARGIN = 1.1
     MIXED_PROBE_EVERY = 16
     MIXED_PROBE_FIRST = 4  # ... while the other kind has fewer samples than this
     # A mixed sample's weight fades by this with every later one of its kind.
@@ -286,7 +294,7 @@ class SpecPolicy:
         if not lens or batch <= 0:
             return self.verify_lens[-1]
         value = {length: self.expected_tokens(length) / self.cost(batch, length) for length in lens}
-        best = max(lens, key=value.get)
+        best = max(lens, key=lambda length: value[length] / (self.PLAIN_MARGIN if length > 1 else 1.0))
         if mixed:
             return self._choose_mixed(batch, lens, value[best])
         if self._plain_left:
