@@ -150,8 +150,9 @@ def test_graph_cycle_matches_the_eager_cycle(
         # The draft graph alone (what a step with prompt rows replays): the
         # cycle graph's drafts, from the same state.
         bucket = runner._spec.bucket(len(active), block)
-        runner._stage_spec(active, bucket, 0, block, verify=False)
-        runner._spec.draft_graphs[(bucket, block)]()
+        with torch.inference_mode():  # as ModelRunner.launch runs it
+            runner._stage_spec(active, bucket, 0, block, verify=False)
+            runner._spec.draft_graphs[(bucket, block)]()
         assert torch.equal(runner._spec.drafts[: len(active), : block - 1].cpu(), graph_drafts)
         eager, eager_logits, eager_drafts = _eager_cycle(runner, active, block)
         eager_logits = eager_logits.view(len(active), block, -1)
@@ -185,6 +186,8 @@ def test_a_decode_graph_writes_the_drafter_context(tmp_path):
     runner, manager = _runner(tmp_path, max_graph_batch=4, verify_lens=(2, 5))
     runner.capture_decode_graphs(max_batch=4, max_model_len=MAX_MODEL_LEN)
     seqs = _prefilled(runner, manager, 3)
+    assert runner._pending.rows == sum(PROMPT_LENS[:3])  # the prompts' rows wait too
+    runner.flush_context()
     dcache = runner.proposer.cache
     for step in range(6):
         for seq in seqs:
