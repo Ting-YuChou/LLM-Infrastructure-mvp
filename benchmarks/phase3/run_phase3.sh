@@ -56,7 +56,9 @@
 # nano (WEIGHT_QUANT=awq loads the AWQ checkpoint), and vllm019 (the pinned
 # vLLM of phases 0-2, no drafter), and nano_dflash (nano with
 # SPECULATIVE_MODEL set to the drafter; SPECULATIVE_WEIGHT_QUANT=w4a16 in
-# extra quantizes it, by convention under a label ending in _dflash4).
+# extra quantizes it, by convention under a label ending in _dflash4;
+# SPECULATIVE_POLICY=fixed runs the whole block every cycle, under a label
+# ending in f).
 #
 # Env: P0_ROOT (default /workspace/p0), P0_RUN_ID (default: UTC timestamp),
 # P0_REPO_DIR, P3_STEPS, P3_RUNS, P3_MODEL, P3_W4_MODEL, P3_DRAFT_MODEL,

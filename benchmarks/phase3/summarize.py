@@ -15,6 +15,10 @@ run (serve/*.metrics.txt), accept/accept.json and status.tsv, and writes:
   M4 gates  the measured cycle at batch 1 (spec_check.py) and nano with the
             drafter at c=1 against the DFlash baselines, which are this run's
             or, with a second argument, another run's (the M0 run)
+  M6        the step time of each CUDA graph (spec_check.py), the verify
+            lengths the policy ran per serving run, and nano with the drafter
+            at every concurrency against itself without one and against the
+            DFlash baselines
 
   python summarize.py <run dir> [<baseline run dir>]
 """
@@ -76,8 +80,9 @@ def by_run(rows: list[dict]) -> dict[tuple[str, str, bool], dict[str, dict[int, 
 
 def base_of(engine: str) -> str | None:
     """The same server without a drafter (``_dflash4``: a 4-bit drafter; a
-    final ``g``: drafts are the drafter's argmax for sampled requests too)."""
-    for suffix in ("_dflash", "_dflash4", "_dflashg", "_dflash4g"):
+    final ``g``: drafts are the drafter's argmax for sampled requests too; a
+    final ``f``: every cycle runs the whole block)."""
+    for suffix in ("_dflash", "_dflash4", "_dflashg", "_dflash4g", "_dflashf", "_dflash4f"):
         if engine.endswith(suffix):
             return engine[: -len(suffix)]
     return None
@@ -161,6 +166,41 @@ def drafts(out: Path, rows: list[dict]) -> list[str]:
     return ["## Drafts as the servers count them", ""] + table(
         ["server", "run", "drafts", "accepted per draft", "tokens per cycle"], body
     )
+
+
+def verify_lens(out: Path, rows: list[dict]) -> list[str]:
+    """M6: the share of each server's decode rows run at each verify length
+    (1: a plain decode step), and the tokens a decode row yielded."""
+    body, lens = [], set()
+    per_run = []
+    for row in rows:
+        stem = f"{row['engine']}_{row['run']}"
+        before = metrics(out / "serve" / f"{stem}_before.metrics.txt")
+        after = metrics(out / "serve" / f"{stem}_after.metrics.txt")
+        counts = {
+            int(name.rsplit("_", 1)[1]): after[name] - before.get(name, 0.0)
+            for name in after if "spec_rows_len_" in name
+        }
+        if sum(counts.values()) <= 0:
+            continue
+        num, accepted = draft_counts(out, row)
+        lens.update(length for length, count in counts.items() if count > 0)
+        per_run.append((row, counts, num, accepted))
+    for row, counts, num, accepted in per_run:
+        total = sum(counts.values())
+        body.append(
+            [row["engine"], row["run"]]
+            + [f"{100 * counts.get(length, 0.0) / total:.0f}%" for length in sorted(lens)]
+            + [f"{(counts.get(1, 0.0) + num + accepted) / total:.2f}"]
+        )
+    if not body:
+        return []
+    return [
+        "## Verify lengths the policy ran", "",
+        "The share of a server's decode rows (a row per sequence and step) at each verify length: "
+        "1 is a plain decode step, Q a cycle of the anchor and Q - 1 drafts. Tokens per row: what a "
+        "decode row yielded on average.", "",
+    ] + table(["server", "run", *(f"Q={length}" for length in sorted(lens)), "tokens per row"], body)
 
 
 def coupling(out: Path, rows: list[dict]) -> list[str]:
@@ -289,17 +329,20 @@ def spec_check(out: Path) -> list[str]:
         [f"{r['label']} {r['mode']} b={r['batch']}", str(r["tokens"]), str(r["not_argmax"]),
          f"{100 * r['not_argmax'] / r['tokens']:.2f}%", fmt(r["max_margin"], 3), str(r["margins_over_0.5"]),
          str(r["margins_over_1"]), fmt(r["tokens_per_cycle"], 2), fmt(r["out_tok_s"], 0),
-         fmt(r.get("step_ms_median"), 2), fmt(r.get("step_ms_mean"), 2)]
+         fmt(r.get("step_ms_median"), 2), fmt(r.get("step_ms_mean"), 2),
+         " ".join(f"{length}:{count}" for length, count in sorted(
+             (r.get("rows_by_len") or {}).items(), key=lambda item: int(item[0])) if count) or "-"]
         for r in rows
     ]
     lines = [
         "## Emitted tokens against the target's argmax (spec_check.py)", "",
         "Every generated token against the argmax of one teacher-forced pass of the target over the "
         "finished sequence; the margin is the top logit minus the emitted token's. ms/step: the wall "
-        "time of an engine step with no prompt rows (a decode step, or a whole speculative cycle).", "",
+        "time of an engine step with no prompt rows (a decode step, or a whole speculative cycle). "
+        "rows by length: decode rows per verify length of their step (1: no drafts).", "",
     ] + table(
         ["target, mode, batch", "tokens", "not argmax", "share", "largest margin", "margins > 0.5",
-         "margins > 1", "tokens/cycle", "tok/s", "ms/step median", "ms/step mean"],
+         "margins > 1", "tokens/cycle", "tok/s", "ms/step median", "ms/step mean", "rows by length"],
         body,
     )
     single = [r for r in rows if r["batch"] == 1 and r.get("step_ms_median_by_dataset")]
@@ -310,6 +353,102 @@ def spec_check(out: Path) -> list[str]:
              for r in single],
         )
     return lines
+
+
+def step_times(out: Path) -> list[str]:
+    """M6: milliseconds of one step of each CUDA graph on an empty context,
+    as the speculative policy measures them at startup (spec_check.py)."""
+    lines = []
+    for path in sorted((out / "spec_check").glob("*_times.jsonl")):
+        for text in path.read_text().splitlines():
+            entry = json.loads(text)
+            times = {(size, length): ms for size, length, ms in entry["times"]}
+            if not times:
+                continue
+            sizes = sorted({size for size, _ in times})
+            lens = sorted({length for _, length in times})
+            lines += [f"**{entry['label']} {entry['mode']}**", ""] + table(
+                ["sequences", *(f"Q={length}" for length in lens)],
+                [[str(size)] + [fmt(times.get((size, length)), 2) for length in lens] for size in sizes],
+            )
+            if len(lens) > 1:
+                # Tokens per ms relative to a plain step at the M0 study's
+                # acceptance (alpaca, greedy): where a cycle pays on an empty context.
+                survival = [0.81, 0.58, 0.40, 0.27, 0.18, 0.12, 0.08, 0.05, 0.03]
+                body = []
+                for size in sizes:
+                    plain = times.get((size, 1))
+                    if not plain:
+                        continue
+                    body.append([str(size)] + [
+                        f"{(1 + sum(survival[: length - 1])) / times[(size, length)] * plain:.2f}x"
+                        if (size, length) in times else "-" for length in lens
+                    ])
+                lines += ["Tokens per ms over a plain step's, at the acceptance of alpaca (M0 study):", ""]
+                lines += table(["sequences", *(f"Q={length}" for length in lens)], body)
+    if not lines:
+        return []
+    return [
+        "## Step time of each CUDA graph (ms, empty context)", "",
+        "One replay of the graph for that many sequences and verify length Q (1: a decode step with "
+        "its sampling; with a drafter it also writes the drafter's context), on the null block.", "",
+    ] + lines
+
+
+MIN_OVER_PLAIN = 0.98  # M6: with a drafter, never below this share of the same server without
+
+
+def m6_gates(out: Path, serve_rows: list[dict], baseline_rows: list[dict], baseline_name: str) -> list[str]:
+    """Nano with a drafter at every concurrency: at least MIN_OVER_PLAIN of
+    the same server without one (this run's), and above every DFlash
+    baseline on the same weights."""
+    del out
+    runs = by_run(serve_rows + baseline_rows)
+    body, verdicts = [], defaultdict(lambda: [0, 0, 0, 0])
+    for (dataset, sampled), engines in sorted(runs.items(), key=lambda item: (item[0][1], DATASETS.index(item[0][0]))):
+        for engine in sorted(engines):
+            base = base_of(engine)
+            if not engine.startswith("nano") or base is None or base not in engines:
+                continue
+            for level in sorted(engines[engine]):
+                mine = engines[engine][level].get("out_tok_s")
+                plain = engines[base].get(level, {}).get("out_tok_s")
+                theirs = {
+                    name: engines[name][level]["out_tok_s"]
+                    for name in BASELINES.get(base, ()) if level in engines.get(name, {})
+                }
+                if not mine or not plain:
+                    continue
+                best = max(theirs, key=theirs.get) if theirs else None
+                over_plain = mine / plain
+                tally = verdicts[engine]
+                tally[0] += over_plain >= MIN_OVER_PLAIN
+                tally[1] += 1
+                if best:
+                    tally[2] += mine > theirs[best]
+                    tally[3] += 1
+                body.append([
+                    f"{dataset}{' sampled' if sampled else ''} c={level} / {engine}", fmt(mine, 0),
+                    fmt(plain, 0), f"{over_plain:.2f}x{'' if over_plain >= MIN_OVER_PLAIN else ' NOT met'}",
+                    f"{best} {theirs[best]:.0f}" if best else "-",
+                    (f"{mine / theirs[best]:.2f}x{'' if mine > theirs[best] else ' NOT met'}") if best else "-",
+                ])
+    if not body:
+        return []
+    source = f" (baselines from {baseline_name})" if baseline_rows else ""
+    lines = [
+        "## M6 gate: with a drafter at every concurrency", "",
+        f"Output tok/s against the same nano server without a drafter in this run (at least "
+        f"{MIN_OVER_PLAIN}x) and against the fastest DFlash server on the same weights{source} (above).", "",
+    ] + table(
+        ["workload / server", "tok/s", "no drafter", "over no drafter", "best baseline", "over baseline"], body
+    )
+    for engine, (ok_plain, total, ok_base, total_base) in sorted(verdicts.items()):
+        lines.append(
+            f"- {engine}: at least {MIN_OVER_PLAIN}x its own server without a drafter on {ok_plain} of "
+            f"{total} workloads; above the best DFlash baseline on {ok_base} of {total_base}."
+        )
+    return lines + [""]
 
 
 CYCLE_GATE_MS = 8.0  # G3: an AWQ cycle at batch 1
@@ -500,11 +639,13 @@ def main() -> None:
         lines += ["Every server tokenizes the prompts the same." if same else
                   "The servers do NOT count the same prompt tokens: the runs are not comparable as they are.", ""]
     if serve_rows:
-        lines += ["## Serving", ""] + serving(serve_rows) + drafts(out, serve_rows) + coupling(out, serve_rows)
+        lines += ["## Serving", ""] + serving(serve_rows) + drafts(out, serve_rows)
+        lines += verify_lens(out, serve_rows) + coupling(out, serve_rows)
     accept_lines, accept_rows = accept(out)
-    lines += texts(out) + spec_check(out) + parity(out) + block_kernel(out)
+    lines += texts(out) + spec_check(out) + step_times(out) + parity(out) + block_kernel(out)
     lines += accept_lines + gate(serve_rows, accept_rows)
     lines += m4_gates(out, serve_rows, baseline_rows, baseline.name if baseline else "")
+    lines += m6_gates(out, serve_rows, baseline_rows, baseline.name if baseline else "")
     (out / "summary.md").write_text("\n".join(lines) + "\n")
 
 

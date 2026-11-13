@@ -14,6 +14,12 @@ while the GPU runs step N (vLLM's async scheduling, SGLang's overlap
 scheduler). Tokens still in flight feed the next step on the device
 (ModelRunner's ``sampled`` buffer); finish checks run one step late, so a
 request that just hit EOS may run one extra, discarded, step.
+
+With a proposer (speculative decoding, spec.py) every step drafts as many
+tokens per decode row as :class:`~.spec.SpecPolicy` chooses. A cycle's
+tokens are known only when it is collected, so a step that drafts is
+collected before the next one is scheduled; a step that does not is a plain
+step, overlapped as above.
 """
 
 from __future__ import annotations
@@ -38,7 +44,7 @@ from .nvtx import nvtx_range
 from .sampling import SamplingOptions
 from .scheduler import Row, Scheduler
 from .sequence import Sequence, SequenceStatus
-from .spec import DFlashProposer, Proposer
+from .spec import DFlashProposer, Proposer, SpecPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +103,16 @@ class EngineCore:
             )
         self.proposer = proposer
         num_draft_tokens = proposer.num_draft_tokens if proposer is not None else 0
+        # The verify lengths a step can run: the whole block, and under the
+        # adaptive policy the configured shorter ones (1: no drafts).
+        verify_lens = {num_draft_tokens + 1}
+        if config.speculative_policy == "adaptive":
+            verify_lens.update(
+                length for length in config.speculative_verify_lens if length <= num_draft_tokens
+            )
+        self.spec_policy = SpecPolicy(tuple(verify_lens)) if proposer is not None else None
+        # Decode rows run at each verify length (a row per sequence and step).
+        self.spec_rows = dict.fromkeys(sorted(verify_lens), 0) if proposer is not None else {}
         if proposer is not None and hasattr(model, "extend_rope_table"):
             # A verify pass reaches num_draft_tokens positions past the last token.
             model.extend_rope_table(config.max_model_len + num_draft_tokens)
@@ -127,38 +143,41 @@ class EngineCore:
             seed=config.seed,
             proposer=proposer,
             draft_temperature=config.speculative_draft_temperature,
+            verify_lens=tuple(verify_lens),
         )
-        # A speculative step's tokens are known only when it is collected, so
-        # the next one cannot launch before.
-        self.async_scheduling = config.async_scheduling and proposer is None
+        self.async_scheduling = config.async_scheduling
         self.requests: dict[int, Sequence] = {}
         self._inbox: deque[tuple[str, object]] = deque()
-        self._inflight: Optional[tuple[StepHandle, list[Row]]] = None
+        # The launched step not collected yet: its handle, rows and launch time.
+        self._inflight: Optional[tuple[StepHandle, list[Row], float]] = None
+        self._last_collected = 0.0  # when the last step's tokens arrived
         self._step_count = 0
 
     def capture_graphs(self) -> None:
         """Before serving on CUDA: compile the eager step's kernel variants,
-        then capture the decode CUDA graphs (with a proposer: the speculative
-        cycle's) and the piecewise graphs for the other steps (unless
-        enforce_eager)."""
+        then capture the decode CUDA graphs, with a proposer the speculative
+        cycle's, and the piecewise graphs for the other steps (unless
+        enforce_eager). The speculative policy gets each graph's step time."""
         if self.model.device.type != "cuda":
             return
         self.model_runner.warm_up_eager(self.config.max_num_seqs)
         if self.config.enforce_eager:
             return
-        if self.proposer is None:  # speculative steps never decode one token per row
+        max_batch = min(self.config.max_num_seqs, self.config.cuda_graph_max_bs)
+        # With a proposer: only if a step may run without drafts.
+        if self.spec_policy is None or 1 in self.spec_policy.verify_lens:
             self.model_runner.capture_decode_graphs(
-                max_batch=min(self.config.max_num_seqs, self.config.cuda_graph_max_bs),
-                max_model_len=self.config.max_model_len,
+                max_batch=max_batch, max_model_len=self.config.max_model_len
             )
         max_tokens = min(self.config.cuda_graph_max_tokens, self.config.max_num_batched_tokens)
         if max_tokens > 0:
             self.model_runner.capture_piecewise_graphs(max_tokens, max_rows=self.config.max_num_seqs)
         if self.proposer is not None:
             self.model_runner.capture_spec_graphs(
-                max_batch=min(self.config.max_num_seqs, self.config.cuda_graph_max_bs),
-                max_model_len=self.config.max_model_len,
+                max_batch=max_batch, max_model_len=self.config.max_model_len
             )
+            if len(self.spec_policy.verify_lens) > 1:
+                self.spec_policy.set_times(self.model_runner.profile_graphs())
 
     # --- frontend side (any thread) ------------------------------------------
 
@@ -215,18 +234,28 @@ class EngineCore:
 
     def _step(self) -> list[RequestOutput]:
         outputs: list[RequestOutput] = []
+        draft_tokens, step = 0, {}
+        if self.spec_policy is not None:
+            # The decode rows the step will have, but for a preemption.
+            decode_rows = min(len(self.scheduler.running), self.config.max_num_seqs)
+            draft_tokens = self.spec_policy.choose(decode_rows) - 1
+            step = {"draft_tokens": draft_tokens}
+            if draft_tokens:
+                # A cycle starts from tokens the host knows.
+                outputs += self._collect_inflight()
+        overlap = self.async_scheduling and not draft_tokens
         try:
             with nvtx_range("schedule"):
-                seqs, has_prefill = self.scheduler.schedule()
+                seqs, has_prefill = self.scheduler.schedule(**step)
         except Exception as exc:
             # Scheduler state for queued requests can't be trusted anymore.
             logger.exception("nano-vLLM schedule() failed; failing queued requests")
-            return self._collect_inflight() + self._fail(
+            return outputs + self._collect_inflight() + self._fail(
                 [*self.scheduler.running, *self.scheduler.waiting], exc
             )
         launched = None
         if seqs:
-            launched, failed = self._launch(seqs, has_prefill)
+            launched, failed = self._launch(seqs, has_prefill, draft_tokens, overlap)
             outputs += failed
         elif self._inflight is None:
             stuck = self.scheduler.unschedulable_head()
@@ -238,7 +267,7 @@ class EngineCore:
                         "than are free with nothing left to release"
                     ),
                 )
-        if self.async_scheduling:
+        if overlap:
             outputs += self._collect_inflight()
             self._inflight = launched
         elif launched is not None:
@@ -246,18 +275,21 @@ class EngineCore:
         return outputs
 
     def _launch(
-        self, seqs: list[Sequence], has_prefill: bool
-    ) -> tuple[Optional[tuple[StepHandle, list[Row]]], list[RequestOutput]]:
+        self, seqs: list[Sequence], has_prefill: bool, draft_tokens: int = 0, overlap: bool = False
+    ) -> tuple[Optional[tuple[StepHandle, list[Row], float]], list[RequestOutput]]:
         # A decode row whose input token is still in flight reads it from the
         # previous step's row on the device.
         gather = None
-        if self.async_scheduling:
+        if overlap:
             gather = [
                 seq.pending_row if not seq.is_prefill and seq.num_inflight else -1
                 for seq in seqs
             ]
+        start = time.perf_counter()
         try:
-            handle = self.model_runner.launch(seqs, has_prefill, gather)
+            handle = self.model_runner.launch(
+                seqs, has_prefill, gather, draft_tokens if self.proposer is not None else None
+            )
         except Exception as exc:
             logger.exception("nano-vLLM model step failed")
             return None, self._fail(seqs, exc)
@@ -265,7 +297,9 @@ class EngineCore:
         for index, row in enumerate(rows):
             if row.samples:
                 row.seq.pending_row = index
-        return (handle, rows), []
+        if self.proposer is not None:
+            self.spec_rows[draft_tokens + 1] += sum(not seq.is_prefill for seq in seqs)
+        return (handle, rows, start), []
 
     def _collect_inflight(self) -> list[RequestOutput]:
         if self._inflight is None:
@@ -273,9 +307,11 @@ class EngineCore:
         inflight, self._inflight = self._inflight, None
         return self._complete(*inflight)
 
-    def _complete(self, handle: StepHandle, rows: list[Row]) -> list[RequestOutput]:
+    def _complete(self, handle: StepHandle, rows: list[Row], launched: float) -> list[RequestOutput]:
         try:
             token_ids = self.model_runner.collect(handle)
+            if self.spec_policy is not None:
+                self._observe_step(handle, token_ids, launched)
             with nvtx_range("postprocess"):
                 emitted = self.scheduler.complete(rows, token_ids)
         except Exception as exc:
@@ -291,6 +327,20 @@ class EngineCore:
             if finish is not None:
                 self.requests.pop(seq.seq_id, None)
         return outputs
+
+    def _observe_step(self, handle: StepHandle, token_ids: list, launched: float) -> None:
+        """What a collected step tells the speculative policy: the drafts
+        each cycle accepted, and what a step that was one graph took. An
+        overlapped step started when the one before it was collected."""
+        now = time.perf_counter()
+        started, self._last_collected = max(launched, self._last_collected), now
+        policy = self.spec_policy
+        if handle.spec_seqs:
+            policy.update(
+                handle.block - 1, [len(tokens) - 1 for tokens in token_ids[: handle.spec_seqs]]
+            )
+        if handle.graph_size:
+            policy.record(handle.graph_size, handle.block, (now - started) * 1e3)
 
     def _fail(self, seqs: list[Sequence], exc: BaseException) -> list[RequestOutput]:
         outputs = []
@@ -321,8 +371,10 @@ class EngineCore:
             # As vLLM counts them: cycles, and the drafts the target accepted.
             spec = {
                 "spec_num_drafts": self.scheduler.spec_cycles,
-                "spec_num_draft_tokens": self.scheduler.spec_cycles * self.proposer.num_draft_tokens,
+                "spec_num_draft_tokens": self.scheduler.spec_draft_tokens,
                 "spec_num_accepted_tokens": self.scheduler.spec_accepted_tokens,
+                # Decode rows by the verify length of their step (1: no drafts).
+                **{f"spec_rows_len_{length}": rows for length, rows in self.spec_rows.items()},
             }
         return {
             **self.block_manager.stats_dict(),

@@ -23,6 +23,13 @@ def _optional_str(value: Any) -> Optional[str]:
     return value
 
 
+def _int_tuple(value: Any) -> tuple[int, ...]:
+    """A YAML list, or "1,2,4" from the environment."""
+    if isinstance(value, str):
+        value = [part for part in value.replace(",", " ").split() if part]
+    return tuple(int(item) for item in value)
+
+
 def _bool_value(value: Any, default: bool = False) -> bool:
     if value is None:
         return default
@@ -116,6 +123,17 @@ class NanoVLLMConfig:
     # (benchmarks/phase3, M5): 1 loses 2-7% of the tokens per cycle to the
     # argmax, 0.25 and 0.5 are level with it (-0.3% to +1.0%).
     speculative_draft_temperature: float = 0.25
+    # "adaptive": every step picks the verify length Q (a decode row's anchor
+    # and Q - 1 drafts) from speculative_verify_lens that yields the most
+    # tokens per millisecond, from each CUDA graph's step time measured at
+    # startup and the drafts' acceptance rates so far (spec.SpecPolicy);
+    # "fixed": every cycle runs the whole block. The output is the same.
+    speculative_policy: str = "adaptive"
+    # The verify lengths "adaptive" chooses from; the whole block
+    # (num_speculative_tokens + 1) always is one, longer ones are dropped.
+    # 1 is a plain decode step: with many sequences a pass over the weights
+    # is no longer shared by enough rows for drafts to pay.
+    speculative_verify_lens: tuple[int, ...] = (1, 2, 3, 4, 6, 10)
     # Run the engine core (scheduler + model) in its own process; the server
     # process keeps tokenization, detokenization, stop strings and HTTP.
     multiprocess: bool = False
@@ -164,6 +182,11 @@ class NanoVLLMConfig:
             raise ValueError("speculative_weight_quant must be one of: none, w4a16")
         if not 0.0 <= self.speculative_draft_temperature <= 1.0:
             raise ValueError("speculative_draft_temperature must be between 0 (argmax drafts) and 1")
+        if self.speculative_policy not in {"adaptive", "fixed"}:
+            raise ValueError("speculative_policy must be one of: adaptive, fixed")
+        self.speculative_verify_lens = tuple(int(length) for length in self.speculative_verify_lens)
+        if any(length < 1 for length in self.speculative_verify_lens):
+            raise ValueError("speculative_verify_lens must be positive")
 
     @classmethod
     def from_yaml(cls, config_path: str | None) -> "NanoVLLMConfig":
@@ -308,6 +331,18 @@ class NanoVLLMConfig:
                 _env(
                     "SPECULATIVE_DRAFT_TEMPERATURE",
                     engine.get("speculative_draft_temperature", cls.speculative_draft_temperature),
+                )
+            ),
+            speculative_policy=str(
+                _env(
+                    "SPECULATIVE_POLICY",
+                    engine.get("speculative_policy", cls.speculative_policy),
+                )
+            ),
+            speculative_verify_lens=_int_tuple(
+                _env(
+                    "SPECULATIVE_VERIFY_LENS",
+                    engine.get("speculative_verify_lens", cls.speculative_verify_lens),
                 )
             ),
             multiprocess=_bool_value(

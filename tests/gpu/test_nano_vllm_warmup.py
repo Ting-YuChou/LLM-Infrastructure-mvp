@@ -5,8 +5,9 @@ running request for seconds (Phase 2 LOG: the first M2 W1 sweep). After
 capture_graphs, which compiles the eager step's variants and captures the
 decode graphs, a mixed workload with every decode row count, eager and graph
 decode steps and several block-table widths must find every kernel in
-Triton's in-memory cache. With a drafter the decode rows are verify rows:
-the same for every number of them, for the target and the drafter.
+Triton's in-memory cache. With a drafter the decode rows are verify rows of
+any of the policy's lengths, or plain decode rows whose tokens go through
+the drafter's context writes: the same for every number of them.
 """
 
 import random
@@ -25,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from serving.nano_vllm.config import NanoVLLMConfig  # noqa: E402
 from serving.nano_vllm.core import EngineCore, EngineRequest  # noqa: E402
 from serving.nano_vllm.sampling import SamplingOptions  # noqa: E402
+from serving.nano_vllm.spec import SpecPolicy  # noqa: E402
 from test_nano_vllm_block_attention_gpu import drafter_checkpoint  # noqa: E402
 from test_nano_vllm_forward_gpu import _model  # noqa: E402
 
@@ -130,6 +132,23 @@ def test_no_kernel_compiles_after_warm_up_with_a_drafter(tmp_path, linear_backen
     core = EngineCore(config, model)
     assert core.proposer is not None and core.proposer.num_draft_tokens == 4
     core.capture_graphs()
+    lens = core.spec_policy.verify_lens
+    assert lens == (1, 2, 3, 4, 5)
+    # Every graph was timed, the decode graphs as length 1.
+    assert set(core.spec_policy.times) == {
+        (size, length) for size in (1, 2, 4, 8, 16) for length in lens
+    }
+
+    class EveryLength(SpecPolicy):
+        """Each length in turn, with runs of plain steps (overlapped)."""
+
+        steps = 0
+
+        def choose(self, batch):
+            self.steps += 1
+            return (1, 1, 2, 5, 1, 3, 4, 4, 1, 1, 1, 5)[self.steps % 12]
+
+    core.spec_policy = EveryLength(lens, core.spec_policy.times)
 
     rng = random.Random(0)
     pending = [
@@ -140,9 +159,9 @@ def test_no_kernel_compiles_after_warm_up_with_a_drafter(tmp_path, linear_backen
     verify_rows = set()
     launch_spec = core.model_runner._launch_spec
 
-    def spy(seqs, slot):
-        verify_rows.add(sum(not seq.is_prefill for seq in seqs))
-        return launch_spec(seqs, slot)
+    def spy(seqs, slot, block=None):
+        verify_rows.add((sum(not seq.is_prefill for seq in seqs), block))
+        return launch_spec(seqs, slot, block)
 
     core.model_runner._launch_spec = spy
     with _TritonCompiles() as compiles:
@@ -156,4 +175,6 @@ def test_no_kernel_compiles_after_warm_up_with_a_drafter(tmp_path, linear_backen
                 assert output.error is None, output.error
             steps += 1
     assert compiles.kernels == [], compiles.kernels
-    assert len(verify_rows) > 8, sorted(verify_rows)
+    assert len({rows for rows, _ in verify_rows}) > 8, sorted(verify_rows)
+    assert {block for _, block in verify_rows} == {2, 3, 4, 5}
+    assert all(count > 0 for count in core.spec_rows.values()), core.spec_rows

@@ -77,7 +77,7 @@ class ScriptedProposer:
         raise AssertionError("no taps were asked for")
 
     def propose(self, batch):
-        k = self.num_draft_tokens
+        k = batch.num_draft_tokens
         self.batches.append(len(batch.seqs))
         assert batch.positions.numel() == len(batch.seqs) * (k + 1)
         drafts = []

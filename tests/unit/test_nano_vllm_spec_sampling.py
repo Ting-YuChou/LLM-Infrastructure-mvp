@@ -59,7 +59,7 @@ class _TargetAsDrafter:
         raise AssertionError("no taps were asked for")
 
     def propose(self, batch):
-        drafted, vocab = self.num_draft_tokens, self.hf_model.config.vocab_size
+        drafted, vocab = batch.num_draft_tokens, self.hf_model.config.vocab_size
         tokens = [list(seq.token_ids) for seq in batch.seqs]
         logits = torch.zeros(len(tokens) * drafted, vocab)
         for j in range(drafted):
@@ -166,7 +166,7 @@ class _TableDrafter:
         raise AssertionError("no taps were asked for")
 
     def propose(self, batch):
-        positions = batch.positions.view(-1, self.num_draft_tokens + 1)[:, 1:]
+        positions = batch.positions.view(-1, batch.num_draft_tokens + 1)[:, 1:]
         return batch.draw(self.table[positions.reshape(-1)]).view(positions.shape)
 
 
@@ -183,9 +183,9 @@ def test_drafts_are_drawn_with_the_noise_of_the_positions_they_propose(target, g
     cycles = []  # (sequence id, tokens before the cycle) per verify row, and the drafts
     launch, propose = runner._launch_spec, proposer.propose
 
-    def spy_launch(seqs, slot):
+    def spy_launch(seqs, slot, block=None):
         cycles.append([[(seq.seq_id, seq.num_tokens) for seq in seqs if not seq.is_prefill], None])
-        return launch(seqs, slot)
+        return launch(seqs, slot, block)
 
     def spy_propose(batch):
         drafts = propose(batch)
@@ -203,10 +203,11 @@ def test_drafts_are_drawn_with_the_noise_of_the_positions_they_propose(target, g
     checked = 0
     for rows, drafts in cycles:
         for (seq_id, num_tokens), drafted in zip(rows, drafts):
-            positions = list(range(num_tokens, num_tokens + DRAFTED))
+            count = drafted.numel()  # the step's drafts per sequence
+            positions = list(range(num_tokens, num_tokens + count))
             reference.sample(
-                proposer.table[positions], [settings[seq_id]] * DRAFTED, [seq_id] * DRAFTED, positions, out
+                proposer.table[positions], [settings[seq_id]] * count, [seq_id] * count, positions, out
             )
-            assert drafted.tolist() == out.tolist()
+            assert drafted.tolist() == out[:count].tolist()
             checked += 1
     assert checked > 20

@@ -57,7 +57,7 @@ class _Oracle:
         raise AssertionError("no taps were asked for")
 
     def propose(self, batch):
-        block = self.num_draft_tokens + 1
+        block = batch.num_draft_tokens + 1
         positions = batch.positions.view(-1, block)[:, 1:]
         drafts = self.expected[positions.clamp(max=self.expected.numel() - 1)]
         return torch.where(positions % self.wrong_every == 0, drafts + 1, drafts)
@@ -88,10 +88,10 @@ def _run(core: EngineCore, prompts: list[list[int]], arrive_every: int = 0, samp
     paths = {"graph": 0, "eager": 0}
     replay, forward = runner._replay_spec, runner._forward_prepared
 
-    def spy_replay(seqs, bucket, slot):
+    def spy_replay(seqs, bucket, slot, block):
         paths["graph"] += 1
         assert bucket >= len(seqs)
-        return replay(seqs, bucket, slot)
+        return replay(seqs, bucket, slot, block)
 
     def spy_forward(input_ids, positions, metadata, use_graphs=True, observe=False):
         paths["eager"] += bool(metadata.num_block_rows)

@@ -22,9 +22,11 @@ class Row:
     samples: bool  # the step samples a token for it (decode, or the last prompt chunk)
     num_computed_tokens: int  # KV computed once the step finishes
     epoch: int  # the block table it wrote into (see Sequence.epoch)
-    # A speculative row: the step yields 1 to K + 1 tokens, and how much KV
-    # it computed is known only then (num_computed_tokens is the KV before it).
+    # A speculative row: the step yields 1 to drafted + 1 tokens, and how
+    # much KV it computed is known only then (num_computed_tokens is the KV
+    # before it).
     spec: bool = False
+    drafted: int = 0
 
 
 class Scheduler:
@@ -38,7 +40,8 @@ class Scheduler:
     With ``num_draft_tokens`` K > 0 a decode row is a speculative one: it
     runs K + 1 tokens (the last accepted token and K drafts, see spec.py),
     so it costs K + 1 of the token budget and needs KV slots for K positions
-    past the token being decoded.
+    past the token being decoded. :meth:`schedule` can ask for fewer drafts
+    for its step, down to 0: plain decode rows.
     """
 
     def __init__(
@@ -55,9 +58,11 @@ class Scheduler:
         self.max_num_seqs = max(1, max_num_seqs)
         self.max_num_batched_tokens = max(1, max_num_batched_tokens)
         self.policy = policy
-        self.num_draft_tokens = num_draft_tokens
-        # Speculative cycles completed, and the drafts the target accepted in them.
+        self.num_draft_tokens = num_draft_tokens  # the most a step drafts per row
+        self.step_draft_tokens = num_draft_tokens  # what the step being scheduled does
+        # Speculative cycles completed, their drafts, and the ones the target accepted.
         self.spec_cycles = 0
+        self.spec_draft_tokens = 0
         self.spec_accepted_tokens = 0
         self.waiting: deque[Sequence] = deque()
         self.running: deque[Sequence] = deque()
@@ -90,12 +95,21 @@ class Scheduler:
         with suppress(ValueError):
             self.waiting.remove(seq)
 
-    def schedule(self) -> tuple[list[Sequence], bool]:
-        """The next batch and whether it has prefill rows (decode rows come first)."""
+    def schedule(self, draft_tokens: Optional[int] = None) -> tuple[list[Sequence], bool]:
+        """The next batch and whether it has prefill rows (decode rows come first).
+
+        ``draft_tokens``: the drafts per decode row of this step, 0 to
+        ``num_draft_tokens`` (the default).
+        """
+        if draft_tokens is None:
+            draft_tokens = self.num_draft_tokens
+        if not 0 <= draft_tokens <= self.num_draft_tokens:
+            raise ValueError(f"a step drafts 0 to {self.num_draft_tokens} tokens per row")
+        self.step_draft_tokens = draft_tokens
         if self.policy == "mixed":
             decodes = self._schedule_decode()
             prefills = self._schedule_prefill(
-                token_budget=self.max_num_batched_tokens - len(decodes) * (self.num_draft_tokens + 1),
+                token_budget=self.max_num_batched_tokens - len(decodes) * (draft_tokens + 1),
                 seq_budget=self.max_num_seqs - len(decodes),
             )
             return decodes + prefills, bool(prefills)
@@ -119,12 +133,15 @@ class Scheduler:
         until :meth:`complete` brings its value.
         """
         rows = []
+        drafted = self.step_draft_tokens
         for seq in seqs:
-            if self.num_draft_tokens and not seq.is_prefill:
+            if drafted and not seq.is_prefill:
                 # How many of its tokens stand is known when it completes.
                 seq.num_scheduled_tokens = 0
                 seq.num_inflight += 1
-                rows.append(Row(seq, True, seq.num_cached_tokens, seq.epoch, spec=True))
+                rows.append(
+                    Row(seq, True, seq.num_cached_tokens, seq.epoch, spec=True, drafted=drafted)
+                )
                 continue
             end = seq.num_cached_tokens + seq.num_scheduled_tokens
             # A prefill chunk that leaves prompt tokens unprocessed samples
@@ -182,6 +199,7 @@ class Scheduler:
         seq = row.seq
         seq.num_inflight -= 1
         self.spec_cycles += 1
+        self.spec_draft_tokens += row.drafted
         self.spec_accepted_tokens += len(tokens) - 1
         finished = False
         for token_id in tokens:
@@ -284,7 +302,7 @@ class Scheduler:
         """
         scheduled: list[Sequence] = []
         done: list[Sequence] = []
-        lookahead = self.num_draft_tokens
+        lookahead = self.step_draft_tokens
         budget = min(self.max_num_seqs, max(1, self.max_num_batched_tokens // (lookahead + 1)))
         current: Optional[Sequence] = None
         try:

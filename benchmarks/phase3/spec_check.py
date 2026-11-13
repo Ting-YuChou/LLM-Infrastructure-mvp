@@ -26,6 +26,12 @@ every request of the group has its first token, so a step is a decode step
 collects a step before it returns, so that is the whole cycle: host work,
 draft, verify and sampling.
 
+With a drafter the engine picks each step's verify length (spec.SpecPolicy):
+the rows report how many decode rows ran at each length, and
+<out>_times.jsonl keeps the step time of every CUDA graph the policy starts
+from (for the engine without a drafter: of its decode graphs, the same step
+without the drafter's context writes).
+
   PYTHONPATH=<repo> python spec_check.py --model <dir> [--weight-quant awq] \
       --drafter <dir> --workloads <dir> --out <file.json> [--prompts 4] \
       [--drafter-quants none,w4a16]
@@ -158,12 +164,21 @@ def main() -> None:
 
     model = load_model(config(None))
     rows = []
+    times_path = args.out.with_name(args.out.stem + "_times.jsonl")
+    times_path.write_text("")
     modes = [("plain", None, "none")]
     for quant in args.drafter_quants.split(","):
         modes.append(("spec" if quant == "none" else f"spec, {quant} drafter", args.drafter, quant))
     for mode, drafter, drafter_quant in modes:
         core = EngineCore(config(drafter, drafter_quant), model)
         core.capture_graphs()
+        policy = core.spec_policy
+        times = policy.times if policy is not None and policy.times else core.model_runner.profile_graphs()
+        with times_path.open("a") as handle:
+            handle.write(json.dumps({
+                "label": args.label, "mode": mode,
+                "times": sorted([size, length, ms] for (size, length), ms in times.items()),
+            }) + "\n")
         generate(core, requests[:2], eos, 16, together=False)  # first-use compiles
         generate(core, requests[:2], eos, 16, together=True)
         for together in (False, True):
@@ -191,6 +206,16 @@ def main() -> None:
                 "margins_over_0.5": sum(m > 0.5 for m in wrong),
                 "margins_over_1": sum(m > 1.0 for m in wrong),
                 "tokens_per_cycle": (accepted + cycles) / cycles if cycles else None,
+                # Decode rows by the verify length of their step (1: no drafts).
+                "rows_by_len": {
+                    name.rsplit("_", 1)[1]: count - before.get(name, 0)
+                    for name, count in stats.items() if name.startswith("spec_rows_len_")
+                },
+                "accept_rates": [round(rate, 3) for rate in policy.rates] if policy is not None else None,
+                "extra_ms": {
+                    f"{bucket} {'cycle' if cycle else 'plain'}": round(ms, 3)
+                    for (bucket, cycle), ms in sorted(policy.extra.items())
+                } if policy is not None else None,
                 "out_tok_s": len(margins) / seconds,
                 "steps": len(all_steps),
                 "step_ms_median": 1000 * statistics.median(all_steps) if all_steps else None,

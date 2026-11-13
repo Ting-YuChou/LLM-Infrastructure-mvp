@@ -60,6 +60,13 @@ engine:
   # positions at this fraction of the request's temperature (1: coupled
   # sampling; 0: the drafter's argmax). The output is the same for any value.
   speculative_draft_temperature: 0.25
+  # "adaptive": each step picks the verify length (a decode row's anchor plus
+  # drafts) from speculative_verify_lens that yields the most tokens per
+  # millisecond, from the CUDA graphs' step times measured at startup and the
+  # drafts' acceptance so far; 1 is a plain decode step. "fixed": always the
+  # whole block. The output is the same.
+  speculative_policy: "adaptive"
+  speculative_verify_lens: [1, 2, 3, 4, 6, 10]
   # Engine core (scheduler + model) in its own process; this one keeps
   # tokenization, detokenization and HTTP off the model steps' GIL.
   multiprocess: false
