@@ -1029,3 +1029,39 @@ results/<run_id>/.
   `_eager`).
 - 409 nano unit tests; 12 more deliberate bugs in this part each fail a
   test.
+
+### Run m7-fix-20261113-104018-colab (new VM: the spec and warm-up GPU tests, AWQ and BF16 serving with the policy timing mixed steps)
+
+- 96 tests passed. AWQ alpaca c=64: 5726 tok/s against 5981 without a
+  drafter, 0.96x (0.93x before): still under the gate. Everything else as
+  in the runs before it (AWQ above vLLM on 16 of 16, BF16 level or above
+  on 15 of 16, gsm8k c=16 2202 against 2229).
+- The step counters say why (alpaca c=64, AWQ, the run's steps by kind):
+
+  | kind | steps | ms per step |
+  |---|---:|---:|
+  | plain | 392 | 8.93 |
+  | cycle (Q=2 to 4) | 172 | 16.92 |
+  | plain with prompt rows | 40 | 13.36 |
+  | cycle with prompt rows | 69 | 27.87 |
+
+  Alone, plain steps and short cycles are even here (about 1.9 tokens a
+  row for 1.9 times the milliseconds), so the policy runs both. Next to
+  prompt rows a cycle takes 14.5 ms more than a plain step for 0.9 more
+  tokens a row, and still ran 69 times to the plain step's 40: the run
+  opens with 64 prompts at once, the plain step that carried them took
+  over 100 ms, and with a mean of the first samples that one made plain
+  steps look slow next to prompts until enough probes (one in 16) had
+  diluted it.
+- So the prompts' share has to come out of the measurement, not cancel on
+  average: mixed steps' times are now fitted as `extra + prompt_ms *
+  prompt tokens` (decayed least squares, one slope for every size and
+  kind, an intercept each; no slope when the prompt sizes do not differ),
+  and a kind with fewer than four samples next to prompts is tried every
+  fourth mixed step.
+- Other sizes in the same table: at 16 AWQ sequences a cycle with prompt
+  rows is 15.9 ms against 10.6 alone; on the BF16 target at 64, 35.5
+  against 25.4 (and stays the better choice there); humaneval at 64 AWQ
+  sequences 55 ms against 24.9: 64 rows of 4 tokens and the prompts are
+  past the 512 tokens the piecewise graphs cover.
+- 48 minutes of VM, 4.3 CU (372.07 -> 367.78). The VM is stopped.

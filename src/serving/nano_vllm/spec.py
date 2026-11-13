@@ -168,13 +168,17 @@ class SpecPolicy:
     graph, and a cycle there costs more over a plain step than it does
     alone (it waits for the cycle in flight where a plain step overlaps the
     step before it). Its time is measured apart, again per graph size and
-    kind. The prompt's own share is in both kinds' times and is not the
-    choice's to save (it is paid once per prompt, not per step), so there
-    the policy does not maximize tokens per millisecond of the step: it
-    takes the Q with the largest ``tokens - rate * milliseconds``, ``rate``
-    being what the best step without prompt rows yields per millisecond,
-    that is, what the same time would have brought elsewhere. One mixed
-    step in ``MIXED_PROBE_EVERY`` runs the other kind.
+    kind. The prompt's own share is not the choice's to save (it is paid
+    once per prompt, not per step) and differs from step to step (a burst
+    of arrivals is one step of a hundred milliseconds), so it is taken out:
+    the times are fitted as ``extra + prompt_ms * prompt tokens``, one
+    slope for all, and only ``extra`` is the step's. There the policy does
+    not maximize tokens per millisecond of the step either: it takes the Q
+    with the largest ``tokens - rate * milliseconds``, ``rate`` being what
+    the best step without prompt rows yields per millisecond, that is, what
+    the same time would have brought elsewhere. One mixed step in
+    ``MIXED_PROBE_EVERY`` runs the other kind (in ``MIXED_PROBE_FIRST``
+    while that kind has few samples).
     """
 
     # A draft's acceptance rate before any cycle has run it.
@@ -188,6 +192,12 @@ class SpecPolicy:
     PLAIN_PROBE_SHARE = 0.6
     PLAIN_PROBE_STEPS = 4
     MIXED_PROBE_EVERY = 16
+    MIXED_PROBE_FIRST = 4  # ... while the other kind has fewer samples than this
+    # A mixed sample's weight fades by this with every later one of its kind.
+    MIXED_DECAY = 0.9
+    # Prompt sizes must differ by this much (tokens, standard deviation
+    # within a kind) for their slope to be read off the samples.
+    MIXED_MIN_SPREAD = 10.0
 
     def __init__(
         self,
@@ -204,9 +214,14 @@ class SpecPolicy:
         self.probe_every = probe_every
         self.times: dict[tuple[int, int], float] = {}
         self.extra: dict[tuple[int, bool], float] = {}
-        # The same for steps with prompt rows, and the samples behind each.
+        # The same for steps with prompt rows, net of the prompts' share
+        # (``prompt_ms`` per prompt token), and what they are fitted from:
+        # per key the samples so far and the decayed sums of 1, x, y, x^2
+        # and x * y (x: prompt tokens, y: milliseconds over the table).
         self.mixed: dict[tuple[int, bool], float] = {}
+        self.prompt_ms = 0.0
         self._mixed_samples: dict[tuple[int, bool], int] = {}
+        self._mixed_sums: dict[tuple[int, bool], list[float]] = {}
         self._mixed_choices = 0
         self._sizes: dict[int, list[int]] = {}
         self._choices = 0
@@ -219,7 +234,7 @@ class SpecPolicy:
         """``times[(sequences, Q)]``: milliseconds of one step of a graph."""
         self.times = dict(times)
         self.extra = {}
-        self.mixed, self._mixed_samples = {}, {}
+        self.mixed, self._mixed_samples, self._mixed_sums, self.prompt_ms = {}, {}, {}, 0.0
         self._sizes = {
             length: sorted(size for size, q in self.times if q == length)
             for length in self.verify_lens
@@ -255,7 +270,8 @@ class SpecPolicy:
 
     def mixed_cost(self, batch: int, length: int) -> float:
         """Milliseconds of a step of ``batch`` sequences at ``length`` with
-        prompt rows next to them; until one has run, as without them."""
+        prompt rows next to them, without the prompts' own share; until one
+        has run, as without prompt rows."""
         bucket = self.bucket(batch, length)
         extra = self.mixed.get((bucket, length > 1))
         if extra is None:
@@ -297,11 +313,14 @@ class SpecPolicy:
         }
         best = max(lens, key=score.get)
         self._mixed_choices += 1
-        if self.probe_every and self._mixed_choices % self.MIXED_PROBE_EVERY == 0:
-            # The kind not in use keeps a measured time.
-            others = [length for length in lens if (length > 1) != (best > 1)]
-            if others:
-                return max(others, key=score.get)
+        # The kind not in use keeps a measured time.
+        others = [length for length in lens if (length > 1) != (best > 1)]
+        if self.probe_every and others:
+            other = max(others, key=score.get)
+            samples = self._mixed_samples.get((self.bucket(batch, other), other > 1), 0)
+            every = self.MIXED_PROBE_FIRST if samples < self.MIXED_PROBE_FIRST else self.MIXED_PROBE_EVERY
+            if self._mixed_choices % every == 0:
+                return other
         return best
 
     def update(self, drafted: int, accepted: list[int]) -> None:
@@ -322,26 +341,49 @@ class SpecPolicy:
             self.rates[depth] += weight * (reached[depth + 1] / tried - self.rates[depth])
 
     def record(
-        self, bucket: int, length: int, milliseconds: float, rate: float = 0.1, mixed: bool = False
+        self,
+        bucket: int,
+        length: int,
+        milliseconds: float,
+        rate: float = 0.1,
+        mixed: bool = False,
+        prompt_tokens: int = 0,
     ) -> None:
         """A step of graph size ``bucket`` at ``length`` took
-        ``milliseconds``, launch to collected tokens; ``mixed``: with prompt
-        rows next to its decode rows (``bucket``: the size its decode rows
-        are costed at)."""
+        ``milliseconds``, launch to collected tokens; ``mixed``: with
+        ``prompt_tokens`` of prompt rows next to its decode rows
+        (``bucket``: the size its decode rows are costed at)."""
         base = self.times.get((bucket, length))
         if base is None:
             return
         key = (bucket, length > 1)
         if mixed:
-            # Prompts differ from step to step: the mean of the first
-            # samples, then a running average. No cap: a prompt's share is
-            # no stall, and both kinds must carry it alike.
-            count = self._mixed_samples[key] = self._mixed_samples.get(key, 0) + 1
-            previous = self.mixed.get(key, 0.0)
-            self.mixed[key] = previous + max(rate, 1.0 / count) * (milliseconds - base - previous)
+            self._mixed_samples[key] = self._mixed_samples.get(key, 0) + 1
+            x, y = float(prompt_tokens), milliseconds - base
+            sums = self._mixed_sums.setdefault(key, [0.0] * 5)
+            for index, term in enumerate((1.0, x, y, x * x, x * y)):
+                sums[index] = self.MIXED_DECAY * sums[index] + term
+            self._fit_mixed()
             return
         previous = self.extra.get(key)
         # One stalled step (the host was busy elsewhere) is not the step's
         # cost: a sample counts for at most three times the current estimate.
         extra = min(milliseconds - base, 3.0 * (base + max(previous or 0.0, 0.0)))
         self.extra[key] = extra if previous is None else previous + rate * (extra - previous)
+
+    def _fit_mixed(self) -> None:
+        """Least squares of the mixed steps' milliseconds over the table on
+        their prompt tokens: one slope for every key (``prompt_ms``), an
+        intercept per key (``mixed``). Without enough spread in the prompt
+        sizes the slope is 0 and an intercept is its key's mean, the
+        prompts' share included, alike for both kinds."""
+        weight = spread = covariance = 0.0
+        for w, sx, sy, sxx, sxy in self._mixed_sums.values():
+            weight += w
+            spread += sxx - sx * sx / w
+            covariance += sxy - sx * sy / w
+        self.prompt_ms = 0.0
+        if spread > self.MIXED_MIN_SPREAD**2 * weight:
+            self.prompt_ms = max(covariance / spread, 0.0)
+        for key, (w, sx, sy, _, _) in self._mixed_sums.items():
+            self.mixed[key] = (sy - self.prompt_ms * sx) / w

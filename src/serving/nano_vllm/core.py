@@ -336,6 +336,7 @@ class EngineCore:
                 for seq in seqs
             ]
         start = time.perf_counter()
+        prompt_tokens = sum(seq.num_scheduled_tokens for seq in seqs if seq.is_prefill)
         try:
             handle = self.model_runner.launch(
                 seqs, has_prefill, gather, draft_tokens if self.proposer is not None else None
@@ -343,6 +344,7 @@ class EngineCore:
         except Exception as exc:
             logger.exception("nano-vLLM model step failed")
             return None, self._fail(seqs, exc)
+        handle.prompt_tokens = prompt_tokens
         rows = self.scheduler.launched(seqs)
         for index, row in enumerate(rows):
             if row.samples:
@@ -411,7 +413,9 @@ class EngineCore:
         elif handle.mixed:
             bucket = policy.bucket(handle.decode_seqs, handle.block)
             if bucket is not None:
-                policy.record(bucket, handle.block, milliseconds, mixed=True)
+                policy.record(
+                    bucket, handle.block, milliseconds, mixed=True, prompt_tokens=handle.prompt_tokens
+                )
         kind = "cycle" if handle.spec_seqs else "plain" if handle.decode_seqs else "prompt"
         if handle.mixed:
             kind += "_mixed"

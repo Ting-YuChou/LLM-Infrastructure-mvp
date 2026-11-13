@@ -237,43 +237,73 @@ def test_steps_with_prompt_rows_are_timed_and_chosen_apart():
     # Nothing measured next to prompt rows yet: as alone.
     assert policy.choose(64, mixed=True) == 2
     assert policy.mixed_cost(64, 2) == policy.cost(64, 2)
-    for prompt_ms in (2.0, 6.0, 4.0):  # the prompt's own share varies; both kinds carry it
-        policy.record(64, 2, times[(64, 2)] + prompt_ms + 8.0, mixed=True)
-        policy.record(64, 1, times[(64, 1)] + prompt_ms, mixed=True)
-    assert policy.mixed[(64, True)] == pytest.approx(12.0) and policy.mixed[(64, False)] == pytest.approx(4.0)
-    assert policy.mixed_cost(64, 3) == pytest.approx(times[(64, 3)] + 12.0)
+    for prompt_tokens in (50, 150, 100):  # 0.04 ms a prompt token, whatever the step drafts
+        policy.record(64, 2, times[(64, 2)] + 0.04 * prompt_tokens + 8.0, mixed=True, prompt_tokens=prompt_tokens)
+        policy.record(64, 1, times[(64, 1)] + 0.04 * prompt_tokens, mixed=True, prompt_tokens=prompt_tokens)
+    assert policy.prompt_ms == pytest.approx(0.04)
+    assert policy.mixed[(64, True)] == pytest.approx(8.0) and policy.mixed[(64, False)] == pytest.approx(0.0, abs=1e-6)
+    assert policy.mixed_cost(64, 3) == pytest.approx(times[(64, 3)] + 8.0)
     assert policy.choose(64, mixed=True) == 1
     assert policy.choose(64) == 2  # steps without prompt rows are not touched
-    assert (64, True) in policy.extra and policy.extra[(64, True)] == pytest.approx(-5.0)
-    # The prompt's share alone does not move the choice: 30 ms more on both.
+    assert policy.extra[(64, True)] == pytest.approx(-5.0)
+    # Other sizes keep their own times.
+    assert (16, True) not in policy.mixed and policy.mixed_cost(16, 2) == policy.cost(16, 2)
+    policy.set_times(times)
+    assert policy.mixed == {} and policy.prompt_ms == 0.0
+
+
+def test_a_burst_of_prompts_does_not_make_its_kind_look_slow():
+    """64 requests at once: one plain step with 3000 prompt tokens takes
+    120 ms more than its table time. Its kind's own extra is still nothing."""
+    policy = SpecPolicy((1, 2, 3, 4, 6, 10), _times(), probe_every=0)
+    policy.rates = [0.8] * 9
+    times = policy.times
+    for _ in range(40):
+        policy.record(64, 2, times[(64, 2)] - 5.0)
+        policy.record(64, 1, times[(64, 1)])
+    policy.record(64, 1, times[(64, 1)] + 0.04 * 3000, mixed=True, prompt_tokens=3000)
+    # One sample: nothing to tell the prompts' share from the step's.
+    assert policy.prompt_ms == 0.0 and policy.mixed[(64, False)] == pytest.approx(120.0)
+    assert policy.choose(64, mixed=True) > 1
+    for prompt_tokens in (40, 120, 80, 60):  # cycles next to prompts of ordinary sizes, 8 ms dearer
+        policy.record(64, 2, times[(64, 2)] + 0.04 * prompt_tokens + 8.0, mixed=True, prompt_tokens=prompt_tokens)
+    assert policy.prompt_ms == pytest.approx(0.04)
+    assert policy.mixed[(64, False)] == pytest.approx(0.0, abs=1e-6)
+    assert policy.choose(64, mixed=True) == 1
+    # Prompts of one size: no slope to read, the share stays in both kinds alike.
     even = SpecPolicy((1, 2, 3, 4, 6, 10), _times(), probe_every=0)
     even.rates = [0.8] * 9
     alone = even.choose(4)
     assert alone > 1
-    for _ in range(3):
-        even.record(4, alone, times[(4, alone)] + 30.0, mixed=True)
-        even.record(4, 1, times[(4, 1)] + 30.0, mixed=True)
+    for prompt_tokens, noise in ((699, 3.0), (700, -3.0), (701, 0.0)):  # a token apart: nothing to read
+        even.record(4, alone, times[(4, alone)] + 30.0 + noise, mixed=True, prompt_tokens=prompt_tokens)
+        even.record(4, 1, times[(4, 1)] + 30.0 - noise, mixed=True, prompt_tokens=prompt_tokens)
+    assert even.prompt_ms == 0.0 and even.mixed[(4, False)] == pytest.approx(30.0, abs=0.5)
     assert even.choose(4, mixed=True) == alone
-    # A stalled step is capped alone, a long prompt is not.
-    even.record(4, 1, 10_000.0, mixed=True)
-    assert even.mixed[(4, False)] > 2000.0
-    # Other sizes keep their own times.
-    assert (16, True) not in policy.mixed and policy.mixed_cost(16, 2) == policy.cost(16, 2)
-    policy.set_times(times)
-    assert policy.mixed == {}
+    # A later sample weighs more than an earlier one.
+    even.record(4, 1, times[(4, 1)] + 60.0, mixed=True, prompt_tokens=700)
+    assert 37.5 < even.mixed[(4, False)] < 45.0
 
 
 def test_one_mixed_step_in_sixteen_runs_the_other_kind():
     policy = SpecPolicy((1, 2, 3, 4, 6, 10), _times())
     policy.rates = [0.8] * 9
     assert policy.choose(1, mixed=True) == 10
-    chosen = [policy.choose(1, mixed=True) for _ in range(SpecPolicy.MIXED_PROBE_EVERY * 3)]
+    # Plain steps next to prompts have no time yet: one step in four.
+    first, later = SpecPolicy.MIXED_PROBE_FIRST, SpecPolicy.MIXED_PROBE_EVERY
+    chosen = [policy.choose(1, mixed=True) for _ in range(first * 3 - 2)]
+    assert chosen.count(1) == 2 and set(chosen) == {1, 10}
+    for _ in range(first):
+        policy.record(1, 1, policy.times[(1, 1)] + 3.0, mixed=True, prompt_tokens=50)
+        policy.record(1, 10, policy.times[(1, 10)] + 3.0, mixed=True, prompt_tokens=50)
+    policy._mixed_choices = 0
+    chosen = [policy.choose(1, mixed=True) for _ in range(later * 3)]
     assert chosen.count(1) == 3 and set(chosen) == {1, 10}
     # Where plain steps are best, a cycle is tried: the best of them.
     plain = SpecPolicy((1, 2, 3, 4, 6, 10), _times())
     plain.rates = [0.3] * 9
     assert plain.choose(64, mixed=True) == 1
-    chosen = [plain.choose(64, mixed=True) for _ in range(SpecPolicy.MIXED_PROBE_EVERY * 2)]
+    chosen = [plain.choose(64, mixed=True) for _ in range(first * 2 - 1)]
     assert chosen.count(1) == len(chosen) - 2 and set(chosen) == {1, 2}
     # Mixed choices leave the other steps' probes alone.
     assert plain._choices == 0
@@ -714,9 +744,10 @@ def test_the_engine_times_steps_with_prompt_rows_apart(tmp_path, target):
         asked.append((mixed, bool(core.scheduler.waiting)))
         return choose(batch, mixed)
 
-    def spy_record(bucket, length, milliseconds, rate=0.1, mixed=False):
+    def spy_record(bucket, length, milliseconds, rate=0.1, mixed=False, prompt_tokens=0):
         recorded.append((bucket, length, mixed))
-        return record(bucket, length, milliseconds, rate, mixed)
+        assert (prompt_tokens > 0) == mixed
+        return record(bucket, length, milliseconds, rate, mixed, prompt_tokens)
 
     policy.choose, policy.record = spy_choose, spy_record
     outputs, paths = _run(core, prompts, arrive_every=3)

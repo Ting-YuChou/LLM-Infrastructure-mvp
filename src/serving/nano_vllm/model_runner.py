@@ -204,6 +204,7 @@ class StepHandle:
     # whether prompt rows ran next to them.
     decode_seqs: int = 0
     mixed: bool = False
+    prompt_tokens: int = 0  # its prompt rows' tokens (set by the engine core)
 
     @property
     def chains(self) -> bool:
