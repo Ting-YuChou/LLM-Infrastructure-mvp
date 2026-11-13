@@ -137,7 +137,7 @@ def metrics(path: Path) -> dict[str, float]:
     if not path.exists():
         return values
     for line in path.read_text().splitlines():
-        m = re.match(r"([A-Za-z_:]+)(\{[^}]*\})?\s+([-+0-9.eE]+)$", line.strip())
+        m = re.match(r"([A-Za-z_:][A-Za-z0-9_:]*)(\{[^}]*\})?\s+([-+0-9.eE]+)$", line.strip())
         if m:
             values[m.group(1)] += float(m.group(3))
     return values
