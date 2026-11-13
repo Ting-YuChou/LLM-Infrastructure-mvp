@@ -22,9 +22,12 @@ weights.
 
 It also times the engine's steps: the wall time of each core.step() once
 every request of the group has its first token, so a step is a decode step
-(plain) or a speculative cycle with no prompt rows next to it. The core
-collects a step before it returns, so that is the whole cycle: host work,
-draft, verify and sampling.
+(plain) or a speculative cycle with no prompt rows next to it. Without async
+scheduling the core collects a step before it returns, so that is the whole
+cycle: host work, draft, verify and sampling. With it (--scheduling
+sync,async runs both) a step launches the next cycle and collects the one
+before, so its time is what the GPU takes per cycle once the host's work
+overlaps it; the "async" rows also say whether the tokens are the sync run's.
 
 With a drafter the engine picks each step's verify length (spec.SpecPolicy):
 the rows report how many decode rows ran at each length, and
@@ -136,6 +139,10 @@ def main() -> None:
         "--drafter-quants", default="none",
         help="comma-separated speculative_weight_quant settings, a speculative run for each",
     )
+    parser.add_argument(
+        "--scheduling", default="sync",
+        help="comma-separated sync and/or async: a speculative run for each (async_scheduling)",
+    )
     args = parser.parse_args()
 
     from transformers import AutoTokenizer
@@ -152,13 +159,13 @@ def main() -> None:
             datasets.append(dataset)
             requests.append(tokenizer(json.loads(line)["prompt"], add_special_tokens=True).input_ids)
 
-    def config(drafter, drafter_quant="none"):
+    def config(drafter, drafter_quant="none", async_scheduling=False):
         return NanoVLLMConfig(
             model_name=args.model, dtype="bfloat16", device="cuda", max_model_len=4096,
             max_new_tokens=args.max_tokens, num_kvcache_blocks=4096, max_num_seqs=16,
             max_num_batched_tokens=2048, weight_quant=args.weight_quant,
             lm_head_quant="int8" if args.weight_quant != "none" else "none",
-            async_scheduling=False, speculative_model=drafter,
+            async_scheduling=async_scheduling, speculative_model=drafter,
             speculative_weight_quant=drafter_quant,
         )
 
@@ -166,11 +173,15 @@ def main() -> None:
     rows = []
     times_path = args.out.with_name(args.out.stem + "_times.jsonl")
     times_path.write_text("")
-    modes = [("plain", None, "none")]
+    modes = [("plain", None, "none", False)]
     for quant in args.drafter_quants.split(","):
-        modes.append(("spec" if quant == "none" else f"spec, {quant} drafter", args.drafter, quant))
-    for mode, drafter, drafter_quant in modes:
-        core = EngineCore(config(drafter, drafter_quant), model)
+        for scheduling in args.scheduling.split(","):
+            name = "spec" if quant == "none" else f"spec, {quant} drafter"
+            is_async = scheduling == "async"
+            modes.append((name + (", async" if is_async else ""), args.drafter, quant, is_async))
+    sync_outputs: dict[tuple[str, bool], list[list[int]]] = {}
+    for mode, drafter, drafter_quant, is_async in modes:
+        core = EngineCore(config(drafter, drafter_quant, is_async), model)
         core.capture_graphs()
         policy = core.spec_policy
         times = policy.times if policy is not None and policy.times else core.model_runner.profile_graphs()
@@ -195,6 +206,13 @@ def main() -> None:
             margins = [m for prompt, out in zip(requests, outputs) for m in teacher_margins(model, prompt, out)]
             wrong = sorted(m for m in margins if m > 0)
             cycles = stats.get("spec_num_drafts", 0) - before.get("spec_num_drafts", 0)
+            # The same drafter with each cycle collected before the next.
+            key = (drafter_quant, together)
+            if drafter is not None and not is_async:
+                sync_outputs[key] = outputs
+            same_as_sync = None
+            if is_async and key in sync_outputs:
+                same_as_sync = sum(a == b for a, b in zip(outputs, sync_outputs[key]))
             accepted = stats.get("spec_num_accepted_tokens", 0) - before.get("spec_num_accepted_tokens", 0)
             row = {
                 "label": args.label,
@@ -206,6 +224,11 @@ def main() -> None:
                 "margins_over_0.5": sum(m > 0.5 for m in wrong),
                 "margins_over_1": sum(m > 1.0 for m in wrong),
                 "tokens_per_cycle": (accepted + cycles) / cycles if cycles else None,
+                # Async: requests whose tokens are the sync run's, of len(requests);
+                # rows that landed after their sequence had ended.
+                "requests": len(requests),
+                "same_as_sync": same_as_sync,
+                "discarded": stats.get("spec_num_discarded", 0) - before.get("spec_num_discarded", 0),
                 # Decode rows by the verify length of their step (1: no drafts).
                 "rows_by_len": {
                     name.rsplit("_", 1)[1]: count - before.get(name, 0)

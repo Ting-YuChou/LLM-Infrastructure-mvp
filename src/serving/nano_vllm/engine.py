@@ -400,10 +400,10 @@ class NanoLlamaEngine:
         speculative step writes past the last token."""
         if self.core is not None:
             manager = self.core.block_manager
-            return manager.num_blocks * manager.block_size - self.core.scheduler.num_draft_tokens
+            return manager.num_blocks * manager.block_size - self.core.scheduler.max_lookahead
         if self._core_process is not None:
             process = self._core_process
-            return process.num_blocks * self.config.kvcache_block_size - process.num_draft_tokens
+            return process.num_blocks * self.config.kvcache_block_size - process.lookahead
         return self.config.num_kvcache_blocks * self.config.kvcache_block_size
 
     async def stream_request(self, seq: Sequence) -> AsyncIterator[StreamOutput]:
@@ -671,7 +671,7 @@ class _CoreProcess:
         self._send_lock = threading.Lock()
         self._reader: Optional[threading.Thread] = None
         self.num_blocks = 0
-        self.num_draft_tokens = 0
+        self.lookahead = 0  # KV slots a speculative step may write past a request's last token
         self.stats: dict = {}
 
     def start(self, timeout_s: float = 1800.0) -> None:
@@ -688,7 +688,7 @@ class _CoreProcess:
             detail = message[1] if message[0] == "dead" else message
             raise RuntimeError(f"nano-vLLM engine core failed to start:\n{detail}")
         self.num_blocks = message[1]["num_blocks"]
-        self.num_draft_tokens = message[1].get("num_draft_tokens", 0)
+        self.lookahead = message[1].get("lookahead", 0)
 
     def send(self, message: tuple) -> None:
         with self._send_lock:

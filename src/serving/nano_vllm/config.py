@@ -134,6 +134,11 @@ class NanoVLLMConfig:
     # 1 is a plain decode step: with many sequences a pass over the weights
     # is no longer shared by enough rows for drafts to pay.
     speculative_verify_lens: tuple[int, ...] = (1, 2, 3, 4, 6, 10)
+    # With async_scheduling: launch a cycle behind the one still running, so
+    # the host's work between two cycles overlaps the GPU's (more tokens per
+    # second; a new request waits for both cycles, so its first token comes
+    # up to a cycle later). False: each cycle is collected before the next.
+    speculative_chain: bool = True
     # Run the engine core (scheduler + model) in its own process; the server
     # process keeps tokenization, detokenization, stop strings and HTTP.
     multiprocess: bool = False
@@ -344,6 +349,10 @@ class NanoVLLMConfig:
                     "SPECULATIVE_VERIFY_LENS",
                     engine.get("speculative_verify_lens", cls.speculative_verify_lens),
                 )
+            ),
+            speculative_chain=_bool_value(
+                _env("SPECULATIVE_CHAIN", engine.get("speculative_chain")),
+                default=cls.speculative_chain,
             ),
             multiprocess=_bool_value(
                 _env("ENGINE_MULTIPROCESS", engine.get("multiprocess")),

@@ -1,6 +1,8 @@
 """The speculative cycle as one CUDA graph (ModelRunner.capture_spec_graphs):
 a replay must do what the eager cycle does, without waiting for the GPU, at
-every verify length; a plain decode graph keeps the drafter's context."""
+every verify length; a plain decode graph keeps the drafter's context; and a
+cycle launched behind one still in flight is the cycle the host would have
+launched once that one's tokens were back."""
 
 import sys
 from pathlib import Path
@@ -15,7 +17,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent))
 
 from serving.nano_vllm.block_manager import BlockManager  # noqa: E402
+from serving.nano_vllm.config import NanoVLLMConfig  # noqa: E402
+from serving.nano_vllm.core import EngineCore, EngineRequest  # noqa: E402
 from serving.nano_vllm.dflash import DFlashDrafter  # noqa: E402
+from serving.nano_vllm.kernels import w4a16  # noqa: E402
 from serving.nano_vllm.model_runner import ModelRunner  # noqa: E402
 from serving.nano_vllm.sampling import SamplingOptions  # noqa: E402
 from serving.nano_vllm.sequence import Sequence  # noqa: E402
@@ -45,7 +50,9 @@ def _runner(
     cache = model.new_paged_cache(num_blocks=96, block_size=BLOCK_SIZE)
     manager = BlockManager(num_blocks=96, block_size=BLOCK_SIZE, enable_prefix_cache=False)
     proposer = DFlashProposer(drafter, drafter.new_paged_cache(96, BLOCK_SIZE))
-    model.extend_rope_table(MAX_MODEL_LEN + proposer.num_draft_tokens)
+    # As EngineCore: a chained block starts up to a cycle's drafts further on.
+    model.extend_rope_table(MAX_MODEL_LEN + 2 * proposer.num_draft_tokens)
+    drafter.extend_rope_table(MAX_MODEL_LEN + 2 * proposer.num_draft_tokens)
     runner = ModelRunner(model, cache, manager, max_rows=8, proposer=proposer, verify_lens=verify_lens)
     runner.capture_spec_graphs(
         max_batch=max_graph_batch, max_model_len=MAX_MODEL_LEN, keep_outputs=True
@@ -307,3 +314,165 @@ def test_a_draft_row_and_the_verify_row_of_its_position_draw_alike(tmp_path, gra
     values = logits.float().cpu()
     is_max = values.gather(-1, verify.unsqueeze(-1)).squeeze(-1) == values.max(dim=-1).values
     assert is_max[1].all() and not is_max[0].all()
+
+
+# --- a cycle launched behind a cycle in flight ---------------------------------
+
+
+def _append(seqs, cycles):
+    """What the scheduler does with a collected cycle's tokens."""
+    for seq, tokens in zip(seqs, cycles):
+        for token in tokens:
+            seq.append_token(token)
+        seq.num_cached_tokens = seq.num_tokens - 1
+
+
+@pytest.mark.parametrize(
+    "weight_quant,kv_cache_dtype,drafter_quant,blocks",
+    [
+        ("none", "auto", "none", (5,)),
+        ("none", "auto", "none", (3, 5, 2, 4)),
+        ("none", "fp8", "none", (4, 2, 5)),
+        ("awq_int8head", "auto", "w4a16", (5, 3)),
+    ],
+)
+def test_a_cycle_behind_one_in_flight_is_the_cycle_launched_after_it_landed(
+    tmp_path, monkeypatch, weight_quant, kv_cache_dtype, drafter_quant, blocks
+):
+    """Cycle B is launched while cycle A runs: its anchors, positions, KV
+    slots and sampling positions come from what A leaves on the device. Run
+    again once the host knows A's tokens (a cycle only writes KV past the
+    cached tokens, so the same state can run it twice), it must draft and
+    verify the same tokens."""
+    # One split: the W4A16 kernels then sum in a fixed order (as in test_nano_vllm_async).
+    monkeypatch.setitem(w4a16.W4A16_CONFIG, "splits", 1)
+    monkeypatch.setitem(w4a16.W4A16_CONFIG, "layout", "tiled")
+    runner, manager = _runner(tmp_path, 4, weight_quant, kv_cache_dtype, drafter_quant, verify_lens=blocks)
+    seqs = _prefilled(runner, manager, 3)
+    # A sampled row: its draws depend on the positions the graph computes.
+    seqs[1].sampling = SamplingOptions(max_tokens=64, temperature=1.2, top_p=0.95, top_k=50)
+    rows = list(range(len(seqs)))
+    moved = 0
+    for cycle in range(8):
+        first, second = blocks[cycle % len(blocks)], blocks[(cycle + 1) % len(blocks)]
+        for seq in seqs:
+            manager.may_append(seq, lookahead=first - 1)
+        inflight = runner.launch(seqs, is_prefill=False, draft_tokens=first - 1)
+        # The host only knows the cycle in flight moves each sequence 1 to
+        # ``first`` tokens on.
+        for seq in seqs:
+            manager.may_append(seq, lookahead=first + second - 1)
+        torch.cuda.set_sync_debug_mode("error")
+        try:
+            chained = runner.launch(seqs, is_prefill=False, gather_rows=rows, draft_tokens=second - 1)
+        finally:
+            torch.cuda.set_sync_debug_mode("default")
+        landed = runner.collect(inflight)
+        behind = runner.collect(chained)
+        assert chained.chains and chained.spec_seqs == 3
+        logits, drafts, choices = _graph_outputs(runner, 3, second)
+        state = runner._spec.state[:, :3].clone()
+        moved += sum(len(tokens) > 1 for tokens in landed)
+
+        _append(seqs, landed)
+        again = _cycle(runner, seqs, second)
+        again_logits, again_drafts, again_choices = _graph_outputs(runner, 3, second)
+        assert behind == again
+        assert torch.equal(drafts, again_drafts) and torch.equal(choices, again_choices)
+        torch.testing.assert_close(logits, again_logits, rtol=2e-2, atol=2e-2)
+        # Where each sequence goes next: its last token and that token's position.
+        assert torch.equal(state, runner._spec.state[:, :3])
+        _append(seqs, again)
+        assert state[0].tolist() == [seq.last_token for seq in seqs]
+        assert state[1].tolist() == [seq.num_tokens - 1 for seq in seqs]
+    assert moved > 0  # some cycle in flight accepted a draft: the host was behind
+
+
+def _serve(tmp_path, async_scheduling, prompts, sampling, late=None, weight_quant="none"):
+    """Token ids per request from an engine core with the drafter (every
+    cycle the whole block), how many cycle graphs it launched behind a cycle
+    in flight, and its stats."""
+    config = NanoVLLMConfig(
+        max_model_len=MAX_MODEL_LEN,
+        kvcache_block_size=BLOCK_SIZE,
+        num_kvcache_blocks=96,
+        max_num_seqs=8,
+        max_num_batched_tokens=256,
+        attention_backend="triton",
+        weight_quant=weight_quant,
+        scheduling="mixed",
+        async_scheduling=async_scheduling,
+        cuda_graph_max_bs=8,
+        speculative_model=str(drafter_checkpoint(tmp_path / "drafter")),
+        speculative_policy="fixed",
+    )
+    model = _model(
+        "cuda", torch.bfloat16, use_triton=True, attention_backend="triton", weight_quant=weight_quant
+    )
+    core = EngineCore(config, model)
+    core.capture_graphs()
+    replay = core.model_runner._replay_spec
+    chained = []
+
+    def spy(seqs, bucket, slot, block, chain=None):
+        chained.append(chain is not None)
+        return replay(seqs, bucket, slot, block, chain)
+
+    core.model_runner._replay_spec = spy
+    for req_id, prompt in enumerate(prompts):
+        core.add_request(EngineRequest(req_id, prompt, sampling))
+    tokens = {index: [] for index in range(len(prompts) + (late is not None))}
+    steps = 0
+    try:
+        while core.has_work():
+            if steps == 3:  # past the first prefill: no host sync but collecting
+                torch.cuda.set_sync_debug_mode("error")
+            if late is not None and steps == 6:
+                core.add_request(EngineRequest(len(prompts), late, sampling))
+            for output in core.step():
+                assert output.error is None, output.error
+                tokens[output.req_id].append(output.token_id)
+            steps += 1
+    finally:
+        torch.cuda.set_sync_debug_mode("default")
+    assert core.block_manager.num_free_blocks == core.block_manager.num_blocks
+    return [tokens[index] for index in sorted(tokens)], sum(chained), core.stats()
+
+
+@pytest.mark.parametrize("sampled", [False, True], ids=["greedy", "sampled"])
+def test_one_requests_tokens_with_chained_cycles(tmp_path, sampled):
+    """One request at a time: the same cycles on the same rows whether each
+    is collected before the next or not, so the same tokens bit for bit."""
+    sampling = SamplingOptions(
+        max_tokens=48, temperature=0.8 if sampled else 0.0, top_p=0.9, ignore_eos=True
+    )
+    prompt = [(11 * j) % 500 + 1 for j in range(24)]
+    expected, none, alone = _serve(tmp_path, False, [prompt], sampling)
+    tokens, chained, stats = _serve(tmp_path, True, [prompt], sampling)
+    assert len(expected[0]) == 48 and none == 0
+    assert tokens == expected
+    assert chained > 5
+    assert stats["spec_num_discarded"] == 0
+    for name in ("spec_num_drafts", "spec_num_accepted_tokens"):
+        assert stats[name] == alone[name]
+
+
+def test_many_requests_tokens_with_chained_cycles(tmp_path, monkeypatch):
+    """Requests of different lengths with a late arrival: sequences end
+    while a row of theirs is in flight (discarded), prompt rows make a step
+    wait for the cycle in flight, and the rest chain."""
+    monkeypatch.setitem(w4a16.W4A16_CONFIG, "splits", 1)
+    monkeypatch.setitem(w4a16.W4A16_CONFIG, "layout", "tiled")
+    sampling = SamplingOptions(max_tokens=40, temperature=0.0, ignore_eos=True)
+    prompts = [[(11 * i + j) % 500 + 1 for j in range(12 + 5 * i)] for i in range(5)]
+    late = [(13 * j) % 500 + 1 for j in range(40)]
+    expected, _, _ = _serve(tmp_path, False, prompts, sampling, late)
+    tokens, chained, stats = _serve(tmp_path, True, prompts, sampling, late)
+    assert all(len(row) == 40 for row in tokens)
+    assert chained > 5
+    assert stats["spec_num_discarded"] > 0
+    # A discarded row changes how many rows its step pads to, and a kernel's
+    # sums with it; a greedy stream may then split at a near-tie, as between
+    # any two batch sizes. Nearly every request must come out the same.
+    same = sum(got == want for got, want in zip(tokens, expected))
+    assert same >= len(expected) - 1, (tokens, expected)

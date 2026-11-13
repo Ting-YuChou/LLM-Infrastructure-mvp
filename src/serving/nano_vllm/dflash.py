@@ -229,6 +229,15 @@ class DFlashDrafter:
             inv_freq, max_positions or target.rope_cos.shape[0] + config.block_size, self.dtype
         )
 
+    def extend_rope_table(self, num_positions: int) -> None:
+        """Make the RoPE table cover ``num_positions`` (a block that follows
+        a cycle still in flight starts up to a block further on)."""
+        if num_positions > self.rope_cos.shape[0]:
+            inv_freq = compute_inv_freq(
+                self.config.head_dim, theta=self.config.rope_theta, device=self.device
+            )
+            self.rope_cos, self.rope_sin = rope_cos_sin(inv_freq, num_positions, self.dtype)
+
     @classmethod
     def from_pretrained(
         cls,

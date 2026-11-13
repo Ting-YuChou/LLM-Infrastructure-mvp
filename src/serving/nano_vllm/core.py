@@ -16,10 +16,14 @@ scheduler). Tokens still in flight feed the next step on the device
 request that just hit EOS may run one extra, discarded, step.
 
 With a proposer (speculative decoding, spec.py) every step drafts as many
-tokens per decode row as :class:`~.spec.SpecPolicy` chooses. A cycle's
-tokens are known only when it is collected, so a step that drafts is
-collected before the next one is scheduled; a step that does not is a plain
-step, overlapped as above.
+tokens per decode row as :class:`~.spec.SpecPolicy` chooses; a step that
+drafts none is a plain step, overlapped as above. How far a cycle moves a
+sequence is known only when it is collected, but a cycle that ran as one
+CUDA graph leaves that on the device, so with ``async_scheduling`` the next
+cycle is launched behind it as well (:meth:`EngineCore._chains`): the
+scheduler gives its rows KV slots for wherever the cycle in flight may end,
+and a row whose sequence that cycle finishes is discarded. Any other step
+after a cycle (a plain one, one with prompt rows) waits for its tokens.
 """
 
 from __future__ import annotations
@@ -116,9 +120,19 @@ class EngineCore:
         self.spec_policy = SpecPolicy(tuple(verify_lens)) if proposer is not None else None
         # Decode rows run at each verify length (a row per sequence and step).
         self.spec_rows = dict.fromkeys(sorted(verify_lens), 0) if proposer is not None else {}
+        # A cycle can follow one still in flight when both are one graph.
+        chain_cycles = (
+            config.async_scheduling
+            and config.speculative_chain
+            and getattr(proposer, "device_only", False)
+        )
         if proposer is not None and hasattr(model, "extend_rope_table"):
-            # A verify pass reaches num_draft_tokens positions past the last token.
-            model.extend_rope_table(config.max_model_len + num_draft_tokens)
+            # A verify pass reaches num_draft_tokens positions past its
+            # anchor, which a cycle in flight leaves up to as many past the
+            # last token the host knows.
+            model.extend_rope_table(config.max_model_len + 2 * num_draft_tokens)
+            if drafter is not None:
+                drafter.extend_rope_table(config.max_model_len + 2 * num_draft_tokens)
         Sequence.block_size = config.kvcache_block_size
         manager_cls = BlockManager
         if config.prefix_cache_backend == "cpp":
@@ -134,6 +148,7 @@ class EngineCore:
             max_num_batched_tokens=config.max_num_batched_tokens,
             policy=config.scheduling,
             num_draft_tokens=num_draft_tokens,
+            chain_cycles=chain_cycles,
         )
         self.paged_cache = model.new_paged_cache(
             num_blocks=config.num_kvcache_blocks, block_size=config.kvcache_block_size
@@ -149,6 +164,7 @@ class EngineCore:
             verify_lens=tuple(verify_lens),
         )
         self.async_scheduling = config.async_scheduling
+        self.chain_cycles = chain_cycles
         self.requests: dict[int, Sequence] = {}
         self._inbox: deque[tuple[str, object]] = deque()
         # The launched step not collected yet: its handle, rows and launch time.
@@ -238,15 +254,20 @@ class EngineCore:
     def _step(self) -> list[RequestOutput]:
         outputs: list[RequestOutput] = []
         draft_tokens, step = 0, {}
+        chained = False
         if self.spec_policy is not None:
             # The decode rows the step will have, but for a preemption.
             decode_rows = min(len(self.scheduler.running), self.config.max_num_seqs)
             draft_tokens = self.spec_policy.choose(decode_rows) - 1
             step = {"draft_tokens": draft_tokens}
-            if draft_tokens:
-                # A cycle starts from tokens the host knows.
+            cycle_inflight = self._inflight is not None and self._inflight[0].spec_seqs > 0
+            chained = bool(draft_tokens) and cycle_inflight and self._chains(decode_rows, draft_tokens + 1)
+            if (draft_tokens or cycle_inflight) and not chained:
+                # A cycle starts from tokens the host knows, unless it
+                # follows one in flight on the device; a plain step never
+                # follows a cycle in flight.
                 outputs += self._collect_inflight()
-        overlap = self.async_scheduling and not draft_tokens
+        overlap = self.async_scheduling and (not draft_tokens or chained)
         try:
             with nvtx_range("schedule"):
                 seqs, has_prefill = self.scheduler.schedule(**step)
@@ -274,14 +295,35 @@ class EngineCore:
             outputs += self._collect_inflight()
             self._inflight = launched
         elif launched is not None:
-            outputs += self._complete(*launched)
+            if self.chain_cycles and launched[0].chains:
+                # Nothing is in flight: the next cycle may follow this one.
+                self._inflight = launched
+            else:
+                outputs += self._complete(*launched)
         return outputs
+
+    def _chains(self, decode_rows: int, block: int) -> bool:
+        """Whether a cycle of ``block`` for up to ``decode_rows`` sequences
+        can be launched behind the cycle in flight: it must be one graph (no
+        prompt rows, which need the host's token ids, and a size the graphs
+        cover), and it is not worth a GPU step when every row of the cycle
+        in flight may be its sequence's last."""
+        if not self.chain_cycles or self.scheduler.waiting:
+            return False
+        if not self.model_runner.has_spec_graph(decode_rows, block):
+            return False
+        return not all(
+            row.seq.is_finished
+            or row.seq.num_completion_tokens + row.drafted + 1 >= row.seq.sampling.max_tokens
+            for row in self._inflight[1]
+        )
 
     def _launch(
         self, seqs: list[Sequence], has_prefill: bool, draft_tokens: int = 0, overlap: bool = False
     ) -> tuple[Optional[tuple[StepHandle, list[Row], float]], list[RequestOutput]]:
         # A decode row whose input token is still in flight reads it from the
-        # previous step's row on the device.
+        # previous step's row on the device (a cycle's row: where the cycle
+        # in flight leaves its sequence).
         gather = None
         if overlap:
             gather = [
@@ -314,7 +356,7 @@ class EngineCore:
         try:
             token_ids = self.model_runner.collect(handle)
             if self.spec_policy is not None:
-                self._observe_step(handle, token_ids, launched)
+                self._observe_step(handle, rows, token_ids, launched)
             with nvtx_range("postprocess"):
                 emitted = self.scheduler.complete(rows, token_ids)
         except Exception as exc:
@@ -331,9 +373,13 @@ class EngineCore:
                 self.requests.pop(seq.seq_id, None)
         return outputs
 
-    def _observe_step(self, handle: StepHandle, token_ids: list, launched: float) -> None:
+    def _observe_step(
+        self, handle: StepHandle, rows: list[Row], token_ids: list, launched: float
+    ) -> None:
         """What a collected step tells the speculative policy: the drafts
-        each cycle accepted, and what a step that was one graph took.
+        each cycle accepted (but for the rows about to be discarded, which
+        ran past their sequence's end), and what a step that was one graph
+        took.
 
         A step's time runs from the collection of the step before it: an
         overlapped step starts on the GPU then, and for the others it adds
@@ -347,7 +393,12 @@ class EngineCore:
         policy = self.spec_policy
         if handle.spec_seqs:
             policy.update(
-                handle.block - 1, [len(tokens) - 1 for tokens in token_ids[: handle.spec_seqs]]
+                handle.block - 1,
+                [
+                    len(tokens) - 1
+                    for row, tokens in zip(rows, token_ids[: handle.spec_seqs])
+                    if not row.seq.is_finished
+                ],
             )
         if handle.graph_size:
             policy.record(handle.graph_size, handle.block, (now - started) * 1e3)
@@ -383,6 +434,8 @@ class EngineCore:
                 "spec_num_drafts": self.scheduler.spec_cycles,
                 "spec_num_draft_tokens": self.scheduler.spec_draft_tokens,
                 "spec_num_accepted_tokens": self.scheduler.spec_accepted_tokens,
+                # Cycles launched behind one that turned out to end their sequence.
+                "spec_num_discarded": self.scheduler.spec_discarded,
                 # Decode rows by the verify length of their step (1: no drafts).
                 **{f"spec_rows_len_{length}": rows for length, rows in self.spec_rows.items()},
             }
@@ -557,7 +610,7 @@ def load_drafter(config: NanoVLLMConfig, model):
 #
 # Frontend -> core: ("add", EngineRequest), ("abort", [req_id]),
 #                   ("utility", call_id, name), ("shutdown",)
-# Core -> frontend: ("ready", {"num_blocks": n, "num_draft_tokens": k}), ("outputs", [RequestOutput], stats | None),
+# Core -> frontend: ("ready", {"num_blocks": n, "lookahead": k}), ("outputs", [RequestOutput], stats | None),
 #                   ("utility", call_id, result), ("dead", traceback text)
 
 STATS_INTERVAL_S = 0.25
@@ -582,7 +635,7 @@ def run_core_process(config: NanoVLLMConfig, inbox, outbox) -> None:
             "ready",
             {
                 "num_blocks": core.block_manager.num_blocks,
-                "num_draft_tokens": core.scheduler.num_draft_tokens,
+                "lookahead": core.scheduler.max_lookahead,
             },
         ))
         last_stats = 0.0

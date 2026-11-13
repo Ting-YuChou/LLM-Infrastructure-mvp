@@ -159,9 +159,12 @@ def test_no_kernel_compiles_after_warm_up_with_a_drafter(tmp_path, linear_backen
     verify_rows = set()
     launch_spec = core.model_runner._launch_spec
 
-    def spy(seqs, slot, block=None):
+    chained = []
+
+    def spy(seqs, slot, block=None, chain=None):
         verify_rows.add((sum(not seq.is_prefill for seq in seqs), block))
-        return launch_spec(seqs, slot, block)
+        chained.append(chain is not None)
+        return launch_spec(seqs, slot, block, chain)
 
     core.model_runner._launch_spec = spy
     with _TritonCompiles() as compiles:
@@ -178,3 +181,5 @@ def test_no_kernel_compiles_after_warm_up_with_a_drafter(tmp_path, linear_backen
     assert len({rows for rows, _ in verify_rows}) > 8, sorted(verify_rows)
     assert {block for _, block in verify_rows} == {2, 3, 4, 5}
     assert all(count > 0 for count in core.spec_rows.values()), core.spec_rows
+    # Cycles launched behind a cycle in flight ran the same kernels.
+    assert sum(chained) > 5

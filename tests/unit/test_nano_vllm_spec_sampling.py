@@ -178,14 +178,19 @@ def test_drafts_are_drawn_with_the_noise_of_the_positions_they_propose(target, g
     _, path = target
     prompts = list(PROMPTS.values())
     proposer = _TableDrafter(TINY_CONFIG["vocab_size"], DRAFTED)
-    core = _core(path, proposer, graphs, seed=11, speculative_draft_temperature=draft_temperature)
+    # Every cycle collected before the next: the host knows each row's
+    # position at its launch (test_nano_vllm_spec_chain.py covers the rest).
+    core = _core(
+        path, proposer, graphs, seed=11, speculative_draft_temperature=draft_temperature,
+        async_scheduling=False,
+    )
     runner = core.model_runner
     cycles = []  # (sequence id, tokens before the cycle) per verify row, and the drafts
     launch, propose = runner._launch_spec, proposer.propose
 
-    def spy_launch(seqs, slot, block=None):
+    def spy_launch(seqs, slot, block=None, chain=None):
         cycles.append([[(seq.seq_id, seq.num_tokens) for seq in seqs if not seq.is_prefill], None])
-        return launch(seqs, slot, block)
+        return launch(seqs, slot, block, chain)
 
     def spy_propose(batch):
         drafts = propose(batch)

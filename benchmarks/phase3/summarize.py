@@ -81,8 +81,11 @@ def by_run(rows: list[dict]) -> dict[tuple[str, str, bool], dict[str, dict[int, 
 def base_of(engine: str) -> str | None:
     """The same server without a drafter (``_dflash4``: a 4-bit drafter; a
     final ``g``: drafts are the drafter's argmax for sampled requests too; a
-    final ``f``: every cycle runs the whole block)."""
-    for suffix in ("_dflash", "_dflash4", "_dflashg", "_dflash4g", "_dflashf", "_dflash4f"):
+    final ``f``: every cycle runs the whole block; a final ``s``: every
+    cycle is collected before the next)."""
+    for suffix in (
+        "_dflash", "_dflash4", "_dflashg", "_dflash4g", "_dflashf", "_dflash4f", "_dflashs", "_dflash4s"
+    ):
         if engine.endswith(suffix):
             return engine[: -len(suffix)]
     return None
@@ -451,6 +454,69 @@ def m6_gates(out: Path, serve_rows: list[dict], baseline_rows: list[dict], basel
     return lines + [""]
 
 
+def m7_gates(out: Path, serve_rows: list[dict]) -> list[str]:
+    """A cycle launched behind the one in flight against each cycle
+    collected before the next: the same tokens, more of them per second.
+    In-process (spec_check.py, both in one run) and, where a server ran both
+    ways (the label ending in ``s`` collects every cycle), while serving."""
+    lines: list[str] = []
+    checks = [row for path in sorted((out / "spec_check").glob("*.json")) for row in json.loads(path.read_text())]
+    by_mode = {(r["label"], r["mode"], r["batch"]): r for r in checks}
+    body = []
+    for (label, mode, batch), chained in by_mode.items():
+        if not mode.endswith(", async"):
+            continue
+        alone = by_mode.get((label, mode[: -len(", async")], batch))
+        if alone is None:
+            continue
+        same = chained.get("same_as_sync")
+        body.append([
+            f"{label} {mode[: -len(', async')]} b={batch}", fmt(alone["out_tok_s"], 0), fmt(chained["out_tok_s"], 0),
+            f"{chained['out_tok_s'] / alone['out_tok_s']:.3f}x",
+            fmt(alone.get("step_ms_median"), 2), fmt(chained.get("step_ms_median"), 2),
+            "-" if same is None else f"{same} of {chained.get('requests', '?')}",
+            str(chained.get("discarded", "-")),
+        ])
+    if body:
+        lines += [
+            "## M7: cycles launched behind the cycle in flight", "",
+            "The engine core in one process (spec_check.py), each cycle collected before the next "
+            "(sync) and launched behind the one in flight (async). Same tokens: requests whose "
+            "tokens are the sync run's (greedy streams can split at a near-tie when a discarded "
+            "row changes a step's size). Discarded: rows that landed after their sequence had ended.", "",
+        ] + table(
+            ["target, drafter, batch", "sync tok/s", "async tok/s", "async / sync", "sync ms/step",
+             "async ms/step", "same tokens", "discarded"],
+            body,
+        )
+    runs = by_run(serve_rows)
+    body = []
+    for (dataset, sampled), engines in sorted(runs.items(), key=lambda item: (item[0][1], DATASETS.index(item[0][0]))):
+        for engine in sorted(engines):
+            alone = engines.get(engine + "s")
+            if not engine.startswith("nano") or base_of(engine) is None or not alone:
+                continue
+            for level in sorted(engines[engine]):
+                if level not in alone:
+                    continue
+                mine, theirs = engines[engine][level], alone[level]
+                body.append([
+                    f"{dataset}{' sampled' if sampled else ''} c={level} / {engine}",
+                    fmt(float(theirs["out_tok_s"]), 0), fmt(float(mine["out_tok_s"]), 0),
+                    f"{mine['out_tok_s'] / theirs['out_tok_s']:.3f}x",
+                    fmt(float(theirs["ttft_p50_ms"]), 1), fmt(float(mine["ttft_p50_ms"]), 1),
+                ])
+    if body:
+        lines += [
+            "**Serving: the same server with SPECULATIVE_CHAIN=0 (each cycle collected) and as it is**", "",
+        ] + table(
+            ["workload / server", "collected tok/s", "chained tok/s", "chained / collected",
+             "collected TTFT p50 (ms)", "chained TTFT p50 (ms)"],
+            body,
+        )
+    return lines
+
+
 CYCLE_GATE_MS = 8.0  # G3: an AWQ cycle at batch 1
 BASELINES = {  # nano's servers with a drafter -> the DFlash servers on the same weights
     "nano_awq": ("vllmw4_dflash",),
@@ -646,6 +712,7 @@ def main() -> None:
     lines += accept_lines + gate(serve_rows, accept_rows)
     lines += m4_gates(out, serve_rows, baseline_rows, baseline.name if baseline else "")
     lines += m6_gates(out, serve_rows, baseline_rows, baseline.name if baseline else "")
+    lines += m7_gates(out, serve_rows)
     (out / "summary.md").write_text("\n".join(lines) + "\n")
 
 

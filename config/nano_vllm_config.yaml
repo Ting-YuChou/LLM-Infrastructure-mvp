@@ -67,6 +67,9 @@ engine:
   # whole block. The output is the same.
   speculative_policy: "adaptive"
   speculative_verify_lens: [1, 2, 3, 4, 6, 10]
+  # With async_scheduling: launch each cycle behind the one still running
+  # (higher throughput; a new request's first token comes up to a cycle later).
+  speculative_chain: true
   # Engine core (scheduler + model) in its own process; this one keeps
   # tokenization, detokenization and HTTP off the model steps' GIL.
   multiprocess: false

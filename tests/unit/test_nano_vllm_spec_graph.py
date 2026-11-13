@@ -79,19 +79,21 @@ def _core(path, proposer=None, graphs=None, **overrides) -> EngineCore:
 
 
 def _run(core: EngineCore, prompts: list[list[int]], arrive_every: int = 0, sampling=None):
-    """Token ids per request, and how many cycles took the graph / the eager
-    path. ``sampling``: one SamplingOptions or one per request (default greedy)."""
+    """Token ids per request, and how many cycles took the graph (and of
+    those, followed a cycle in flight) / the eager path. ``sampling``: one SamplingOptions or one per request (default greedy)."""
     sampling = sampling or SamplingOptions(max_tokens=MAX_TOKENS, **GREEDY)
     if not isinstance(sampling, list):
         sampling = [sampling] * len(prompts)
     runner = core.model_runner
-    paths = {"graph": 0, "eager": 0}
+    paths = {"graph": 0, "eager": 0, "chained": 0}
     replay, forward = runner._replay_spec, runner._forward_prepared
 
-    def spy_replay(seqs, bucket, slot, block):
+    def spy_replay(seqs, bucket, slot, block, chain=None):
         paths["graph"] += 1
+        # Launched behind a cycle still in flight.
+        paths["chained"] += chain is not None
         assert bucket >= len(seqs)
-        return replay(seqs, bucket, slot, block)
+        return replay(seqs, bucket, slot, block, chain)
 
     def spy_forward(input_ids, positions, metadata, *args, **kwargs):
         paths["eager"] += bool(metadata.num_block_rows)

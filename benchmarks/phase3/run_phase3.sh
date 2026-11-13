@@ -39,7 +39,9 @@
 #              drafter, against the target's argmax in one teacher-forced
 #              pass, and the wall time of a decode step and of a speculative
 #              cycle; AWQ and BF16 target, the drafter as it is and in 4 bits
-#              (P3_DRAFTER_QUANTS, default none,w4a16) (not in the default)
+#              (P3_DRAFTER_QUANTS, default none,w4a16), each cycle collected
+#              before the next and launched behind it (P3_SPEC_SCHEDULING,
+#              default sync,async) (not in the default)
 #   kbench     phase1/kbench.py on P3_KERNELS (default: the verify rows'
 #              attention by the block, prefill and decode kernels and vLLM's
 #              flash-attention, and the drafter's norm + RoPE + KV write)
@@ -58,7 +60,8 @@
 # SPECULATIVE_MODEL set to the drafter; SPECULATIVE_WEIGHT_QUANT=w4a16 in
 # extra quantizes it, by convention under a label ending in _dflash4;
 # SPECULATIVE_POLICY=fixed runs the whole block every cycle, under a label
-# ending in f).
+# ending in f; SPECULATIVE_CHAIN=0 collects every cycle before the next,
+# under a label ending in s).
 #
 # Env: P0_ROOT (default /workspace/p0), P0_RUN_ID (default: UTC timestamp),
 # P0_REPO_DIR, P3_STEPS, P3_RUNS, P3_MODEL, P3_W4_MODEL, P3_DRAFT_MODEL,
@@ -408,6 +411,7 @@ spec_check() {
     "${cmd[@]}" "${PY}" "${CODE_DIR}/spec_check.py" --model "${model}" --weight-quant "${quant}" \
       --drafter "${DRAFT}" --workloads "${WORKLOADS}" --label "${label}" \
       --drafter-quants "${P3_DRAFTER_QUANTS:-none,w4a16}" \
+      --scheduling "${P3_SPEC_SCHEDULING:-sync,async}" \
       --out "${OUT}/spec_check/${label}.json" | tee /dev/fd/3 || rc=1
   done
   return "${rc}"
