@@ -59,7 +59,7 @@ engine:
   # A sampled request's drafts are drawn with the target's noise for the same
   # positions at this fraction of the request's temperature (1: coupled
   # sampling; 0: the drafter's argmax). The output is the same for any value.
-  speculative_draft_temperature: 1.0
+  speculative_draft_temperature: 0.25
   # Engine core (scheduler + model) in its own process; this one keeps
   # tokenization, detokenization and HTTP off the model steps' GIL.
   multiprocess: false

@@ -488,3 +488,33 @@ results/<run_id>/.
   Every one is above the baselines (1.01x to 1.23x); nano AWQ without a
   drafter is 206 / 205 (M0: 206 / 206).
 - 58 minutes of VM, 4.6 CU (412.37 -> 407.78). The VM is stopped.
+
+### Run m5-sweep-20261112-235755-colab (new VM: drafts drawn below the request's temperature)
+
+- `speculative_draft_temperature` replaces the on/off setting: the drafts
+  are drawn with the target's noise at that fraction of the request's
+  temperature (0: the argmax, 1: coupled as above). The noise then decides
+  a draft only where the drafter's leading tokens are close.
+- Tokens per cycle at c=1, temperature 0.7, top-p 0.9, the same seed (0 and
+  1 from the run above):
+
+  | target, dataset | 0 (argmax) | 0.25 | 0.5 | 0.75 | 1 (coupled) |
+  |---|---:|---:|---:|---:|---:|
+  | AWQ, alpaca | 3.40 | 3.42 | 3.41 | 3.35 | 3.16 |
+  | AWQ, humaneval | 5.14 | 5.19 | 5.16 | 5.16 | 4.95 |
+  | BF16, alpaca | 3.47 | 3.46 | 3.44 | 3.39 | 3.35 |
+  | BF16, humaneval | 5.21 | 5.25 | 5.26 | 5.23 | 5.12 |
+
+  0.25 is level with the argmax (-0.3% to +1.0%, about 1,100 to 1,400
+  cycles per cell), then the tokens per cycle fall towards 1. Nothing here
+  beats argmax drafts by more than the noise: the M5 gate (at least the
+  argmax drafts' tokens per cycle) is met at 0.25 on three of four and
+  missed by 0.01 on the fourth, and coupling at the request's own
+  temperature is a negative result with this drafter. The default is 0.25.
+- Output tok/s at c=1 with 0.25 (alpaca / humaneval): AWQ 411 / 628 (vLLM
+  AWQ + DFlash: 371 / 556), BF16 219 / 327 (vLLM BF16 + DFlash: 208 / 310,
+  SGLang: 186 / 287).
+- The spec and sampler GPU tests: 75 passed. 30 minutes of VM, 2.9 CU
+  (407.78 -> 404.88). The VM is stopped. An earlier start of this run
+  failed in my shell before it reached Colab (zsh read `$t:sampled` as a
+  modifier); it is a bash script now.

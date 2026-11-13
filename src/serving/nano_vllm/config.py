@@ -112,7 +112,10 @@ class NanoVLLMConfig:
     # logits agree closely enough); 0: the drafter's argmax, whatever the
     # request samples with; in between, the noise decides only where the
     # drafter's leading tokens are close. The output is the same for any value.
-    speculative_draft_temperature: float = 1.0
+    # Measured with the public Llama 3.1 8B DFlash drafter at temperature 0.7
+    # (benchmarks/phase3, M5): 1 loses 2-7% of the tokens per cycle to the
+    # argmax, 0.25 and 0.5 are level with it (-0.3% to +1.0%).
+    speculative_draft_temperature: float = 0.25
     # Run the engine core (scheduler + model) in its own process; the server
     # process keeps tokenization, detokenization, stop strings and HTTP.
     multiprocess: bool = False

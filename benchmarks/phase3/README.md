@@ -12,6 +12,7 @@ A100-SXM4-40GB with Llama 3.1 8B Instruct (BF16 and the AWQ INT4 checkpoint).
 | M2 | synchronous greedy cycle on the existing kernels: output equal to no speculation |
 | M3 | block attention kernel: one KV read for all of a sequence's verify rows |
 | M4 | the cycle as CUDA graphs, 4-bit drafter |
+| M5 | sampled requests: drafts drawn with the target's noise (coupled sampling), a keyed PyTorch reference of the sampler |
 
 ## How to run
 
@@ -174,3 +175,36 @@ Not yet: with a block of 10 for every sequence, AWQ + DFlash at c=16 / c=64
 (alpaca 2229 / 2739, humaneval 2966 / 3946) is about vLLM AWQ + DFlash's and
 below nano without a drafter (2567 / 6012, 2516 / 5159); sampled requests
 draft greedily (M5); steps with a prompt row run outside the graph.
+
+### M5 (runs `m5-20261112-231250-colab`, `m5-sweep-20261112-235755-colab`; baselines from the M0 run)
+
+A sampled request was already lossless (a verify row draws with the noise
+of its position); M5 draws the drafts with the same noise, at
+`speculative_draft_temperature` times the request's temperature. Tokens per
+cycle at c=1, temperature 0.7, top-p 0.9, one seed:
+
+| target, dataset | 0 (argmax drafts) | 0.25 | 0.5 | 0.75 | 1 (coupled) |
+|---|---:|---:|---:|---:|---:|
+| AWQ, alpaca | 3.40 | 3.42 | 3.41 | 3.35 | 3.16 |
+| AWQ, humaneval | 5.14 | 5.19 | 5.16 | 5.16 | 4.95 |
+| BF16, alpaca | 3.47 | 3.46 | 3.44 | 3.39 | 3.35 |
+| BF16, humaneval | 5.21 | 5.25 | 5.26 | 5.23 | 5.12 |
+
+Output tok/s at c=1, temperature 0.7, top-p 0.9 (alpaca / humaneval):
+
+| server | tok/s |
+|---|---|
+| vLLM AWQ + DFlash | 371 / 556 |
+| nano AWQ + DFlash, drafts at 0.25 | 411 / 628 |
+| nano AWQ + DFlash, 4-bit drafter, coupled | 448 / 684 |
+| SGLang BF16 + DFlash | 186 / 287 |
+| vLLM BF16 + DFlash | 208 / 310 |
+| nano BF16 + DFlash, drafts at 0.25 | 219 / 327 |
+| nano BF16 + DFlash, 4-bit drafter, coupled | 219 / 332 |
+
+| gate | result |
+|---|---|
+| tokens per cycle at temperature 0.7 at least those of argmax drafts | coupled at the request's temperature: not met (2-7% fewer). At 0.25, the default: level (-0.3% to +1.0%) |
+| sampled c=1 above both baselines | met in every configuration measured (1.01x to 1.23x) |
+| one seed, with and without a drafter: the same tokens (CPU) | met, for any draft temperature, eager steps and graphs |
+| tests/gpu + nano unit tests | 1324 passed, none skipped |
