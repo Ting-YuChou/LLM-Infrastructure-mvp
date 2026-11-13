@@ -62,7 +62,7 @@ class _Scripted(SpecPolicy):
         self.steps = 0
         self.updates: list[tuple[int, list[int]]] = []
 
-    def choose(self, batch):
+    def choose(self, batch, mixed=False):
         self.steps += 1
         return self.script[(self.steps - 1) % len(self.script)]
 
@@ -221,6 +221,62 @@ def test_time_measured_while_serving_favors_longer_cycles():
     assert policy.extra[(16, False)] == pytest.approx(3 * policy.times[(16, 1)])
     policy.record(3, 1, 1.0)  # not a profiled graph: ignored
     assert (3, False) not in policy.extra
+
+
+def test_steps_with_prompt_rows_are_timed_and_chosen_apart():
+    """Alone, a cycle of 2 beats a plain step for 64 sequences; next to
+    prompt rows it takes 8 ms more than a plain step does there, more than
+    its extra tokens are worth at the rate of the best step alone."""
+    policy = SpecPolicy((1, 2, 3, 4, 6, 10), _times(), probe_every=0)
+    policy.rates = [0.8] * 9
+    times = policy.times
+    for _ in range(40):
+        policy.record(64, 2, times[(64, 2)] - 5.0)  # overlapped cycles: cheaper than the table
+        policy.record(64, 1, times[(64, 1)])
+    assert policy.choose(64) == 2
+    # Nothing measured next to prompt rows yet: as alone.
+    assert policy.choose(64, mixed=True) == 2
+    assert policy.mixed_cost(64, 2) == policy.cost(64, 2)
+    for prompt_ms in (2.0, 6.0, 4.0):  # the prompt's own share varies; both kinds carry it
+        policy.record(64, 2, times[(64, 2)] + prompt_ms + 8.0, mixed=True)
+        policy.record(64, 1, times[(64, 1)] + prompt_ms, mixed=True)
+    assert policy.mixed[(64, True)] == pytest.approx(12.0) and policy.mixed[(64, False)] == pytest.approx(4.0)
+    assert policy.mixed_cost(64, 3) == pytest.approx(times[(64, 3)] + 12.0)
+    assert policy.choose(64, mixed=True) == 1
+    assert policy.choose(64) == 2  # steps without prompt rows are not touched
+    assert (64, True) in policy.extra and policy.extra[(64, True)] == pytest.approx(-5.0)
+    # The prompt's share alone does not move the choice: 30 ms more on both.
+    even = SpecPolicy((1, 2, 3, 4, 6, 10), _times(), probe_every=0)
+    even.rates = [0.8] * 9
+    alone = even.choose(4)
+    assert alone > 1
+    for _ in range(3):
+        even.record(4, alone, times[(4, alone)] + 30.0, mixed=True)
+        even.record(4, 1, times[(4, 1)] + 30.0, mixed=True)
+    assert even.choose(4, mixed=True) == alone
+    # A stalled step is capped alone, a long prompt is not.
+    even.record(4, 1, 10_000.0, mixed=True)
+    assert even.mixed[(4, False)] > 2000.0
+    # Other sizes keep their own times.
+    assert (16, True) not in policy.mixed and policy.mixed_cost(16, 2) == policy.cost(16, 2)
+    policy.set_times(times)
+    assert policy.mixed == {}
+
+
+def test_one_mixed_step_in_sixteen_runs_the_other_kind():
+    policy = SpecPolicy((1, 2, 3, 4, 6, 10), _times())
+    policy.rates = [0.8] * 9
+    assert policy.choose(1, mixed=True) == 10
+    chosen = [policy.choose(1, mixed=True) for _ in range(SpecPolicy.MIXED_PROBE_EVERY * 3)]
+    assert chosen.count(1) == 3 and set(chosen) == {1, 10}
+    # Where plain steps are best, a cycle is tried: the best of them.
+    plain = SpecPolicy((1, 2, 3, 4, 6, 10), _times())
+    plain.rates = [0.3] * 9
+    assert plain.choose(64, mixed=True) == 1
+    chosen = [plain.choose(64, mixed=True) for _ in range(SpecPolicy.MIXED_PROBE_EVERY * 2)]
+    assert chosen.count(1) == len(chosen) - 2 and set(chosen) == {1, 2}
+    # Mixed choices leave the other steps' probes alone.
+    assert plain._choices == 0
 
 
 def test_config_verify_lens(monkeypatch, tmp_path):
@@ -624,8 +680,8 @@ def test_the_policys_choice_follows_the_number_of_running_sequences(tmp_path, ta
     chosen = []
     choose = core.spec_policy.choose
 
-    def spy(batch):
-        chosen.append((batch, choose(batch)))
+    def spy(batch, mixed=False):
+        chosen.append((batch, choose(batch, mixed)))
         return chosen[-1][1]
 
     core.spec_policy.choose = spy
@@ -637,6 +693,54 @@ def test_the_policys_choice_follows_the_number_of_running_sequences(tmp_path, ta
     assert {length for batch, length in chosen if batch > 2} == {1}
     assert {length for batch, length in chosen if 0 < batch <= 2} == {5}
     assert any(batch > 2 for batch, _ in chosen) and any(batch == 2 for batch, _ in chosen)
+
+
+def test_the_engine_times_steps_with_prompt_rows_apart(tmp_path, target):
+    """Steps with prompt rows next to decode rows go to the policy as such,
+    chosen as such when prompts wait, and every step is counted by kind."""
+    _, path = target
+    prompts = list(PROMPTS.values())
+    expected, _ = _run(_core(path), prompts)
+    core = _graph_core(
+        path, graphs=4, speculative_model=_drafter_path(tmp_path, 0), max_num_batched_tokens=8,
+    )
+    policy = core.spec_policy
+    policy.set_times({(size, length): 5.0 for size in (1, 2, 4) for length in policy.verify_lens})
+    policy.probe_every = 0
+    asked, recorded = [], []
+    choose, record = policy.choose, policy.record
+
+    def spy_choose(batch, mixed=False):
+        asked.append((mixed, bool(core.scheduler.waiting)))
+        return choose(batch, mixed)
+
+    def spy_record(bucket, length, milliseconds, rate=0.1, mixed=False):
+        recorded.append((bucket, length, mixed))
+        return record(bucket, length, milliseconds, rate, mixed)
+
+    policy.choose, policy.record = spy_choose, spy_record
+    outputs, paths = _run(core, prompts, arrive_every=3)
+    assert outputs == expected
+    assert all(mixed == waiting for mixed, waiting in asked) and {mixed for mixed, _ in asked} == {False, True}
+    assert {mixed for _, _, mixed in recorded} == {False, True}
+    assert policy.mixed and policy.extra
+    stats = core.stats()
+    steps = {name[len("spec_steps_"):]: count for name, count in stats.items() if name.startswith("spec_steps_")}
+    assert steps["cycle"] == paths["graph"] and steps["cycle_mixed"] == paths["eager"] > 0
+    assert sum(mixed for _, _, mixed in recorded) == steps["cycle_mixed"] + steps.get("plain_mixed", 0)
+    assert steps["prompt"] > 0
+    assert all(stats[f"spec_step_ms_{kind}"] >= 0 for kind in steps)
+
+    # Plain steps next to prompt rows are timed as theirs.
+    core = _scripted(_graph_core(
+        path, graphs=4, speculative_model=_drafter_path(tmp_path, 0), max_num_batched_tokens=8,
+    ), [1, 3])
+    core.spec_policy.set_times({(size, length): 5.0 for size in (1, 2, 4) for length in policy.verify_lens})
+    outputs, _ = _run(core, prompts, arrive_every=3)
+    assert outputs == expected
+    stats = core.stats()
+    assert stats["spec_steps_plain_mixed"] > 0 and stats["spec_steps_plain"] > 0
+    assert {cycle for _, cycle in core.spec_policy.mixed} == {False, True}
 
 
 @pytest.mark.parametrize("scheduling", ["mixed", "prefill_first"])

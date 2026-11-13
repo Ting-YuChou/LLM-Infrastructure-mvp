@@ -120,6 +120,10 @@ class EngineCore:
         self.spec_policy = SpecPolicy(tuple(verify_lens)) if proposer is not None else None
         # Decode rows run at each verify length (a row per sequence and step).
         self.spec_rows = dict.fromkeys(sorted(verify_lens), 0) if proposer is not None else {}
+        # Steps and their milliseconds (as the policy times them) by kind:
+        # plain, cycle, prompt (no decode rows), and the first two with
+        # prompt rows (_mixed) or outside the graphs (_eager).
+        self.spec_steps: dict[str, tuple[int, float]] = {}
         # A cycle can follow one still in flight when both are one graph.
         chain_cycles = (
             config.async_scheduling
@@ -258,7 +262,8 @@ class EngineCore:
         if self.spec_policy is not None:
             # The decode rows the step will have, but for a preemption.
             decode_rows = min(len(self.scheduler.running), self.config.max_num_seqs)
-            draft_tokens = self.spec_policy.choose(decode_rows) - 1
+            # Prompts waiting: the step will most likely have their rows too.
+            draft_tokens = self.spec_policy.choose(decode_rows, bool(self.scheduler.waiting)) - 1
             step = {"draft_tokens": draft_tokens}
             cycle_inflight = self._inflight is not None and self._inflight[0].spec_seqs > 0
             chained = bool(draft_tokens) and cycle_inflight and self._chains(decode_rows, draft_tokens + 1)
@@ -378,8 +383,8 @@ class EngineCore:
     ) -> None:
         """What a collected step tells the speculative policy: the drafts
         each cycle accepted (but for the rows about to be discarded, which
-        ran past their sequence's end), and what a step that was one graph
-        took.
+        ran past their sequence's end), and what a step that was one graph,
+        or had prompt rows next to its decode rows, took.
 
         A step's time runs from the collection of the step before it: an
         overlapped step starts on the GPU then, and for the others it adds
@@ -400,8 +405,20 @@ class EngineCore:
                     if not row.seq.is_finished
                 ],
             )
+        milliseconds = (now - started) * 1e3
         if handle.graph_size:
-            policy.record(handle.graph_size, handle.block, (now - started) * 1e3)
+            policy.record(handle.graph_size, handle.block, milliseconds)
+        elif handle.mixed:
+            bucket = policy.bucket(handle.decode_seqs, handle.block)
+            if bucket is not None:
+                policy.record(bucket, handle.block, milliseconds, mixed=True)
+        kind = "cycle" if handle.spec_seqs else "plain" if handle.decode_seqs else "prompt"
+        if handle.mixed:
+            kind += "_mixed"
+        elif handle.decode_seqs and not handle.graph_size:
+            kind += "_eager"
+        count, total = self.spec_steps.get(kind, (0, 0.0))
+        self.spec_steps[kind] = (count + 1, total + milliseconds)
 
     def _fail(self, seqs: list[Sequence], exc: BaseException) -> list[RequestOutput]:
         outputs = []
@@ -438,6 +455,8 @@ class EngineCore:
                 "spec_num_discarded": self.scheduler.spec_discarded,
                 # Decode rows by the verify length of their step (1: no drafts).
                 **{f"spec_rows_len_{length}": rows for length, rows in self.spec_rows.items()},
+                **{f"spec_steps_{kind}": count for kind, (count, _) in self.spec_steps.items()},
+                **{f"spec_step_ms_{kind}": round(ms, 1) for kind, (_, ms) in self.spec_steps.items()},
             }
         return {
             **self.block_manager.stats_dict(),

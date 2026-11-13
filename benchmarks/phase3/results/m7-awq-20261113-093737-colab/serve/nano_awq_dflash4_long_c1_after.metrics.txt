@@ -1,0 +1,10 @@
+llm_engine_spec_num_drafts{model="nano-llm-local"} 32150.0
+llm_engine_spec_num_draft_tokens{model="nano-llm-local"} 139030.0
+llm_engine_spec_num_accepted_tokens{model="nano-llm-local"} 80070.0
+llm_engine_spec_num_discarded{model="nano-llm-local"} 284.0
+llm_engine_spec_rows_len_1{model="nano-llm-local"} 47168.0
+llm_engine_spec_rows_len_2{model="nano-llm-local"} 845.0
+llm_engine_spec_rows_len_3{model="nano-llm-local"} 628.0
+llm_engine_spec_rows_len_4{model="nano-llm-local"} 20211.0
+llm_engine_spec_rows_len_6{model="nano-llm-local"} 4749.0
+llm_engine_spec_rows_len_10{model="nano-llm-local"} 6001.0

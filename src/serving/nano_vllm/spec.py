@@ -163,6 +163,18 @@ class SpecPolicy:
     all its verify rows), which is what makes long contexts favor longer
     cycles. Without ``times`` (no graphs: the CPU, enforce_eager) every step
     runs the longest length.
+
+    A step with prompt rows next to its decode rows (``mixed``) is not one
+    graph, and a cycle there costs more over a plain step than it does
+    alone (it waits for the cycle in flight where a plain step overlaps the
+    step before it). Its time is measured apart, again per graph size and
+    kind. The prompt's own share is in both kinds' times and is not the
+    choice's to save (it is paid once per prompt, not per step), so there
+    the policy does not maximize tokens per millisecond of the step: it
+    takes the Q with the largest ``tokens - rate * milliseconds``, ``rate``
+    being what the best step without prompt rows yields per millisecond,
+    that is, what the same time would have brought elsewhere. One mixed
+    step in ``MIXED_PROBE_EVERY`` runs the other kind.
     """
 
     # A draft's acceptance rate before any cycle has run it.
@@ -175,6 +187,7 @@ class SpecPolicy:
     # at least this share of the best length's, PLAIN_PROBE_STEPS in a row.
     PLAIN_PROBE_SHARE = 0.6
     PLAIN_PROBE_STEPS = 4
+    MIXED_PROBE_EVERY = 16
 
     def __init__(
         self,
@@ -191,6 +204,10 @@ class SpecPolicy:
         self.probe_every = probe_every
         self.times: dict[tuple[int, int], float] = {}
         self.extra: dict[tuple[int, bool], float] = {}
+        # The same for steps with prompt rows, and the samples behind each.
+        self.mixed: dict[tuple[int, bool], float] = {}
+        self._mixed_samples: dict[tuple[int, bool], int] = {}
+        self._mixed_choices = 0
         self._sizes: dict[int, list[int]] = {}
         self._choices = 0
         self._probes = 0
@@ -202,6 +219,7 @@ class SpecPolicy:
         """``times[(sequences, Q)]``: milliseconds of one step of a graph."""
         self.times = dict(times)
         self.extra = {}
+        self.mixed, self._mixed_samples = {}, {}
         self._sizes = {
             length: sorted(size for size, q in self.times if q == length)
             for length in self.verify_lens
@@ -235,13 +253,26 @@ class SpecPolicy:
         # Past the largest graph the step runs eagerly, in proportion.
         return max(base + extra, 0.1 * base) * max(1.0, batch / bucket)
 
-    def choose(self, batch: int) -> int:
-        """The verify length for a step with ``batch`` decode rows."""
+    def mixed_cost(self, batch: int, length: int) -> float:
+        """Milliseconds of a step of ``batch`` sequences at ``length`` with
+        prompt rows next to them; until one has run, as without them."""
+        bucket = self.bucket(batch, length)
+        extra = self.mixed.get((bucket, length > 1))
+        if extra is None:
+            return self.cost(batch, length)
+        base = self.times[(bucket, length)]
+        return max(base + extra, 0.1 * base) * max(1.0, batch / bucket)
+
+    def choose(self, batch: int, mixed: bool = False) -> int:
+        """The verify length for a step with ``batch`` decode rows;
+        ``mixed``: prompt rows will run next to them."""
         lens = [length for length in self.verify_lens if self._sizes.get(length)]
         if not lens or batch <= 0:
             return self.verify_lens[-1]
         value = {length: self.expected_tokens(length) / self.cost(batch, length) for length in lens}
         best = max(lens, key=value.get)
+        if mixed:
+            return self._choose_mixed(batch, lens, value[best])
         if self._plain_left:
             self._plain_left -= 1
             return 1
@@ -255,6 +286,22 @@ class SpecPolicy:
                 return 1
             if longer is not None:
                 return longer
+        return best
+
+    def _choose_mixed(self, batch: int, lens: list[int], rate: float) -> int:
+        """``rate``: tokens per sequence and millisecond of the best step
+        without prompt rows."""
+        score = {
+            length: self.expected_tokens(length) - rate * self.mixed_cost(batch, length)
+            for length in lens
+        }
+        best = max(lens, key=score.get)
+        self._mixed_choices += 1
+        if self.probe_every and self._mixed_choices % self.MIXED_PROBE_EVERY == 0:
+            # The kind not in use keeps a measured time.
+            others = [length for length in lens if (length > 1) != (best > 1)]
+            if others:
+                return max(others, key=score.get)
         return best
 
     def update(self, drafted: int, accepted: list[int]) -> None:
@@ -274,13 +321,25 @@ class SpecPolicy:
             weight = 1.0 - math.pow(1.0 - self.rate, tried)
             self.rates[depth] += weight * (reached[depth + 1] / tried - self.rates[depth])
 
-    def record(self, bucket: int, length: int, milliseconds: float, rate: float = 0.1) -> None:
-        """A step of graph size ``bucket`` at ``length`` (no prompt rows next
-        to it) took ``milliseconds``, launch to collected tokens."""
+    def record(
+        self, bucket: int, length: int, milliseconds: float, rate: float = 0.1, mixed: bool = False
+    ) -> None:
+        """A step of graph size ``bucket`` at ``length`` took
+        ``milliseconds``, launch to collected tokens; ``mixed``: with prompt
+        rows next to its decode rows (``bucket``: the size its decode rows
+        are costed at)."""
         base = self.times.get((bucket, length))
         if base is None:
             return
         key = (bucket, length > 1)
+        if mixed:
+            # Prompts differ from step to step: the mean of the first
+            # samples, then a running average. No cap: a prompt's share is
+            # no stall, and both kinds must carry it alike.
+            count = self._mixed_samples[key] = self._mixed_samples.get(key, 0) + 1
+            previous = self.mixed.get(key, 0.0)
+            self.mixed[key] = previous + max(rate, 1.0 / count) * (milliseconds - base - previous)
+            return
         previous = self.extra.get(key)
         # One stalled step (the host was busy elsewhere) is not the step's
         # cost: a sample counts for at most three times the current estimate.

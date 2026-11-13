@@ -200,6 +200,10 @@ class StepHandle:
     # The size of the CUDA graph the whole step replayed (a decode graph or
     # a cycle's); 0 when it ran any other way.
     graph_size: int = 0
+    # Its sequences that decoded (plain rows or speculative ones), and
+    # whether prompt rows ran next to them.
+    decode_seqs: int = 0
+    mixed: bool = False
 
     @property
     def chains(self) -> bool:
@@ -350,7 +354,11 @@ class ModelRunner:
             event = self._events[slot]
             if event is not None:
                 event.record()
-        return StepHandle(rows, slot, event, graph_size=graph_size)
+        decode_seqs = sum(not seq.is_prefill for seq in seqs) if is_prefill else rows
+        return StepHandle(
+            rows, slot, event, graph_size=graph_size, decode_seqs=decode_seqs,
+            mixed=0 < decode_seqs < rows,
+        )
 
     def collect(self, handle: StepHandle) -> list[int | list[int]]:
         """Wait for a launched step and return its sampled token ids: one per
@@ -435,7 +443,10 @@ class ModelRunner:
             event = self._events[slot]
             if event is not None:
                 event.record()
-        return StepHandle(rows, slot, event, spec_seqs=num_spec, block=block)
+        return StepHandle(
+            rows, slot, event, spec_seqs=num_spec, block=block, decode_seqs=num_spec,
+            mixed=num_spec < len(seqs),
+        )
 
     def has_spec_graph(self, rows: int, block: int) -> bool:
         """Whether a cycle of ``rows`` sequences at verify length ``block``
@@ -972,7 +983,9 @@ class ModelRunner:
         event = self._events[slot]
         if event is not None:
             event.record()
-        return StepHandle(tokens, slot, event, spec_seqs=batch, block=block, graph_size=bucket)
+        return StepHandle(
+            tokens, slot, event, spec_seqs=batch, block=block, graph_size=bucket, decode_seqs=batch
+        )
 
     def _stage_spec(
         self,

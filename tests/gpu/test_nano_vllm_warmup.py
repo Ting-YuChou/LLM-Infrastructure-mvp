@@ -144,7 +144,7 @@ def test_no_kernel_compiles_after_warm_up_with_a_drafter(tmp_path, linear_backen
 
         steps = 0
 
-        def choose(self, batch):
+        def choose(self, batch, mixed=False):
             self.steps += 1
             return (1, 1, 2, 5, 1, 3, 4, 4, 1, 1, 1, 5)[self.steps % 12]
 
