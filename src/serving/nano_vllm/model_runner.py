@@ -886,28 +886,47 @@ class ModelRunner:
                 best = min(best, (time.perf_counter() - start) / repeats)
             return best * 1e3
 
-        times: dict[tuple[int, int], float] = {}
-        start = time.perf_counter()
+        # Per staging of the static buffers: the graphs that run from it.
+        groups: list[tuple[Callable[[], None], dict[tuple[int, int], Callable[[], None]]]] = []
         if self._graphs is not None:
             decode = self._graphs
-            self._fill_padding(decode, 0, slot=0)
-            decode.longs.copy_(decode.host_longs[0])
-            decode.ints.copy_(decode.host_ints[0])
-            self.sampler.stage([], [], [], 0, slot=0, padded_rows=decode.max_batch)
-            for size, replay in decode.graphs.items():
-                logits = decode.outputs[size]
 
-                def step(replay=replay, logits=logits) -> None:
-                    replay()
-                    self.sampler.draw(logits, self.sampled, (False, False, False))
+            def stage_decode() -> None:
+                self._fill_padding(decode, 0, slot=0)
+                decode.longs.copy_(decode.host_longs[0])
+                decode.ints.copy_(decode.host_ints[0])
+                self.sampler.stage([], [], [], 0, slot=0, padded_rows=decode.max_batch)
 
-                times[(size, 1)] = measure(step)
+            def decode_step(size: int) -> None:
+                decode.graphs[size]()
+                self.sampler.draw(decode.outputs[size], self.sampled, (False, False, False))
+
+            groups.append(
+                (stage_decode, {(size, 1): functools.partial(decode_step, size) for size in decode.graphs})
+            )
         if self._spec is not None:
             for block in self.verify_lens:
-                self._stage_null_cycles(self._spec, block)
-                for (size, length), replay in self._spec.graphs.items():
-                    if length == block:
-                        times[(size, block)] = measure(replay)
+                groups.append((
+                    functools.partial(self._stage_null_cycles, self._spec, block),
+                    {key: replay for key, replay in self._spec.graphs.items() if key[1] == block},
+                ))
+        times: dict[tuple[int, int], float] = {}
+        start = time.perf_counter()
+        # The GPU has idled through the captures and its first steps after
+        # that run slow (0.5 ms on a 5 ms step, for a few hundred ms): run
+        # it warm first, and keep the faster of two passes over the graphs.
+        if groups:
+            stage, steps = groups[-1]
+            stage()
+            warm = next(iter(steps.values()))
+            while time.perf_counter() - start < 0.5:
+                warm()
+                torch.cuda.synchronize(device)
+        for _ in range(2):
+            for stage, steps in groups:
+                stage()
+                for key, step in steps.items():
+                    times[key] = min(times.get(key, float("inf")), measure(step))
         sizes = sorted({size for size, _ in times})
         lens = sorted({length for _, length in times})
         logger.info(
