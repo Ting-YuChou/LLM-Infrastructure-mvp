@@ -80,7 +80,8 @@ class _PendingContext:
     been given yet: their taps, positions and KV slots, on the device.
 
     A decode graph with a proposer leaves its rows here instead of calling
-    ``Proposer.observe``, and :meth:`ModelRunner.flush_context` hands them
+    ``Proposer.observe`` (so does a plain or prompt step outside the graphs,
+    when its tokens fit), and :meth:`ModelRunner.flush_context` hands them
     over many steps at a time. For the DFlash drafter a context write reads
     0.25 GB of projections whatever the number of rows, about 0.8 ms on an
     A100, a sixth of a plain AWQ step; over a few hundred rows at once it
@@ -142,6 +143,11 @@ class _SpecGraphs:
     tokens per row), staged in two slots the same way. Padded rows run a
     block on the null block. On the CPU (tests) a "graph" is the cycle run
     eagerly.
+
+    A step with prompt rows next to its verify rows cannot be one graph (the
+    prompt chunks' shapes vary), but its drafts can: ``draft_graphs`` hold
+    the proposer's part of each cycle alone, from the same static buffers
+    into ``drafts``, and the target's pass then runs as any mixed step's.
     """
 
     max_batch: int
@@ -155,7 +161,9 @@ class _SpecGraphs:
     ints: torch.Tensor
     cu_seqlens: dict[int, torch.Tensor]  # per block: [max_batch + 1] int32, each row's first token
     accepted: torch.Tensor  # [max_batch] long: the drafts each row accepted
+    drafts: torch.Tensor  # [max_batch, longest block - 1] long: a draft graph's tokens
     graphs: dict[tuple[int, int], Callable[[], None]]  # (size, block)
+    draft_graphs: dict[tuple[int, int], Callable[[], None]]
     # Per graph, when asked for (tests compare them): what its last cycle
     # left, the verify logits [size * block, vocab] and the drafts [size,
     # block - 1]. Kept alive, they stay out of the pool the graphs share.
@@ -238,6 +246,7 @@ class ModelRunner:
         max_rows *= self.block
         self._graphs: Optional[_DecodeGraphs] = None
         self._pending: Optional[_PendingContext] = None
+        self._prepared_slots: list[int] = []
         self._pieces: Optional[_PiecewiseGraphs] = None
         self._spec: Optional[_SpecGraphs] = None
         device = model.device
@@ -265,6 +274,7 @@ class ModelRunner:
         """One synchronous step: launch, then collect."""
         return self.collect(self.launch(seqs, is_prefill))
 
+    @torch.inference_mode()
     def launch(
         self,
         seqs: list[Sequence],
@@ -273,6 +283,9 @@ class ModelRunner:
         draft_tokens: Optional[int] = None,
     ) -> StepHandle:
         """Enqueue the forward pass and sampling; nothing here waits for the GPU.
+
+        In inference mode, like the captures: a step writes the graphs'
+        static buffers, which were made there.
 
         ``draft_tokens``: with a proposer, the drafts per decode row (default
         its K); 0 decodes one token per row as without a proposer.
@@ -342,27 +355,33 @@ class ModelRunner:
         block = block or self.block
         self.flush_context()  # the drafts read every computed token's context
         num_spec = next((i for i, seq in enumerate(seqs) if seq.is_prefill), len(seqs))
-        if self._spec is not None and num_spec == len(seqs):
-            bucket = self._spec.bucket(num_spec, block)
-            if bucket is not None:
-                with nvtx_range("spec_replay"):
-                    return self._replay_spec(seqs, bucket, slot, block)
+        bucket = self._spec.bucket(num_spec, block) if self._spec is not None else None
+        if bucket is not None and num_spec == len(seqs):
+            with nvtx_range("spec_replay"):
+                return self._replay_spec(seqs, bucket, slot, block)
         with nvtx_range("prepare"):
             input_ids, positions, metadata = self.prepare(seqs, True, spec_rows=num_spec, block=block)
         spec_tokens = num_spec * block
         with nvtx_range("draft"):
             block_ids = input_ids[:spec_tokens].view(num_spec, block)
-            drafts = proposer.propose(
-                DraftBatch(
-                    seqs=seqs[:num_spec],
-                    anchor_ids=block_ids[:, 0],
-                    positions=positions[:spec_tokens],
-                    slot_mapping=metadata.slot_mapping[:spec_tokens],
-                    block_tables=metadata.block_tables[:num_spec],
-                    context_lens=metadata.context_lens[:num_spec] - block,
-                    draw=self._draft_draw(seqs[:num_spec], slot, block - 1),
+            if bucket is not None:
+                # Prompt rows follow the verify rows: the drafts still come
+                # from one graph.
+                self._stage_spec(seqs[:num_spec], bucket, slot, block, verify=False)
+                self._spec.draft_graphs[(bucket, block)]()
+                drafts = self._spec.drafts[:num_spec, : block - 1]
+            else:
+                drafts = proposer.propose(
+                    DraftBatch(
+                        seqs=seqs[:num_spec],
+                        anchor_ids=block_ids[:, 0],
+                        positions=positions[:spec_tokens],
+                        slot_mapping=metadata.slot_mapping[:spec_tokens],
+                        block_tables=metadata.block_tables[:num_spec],
+                        context_lens=metadata.context_lens[:num_spec] - block,
+                        draw=self._draft_draw(seqs[:num_spec], slot, block - 1),
+                    )
                 )
-            )
             block_ids[:, 1:] = drafts
         logits = self._forward_prepared(input_ids, positions, metadata, observe=True)
         rows = logits.shape[0]
@@ -425,6 +444,7 @@ class ModelRunner:
             positions += range(seq.num_tokens, seq.num_tokens + count)
         return options, seq_ids, positions
 
+    @torch.inference_mode()
     def forward(
         self,
         seqs: list[Sequence],
@@ -439,16 +459,19 @@ class ModelRunner:
             if bucket is not None:
                 with nvtx_range("replay"):
                     return self._replay(seqs, bucket, gather_rows, slot)
-        # This step's context writes follow the pending ones: a slot that
-        # was freed and given to another sequence keeps the later write.
-        self.flush_context()
         with nvtx_range("prepare"):
             input_ids, positions, metadata = self.prepare(seqs, is_prefill)
             if gather_rows is not None and any(row >= 0 for row in gather_rows):
                 input_ids = self._gather_inputs(input_ids, seqs, gather_rows)
-        # Every token the target computes is context for the proposer.
+        # Every token the target computes is context for the proposer: left
+        # pending like a decode graph's rows when they fit, else written now,
+        # after the pending ones (a slot that was freed and given to another
+        # sequence keeps the later write).
         observe = self.proposer is not None
-        return self._forward_prepared(input_ids, positions, metadata, use_graphs, observe)
+        pending_at = self._reserve_pending(self._prepared_slots) if observe else None
+        if pending_at is None:
+            self.flush_context()
+        return self._forward_prepared(input_ids, positions, metadata, use_graphs, observe, pending_at)
 
     def _forward_prepared(
         self,
@@ -457,10 +480,12 @@ class ModelRunner:
         metadata: BatchMetadata,
         use_graphs: bool = True,
         observe: bool = False,
+        pending_at: Optional[int] = None,
     ) -> torch.Tensor:
         """The forward pass of a packed batch, through the piecewise graphs
         when they cover it; ``observe`` hands every token's taps to the
-        proposer."""
+        proposer, or with ``pending_at`` (:meth:`_reserve_pending`) leaves
+        them among the pending context rows from that row on."""
         tap_layers = self.proposer.tap_layers if observe else ()
         bucket = None
         if use_graphs and self._pieces is not None and metadata.logits_indices is not None:
@@ -481,10 +506,32 @@ class ModelRunner:
         else:
             with nvtx_range("forward"):
                 logits, taps = self.model.forward_batch(input_ids, positions, self.cache, metadata), None
-        if taps is not None:
+        if taps is not None and pending_at is not None:
+            pending, end = self._pending, pending_at + taps.shape[0]
+            pending.taps[pending_at:end].copy_(taps)
+            pending.positions[pending_at:end].copy_(positions)
+            pending.slots[pending_at:end].copy_(metadata.slot_mapping)
+        elif taps is not None:
             with nvtx_range("observe"):
                 self.proposer.observe(taps, positions, metadata.slot_mapping)
         return logits
+
+    def _reserve_pending(self, kv_slots: list[int]) -> Optional[int]:
+        """Rows among the pending context for tokens at ``kv_slots``: the
+        first row's index, or None when they cannot wait (no pending
+        context, or more tokens than it holds). A slot already pending must
+        be written in order (its block was freed and reused, or a discarded
+        step is run again), so what is pending is flushed first; so it is
+        when the rows would not fit."""
+        pending = self._pending
+        if pending is None or len(kv_slots) > pending.capacity:
+            return None
+        if pending.rows + len(kv_slots) > pending.capacity or not pending.host_slots.isdisjoint(kv_slots):
+            self.flush_context()
+        first = pending.rows
+        pending.rows += len(kv_slots)
+        pending.host_slots.update(kv_slots)
+        return first
 
     def prepare(
         self, seqs: list[Sequence], is_prefill: bool, spec_rows: int = 0, block: Optional[int] = None
@@ -527,6 +574,7 @@ class ModelRunner:
             )
             context_lens.append(end)
             query_lens.append(end - start)
+        self._prepared_slots = slots  # the tokens' KV slots, for _reserve_pending
         return build_batch(
             input_ids=input_ids,
             positions=positions,
@@ -692,7 +740,9 @@ class ModelRunner:
                 for block in self.verify_lens
             },
             accepted=torch.zeros(max_batch, dtype=torch.long, device=device),
+            drafts=torch.zeros(max_batch, longest - 1, dtype=torch.long, device=device),
             graphs={},
+            draft_graphs={},
             outputs={} if keep_outputs else None,
         )
         self._stage_null_cycles(graphs, longest)
@@ -710,12 +760,18 @@ class ModelRunner:
                     graphs.vocab = self._spec_cycle(graphs, size, block)[0].shape[-1]
                     if not cuda:
                         graphs.graphs[key] = functools.partial(self._record_spec_cycle, graphs, size, block)
+                        graphs.draft_graphs[key] = functools.partial(self._draft_only, graphs, size, block)
                         continue
                     torch.cuda.synchronize(device)
                     graph = torch.cuda.CUDAGraph()
                     with torch.cuda.graph(graph, pool=pool):
                         self._record_spec_cycle(graphs, size, block)
                     graphs.graphs[key] = graph.replay
+                    # The cycle's eager run compiled the drafter's kernels too.
+                    graph = torch.cuda.CUDAGraph()
+                    with torch.cuda.graph(graph, pool=pool):
+                        self._draft_only(graphs, size, block)
+                    graphs.draft_graphs[key] = graph.replay
         if cuda:
             torch.cuda.synchronize(device)
         self._spec = graphs
@@ -759,21 +815,7 @@ class ModelRunner:
         the verify logits and the drafts."""
         proposer = self.proposer
         tokens = size * block
-        anchors = graphs.longs[0, :tokens].view(size, block)[:, :1]
-        positions, slots = graphs.longs[1, :tokens], graphs.longs[2, :tokens]
-        context_lens = graphs.ints[:size]
-        tables = graphs.ints[graphs.max_batch :].view(graphs.max_batch, graphs.width)[:size]
-        drafts = proposer.propose(
-            DraftBatch(
-                seqs=[None] * size,
-                anchor_ids=anchors[:, 0],
-                positions=positions,
-                slot_mapping=slots,
-                block_tables=tables,
-                context_lens=context_lens - block,
-                draw=self._graph_draft_draw if self.draft_sampler is not None else None,
-            )
-        )
+        anchors, drafts, positions, slots, context_lens, tables = self._spec_drafts(graphs, size, block)
         input_ids = torch.cat([anchors, drafts], dim=1).view(-1)
         metadata = BatchMetadata(
             slot_mapping=slots,
@@ -799,6 +841,34 @@ class ModelRunner:
         graphs.accepted[:size].copy_(accept_prefix(drafts, target))
         return logits, drafts
 
+    def _spec_drafts(self, graphs: _SpecGraphs, size: int, block: int) -> tuple[torch.Tensor, ...]:
+        """The proposer's part of a cycle from the static buffers: the
+        anchors [size, 1] and drafts [size, block - 1], and the buffers'
+        views the verify pass shares (positions, slots, context lengths,
+        block tables)."""
+        tokens = size * block
+        anchors = graphs.longs[0, :tokens].view(size, block)[:, :1]
+        positions, slots = graphs.longs[1, :tokens], graphs.longs[2, :tokens]
+        context_lens = graphs.ints[:size]
+        tables = graphs.ints[graphs.max_batch :].view(graphs.max_batch, graphs.width)[:size]
+        drafts = self.proposer.propose(
+            DraftBatch(
+                seqs=[None] * size,
+                anchor_ids=anchors[:, 0],
+                positions=positions,
+                slot_mapping=slots,
+                block_tables=tables,
+                context_lens=context_lens - block,
+                draw=self._graph_draft_draw if self.draft_sampler is not None else None,
+            )
+        )
+        return anchors, drafts, positions, slots, context_lens, tables
+
+    def _draft_only(self, graphs: _SpecGraphs, size: int, block: int) -> None:
+        """What a draft graph records: the drafts into ``graphs.drafts``."""
+        drafts = self._spec_drafts(graphs, size, block)[1]
+        graphs.drafts[:size, : block - 1].copy_(drafts)
+
     def _fill_spec_padding(self, graphs: _SpecGraphs, start: int, slot: int, block: int) -> None:
         """Rows from ``start`` on: a block of token 0 at position 0 in the
         null block, whose context is that block."""
@@ -816,6 +886,25 @@ class ModelRunner:
         graphs = self._spec
         batch = len(seqs)
         tokens = batch * block
+        self._stage_spec(seqs, bucket, slot, block, verify=True)
+        graphs.graphs[(bucket, block)]()
+        host = self.host_out[slot]
+        host[:tokens].copy_(self.sampled[:tokens], non_blocking=True)
+        host[tokens : tokens + batch].copy_(graphs.accepted[:batch], non_blocking=True)
+        event = self._events[slot]
+        if event is not None:
+            event.record()
+        return StepHandle(tokens, slot, event, spec_seqs=batch, block=block, graph_size=bucket)
+
+    def _stage_spec(
+        self, seqs: list[Sequence], bucket: int, slot: int, block: int, verify: bool
+    ) -> None:
+        """Fill the cycle graphs' static buffers with the verify rows
+        ``seqs`` of ``block`` tokens, padded to ``bucket`` rows, and stage
+        the draft rows' sampling; ``verify``: the verify rows' too (a draft
+        graph alone does not sample them)."""
+        graphs = self._spec
+        batch = len(seqs)
         longs = graphs.host_longs[slot].numpy()
         ints = graphs.host_ints[slot].numpy()
         tables = ints[graphs.max_batch :].reshape(graphs.max_batch, graphs.width)
@@ -837,10 +926,11 @@ class ModelRunner:
             tables[row, : len(table)] = table
             tables[row, len(table) :] = null
         self._fill_spec_padding(graphs, batch, slot, block)
-        self.sampler.stage(
-            *self._spec_sampling(seqs, batch, block), graphs.vocab, slot=slot,
-            padded_rows=bucket * block,
-        )
+        if verify:
+            self.sampler.stage(
+                *self._spec_sampling(seqs, batch, block), graphs.vocab, slot=slot,
+                padded_rows=bucket * block,
+            )
         if self.draft_sampler is not None:
             self.draft_sampler.stage(
                 *self._draft_sampling(seqs, block - 1), graphs.vocab, slot=slot,
@@ -848,14 +938,6 @@ class ModelRunner:
             )
         graphs.longs.copy_(graphs.host_longs[slot], non_blocking=True)
         graphs.ints.copy_(graphs.host_ints[slot], non_blocking=True)
-        graphs.graphs[(bucket, block)]()
-        host = self.host_out[slot]
-        host[:tokens].copy_(self.sampled[:tokens], non_blocking=True)
-        host[tokens : tokens + batch].copy_(graphs.accepted[:batch], non_blocking=True)
-        event = self._events[slot]
-        if event is not None:
-            event.record()
-        return StepHandle(tokens, slot, event, spec_seqs=batch, block=block, graph_size=bucket)
 
     # --- what a step of each graph takes ------------------------------------
 
@@ -946,7 +1028,9 @@ class ModelRunner:
     # --- CUDA graphs for decode ------------------------------------------
 
     @torch.inference_mode()
-    def capture_decode_graphs(self, max_batch: int, max_model_len: int) -> None:
+    def capture_decode_graphs(
+        self, max_batch: int, max_model_len: int, pending_rows: Optional[int] = None
+    ) -> None:
         """Capture one decode graph per size in GRAPH_BATCH_SIZES up to max_batch.
 
         Every graph reads the same static buffers, so a step only refills them.
@@ -961,8 +1045,9 @@ class ModelRunner:
 
         With a proposer that reads the target's taps, a graph leaves its
         tokens' taps among the pending context rows (:class:`_PendingContext`)
-        for :meth:`flush_context`. On the CPU (tests) a "graph" is the step
-        run eagerly.
+        for :meth:`flush_context` (``pending_rows`` of them at most; default
+        four steps of the largest graph, at least 64). On the CPU (tests) a
+        "graph" is the step run eagerly.
         """
         device = self.model.device
         cuda = device.type == "cuda"
@@ -982,7 +1067,10 @@ class ModelRunner:
         )
         self._pending = None
         if self.proposer is not None and self.proposer.tap_layers:
-            self._pending = self._new_pending_context(max_batch)
+            # At least a step of the largest graph.
+            self._pending = self._new_pending_context(
+                max(pending_rows or max(4 * max_batch, 64), max_batch)
+            )
         self._fill_padding(graphs, 0, slot=0)
         graphs.longs.copy_(graphs.host_longs[0])
         graphs.ints.copy_(graphs.host_ints[0])
@@ -1011,12 +1099,11 @@ class ModelRunner:
             time.perf_counter() - start,
         )
 
-    def _new_pending_context(self, max_batch: int) -> _PendingContext:
-        """Room for a few steps of the largest decode graph, and one run of
-        the proposer's context writes per padded size (their kernels'
-        first use must not be mid-serving)."""
+    def _new_pending_context(self, capacity: int) -> _PendingContext:
+        """Room for ``capacity`` rows, and one run of the proposer's context
+        writes per padded size (their kernels' first use must not be
+        mid-serving)."""
         device = self.model.device
-        capacity = max(4 * max_batch, 64)
         width = len(self.proposer.tap_layers) * self.model.config.hidden_size
         null_slot = self.cache.null_block * self.cache.block_size
         pending = _PendingContext(
@@ -1032,10 +1119,10 @@ class ModelRunner:
 
     @torch.inference_mode()
     def flush_context(self) -> None:
-        """Give the proposer the context of the tokens the decode graphs
-        left pending. Called before a cycle (its drafts read the context),
-        before any step that writes context itself, and before a decode
-        graph whose rows would not fit or would write a pending slot again."""
+        """Give the proposer the context of the tokens left pending. Called
+        before a cycle (its drafts read the context), before a step that
+        writes context itself, and before a step whose rows would not fit
+        or would write a pending slot again (:meth:`_reserve_pending`)."""
         pending = self._pending
         if pending is None or not pending.rows:
             return
@@ -1113,16 +1200,10 @@ class ModelRunner:
         tables = ints[graphs.max_batch :].reshape(graphs.max_batch, graphs.width)
         null = self.cache.null_block
         kv_slots = [self.block_manager.slot_for_position(seq, seq.num_cached_tokens) for seq in seqs]
-        pending = self._pending
-        if pending is not None:
-            # The rows join the pending context; a slot already pending (its
-            # block was freed and reused, or a discarded step is run again)
-            # must be written in order, so what is pending goes first.
-            if pending.rows + batch > pending.capacity or not pending.host_slots.isdisjoint(kv_slots):
-                self.flush_context()
-            longs[4, :batch] = range(pending.rows, pending.rows + batch)
-            pending.rows += batch
-            pending.host_slots.update(kv_slots)
+        if self._pending is not None:
+            # The graph leaves its rows among the pending context.
+            first = self._reserve_pending(kv_slots)
+            longs[4, :batch] = range(first, first + batch)
         for row, seq in enumerate(seqs):
             position = seq.num_cached_tokens
             longs[0, row] = seq.token_ids[position] if position < seq.num_tokens else 0

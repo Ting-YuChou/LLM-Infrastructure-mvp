@@ -93,9 +93,9 @@ def _run(core: EngineCore, prompts: list[list[int]], arrive_every: int = 0, samp
         assert bucket >= len(seqs)
         return replay(seqs, bucket, slot, block)
 
-    def spy_forward(input_ids, positions, metadata, use_graphs=True, observe=False):
+    def spy_forward(input_ids, positions, metadata, *args, **kwargs):
         paths["eager"] += bool(metadata.num_block_rows)
-        return forward(input_ids, positions, metadata, use_graphs, observe)
+        return forward(input_ids, positions, metadata, *args, **kwargs)
 
     runner._replay_spec, runner._forward_prepared = spy_replay, spy_forward
     outputs: dict[int, list[int]] = {index: [] for index in range(len(prompts))}

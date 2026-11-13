@@ -147,6 +147,12 @@ def test_graph_cycle_matches_the_eager_cycle(
         replayed = _cycle(runner, active, block)
         graph_logits, graph_drafts, choices = _graph_outputs(runner, len(active), block)
         assert graph_drafts.shape == (len(active), block - 1)
+        # The draft graph alone (what a step with prompt rows replays): the
+        # cycle graph's drafts, from the same state.
+        bucket = runner._spec.bucket(len(active), block)
+        runner._stage_spec(active, bucket, 0, block, verify=False)
+        runner._spec.draft_graphs[(bucket, block)]()
+        assert torch.equal(runner._spec.drafts[: len(active), : block - 1].cpu(), graph_drafts)
         eager, eager_logits, eager_drafts = _eager_cycle(runner, active, block)
         eager_logits = eager_logits.view(len(active), block, -1)
 
@@ -206,6 +212,7 @@ def test_a_decode_graph_writes_the_drafter_context(tmp_path):
             dcache.keys[layer].reshape(dcache.total_slots, -1)[slots] = 0
             dcache.values[layer].reshape(dcache.total_slots, -1)[slots] = 0
         eager_logits = runner.forward(seqs, False, use_graphs=False).float()
+        runner.flush_context()  # the eager step's rows wait like the graph's
         torch.testing.assert_close(graph_logits, eager_logits, rtol=2e-2, atol=2e-2)
         for got, want in zip(from_graph, written()):
             assert want.abs().max() > 0

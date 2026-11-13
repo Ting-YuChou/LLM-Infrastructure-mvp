@@ -76,12 +76,14 @@ def _scripted(core, script=SCRIPT):
     return core
 
 
-def _graph_core(path, proposer=None, graphs=None, **overrides):
+def _graph_core(path, proposer=None, graphs=None, pending_rows=None, **overrides):
     """``_core`` with the decode graphs too (on the CPU: the step run from
     the static buffers), so a plain step leaves its context rows pending."""
     core = _core(path, proposer, graphs, **overrides)
     if graphs:
-        core.model_runner.capture_decode_graphs(max_batch=graphs, max_model_len=core.config.max_model_len)
+        core.model_runner.capture_decode_graphs(
+            max_batch=graphs, max_model_len=core.config.max_model_len, pending_rows=pending_rows
+        )
     return core
 
 
@@ -173,6 +175,31 @@ def test_one_step_in_probe_every_runs_the_next_longer_length():
     assert {policy.choose(1) for _ in range(32)} == {10}  # nothing longer to probe
 
 
+def test_plain_steps_are_tried_when_they_look_close_to_the_best_length():
+    """A kind of step that never runs is never timed. Where the estimate
+    puts plain steps near the best cycle, every other probe is a few plain
+    steps in a row; where they are far off, none is."""
+    policy = SpecPolicy((1, 2, 3, 4, 6, 10), _times(), probe_every=8)
+    assert policy.choose(1) == 10
+    assert 1 not in {policy.choose(1) for _ in range(64)}  # one sequence: a cycle is 2.6x a plain step
+    policy = SpecPolicy((1, 2, 3, 4, 6, 10), _times(), probe_every=8)
+    best = policy.choose(16)
+    assert 1 < best < 10
+    chosen = [best] + [policy.choose(16) for _ in range(40)]
+    longer = min(length for length in policy.verify_lens if length > best)
+    # Choices 8 and 24: one step at the next longer length. Choice 16: four
+    # plain steps (the three after the first are not choices), and again
+    # at choice 32.
+    assert chosen[7] == longer and chosen[26] == longer
+    assert chosen[15:19] == [1, 1, 1, 1] and chosen[34:38] == [1, 1, 1, 1]
+    probes = {7, 26, *range(15, 19), *range(34, 38)}
+    assert [length for index, length in enumerate(chosen) if index not in probes] == [best] * 31
+    # Once plain steps have been timed and found slow, they are left alone.
+    for _ in range(50):
+        policy.record(16, 1, 3 * policy.times[(16, 1)])
+    assert 1 not in {policy.choose(16) for _ in range(64)}
+
+
 def test_time_measured_while_serving_favors_longer_cycles():
     """What a step takes over its graph's time on an empty context (the
     sequences' KV) is paid once per step, whatever the verify length."""
@@ -255,10 +282,19 @@ def test_tokens_do_not_depend_on_the_verify_lengths(tmp_path, target, sampled, g
         return propose(batch)
 
     core.proposer.propose = drafts_from_a_complete_context
+    draft_graphs = []
+    if graphs:
+        spec = runner._spec
+        for key, replay in list(spec.draft_graphs.items()):
+            spec.draft_graphs[key] = lambda key=key, replay=replay: (draft_graphs.append(key), replay())[1]
     # An arrival every third step: decode rows of any length next to prompt chunks.
     outputs, paths = _run(core, prompts, arrive_every=3, sampling=sampling)
     assert outputs == expected
-    assert bool(flushed) == bool(graphs)  # the decode graphs' context rows, in batches
+    assert bool(flushed) == bool(graphs)  # the plain steps' context rows, in batches
+    if graphs:
+        # A cycle next to prompt rows drafts through its draft graph.
+        assert len(draft_graphs) == paths["eager"] > 0
+        assert {block for _, block in draft_graphs} >= {2, 3, 5}
     assert core.block_manager.num_free_blocks == core.block_manager.num_blocks
     assert paths["eager"] > 0 and (paths["graph"] > 0) == bool(graphs)
 
@@ -279,6 +315,58 @@ def test_tokens_do_not_depend_on_the_verify_lengths(tmp_path, target, sampled, g
     assert sum(len(accepted) for _, accepted in updates) == cycles
     assert {drafted for drafted, _ in updates} == {1, 2, 3, 4}
     assert all(0 <= count <= drafted for drafted, accepted in updates for count in accepted)
+
+
+@pytest.mark.parametrize("graphs", [0, 64, 5], ids=["cycle graphs only", "decode graphs too", "5 pending rows"])
+def test_steps_outside_the_graphs_leave_their_context_pending(tmp_path, target, graphs):
+    """Prompt chunks and plain rows next to them run outside the decode
+    graphs; with a pending context their rows wait for the next flush too
+    (a step with more tokens than it holds writes them itself, after the
+    pending ones), and the drafter's context ends up what its reference
+    computes."""
+    hf_model, path = target
+    settings = dict(graphs=4, speculative_model=_drafter_path(tmp_path, 0), max_num_batched_tokens=8)
+    core = _graph_core(path, pending_rows=graphs, **settings) if graphs else _core(path, **settings)
+    _scripted(core, script=[1, 1, 1, 1, 1, 1, 3, 1, 1, 5])
+    runner = core.model_runner
+    flushed = _count_flushes(runner)
+    observed = []
+    observe = core.proposer.observe
+    core.proposer.observe = lambda taps, positions, slots: (observed.append(taps.shape[0]), observe(taps, positions, slots))[1]
+    pending = list(enumerate(PROMPTS.values()))
+    steps = 0
+    while pending or min((seq.num_completion_tokens for seq in core.requests.values()), default=0) < 20:
+        if pending and steps % 4 == 0:
+            req_id, prompt = pending.pop(0)
+            core.add_request(EngineRequest(req_id, list(prompt), SamplingOptions(max_tokens=40, **GREEDY)))
+        assert all(output.error is None for output in core.step())
+        steps += 1
+    core._collect_inflight()
+    assert len(core.requests) == len(PROMPTS)
+    if graphs == 64:
+        # Every context write outside a cycle went through a flush: padded
+        # to 16 or 64 rows, never a step's own handful.
+        assert flushed and max(flushed) <= 64
+        assert len([rows for rows in observed if rows in (16, 64)]) == len(flushed)
+    elif graphs:
+        assert flushed and max(flushed) <= 5
+        assert max(observed) > 5  # a prompt chunk with a decode row: written at once
+    else:
+        assert runner._pending is None and not flushed
+    runner.flush_context()
+    drafter, used = core.proposer.drafter, core.proposer.cache
+    for seq in core.requests.values():
+        computed = seq.num_cached_tokens
+        slots = torch.tensor([core.block_manager.slot_for_position(seq, p) for p in range(computed)])
+        fresh = drafter.new_paged_cache(core.config.num_kvcache_blocks, core.config.kvcache_block_size)
+        drafter.write_context(
+            _hf_taps(hf_model, seq.token_ids[:computed]), torch.arange(computed), fresh, slots
+        )
+        for layer in range(drafter.config.num_hidden_layers):
+            for name in ("keys", "values"):
+                got = getattr(used, name)[layer].reshape(used.total_slots, -1)[slots]
+                want = getattr(fresh, name)[layer].reshape(fresh.total_slots, -1)[slots]
+                torch.testing.assert_close(got, want, rtol=1e-4, atol=1e-4)
 
 
 @pytest.mark.parametrize("script", [SCRIPT, [1]], ids=["every length", "plain steps only"])
@@ -369,11 +457,14 @@ def test_a_pending_slot_is_written_before_it_is_computed_again(tmp_path, target)
         torch.testing.assert_close(got, want, rtol=1e-4, atol=1e-4)
 
 
-def _plain_core(tmp_path, path, prompts):
+def _plain_core(tmp_path, path, prompts, pending_rows=None):
     """An engine whose every step is a plain one through the decode graphs,
     stepped until each request has a few tokens and nothing is in flight."""
     core = _scripted(
-        _graph_core(path, graphs=4, speculative_model=_drafter_path(tmp_path, 0)), script=[1]
+        _graph_core(
+            path, graphs=4, speculative_model=_drafter_path(tmp_path, 0), pending_rows=pending_rows
+        ),
+        script=[1],
     )
     for req_id, prompt in enumerate(prompts):
         core.add_request(EngineRequest(req_id, list(prompt), SamplingOptions(max_tokens=40, **GREEDY)))
@@ -417,21 +508,28 @@ def test_a_flush_leaves_no_row_to_be_written_again(tmp_path, target):
     assert torch.equal(_context_keys(core, [slot]), kept)
 
 
-def test_an_eager_steps_context_is_written_after_the_pending_rows(tmp_path, target):
-    """A step outside the decode graphs writes its context at once; rows
-    still pending for the same slots are older and must not land after it."""
+@pytest.mark.parametrize("chunk", [1, 6], ids=["a row that waits", "a chunk written at once"])
+def test_an_eager_steps_context_is_written_after_the_pending_rows(tmp_path, target, chunk):
+    """A step outside the decode graphs computes a slot whose row is still
+    pending. Whether its own rows wait too or (more tokens than the pending
+    context holds) are written at once, the older row must not land after."""
     hf_model, path = target
-    core = _plain_core(tmp_path, path, [PROMPTS["a"]])
+    core = _plain_core(tmp_path, path, [PROMPTS["a"]], pending_rows=5)
     runner, pending = core.model_runner, core.model_runner._pending
+    assert pending.capacity == 5
     seq = core.requests[0]
     position = seq.num_cached_tokens
     core.block_manager.may_append(seq)
     slot = core.block_manager.slot_for_position(seq, position)
     runner.collect(runner.launch([seq], is_prefill=False, draft_tokens=0))  # pending: the token at position
     assert slot in pending.host_slots
-    # The position is computed again with another token, eagerly.
+    # The position is computed again with another token, eagerly: alone, or
+    # as the end of a chunk of six tokens.
     seq.token_ids[position] = (seq.token_ids[position] + 1) % TINY_CONFIG["vocab_size"]
-    runner.forward([seq], False, use_graphs=False)
+    if chunk > 1:
+        seq.is_prefill, seq.num_cached_tokens, seq.num_scheduled_tokens = True, position - chunk + 1, chunk
+    runner.forward([seq], chunk > 1, use_graphs=False)
+    assert pending.rows == (1 if chunk == 1 else 0)
     runner.flush_context()
     drafter = core.proposer.drafter
     fresh = drafter.new_paged_cache(core.config.num_kvcache_blocks, core.config.kvcache_block_size)
@@ -468,7 +566,9 @@ def test_drafts_of_any_length_are_drawn_with_the_noise_of_their_positions(target
     _, path = target
     prompts = list(PROMPTS.values())
     proposer = _TableDrafter(TINY_CONFIG["vocab_size"], 4)
-    core = _scripted(_core(path, proposer, graphs, seed=11, speculative_draft_temperature=0.6))
+    core = _scripted(_core(
+        path, proposer, graphs, seed=11, speculative_draft_temperature=0.6, max_num_batched_tokens=8,
+    ))
     runner = core.model_runner
     cycles = []  # (sequence id, tokens before the cycle) per verify row, and the drafts
     launch, propose = runner._launch_spec, proposer.propose
@@ -484,7 +584,10 @@ def test_drafts_of_any_length_are_drawn_with_the_noise_of_their_positions(target
 
     runner._launch_spec, proposer.propose = spy_launch, spy_propose
     settings = [SAMPLED, SamplingOptions(max_tokens=MAX_TOKENS, temperature=0.0), SAMPLED]
-    _run(core, prompts, sampling=settings)
+    # An arrival every third step: cycles next to prompt chunks draft too
+    # (through the draft graphs, when there are graphs).
+    _, paths = _run(core, prompts, arrive_every=3, sampling=settings)
+    assert paths["eager"] > 0
 
     reference = Sampler(max_rows=4, device="cpu", seed=11, temperature_scale=0.6)
     out = torch.zeros(4, dtype=torch.long)

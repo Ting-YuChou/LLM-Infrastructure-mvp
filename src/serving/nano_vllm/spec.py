@@ -148,8 +148,11 @@ class SpecPolicy:
     depend on how many drafts follow it (measured with the DFlash drafter:
     a block of 4 or 6 yields what the first 3 or 5 drafts of a block of 10
     do), so one set of rates serves every Q. Depths past the Q in use get no
-    cycles; one step in ``probe_every`` runs the next longer length to keep
-    their rates current.
+    cycles, and a kind of step the engine does not run gets no time
+    measured (below), so every ``probe_every`` steps the policy tries
+    something else, in turn: one step at the next longer length, and a
+    few plain steps in a row (in a row, because plain steps overlap one
+    another) when plain steps look within reach of the best length.
 
     ``cost`` starts from ``times``: a step's milliseconds per (sequences, Q),
     measured at startup by replaying each CUDA graph on an empty context
@@ -168,6 +171,10 @@ class SpecPolicy:
     # used for the kind that has not run yet: it also reads the drafter's
     # KV, and the block kernel is up to 1.3x the decode kernel.
     CYCLE_EXTRA = 1.4
+    # Plain steps are tried when their estimated tokens per millisecond are
+    # at least this share of the best length's, PLAIN_PROBE_STEPS in a row.
+    PLAIN_PROBE_SHARE = 0.6
+    PLAIN_PROBE_STEPS = 4
 
     def __init__(
         self,
@@ -186,6 +193,8 @@ class SpecPolicy:
         self.extra: dict[tuple[int, bool], float] = {}
         self._sizes: dict[int, list[int]] = {}
         self._choices = 0
+        self._probes = 0
+        self._plain_left = 0  # plain steps left of the probe under way
         if times:
             self.set_times(times)
 
@@ -231,10 +240,21 @@ class SpecPolicy:
         lens = [length for length in self.verify_lens if self._sizes.get(length)]
         if not lens or batch <= 0:
             return self.verify_lens[-1]
-        best = max(lens, key=lambda length: self.expected_tokens(length) / self.cost(batch, length))
+        value = {length: self.expected_tokens(length) / self.cost(batch, length) for length in lens}
+        best = max(lens, key=value.get)
+        if self._plain_left:
+            self._plain_left -= 1
+            return 1
         self._choices += 1
         if self.probe_every and self._choices % self.probe_every == 0:
-            best = next((length for length in lens if length > best), best)
+            self._probes += 1
+            longer = next((length for length in lens if length > best), None)
+            plain = best > 1 and 1 in value and value[1] >= self.PLAIN_PROBE_SHARE * value[best]
+            if plain and (longer is None or self._probes % 2 == 0):
+                self._plain_left = self.PLAIN_PROBE_STEPS - 1
+                return 1
+            if longer is not None:
+                return longer
         return best
 
     def update(self, drafted: int, accepted: list[int]) -> None:

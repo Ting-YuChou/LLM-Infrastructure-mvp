@@ -664,3 +664,63 @@ results/<run_id>/.
   (`SpecPolicy.extra`): 0.5-0.9 ms for one or two sequences, 2.1 ms for 16
   on AWQ and 3.8 ms on BF16 (the sequences' KV and the host's work per
   row).
+
+### Run m6-awq-20261113-040727-colab (same VM: AWQ target with and without the drafter, every concurrency)
+
+- Output tok/s, temperature 0 (the policy; every cycle the whole block as
+  in M5, measured here too; no drafter; vLLM AWQ + DFlash from M0):
+
+  | workload | policy | 4-bit drafter, policy | whole block | no drafter | vLLM + DFlash |
+  |---|---:|---:|---:|---:|---:|
+  | alpaca c=1 | 415 | 464 | 427 | 207 | 380 |
+  | alpaca c=4 | 1253 | 1402 | 1175 | 748 | 1211 |
+  | alpaca c=16 | 2967 | 3063 | 2194 | 2491 | 2084 |
+  | alpaca c=64 | 5092 | 5813 | 2741 | 6014 | 2943 |
+  | humaneval c=1 | 629 | 704 | 633 | 206 | 589 |
+  | humaneval c=4 | 1703 | 1830 | 1717 | 735 | 1701 |
+  | humaneval c=16 | 3262 | 3389 | 2939 | 2527 | 2950 |
+  | humaneval c=64 | 5239 | 5316 | 3919 | 5125 | 4204 |
+  | gsm8k c=16 | 2965 | 3056 | 2385 | 2173 | 2312 |
+  | long c=16 | 911 | 926 | 789 | 858 | 750 |
+
+  Above vLLM + DFlash on all 16 workloads (12 with the 4-bit drafter);
+  above nano without a drafter on all but alpaca c=64: 0.85x (0.97x with
+  the 4-bit drafter).
+- The lengths the policy ran: Q=10 at c=1; Q=6 (alpaca) or 10 (humaneval)
+  at c=4; Q=4 (alpaca, gsm8k, long) or 6 (humaneval) at c=16; at c=64 Q=3
+  on alpaca and Q=4 on humaneval, and with the 4-bit drafter plain steps
+  on alpaca (91% of the decode rows).
+- alpaca c=64: Q=3 was the wrong choice (5092 against 6014 for plain
+  steps), and the policy could not find out:
+  - at c=64 most steps have a prompt row, and a cycle with a prompt row
+    took the eager path: the drafter's ~60 kernels launched from the host.
+    Only steps that are one graph are timed, so the policy saw the cheap
+    cycles only. A real Q=3 step took about 30 ms where the table says 21;
+  - it had never run a plain step at 64 sequences, so their time on top of
+    the table was a guess from the cycles' (cost 12.4 ms; they take 10.6),
+    and the probes only ever tried a longer length.
+- Changes after this run:
+  - draft graphs: the proposer's part of each cycle graph captured alone
+    (same static buffers, drafts into a buffer). A cycle next to prompt
+    rows stages and replays it and then runs the target's pass as any
+    mixed step does, so what a mixed cycle costs over a mixed plain step
+    is about what the table says for the graphs;
+  - the policy tries plain steps: every other probe is four plain steps in
+    a row (in a row because plain steps overlap one another, which is part
+    of what they cost), when the estimate puts plain steps within 0.6 of
+    the best length's tokens per millisecond; one sequence never
+    qualifies (0.38);
+  - steps outside the decode graphs (prompt chunks, plain rows next to
+    them) leave their context rows pending too when they fit, instead of
+    writing them at once: at c=64 nearly every plain step is one of those;
+  - `ModelRunner.launch` runs in inference mode (it now writes the graphs'
+    static buffers on every path).
+- `summarize.py` did not read metric names with digits
+  (`spec_rows_len_3`): fixed, the table of lengths is in the run's summary.
+- 385 nano unit tests; 20 deliberate bugs each fail at least one (new: a
+  mixed step's drafts staged without their sampling settings, an eager
+  step's rows stashed at the wrong place or without their slots or past
+  the pending context's size, no flush before a step that writes at once,
+  a graph's rows staged at the wrong pending rows, plain probes never run).
+- Checks and AWQ serving: 61 minutes of VM, 7.6 CU (401.67 -> 394.11). The
+  VM is stopped.
