@@ -7,7 +7,7 @@ import functools
 import gc
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 import torch
@@ -59,18 +59,43 @@ class _DecodeGraphs:
 
     max_batch: int
     width: int  # block-table width: enough blocks for max_model_len
-    # pinned [2, 4, max_batch]: input_ids, positions, slots, gather rows
+    # pinned [2, 5, max_batch]: input_ids, positions, slots, gather rows, and
+    # each row's place among the pending context rows (_PendingContext)
     host_longs: torch.Tensor
     host_ints: torch.Tensor  # pinned [2, max_batch * (1 + width)]: context_lens, tables
     longs: torch.Tensor
     ints: torch.Tensor
     cu_seqlens: torch.Tensor
     logits_indices: torch.Tensor
-    graphs: dict[int, torch.cuda.CUDAGraph]
+    graphs: dict[int, Callable[[], None]]  # a graph's replay; on the CPU the step run eagerly
     outputs: dict[int, torch.Tensor]
 
     def bucket(self, batch: int) -> Optional[int]:
         return next((size for size in sorted(self.graphs) if size >= batch), None)
+
+
+@dataclass
+class _PendingContext:
+    """Tokens a decode graph computed whose context the proposer has not
+    been given yet: their taps, positions and KV slots, on the device.
+
+    A decode graph with a proposer leaves its rows here instead of calling
+    ``Proposer.observe``, and :meth:`ModelRunner.flush_context` hands them
+    over many steps at a time. For the DFlash drafter a context write reads
+    0.25 GB of projections whatever the number of rows, about 0.8 ms on an
+    A100, a sixth of a plain AWQ step; over a few hundred rows at once it
+    is a few microseconds per row. Nothing reads the proposer's context
+    between cycles, so the rows only have to be written before the next
+    one, and before another write to one of their slots.
+    """
+
+    capacity: int
+    taps: torch.Tensor  # [capacity + 1, tap width]; the last row takes the graphs' padded rows
+    positions: torch.Tensor  # [capacity + 1] long
+    slots: torch.Tensor  # [capacity + 1] long: the null slot where no row is pending
+    sizes: tuple[int, ...]  # the row counts a flush is padded to (one kernel shape each)
+    rows: int = 0
+    host_slots: set[int] = field(default_factory=set)  # the pending rows' slots
 
 
 # Token counts that get piecewise graphs; a step runs in the smallest that
@@ -182,7 +207,8 @@ class ModelRunner:
     tokens (one of ``verify_lens``), and :meth:`collect` returns a list of
     tokens for each. A cycle with no prefill rows replays one CUDA graph
     once :meth:`capture_spec_graphs` has run. Every token the target
-    computes, in a plain step too, goes to the proposer as context.
+    computes, in a plain step too, goes to the proposer as context (from
+    the decode graphs in batches: :meth:`flush_context`).
     """
 
     def __init__(
@@ -211,6 +237,7 @@ class ModelRunner:
         self.max_seqs = max_rows
         max_rows *= self.block
         self._graphs: Optional[_DecodeGraphs] = None
+        self._pending: Optional[_PendingContext] = None
         self._pieces: Optional[_PiecewiseGraphs] = None
         self._spec: Optional[_SpecGraphs] = None
         device = model.device
@@ -313,6 +340,7 @@ class ModelRunner:
         """
         proposer = self.proposer
         block = block or self.block
+        self.flush_context()  # the drafts read every computed token's context
         num_spec = next((i for i, seq in enumerate(seqs) if seq.is_prefill), len(seqs))
         if self._spec is not None and num_spec == len(seqs):
             bucket = self._spec.bucket(num_spec, block)
@@ -411,6 +439,9 @@ class ModelRunner:
             if bucket is not None:
                 with nvtx_range("replay"):
                     return self._replay(seqs, bucket, gather_rows, slot)
+        # This step's context writes follow the pending ones: a slot that
+        # was freed and given to another sequence keeps the later write.
+        self.flush_context()
         with nvtx_range("prepare"):
             input_ids, positions, metadata = self.prepare(seqs, is_prefill)
             if gather_rows is not None and any(row >= 0 for row in gather_rows):
@@ -832,7 +863,8 @@ class ModelRunner:
     def profile_graphs(self, repeats: int = 4) -> dict[tuple[int, int], float]:
         """Milliseconds of one step of each captured graph, replayed on the
         null block: ``{(sequences, verify length): ms}``, a decode graph
-        (with its sampling) being length 1. Empty off CUDA.
+        (with its sampling, without the proposer's context writes it leaves
+        pending) being length 1. Empty off CUDA.
 
         The contexts are empty, so this is the part of a step that depends
         on its rows: the weights' passes, the drafter and the sampling. What
@@ -862,11 +894,11 @@ class ModelRunner:
             decode.longs.copy_(decode.host_longs[0])
             decode.ints.copy_(decode.host_ints[0])
             self.sampler.stage([], [], [], 0, slot=0, padded_rows=decode.max_batch)
-            for size, graph in decode.graphs.items():
+            for size, replay in decode.graphs.items():
                 logits = decode.outputs[size]
 
-                def step(graph=graph, logits=logits) -> None:
-                    graph.replay()
+                def step(replay=replay, logits=logits) -> None:
+                    replay()
                     self.sampler.draw(logits, self.sampled, (False, False, False))
 
                 times[(size, 1)] = measure(step)
@@ -908,49 +940,96 @@ class ModelRunner:
         inference mode (the piecewise graphs', say), an update outside it
         raises. Inside inference mode either kind of tensor can be updated.
 
-        With a proposer the graphs also write its context for the decoded
-        tokens (a later cycle drafts from it).
+        With a proposer that reads the target's taps, a graph leaves its
+        tokens' taps among the pending context rows (:class:`_PendingContext`)
+        for :meth:`flush_context`. On the CPU (tests) a "graph" is the step
+        run eagerly.
         """
         device = self.model.device
+        cuda = device.type == "cuda"
         sizes = [size for size in GRAPH_BATCH_SIZES if size < max_batch] + [max_batch]
         width = self._table_width(max_model_len)
         graphs = _DecodeGraphs(
             max_batch=max_batch,
             width=width,
-            host_longs=torch.empty(2, 4, max_batch, dtype=torch.long, pin_memory=True),
-            host_ints=torch.empty(
-                2, max_batch * (1 + width), dtype=torch.int32, pin_memory=True
-            ),
-            longs=torch.empty(4, max_batch, dtype=torch.long, device=device),
-            ints=torch.empty(max_batch * (1 + width), dtype=torch.int32, device=device),
+            host_longs=torch.zeros(2, 5, max_batch, dtype=torch.long, pin_memory=cuda),
+            host_ints=torch.zeros(2, max_batch * (1 + width), dtype=torch.int32, pin_memory=cuda),
+            longs=torch.zeros(5, max_batch, dtype=torch.long, device=device),
+            ints=torch.zeros(max_batch * (1 + width), dtype=torch.int32, device=device),
             cu_seqlens=torch.arange(max_batch + 1, dtype=torch.int32, device=device),
             logits_indices=torch.arange(max_batch, dtype=torch.long, device=device),
             graphs={},
             outputs={},
         )
+        self._pending = None
+        if self.proposer is not None and self.proposer.tap_layers:
+            self._pending = self._new_pending_context(max_batch)
         self._fill_padding(graphs, 0, slot=0)
         graphs.longs.copy_(graphs.host_longs[0])
         graphs.ints.copy_(graphs.host_ints[0])
 
         start = time.perf_counter()
-        pool = torch.cuda.graph_pool_handle()
+        pool = torch.cuda.graph_pool_handle() if cuda else None
         with _no_gc_while_capturing():
             for size in sorted(sizes, reverse=True):  # largest first: the pool fits all
                 # Eager run first: Triton JIT and cuBLAS setup must not happen
                 # inside the capture.
-                self._graph_step(graphs, size)
+                self._record_decode_step(graphs, size)
+                if not cuda:
+                    graphs.graphs[size] = functools.partial(self._record_decode_step, graphs, size)
+                    continue
                 torch.cuda.synchronize(device)
                 graph = torch.cuda.CUDAGraph()
                 with torch.cuda.graph(graph, pool=pool):
-                    graphs.outputs[size] = self._graph_step(graphs, size)
-                graphs.graphs[size] = graph
-        torch.cuda.synchronize(device)
+                    self._record_decode_step(graphs, size)
+                graphs.graphs[size] = graph.replay
+        if cuda:
+            torch.cuda.synchronize(device)
         self._graphs = graphs
         logger.info(
             "nano-vLLM captured decode CUDA graphs for batch sizes %s in %.1f s",
             sorted(sizes),
             time.perf_counter() - start,
         )
+
+    def _new_pending_context(self, max_batch: int) -> _PendingContext:
+        """Room for a few steps of the largest decode graph, and one run of
+        the proposer's context writes per padded size (their kernels'
+        first use must not be mid-serving)."""
+        device = self.model.device
+        capacity = max(4 * max_batch, 64)
+        width = len(self.proposer.tap_layers) * self.model.config.hidden_size
+        null_slot = self.cache.null_block * self.cache.block_size
+        pending = _PendingContext(
+            capacity=capacity,
+            taps=torch.zeros(capacity + 1, width, dtype=self.model.dtype, device=device),
+            positions=torch.zeros(capacity + 1, dtype=torch.long, device=device),
+            slots=torch.full((capacity + 1,), null_slot, dtype=torch.long, device=device),
+            sizes=tuple(sorted({min(size, capacity) for size in (16, 64, 256, 1024)} | {capacity})),
+        )
+        for size in pending.sizes:
+            self.proposer.observe(pending.taps[:size], pending.positions[:size], pending.slots[:size])
+        return pending
+
+    @torch.inference_mode()
+    def flush_context(self) -> None:
+        """Give the proposer the context of the tokens the decode graphs
+        left pending. Called before a cycle (its drafts read the context),
+        before any step that writes context itself, and before a decode
+        graph whose rows would not fit or would write a pending slot again."""
+        pending = self._pending
+        if pending is None or not pending.rows:
+            return
+        with nvtx_range("flush_context"):
+            # Padded to a fixed size: the rows past the pending ones hold the null slot.
+            size = next(size for size in pending.sizes if size >= pending.rows)
+            self.proposer.observe(pending.taps[:size], pending.positions[:size], pending.slots[:size])
+            pending.slots.fill_(self.cache.null_block * self.cache.block_size)
+        pending.rows = 0
+        pending.host_slots.clear()
+
+    def _record_decode_step(self, graphs: _DecodeGraphs, size: int) -> None:
+        graphs.outputs[size] = self._graph_step(graphs, size)
 
     def _graph_step(self, graphs: _DecodeGraphs, size: int) -> torch.Tensor:
         """The decode step a graph records, from the static buffers only.
@@ -976,22 +1055,28 @@ class ModelRunner:
             logits_indices=graphs.logits_indices[:size],
         )
         positions = graphs.longs[1, :size]
-        tap_layers = self.proposer.tap_layers if self.proposer is not None else ()
-        if not tap_layers:
+        pending = self._pending
+        if pending is None:
             return self.model.forward_batch(input_ids, positions, self.cache, metadata)
         logits, taps = self.model.forward_batch_taps(
-            input_ids, positions, self.cache, metadata, tap_layers
+            input_ids, positions, self.cache, metadata, self.proposer.tap_layers
         )
-        self.proposer.observe(taps, positions, metadata.slot_mapping)
+        # The proposer's context of these tokens: written by flush_context.
+        rows = graphs.longs[4, :size]
+        pending.taps.index_copy_(0, rows, taps)
+        pending.positions.index_copy_(0, rows, positions)
+        pending.slots.index_copy_(0, rows, metadata.slot_mapping)
         return logits
 
     def _fill_padding(self, graphs: _DecodeGraphs, start: int, slot: int) -> None:
-        """Rows from ``start`` on: token 0, null slot, context 1, null blocks."""
+        """Rows from ``start`` on: token 0, null slot, context 1, null blocks;
+        their taps go to the pending context's spare row."""
         null = self.cache.null_block
         longs = graphs.host_longs[slot]
         longs[:2, start:] = 0
         longs[2, start:] = null * self.cache.block_size
         longs[3, start:] = -1
+        longs[4, start:] = self._pending.capacity if self._pending is not None else 0
         max_batch = graphs.max_batch
         ints = graphs.host_ints[slot]
         ints[start:max_batch] = 1
@@ -1008,11 +1093,22 @@ class ModelRunner:
         ints = graphs.host_ints[slot].numpy()
         tables = ints[graphs.max_batch :].reshape(graphs.max_batch, graphs.width)
         null = self.cache.null_block
+        kv_slots = [self.block_manager.slot_for_position(seq, seq.num_cached_tokens) for seq in seqs]
+        pending = self._pending
+        if pending is not None:
+            # The rows join the pending context; a slot already pending (its
+            # block was freed and reused, or a discarded step is run again)
+            # must be written in order, so what is pending goes first.
+            if pending.rows + batch > pending.capacity or not pending.host_slots.isdisjoint(kv_slots):
+                self.flush_context()
+            longs[4, :batch] = range(pending.rows, pending.rows + batch)
+            pending.rows += batch
+            pending.host_slots.update(kv_slots)
         for row, seq in enumerate(seqs):
             position = seq.num_cached_tokens
             longs[0, row] = seq.token_ids[position] if position < seq.num_tokens else 0
             longs[1, row] = position
-            longs[2, row] = self.block_manager.slot_for_position(seq, position)
+            longs[2, row] = kv_slots[row]
             longs[3, row] = gather_rows[row] if gather_rows is not None else -1
             ints[row] = position + 1
             table = seq.block_table
@@ -1025,7 +1121,7 @@ class ModelRunner:
         self._fill_padding(graphs, batch, slot)
         graphs.longs.copy_(graphs.host_longs[slot], non_blocking=True)
         graphs.ints.copy_(graphs.host_ints[slot], non_blocking=True)
-        graphs.graphs[bucket].replay()
+        graphs.graphs[bucket]()
         return graphs.outputs[bucket][:batch]
 
     # --- piecewise CUDA graphs for the other steps -------------------------

@@ -173,8 +173,9 @@ def test_graph_cycle_matches_the_eager_cycle(
 
 
 def test_a_decode_graph_writes_the_drafter_context(tmp_path):
-    """A plain step between cycles: its tokens' context must be in the
-    drafter's cache, as the eager step and a cycle leave it."""
+    """A plain step between cycles: its tokens' context must reach the
+    drafter's cache (through the pending rows and their flush) as the
+    eager step leaves it."""
     runner, manager = _runner(tmp_path, max_graph_batch=4, verify_lens=(2, 5))
     runner.capture_decode_graphs(max_batch=4, max_model_len=MAX_MODEL_LEN)
     seqs = _prefilled(runner, manager, 3)
@@ -196,6 +197,10 @@ def test_a_decode_graph_writes_the_drafter_context(tmp_path):
         tokens = runner.collect(handle)
         assert handle.graph_size == 4 and handle.spec_seqs == 0
         graph_logits = runner._graphs.outputs[4][:3].float().clone()
+        # The graph left the rows pending; the flush writes them.
+        assert runner._pending.rows == 3 and runner._pending.host_slots == set(slots.tolist())
+        runner.flush_context()
+        assert runner._pending.rows == 0
         from_graph = written()
         for layer in range(len(dcache.keys)):
             dcache.keys[layer].reshape(dcache.total_slots, -1)[slots] = 0

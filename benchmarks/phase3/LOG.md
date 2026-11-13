@@ -580,3 +580,51 @@ results/<run_id>/.
   scheduler booking the whole block or no lookahead, a cycle launched over
   an in-flight step, rates counting unreached depths, the policy never
   told, draft tokens miscounted) each fail at least one test.
+
+### Run m6-smoke-20261113-024946-colab (new VM: the spec, warm-up, graph and async GPU tests, AWQ spec_check)
+
+- 86 tests passed: a cycle graph of every length gives the eager cycle's
+  logits, also with the length changing from cycle to cycle; a decode graph
+  leaves the drafter's context as the eager step does; every graph gets a
+  step time; no kernel compiles after warm-up with the lengths changing
+  every step.
+- Step time of each graph on an empty context (ms; AWQ target, BF16
+  drafter; spec_check runs with at most 16 sequences):
+
+  | sequences | Q=1 | Q=2 | Q=3 | Q=4 | Q=6 | Q=10 | Q=1, no drafter |
+  |---|---:|---:|---:|---:|---:|---:|---:|
+  | 1 | 5.35 | 6.90 | 6.93 | 6.96 | 7.05 | 7.17 | 4.62 |
+  | 2 | 5.59 | 6.98 | 7.05 | 7.09 | 7.21 | 8.20 | 4.69 |
+  | 4 | 5.57 | 6.99 | 7.07 | 7.13 | 8.02 | 9.27 | 4.71 |
+  | 8 | 5.65 | 7.09 | 7.84 | 8.10 | 9.35 | 14.02 | 4.77 |
+  | 16 | 5.75 | 7.91 | 9.23 | 10.27 | 14.11 | 22.56 | 4.88 |
+
+  A cycle's time is flat up to about 32 verify rows and then grows with
+  them. At alpaca's acceptance the best length is 10 for one or two
+  sequences, 6 for four, 4 or 6 for eight and 4 for sixteen.
+- 16 requests at once (4 per dataset): 2760 tok/s against 1973 without a
+  drafter (1.40x); the policy ran 892 decode rows at Q=4, 83 at Q=6 and 8
+  at Q=10. One at a time it ran Q=10 throughout: 7.74 ms a cycle, as M5.
+  Emitted tokens that are not the teacher-forced argmax: 0.29% and 0.50%
+  (plain: 0.33% and 0.43%), largest margin 0.25.
+- Found: a plain step with the drafter loaded is 0.73 to 0.90 ms slower
+  than without (the Q=1 columns): the drafter's context write for the
+  step's tokens reads fc (168 MB) and five K/V projections whatever the
+  number of rows. That is 16% of a plain step, paid on every step where
+  the policy stops drafting, so with many sequences the engine would run
+  about a tenth below itself without a drafter.
+- Fix (after this run): a decode graph no longer writes the context. It
+  leaves its tokens' taps, positions and slots in a device buffer
+  (`_PendingContext`, room for four steps of the largest graph, at least
+  64 rows), and `ModelRunner.flush_context` writes them in one call padded
+  to a fixed row count: before a cycle (its drafts read the context),
+  before any step that writes context itself, when the rows run out, and
+  before a decode graph that would write a pending slot again (the block
+  was freed and reused, or a discarded step is run again), so two writes
+  to one slot always land in order. `capture_decode_graphs` now works on
+  the CPU like the cycle graphs (the step run from the static buffers), so
+  the unit tests cover all of it: 380 nano unit tests; 15 deliberate bugs
+  (the ten above; no flush before a cycle or before an eager step, a
+  pending slot written twice in one flush, flushed rows left staged, the
+  graph's padded rows counted as pending) each fail at least one.
+- 25 minutes of VM, 2.65 CU (404.32 -> 401.67). The VM is stopped.

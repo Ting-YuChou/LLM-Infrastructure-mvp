@@ -76,6 +76,29 @@ def _scripted(core, script=SCRIPT):
     return core
 
 
+def _graph_core(path, proposer=None, graphs=None, **overrides):
+    """``_core`` with the decode graphs too (on the CPU: the step run from
+    the static buffers), so a plain step leaves its context rows pending."""
+    core = _core(path, proposer, graphs, **overrides)
+    if graphs:
+        core.model_runner.capture_decode_graphs(max_batch=graphs, max_model_len=core.config.max_model_len)
+    return core
+
+
+def _count_flushes(runner):
+    """Rows each flush_context call wrote."""
+    flushed = []
+    flush = runner.flush_context
+
+    def spy():
+        if runner._pending is not None and runner._pending.rows:
+            flushed.append(runner._pending.rows)
+        return flush()
+
+    runner.flush_context = spy
+    return flushed
+
+
 # Steps of 1 to 64 sequences whose time is a pass over the weights (5 ms)
 # plus 0.1 ms per row past the sixteenth, and 1 ms more for a cycle's drafter.
 def _times(lens=(1, 2, 3, 4, 6, 10), sizes=(1, 2, 4, 8, 16, 32, 64)):
@@ -219,13 +242,23 @@ def test_tokens_do_not_depend_on_the_verify_lengths(tmp_path, target, sampled, g
     expected, _ = _run(_core(path), prompts, sampling=sampling)
     if not sampled:
         assert expected == [_hf_greedy(hf_model, prompt, MAX_TOKENS) for prompt in prompts]
-    core = _scripted(_core(
+    core = _scripted(_graph_core(
         path, graphs=graphs, speculative_model=_drafter_path(tmp_path, 0),
         async_scheduling=async_scheduling, max_num_batched_tokens=8,
     ))
+    runner = core.model_runner
+    flushed = _count_flushes(runner)
+    propose = core.proposer.propose
+
+    def drafts_from_a_complete_context(batch):
+        assert runner._pending is None or runner._pending.rows == 0
+        return propose(batch)
+
+    core.proposer.propose = drafts_from_a_complete_context
     # An arrival every third step: decode rows of any length next to prompt chunks.
     outputs, paths = _run(core, prompts, arrive_every=3, sampling=sampling)
     assert outputs == expected
+    assert bool(flushed) == bool(graphs)  # the decode graphs' context rows, in batches
     assert core.block_manager.num_free_blocks == core.block_manager.num_blocks
     assert paths["eager"] > 0 and (paths["graph"] > 0) == bool(graphs)
 
@@ -248,17 +281,33 @@ def test_tokens_do_not_depend_on_the_verify_lengths(tmp_path, target, sampled, g
     assert all(0 <= count <= drafted for drafted, accepted in updates for count in accepted)
 
 
+@pytest.mark.parametrize("script", [SCRIPT, [1]], ids=["every length", "plain steps only"])
 @pytest.mark.parametrize("graphs", [None, 4], ids=["eager", "graphs"])
-def test_plain_steps_write_the_drafter_context_too(tmp_path, target, graphs):
+def test_plain_steps_write_the_drafter_context_too(tmp_path, target, graphs, script):
     hf_model, path = target
-    core = _scripted(_core(path, graphs=graphs, speculative_model=_drafter_path(tmp_path, 0)))
+    core = _scripted(
+        _graph_core(path, graphs=graphs, speculative_model=_drafter_path(tmp_path, 0)), script
+    )
+    runner = core.model_runner
+    flushed = _count_flushes(runner)
     for req_id, prompt in enumerate(PROMPTS.values()):
         core.add_request(EngineRequest(req_id, list(prompt), SamplingOptions(max_tokens=40, **GREEDY)))
-    while min((seq.num_completion_tokens for seq in core.requests.values()), default=0) < 12:
+    while min((seq.num_completion_tokens for seq in core.requests.values()), default=0) < 30:
         assert all(output.error is None for output in core.step())
     assert len(core.requests) == len(PROMPTS)
-    assert core.spec_rows[1] > 0 and core.spec_rows[5] > 0
+    assert core.spec_rows[1] > 0 and (core.spec_rows[5] > 0) == (script is SCRIPT)
     core._collect_inflight()
+    if graphs:
+        pending = runner._pending
+        assert pending.capacity == 64 and max(flushed) <= 64
+        if script == [1]:
+            # No cycle asked for the context: written when the rows ran out
+            # (three sequences, 21 steps), the rest still pending.
+            assert flushed == [63] and 0 < pending.rows <= 63
+            assert len(pending.host_slots) == pending.rows
+    else:
+        assert runner._pending is None
+    runner.flush_context()
 
     drafter, used = core.proposer.drafter, core.proposer.cache
     config = core.config
@@ -275,6 +324,123 @@ def test_plain_steps_write_the_drafter_context_too(tmp_path, target, graphs):
                 got = getattr(used, name)[layer].reshape(used.total_slots, -1)[slots]
                 want = getattr(fresh, name)[layer].reshape(fresh.total_slots, -1)[slots]
                 torch.testing.assert_close(got, want, rtol=1e-4, atol=1e-4)
+
+
+def test_a_pending_slot_is_written_before_it_is_computed_again(tmp_path, target):
+    """A decode graph's rows wait for the next flush. A second write to one
+    of their slots (the block was freed and reused, or the step is run
+    again) must come after the first: the pending rows are flushed first."""
+    hf_model, path = target
+    core = _scripted(
+        _graph_core(path, graphs=4, speculative_model=_drafter_path(tmp_path, 0)), script=[1]
+    )
+    runner = core.model_runner
+    core.add_request(EngineRequest(0, list(PROMPTS["a"]), SamplingOptions(max_tokens=40, **GREEDY)))
+    core.step()
+    while core.requests[0].num_completion_tokens < 3:
+        core.step()
+    core._collect_inflight()
+    seq = core.requests[0]
+    pending = runner._pending
+    before = pending.rows
+    assert before > 0
+    flushed = _count_flushes(runner)
+    core.block_manager.may_append(seq)
+    slot = core.block_manager.slot_for_position(seq, seq.num_cached_tokens)
+
+    def plain_step():
+        return runner.collect(runner.launch([seq], is_prefill=False, draft_tokens=0))
+
+    plain_step()  # a new position: joins the pending rows
+    assert flushed == [] and pending.rows == before + 1 and slot in pending.host_slots
+    plain_step()  # the same position again
+    assert flushed == [before + 1] and pending.rows == 1 and pending.host_slots == {slot}
+    runner.flush_context()
+    assert pending.rows == 0 and not pending.host_slots
+    # The slot holds the context of the token computed there.
+    drafter, used = core.proposer.drafter, core.proposer.cache
+    computed = seq.num_cached_tokens + 1
+    fresh = drafter.new_paged_cache(core.config.num_kvcache_blocks, core.config.kvcache_block_size)
+    slots = torch.tensor([core.block_manager.slot_for_position(seq, p) for p in range(computed)])
+    drafter.write_context(_hf_taps(hf_model, seq.token_ids[:computed]), torch.arange(computed), fresh, slots)
+    for layer in range(drafter.config.num_hidden_layers):
+        got = used.keys[layer].reshape(used.total_slots, -1)[slots]
+        want = fresh.keys[layer].reshape(fresh.total_slots, -1)[slots]
+        torch.testing.assert_close(got, want, rtol=1e-4, atol=1e-4)
+
+
+def _plain_core(tmp_path, path, prompts):
+    """An engine whose every step is a plain one through the decode graphs,
+    stepped until each request has a few tokens and nothing is in flight."""
+    core = _scripted(
+        _graph_core(path, graphs=4, speculative_model=_drafter_path(tmp_path, 0)), script=[1]
+    )
+    for req_id, prompt in enumerate(prompts):
+        core.add_request(EngineRequest(req_id, list(prompt), SamplingOptions(max_tokens=40, **GREEDY)))
+    core.step()
+    while min(seq.num_completion_tokens for seq in core.requests.values()) < 3:
+        core.step()
+    core._collect_inflight()
+    return core
+
+
+def _context_keys(core, slots):
+    """The drafter's keys of every layer at ``slots``."""
+    cache = core.proposer.cache
+    index = torch.tensor(slots)
+    return torch.stack([keys.reshape(cache.total_slots, -1)[index] for keys in cache.keys])
+
+
+def test_a_flush_leaves_no_row_to_be_written_again(tmp_path, target):
+    """A flush is padded to a fixed number of rows. The rows it wrote must
+    not be written again by the next one: their slots may hold another
+    sequence's context by then."""
+    _, path = target
+    core = _plain_core(tmp_path, path, [PROMPTS["a"], PROMPTS["b"]])
+    runner, pending = core.model_runner, core.model_runner._pending
+    seqs = list(core.requests.values())
+    assert pending.rows >= 4
+    # The last pending row: the second sequence's last computed token.
+    slot = core.block_manager.slot_for_position(seqs[1], seqs[1].num_cached_tokens - 1)
+    assert slot in pending.host_slots
+    runner.flush_context()
+    # The slot gets another context (as if its block had gone to another sequence).
+    width = pending.taps.shape[1]
+    other = torch.randn(1, width, generator=torch.Generator().manual_seed(5))
+    core.proposer.observe(other, torch.tensor([7]), torch.tensor([slot]))
+    kept = _context_keys(core, [slot]).clone()
+    # One more plain row and its flush: row 0 only.
+    core.block_manager.may_append(seqs[0])
+    runner.collect(runner.launch([seqs[0]], is_prefill=False, draft_tokens=0))
+    assert pending.rows == 1
+    runner.flush_context()
+    assert torch.equal(_context_keys(core, [slot]), kept)
+
+
+def test_an_eager_steps_context_is_written_after_the_pending_rows(tmp_path, target):
+    """A step outside the decode graphs writes its context at once; rows
+    still pending for the same slots are older and must not land after it."""
+    hf_model, path = target
+    core = _plain_core(tmp_path, path, [PROMPTS["a"]])
+    runner, pending = core.model_runner, core.model_runner._pending
+    seq = core.requests[0]
+    position = seq.num_cached_tokens
+    core.block_manager.may_append(seq)
+    slot = core.block_manager.slot_for_position(seq, position)
+    runner.collect(runner.launch([seq], is_prefill=False, draft_tokens=0))  # pending: the token at position
+    assert slot in pending.host_slots
+    # The position is computed again with another token, eagerly.
+    seq.token_ids[position] = (seq.token_ids[position] + 1) % TINY_CONFIG["vocab_size"]
+    runner.forward([seq], False, use_graphs=False)
+    runner.flush_context()
+    drafter = core.proposer.drafter
+    fresh = drafter.new_paged_cache(core.config.num_kvcache_blocks, core.config.kvcache_block_size)
+    tokens = seq.token_ids[: position + 1]
+    drafter.write_context(
+        _hf_taps(hf_model, tokens)[-1:], torch.tensor([position]), fresh, torch.tensor([slot])
+    )
+    want = torch.stack([keys.reshape(fresh.total_slots, -1)[slot : slot + 1] for keys in fresh.keys])
+    torch.testing.assert_close(_context_keys(core, [slot]), want, rtol=1e-4, atol=1e-4)
 
 
 def test_a_right_drafter_is_accepted_at_every_length(target):
