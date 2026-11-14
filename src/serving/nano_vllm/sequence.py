@@ -46,6 +46,9 @@ class Sequence:
     # that step's sampled-token buffer holding it.
     num_inflight: int = 0
     pending_row: int = -1
+    # Drafts of its speculative row in flight: that cycle moves the sequence
+    # 1 to inflight_drafts + 1 tokens on, which the host learns when it lands.
+    inflight_drafts: int = 0
     # Bumped whenever the block table is released, so a step that finishes
     # afterwards does not commit blocks the sequence no longer owns.
     epoch: int = 0

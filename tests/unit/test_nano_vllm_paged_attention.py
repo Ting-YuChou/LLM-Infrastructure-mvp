@@ -202,6 +202,56 @@ def test_build_batch_aligns_every_field_to_16_bytes(num_decode_rows, prefill_len
     assert metadata.block_tables.stride(0) % 16 == 0  # an integer kernel argument
 
 
+@pytest.mark.parametrize("block_rows", [1, 2, 5])
+@pytest.mark.parametrize("prefill_lens", [[], [3], [1, 7]])
+def test_build_batch_gives_verify_rows_and_the_prefill_rows_after_them_aligned_fields(
+    block_rows, prefill_lens
+):
+    # A speculative step: verify rows of 4 tokens first, with logits for
+    # every token; the prefill rows after them get their own offsets.
+    query_lens = [4] * block_rows + prefill_lens
+    tables = [[i % 8] * (1 + i % 3) for i in range(len(query_lens))]
+    num_tokens = sum(query_lens)
+    _, _, metadata = build_batch(
+        input_ids=list(range(num_tokens)),
+        positions=[0] * num_tokens,
+        slots=list(range(num_tokens)),
+        block_tables=tables,
+        context_lens=[n + 2 for n in query_lens],
+        query_lens=query_lens,
+        is_prefill=True,
+        null_block=8,
+        num_slots=64,
+        device=torch.device("cpu"),
+        block_rows=block_rows,
+    )
+    assert (metadata.num_block_rows, metadata.block_len) == (block_rows, 4)
+    assert metadata.num_decode_rows == 0 and not metadata.decode_only
+    verify_tokens = 4 * block_rows
+    ends = [verify_tokens + sum(prefill_lens[: i + 1]) - 1 for i in range(len(prefill_lens))]
+    assert metadata.logits_indices.tolist() == list(range(verify_tokens)) + ends
+    fields = [metadata.slot_mapping, metadata.block_tables, metadata.context_lens,
+              metadata.cu_seqlens_q, metadata.logits_indices]
+    if prefill_lens:
+        fields += [metadata.prefill_cu_seqlens_q, metadata.prefill_context_lens,
+                   metadata.prefill_block_tables]
+        assert metadata.prefill_cu_seqlens_q.tolist() == [0] + [e - verify_tokens + 1 for e in ends]
+        assert metadata.prefill_context_lens.tolist() == metadata.context_lens[block_rows:].tolist()
+        assert metadata.prefill_block_tables.tolist() == metadata.block_tables[block_rows:].tolist()
+    else:
+        assert metadata.prefill_block_tables is None
+    assert all(t.data_ptr() % 16 == 0 for t in fields)
+
+
+def test_build_batch_rejects_verify_rows_of_different_lengths():
+    with pytest.raises(ValueError, match="verify rows"):
+        build_batch(
+            input_ids=[0] * 7, positions=[0] * 7, slots=list(range(7)), block_tables=[[0], [1]],
+            context_lens=[4, 3], query_lens=[4, 3], is_prefill=True, null_block=8, num_slots=36,
+            device=torch.device("cpu"), block_rows=2,
+        )
+
+
 def test_build_batch_rejects_slots_outside_the_cache():
     with pytest.raises(ValueError, match="outside the KV cache"):
         build_batch(

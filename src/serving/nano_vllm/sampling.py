@@ -114,11 +114,58 @@ def encode_options(options: list[SamplingOptions], vocab: int) -> tuple[list, li
     return temperature, top_p, top_k
 
 
+_PHILOX_M0, _PHILOX_M1 = 0xD2511F53, 0xCD9E8D57
+_PHILOX_W0, _PHILOX_W1 = 0x9E3779B9, 0xBB67AE85
+_U32 = 0xFFFFFFFF
+
+
+def philox4x32(
+    counter: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor], key: tuple[int, int]
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Philox4x32-10 on int64 tensors holding 32-bit words (they broadcast)."""
+    c0, c1, c2, c3 = counter
+    k0, k1 = key
+    for _ in range(10):
+        # A 32x32-bit product wraps in int64, but all of its 64 bits are there.
+        p0, p1 = _PHILOX_M0 * c0, _PHILOX_M1 * c2
+        c0, c1, c2, c3 = ((p1 >> 32) & _U32) ^ c1 ^ k0, p1 & _U32, ((p0 >> 32) & _U32) ^ c3 ^ k1, p0 & _U32
+        k0, k1 = (k0 + _PHILOX_W0) & _U32, (k1 + _PHILOX_W1) & _U32
+    return c0, c1, c2, c3
+
+
+def philox_log_exponential(
+    seed: int,
+    seq_lo: torch.Tensor,
+    seq_hi: torch.Tensor,
+    positions: torch.Tensor,
+    vocab: int,
+) -> torch.Tensor:
+    """log(E), E ~ Exp(1), for every token of every row: [rows, vocab] float32.
+
+    The noise of the CUDA draw kernel (kernels/csrc/sampler.cu), in PyTorch:
+    token ``t`` of a row takes word ``t % 4`` of Philox4x32-10 with counter
+    (t // 4, position, sequence id low, high) and key (seed low, high), and
+    turns its top 23 bits ``m`` into u = (m + 0.5) / 2^23, E = -log1p(u - 1).
+    A row's noise depends on nothing but (seed, sequence id, position), so
+    two samplers that agree on those and on the logits draw the same token.
+    ``seq_lo``, ``seq_hi`` and ``positions`` are [rows] integers; the low 32
+    bits of each are used.
+    """
+    rows = positions.numel()
+    groups = torch.arange(-(-vocab // 4), dtype=torch.int64, device=positions.device).view(1, -1)
+    per_row = [(x.to(torch.int64) & _U32).view(rows, 1) for x in (positions, seq_lo, seq_hi)]
+    words = philox4x32((groups, *per_row), (seed & _U32, (seed >> 32) & _U32))
+    random = torch.stack([w.expand(rows, groups.shape[1]) for w in words], dim=-1).reshape(rows, -1)
+    u = ((random[:, :vocab] >> 9).to(torch.float32) + 0.5) * (1.0 / 8388608.0)
+    return torch.log(-torch.log1p(u - 1.0))
+
+
 def sample_rows(
     logits: torch.Tensor,
     temperature: torch.Tensor,
     top_p: torch.Tensor,
     top_k: torch.Tensor,
+    log_noise: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     """One token per row of [rows, vocab] logits, on their device, no host sync.
 
@@ -126,7 +173,9 @@ def sample_rows(
     otherwise a draw among the tokens keep_mask leaves by the exponential
     race: the argmax of v - log(E) with v = logits / temperature and E ~
     Exp(1), which picks token i with probability softmax(v)[i]. NaN logits
-    count as -inf.
+    count as -inf. ``log_noise`` [rows, vocab] is log(E)
+    (:func:`philox_log_exponential`); without it the noise comes from
+    PyTorch's generator.
     """
     inf = float("inf")
     logits = torch.nan_to_num(logits.float(), nan=-inf, posinf=inf, neginf=-inf)
@@ -134,8 +183,12 @@ def sample_rows(
     greedy = (temperature <= 0) | ~torch.isfinite(logits.max(dim=-1).values)
     temperature = torch.where(temperature > 0, temperature, torch.ones_like(temperature))
     keep = keep_mask(logits, temperature, top_p, top_k)
-    noise = torch.empty_like(logits).exponential_().clamp_min_(torch.finfo(torch.float32).tiny).log_()
-    scores = (logits / temperature.view(-1, 1)).masked_fill(~keep, -inf) - noise
+    if log_noise is None:
+        log_noise = (
+            torch.empty_like(logits).exponential_().clamp_min_(torch.finfo(torch.float32).tiny).log_()
+        )
+    # logits * (1 / T), as the CUDA kernel computes it.
+    scores = (logits * (1.0 / temperature).view(-1, 1)).masked_fill(~keep, -inf) - log_noise
     return torch.where(greedy, greedy_tokens, scores.argmax(dim=-1))
 
 
@@ -186,16 +239,23 @@ class Sampler:
 
     A draw's randomness comes from (seed, sequence id, position of the token
     in its sequence), so a request's tokens do not depend on the batch it
-    runs in (up to the logits, which the batch size can change slightly).
+    runs in (up to the logits, which the batch size can change slightly),
+    and the PyTorch path uses the kernels' noise
+    (:func:`philox_log_exponential`).
     """
 
     # Rows of ``params``: temperature and top_p as float32 bits, top_k (0:
     # off), the token's position, the sequence id's low and high words.
     TEMPERATURE, TOP_P, TOP_K, POSITION, SEQ_LO, SEQ_HI = range(6)
 
-    def __init__(self, max_rows: int, device: torch.device, seed: int = 0):
+    def __init__(
+        self, max_rows: int, device: torch.device, seed: int = 0, temperature_scale: float = 1.0
+    ):
+        """``temperature_scale`` multiplies every row's temperature (a
+        speculative drafter's sampler draws below the request's)."""
         self.device = torch.device(device)
         self.seed = seed
+        self.temperature_scale = temperature_scale
         cuda = self.device.type == "cuda"
         self.host = torch.zeros(2, 6, max_rows, dtype=torch.int32, pin_memory=cuda)
         self.params = torch.zeros(6, max_rows, dtype=torch.int32, device=self.device)
@@ -220,27 +280,62 @@ class Sampler:
         rows, vocab = logits.shape
         if rows != len(options):
             raise ValueError("sample expects one row of logits per option")
+        self.draw(logits, out, self.stage(options, seq_ids, positions, vocab, slot=slot))
+
+    def stage(
+        self,
+        options: list[SamplingOptions],
+        seq_ids: list[int],
+        positions: list[int],
+        vocab: int,
+        slot: int = 0,
+        padded_rows: int = 0,
+    ) -> tuple[bool, bool, bool]:
+        """Upload the rows' settings for the next :meth:`draw`: the host half
+        of :meth:`sample`. Rows from ``len(options)`` up to ``padded_rows``
+        (a CUDA graph's padding) are set to greedy. Returns whether any row
+        samples (temperature > 0), has top-k or top-p, and has both."""
+        rows = len(options)
         temperature, top_p, top_k = encode_options(options, vocab)
         host = self.host[slot].numpy()
         floats = host[:2].view(np.float32)
         floats[self.TEMPERATURE, :rows] = temperature
+        if self.temperature_scale != 1.0:
+            floats[self.TEMPERATURE, :rows] *= self.temperature_scale
         floats[self.TOP_P, :rows] = top_p
         host[self.TOP_K, :rows] = top_k
         host[self.POSITION, :rows] = positions
         ids = np.asarray(seq_ids, dtype=np.int64)
         host[self.SEQ_LO, :rows] = (ids & 0xFFFFFFFF).astype(np.uint32).view(np.int32)
         host[self.SEQ_HI, :rows] = (ids >> 32).astype(np.int32)
+        if padded_rows > rows:
+            floats[self.TEMPERATURE, rows:padded_rows] = 0.0
         self.params.copy_(self.host[slot], non_blocking=True)
 
         sampled = [t > 0 for t in temperature]
         filtered = [s and (p < 1.0 or k > 0) for s, p, k in zip(sampled, top_p, top_k)]
         both = [s and p < 1.0 and k > 0 for s, p, k in zip(sampled, top_p, top_k)]
+        return any(sampled), any(filtered), any(both)
+
+    def draw(
+        self,
+        logits: torch.Tensor,
+        out: torch.Tensor,
+        flags: tuple[bool, bool, bool] = (True, True, True),
+    ) -> None:
+        """One token per row of ``logits`` into ``out[:rows]`` with the staged
+        settings: device work only, so a CUDA graph can hold it. ``flags``
+        (from :meth:`stage`) skip the kernels no row needs; the default runs
+        them all, each row leaving a kernel it does not need at once, for a
+        graph that serves any settings."""
+        rows = logits.shape[0]
+        any_sampled, any_filter, any_both = flags
         if self._cuda is not None and self._cuda(
             logits, self.params, out, self.seed,
-            any_sampled=any(sampled), any_filter=any(filtered), any_both=any(both),
+            any_sampled=any_sampled, any_filter=any_filter, any_both=any_both,
         ):
             return
-        if not any(sampled):
+        if not any_sampled:
             out[:rows].copy_(logits.argmax(dim=-1))
             return
         params = self.params[:, :rows]
@@ -250,5 +345,9 @@ class Sampler:
                 params[self.TEMPERATURE].view(torch.float32),
                 params[self.TOP_P].view(torch.float32),
                 params[self.TOP_K],
+                philox_log_exponential(
+                    self.seed, params[self.SEQ_LO], params[self.SEQ_HI], params[self.POSITION],
+                    logits.shape[-1],
+                ),
             )
         )

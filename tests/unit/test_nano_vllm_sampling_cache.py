@@ -212,3 +212,77 @@ def test_sampler_stages_each_rows_settings_and_samples_on_the_cpu():
     assert params[Sampler.SEQ_LO].tolist() == [1, 2, 3]
     assert params[Sampler.SEQ_HI].tolist() == [0, 0, 5]
     assert torch.equal(sampler.host[1], sampler.params)  # staged in the slot it was given
+
+
+def test_philox4x32_matches_the_published_vectors():
+    from serving.nano_vllm.sampling import philox4x32
+
+    def run(counter, key):
+        words = philox4x32(tuple(torch.tensor([c], dtype=torch.int64) for c in counter), key)
+        return [int(w) for w in words]
+
+    # Random123's known answers for philox4x32-10.
+    assert run((0, 0, 0, 0), (0, 0)) == [0x6627E8D5, 0xE169C58D, 0xBC57AC4C, 0x9B00DBD8]
+    ones = 0xFFFFFFFF
+    assert run((ones,) * 4, (ones, ones)) == [0x408F276D, 0x41C83B0E, 0xA20BC7C6, 0x6D5451FD]
+    assert run((0x243F6A88, 0x85A308D3, 0x13198A2E, 0x03707344), (0xA4093822, 0x299F31D0)) == [
+        0xD16CFE09, 0x94FDCCEB, 0x5001E420, 0x24126EA1
+    ]
+
+
+def test_log_noise_is_exponential_and_depends_on_seed_sequence_and_position_only():
+    from serving.nano_vllm.sampling import philox_log_exponential
+
+    def noise(seed, seq_ids, positions, vocab=1001):
+        ids = torch.tensor(seq_ids)
+        return philox_log_exponential(seed, ids & 0xFFFFFFFF, ids >> 32, torch.tensor(positions), vocab)
+
+    big = (7 << 32) + 3
+    base = noise(5, [1, 2, big], [10, 10, 11])
+    assert base.shape == (3, 1001) and base.dtype == torch.float32
+    # A row is the same wherever it stands in the batch, and at any vocabulary size.
+    assert torch.equal(noise(5, [big, 1], [11, 10]), base[[2, 0]])
+    assert torch.equal(noise(5, [2], [10], vocab=64)[0], base[1, :64])
+    for other in (noise(6, [1], [10]), noise(5, [1], [11]), noise(5, [1 + (1 << 32)], [10]), noise(5, [2], [10])):
+        assert (other[0] != base[0]).float().mean() > 0.99
+    # E ~ Exp(1): mean 1, variance 1, P(E > 1) = 1/e.
+    e = noise(0, list(range(64)), [0] * 64, vocab=20000).double().exp()
+    assert e.mean().item() == pytest.approx(1.0, abs=0.01)
+    assert e.var().item() == pytest.approx(1.0, abs=0.02)
+    assert (e > 1).double().mean().item() == pytest.approx(0.3679, abs=0.005)
+
+
+def test_cpu_sampler_draws_from_the_truncated_softmax_with_keyed_noise():
+    from serving.nano_vllm.sampling import Sampler, SamplingOptions
+
+    row = torch.tensor([2.0, 1.5, 1.0, 0.5, 0.0, -3.0, -3.0, -3.0])
+    rows = 20000
+    option = SamplingOptions(temperature=0.8, top_p=0.9)
+
+    def draw(seed, seq_ids, positions):
+        sampler = Sampler(max_rows=len(seq_ids), device="cpu", seed=seed)
+        out = torch.zeros(len(seq_ids), dtype=torch.long)
+        sampler.sample(row.expand(len(seq_ids), -1), [option] * len(seq_ids), seq_ids, positions, out)
+        return out
+
+    tokens = draw(3, [9] * rows, list(range(rows)))  # one sequence, a draw per position
+    keep = _keep(row.view(1, -1).double(), 0.8, 0.9)[0]
+    probs = torch.softmax((row.double() / 0.8).masked_fill(~keep, float("-inf")), dim=0)
+    freq = torch.bincount(tokens, minlength=8).double() / rows
+    assert freq[~keep].sum() == 0
+    assert torch.allclose(freq, probs, atol=0.015)
+    # The same (seed, sequence, position) draws the same token in any batch.
+    assert torch.equal(draw(3, [9] * rows, list(range(rows))), tokens)
+    assert draw(3, [4, 9, 4], [0, 77, 1])[1] == tokens[77]
+    assert (draw(4, [9] * rows, list(range(rows))) != tokens).float().mean() > 0.3
+    assert (draw(3, [8] * rows, list(range(rows))) != tokens).float().mean() > 0.3
+
+
+def test_sampler_temperature_scale_lowers_sampled_rows_and_leaves_greedy_rows():
+    from serving.nano_vllm.sampling import Sampler, SamplingOptions
+
+    sampler = Sampler(max_rows=3, device="cpu", seed=0, temperature_scale=0.5)
+    options = [SamplingOptions(temperature=0.8), SamplingOptions(temperature=0.0), SamplingOptions(temperature=1.2)]
+    assert sampler.stage(options, [1, 2, 3], [0, 0, 0], vocab=8) == (True, True, False)
+    staged = sampler.params[Sampler.TEMPERATURE].view(torch.float32).tolist()
+    assert staged == pytest.approx([0.4, 0.0, 0.6])

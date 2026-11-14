@@ -1,0 +1,5 @@
+load generator / nano: vllm 0.19.1
+vllm baseline: 0.33.0 | torch 2.14.0
+sglang baseline: 0.5.23 | torch 2.14.1
+study: torch 2.9.0 | transformers 4.57.3
+drafter: z-lab/LLaMA3.1-8B-Instruct-DFlash-UltraChat @ d3af30def9601abdd10810aba220d692f0e803f0

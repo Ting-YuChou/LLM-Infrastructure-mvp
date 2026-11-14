@@ -1,0 +1,217 @@
+[
+  {
+    "label": "bf16",
+    "mode": "plain",
+    "batch": 1,
+    "tokens": 2940,
+    "not_argmax": 8,
+    "max_margin": 0.25,
+    "margins_over_0.5": 0,
+    "margins_over_1": 0,
+    "tokens_per_cycle": null,
+    "rows_by_len": {},
+    "accept_rates": null,
+    "extra_ms": null,
+    "out_tok_s": 81.02989474238798,
+    "steps": 2924,
+    "step_ms_median": 12.214373000233536,
+    "step_ms_mean": 12.221026270181158,
+    "step_ms_median_by_dataset": {
+      "alpaca": 12.206090999825392,
+      "humaneval": 12.21057649991053,
+      "gsm8k": 12.204791999920417,
+      "long": 12.260831000276085
+    }
+  },
+  {
+    "label": "bf16",
+    "mode": "plain",
+    "batch": 16,
+    "tokens": 2974,
+    "not_argmax": 5,
+    "max_margin": 0.25,
+    "margins_over_0.5": 0,
+    "margins_over_1": 0,
+    "tokens_per_cycle": null,
+    "rows_by_len": {},
+    "accept_rates": null,
+    "extra_ms": null,
+    "out_tok_s": 869.8237847889809,
+    "steps": 255,
+    "step_ms_median": 13.590065000244067,
+    "step_ms_mean": 13.298379078446933,
+    "step_ms_median_by_dataset": {}
+  },
+  {
+    "label": "bf16",
+    "mode": "spec",
+    "batch": 1,
+    "tokens": 3009,
+    "not_argmax": 5,
+    "max_margin": 0.25,
+    "margins_over_0.5": 0,
+    "margins_over_1": 0,
+    "tokens_per_cycle": 3.988031914893617,
+    "rows_by_len": {
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "6": 0,
+      "10": 752
+    },
+    "accept_rates": [
+      0.709,
+      0.631,
+      0.722,
+      0.686,
+      0.723,
+      0.686,
+      0.642,
+      0.677,
+      0.72
+    ],
+    "extra_ms": {
+      "1 cycle": 0.691,
+      "2 cycle": 1.427
+    },
+    "out_tok_s": 247.69973001569923,
+    "steps": 752,
+    "step_ms_median": 15.386773499812989,
+    "step_ms_mean": 15.42334343218047,
+    "step_ms_median_by_dataset": {
+      "alpaca": 15.36762900013855,
+      "humaneval": 15.383759000087593,
+      "gsm8k": 15.369985000006636,
+      "long": 15.498051499889698
+    }
+  },
+  {
+    "label": "bf16",
+    "mode": "spec",
+    "batch": 16,
+    "tokens": 2926,
+    "not_argmax": 8,
+    "max_margin": 0.25,
+    "margins_over_0.5": 0,
+    "margins_over_1": 0,
+    "tokens_per_cycle": 3.8675496688741724,
+    "rows_by_len": {
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "6": 325,
+      "10": 430
+    },
+    "accept_rates": [
+      0.816,
+      0.836,
+      0.76,
+      0.776,
+      0.706,
+      0.727,
+      0.658,
+      0.717,
+      0.677
+    ],
+    "extra_ms": {
+      "1 cycle": 0.609,
+      "2 cycle": 1.221,
+      "4 cycle": 0.884,
+      "8 cycle": 2.148,
+      "16 cycle": 3.489
+    },
+    "out_tok_s": 1694.6544073892765,
+    "steps": 76,
+    "step_ms_median": 23.600084500003504,
+    "step_ms_mean": 22.35315969737353,
+    "step_ms_median_by_dataset": {}
+  },
+  {
+    "label": "bf16",
+    "mode": "spec, w4a16 drafter",
+    "batch": 1,
+    "tokens": 3009,
+    "not_argmax": 5,
+    "max_margin": 0.25,
+    "margins_over_0.5": 0,
+    "margins_over_1": 0,
+    "tokens_per_cycle": 3.9774236387782205,
+    "rows_by_len": {
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "6": 0,
+      "10": 753
+    },
+    "accept_rates": [
+      0.722,
+      0.651,
+      0.76,
+      0.607,
+      0.733,
+      0.689,
+      0.644,
+      0.67,
+      0.669
+    ],
+    "extra_ms": {
+      "1 cycle": 0.673,
+      "2 cycle": 1.408
+    },
+    "out_tok_s": 263.10562270321765,
+    "steps": 753,
+    "step_ms_median": 14.420173999951658,
+    "step_ms_mean": 14.457350362556841,
+    "step_ms_median_by_dataset": {
+      "alpaca": 14.406440500124518,
+      "humaneval": 14.411306500051069,
+      "gsm8k": 14.40097099975901,
+      "long": 14.549610499898336
+    }
+  },
+  {
+    "label": "bf16",
+    "mode": "spec, w4a16 drafter",
+    "batch": 16,
+    "tokens": 2972,
+    "not_argmax": 8,
+    "max_margin": 0.25,
+    "margins_over_0.5": 0,
+    "margins_over_1": 0,
+    "tokens_per_cycle": 3.5885922330097086,
+    "rows_by_len": {
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "6": 722,
+      "10": 102
+    },
+    "accept_rates": [
+      0.822,
+      0.775,
+      0.773,
+      0.735,
+      0.689,
+      0.689,
+      0.699,
+      0.643,
+      0.679
+    ],
+    "extra_ms": {
+      "1 cycle": 0.614,
+      "2 cycle": 1.269,
+      "4 cycle": 1.098,
+      "8 cycle": 2.365,
+      "16 cycle": 3.481
+    },
+    "out_tok_s": 1781.6083737917054,
+    "steps": 78,
+    "step_ms_median": 23.01790550018268,
+    "step_ms_mean": 21.03132910256952,
+    "step_ms_median_by_dataset": {}
+  }
+]

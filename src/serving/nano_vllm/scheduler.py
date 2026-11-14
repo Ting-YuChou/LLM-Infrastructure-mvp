@@ -22,6 +22,11 @@ class Row:
     samples: bool  # the step samples a token for it (decode, or the last prompt chunk)
     num_computed_tokens: int  # KV computed once the step finishes
     epoch: int  # the block table it wrote into (see Sequence.epoch)
+    # A speculative row: the step yields 1 to drafted + 1 tokens, and how
+    # much KV it computed is known only then (num_computed_tokens is the KV
+    # the host knew of at its launch).
+    spec: bool = False
+    drafted: int = 0
 
 
 class Scheduler:
@@ -31,6 +36,19 @@ class Scheduler:
     every prefill stalls the running decodes. ``mixed`` (chunked prefill as in
     vLLM v1 and Sarathi): every step decodes all running sequences first and
     fills the rest of the max_num_batched_tokens budget with prefill chunks.
+
+    With ``num_draft_tokens`` K > 0 a decode row is a speculative one: it
+    runs K + 1 tokens (the last accepted token and K drafts, see spec.py),
+    so it costs K + 1 of the token budget and needs KV slots for K positions
+    past the token being decoded. :meth:`schedule` can ask for fewer drafts
+    for its step, down to 0: plain decode rows.
+
+    With ``chain_cycles`` a cycle may be scheduled for a sequence whose
+    previous cycle is still in flight (the model runner starts it from where
+    that one ends, on the device). The host then knows the sequence's length
+    only up to that cycle's drafts, so the row's KV slots reach as many
+    positions further, and a row whose sequence the cycle in flight turns
+    out to finish is discarded when it lands.
     """
 
     def __init__(
@@ -39,6 +57,8 @@ class Scheduler:
         max_num_seqs: int,
         max_num_batched_tokens: int,
         policy: str = "prefill_first",
+        num_draft_tokens: int = 0,
+        chain_cycles: bool = False,
     ) -> None:
         if policy not in SCHEDULING_POLICIES:
             raise ValueError(f"scheduling policy must be one of {SCHEDULING_POLICIES}")
@@ -46,6 +66,17 @@ class Scheduler:
         self.max_num_seqs = max(1, max_num_seqs)
         self.max_num_batched_tokens = max(1, max_num_batched_tokens)
         self.policy = policy
+        self.num_draft_tokens = num_draft_tokens  # the most a step drafts per row
+        self.step_draft_tokens = num_draft_tokens  # what the step being scheduled does
+        # KV slots a sequence may need past its last token: a cycle's
+        # drafts, twice with one cycle behind another in flight.
+        self.max_lookahead = num_draft_tokens * (2 if chain_cycles else 1)
+        # Speculative cycles completed, their drafts, and the ones the target accepted.
+        self.spec_cycles = 0
+        self.spec_draft_tokens = 0
+        self.spec_accepted_tokens = 0
+        # Speculative rows that landed after their sequence had finished.
+        self.spec_discarded = 0
         self.waiting: deque[Sequence] = deque()
         self.running: deque[Sequence] = deque()
 
@@ -54,11 +85,12 @@ class Scheduler:
 
     def add(self, seq: Sequence) -> None:
         # A sequence that can never fit would wait (or be preempted) forever.
-        max_tokens = seq.num_prompt_tokens + seq.sampling.max_tokens
+        max_tokens = seq.num_prompt_tokens + seq.sampling.max_tokens + self.max_lookahead
         capacity = self.block_manager.num_blocks * self.block_manager.block_size
         if max_tokens > capacity:
             raise ValueError(
-                f"Request needs up to {max_tokens} KV slots (prompt + max_tokens) "
+                f"Request needs up to {max_tokens} KV slots (prompt + max_tokens"
+                f"{' + draft tokens' if self.num_draft_tokens else ''}) "
                 f"but the KV cache holds only {capacity}"
             )
         seq.status = SequenceStatus.WAITING
@@ -76,12 +108,21 @@ class Scheduler:
         with suppress(ValueError):
             self.waiting.remove(seq)
 
-    def schedule(self) -> tuple[list[Sequence], bool]:
-        """The next batch and whether it has prefill rows (decode rows come first)."""
+    def schedule(self, draft_tokens: Optional[int] = None) -> tuple[list[Sequence], bool]:
+        """The next batch and whether it has prefill rows (decode rows come first).
+
+        ``draft_tokens``: the drafts per decode row of this step, 0 to
+        ``num_draft_tokens`` (the default).
+        """
+        if draft_tokens is None:
+            draft_tokens = self.num_draft_tokens
+        if not 0 <= draft_tokens <= self.num_draft_tokens:
+            raise ValueError(f"a step drafts 0 to {self.num_draft_tokens} tokens per row")
+        self.step_draft_tokens = draft_tokens
         if self.policy == "mixed":
             decodes = self._schedule_decode()
             prefills = self._schedule_prefill(
-                token_budget=self.max_num_batched_tokens - len(decodes),
+                token_budget=self.max_num_batched_tokens - len(decodes) * (draft_tokens + 1),
                 seq_budget=self.max_num_seqs - len(decodes),
             )
             return decodes + prefills, bool(prefills)
@@ -105,7 +146,17 @@ class Scheduler:
         until :meth:`complete` brings its value.
         """
         rows = []
+        drafted = self.step_draft_tokens
         for seq in seqs:
+            if drafted and not seq.is_prefill:
+                # How many of its tokens stand is known when it completes.
+                seq.num_scheduled_tokens = 0
+                seq.num_inflight += 1
+                seq.inflight_drafts += drafted
+                rows.append(
+                    Row(seq, True, seq.num_cached_tokens, seq.epoch, spec=True, drafted=drafted)
+                )
+                continue
             end = seq.num_cached_tokens + seq.num_scheduled_tokens
             # A prefill chunk that leaves prompt tokens unprocessed samples
             # a meaningless logit.
@@ -117,14 +168,24 @@ class Scheduler:
             rows.append(Row(seq, samples, end, seq.epoch))
         return rows
 
-    def complete(self, rows: list[Row], token_ids: list[int]) -> list[tuple[Sequence, int]]:
-        """Apply a finished step's sampled tokens; return the ones appended."""
+    def complete(
+        self, rows: list[Row], token_ids: list[int | list[int]]
+    ) -> list[tuple[Sequence, int]]:
+        """Apply a finished step's sampled tokens; return the ones appended.
+
+        A speculative row brings a list: the drafts the target accepted and
+        its own next token (spec.py).
+        """
         emitted: list[tuple[Sequence, int]] = []
         for row, token_id in zip(rows, token_ids):
             seq = row.seq
             if seq.is_finished:
                 # Finished or aborted while its step was running: release it.
                 self.abort(seq)
+                self.spec_discarded += row.spec
+                continue
+            if row.spec:
+                self._complete_spec(row, token_id, emitted)
                 continue
             if row.epoch == seq.epoch:  # still the blocks this step wrote
                 self.block_manager.commit(seq, row.num_computed_tokens)
@@ -136,13 +197,50 @@ class Scheduler:
             seq.append_token(token_id)
             emitted.append((seq, token_id))
             if seq.should_finish(token_id):
-                seq.status = SequenceStatus.FINISHED
-                self.block_manager.deallocate(seq)
-                with suppress(ValueError):
-                    self.running.remove(seq)
-                with suppress(ValueError):
-                    self.waiting.remove(seq)
+                self._finish(seq)
         return emitted
+
+    def _complete_spec(
+        self, row: Row, tokens: list[int], emitted: list[tuple[Sequence, int]]
+    ) -> None:
+        """Append a speculative row's tokens up to the one that ends the
+        sequence, then count the KV behind them as computed.
+
+        The step ran [anchor, drafts]; with ``len(tokens) - 1`` drafts
+        accepted, the KV of the anchor and of those drafts stands. Each
+        accepted draft is the token appended at its position, so the blocks
+        handed to the prefix cache hold exactly the appended tokens.
+        """
+        seq = row.seq
+        seq.num_inflight -= 1
+        seq.inflight_drafts -= row.drafted
+        self.spec_cycles += 1
+        self.spec_draft_tokens += row.drafted
+        self.spec_accepted_tokens += len(tokens) - 1
+        finished = False
+        for token_id in tokens:
+            seq.append_token(token_id)
+            emitted.append((seq, token_id))
+            if seq.should_finish(token_id):
+                finished = True
+                break
+        if row.epoch == seq.epoch:  # still the blocks this step wrote
+            # From the KV computed when the row landed (a cycle that was in
+            # flight when this one launched has moved it since). Cut short
+            # by a finish: only the appended tokens' KV counts.
+            computed = min(seq.num_cached_tokens + len(tokens), seq.num_tokens)
+            self.block_manager.commit(seq, computed)
+            seq.num_cached_tokens = computed
+        if finished:
+            self._finish(seq)
+
+    def _finish(self, seq: Sequence) -> None:
+        seq.status = SequenceStatus.FINISHED
+        self.block_manager.deallocate(seq)
+        with suppress(ValueError):
+            self.running.remove(seq)
+        with suppress(ValueError):
+            self.waiting.remove(seq)
 
     def preempt(self, seq: Sequence) -> None:
         seq.status = SequenceStatus.WAITING
@@ -222,7 +320,8 @@ class Scheduler:
         """
         scheduled: list[Sequence] = []
         done: list[Sequence] = []
-        budget = min(self.max_num_seqs, self.max_num_batched_tokens)
+        lookahead = self.step_draft_tokens
+        budget = min(self.max_num_seqs, max(1, self.max_num_batched_tokens // (lookahead + 1)))
         current: Optional[Sequence] = None
         try:
             while self.running and len(scheduled) < budget:
@@ -232,7 +331,10 @@ class Scheduler:
                     done.append(seq)
                     current = None
                     continue
-                while not self.block_manager.can_append(seq):
+                # A cycle in flight leaves the row's anchor up to its drafts
+                # further on.
+                reach = lookahead + seq.inflight_drafts
+                while not self.block_manager.can_append(seq, reach):
                     # Free a partly prefilled request's blocks first (it has
                     # produced nothing yet and stays queued), else preempt the
                     # youngest running one (vLLM's recompute policy); it may be
@@ -250,9 +352,9 @@ class Scheduler:
                     self.preempt(victim)
                 if seq is None:
                     continue
-                seq.num_scheduled_tokens = 1
+                seq.num_scheduled_tokens = lookahead + 1
                 seq.is_prefill = False
-                self.block_manager.may_append(seq)
+                self.block_manager.may_append(seq, reach)
                 scheduled.append(seq)
                 current = None
         finally:

@@ -26,6 +26,7 @@ from kbench import SCALE, _paged_inputs, copies_for, randn, time_us  # noqa: E40
 # the linear() function under the submodule's name.
 linear_mod = importlib.import_module("src.serving.nano_vllm.kernels.linear")
 attention = importlib.import_module("src.serving.nano_vllm.kernels.paged_attention")
+block_attention = importlib.import_module("src.serving.nano_vllm.kernels.block_attention")
 fp8 = importlib.import_module("src.serving.nano_vllm.kernels.fp8")
 
 L2_BYTES = 40 * 1024**2
@@ -143,6 +144,37 @@ def tune_prefill():
         return 3 * 2 * shape["seqs"] * shape["qlen"] * 32 * 128
 
     return sweep("prefill", shapes, configs, make_call, input_bytes, attention.PREFILL_CONFIG)
+
+
+def tune_block():
+    """The block kernel on a speculative step's verify rows (Q = 10): rows
+    per program (block_r), launch settings, and the decode kernel's split
+    count halved splits_shift times."""
+    shapes = [
+        {"B": b, "Q": 10, "ctx": c}
+        for b, c in ((1, 256), (1, 1024), (1, 4096), (4, 1024), (4, 4096), (16, 256), (16, 1024),
+                     (16, 4096), (64, 256), (64, 1024), (64, 4096))
+    ]
+    launches = [(64, 8, 1), (64, 4, 2), (32, 4, 2)]
+    configs = [
+        {"block_n": n, "num_warps": w, "num_stages": st, "block_r": r, "splits_shift": shift}
+        for r in (16, 64) for n, w, st in launches for shift in (0, 1, 2)
+    ]
+
+    def current(shape):
+        return {"block_r": 64, "splits_shift": 0, **block_attention.block_config(shape["B"])}
+
+    def make_call(shape, config):
+        i = _paged_inputs(shape["B"], shape["ctx"], [shape["Q"]] * shape["B"], "cuda")
+        return lambda: block_attention.paged_block_attention(
+            i["q"], i["k_cache"], i["v_cache"], i["tables"], i["context_lens"], None, shape["Q"],
+            SCALE, True, use_triton=True, config=config,
+        )
+
+    def input_bytes(shape):
+        return 2 * 2 * shape["B"] * shape["ctx"] * 8 * 128
+
+    return sweep("block", shapes, configs, make_call, input_bytes, current)
 
 
 def tune_gemv():
@@ -296,6 +328,7 @@ def main() -> None:
             "decode": tune_decode,
             "decode_fp8": tune_decode_fp8,
             "prefill": tune_prefill,
+            "block": tune_block,
             "gemv": tune_gemv,
             "cuda_gemv": tune_cuda_gemv,
             "w4a16": tune_w4a16,

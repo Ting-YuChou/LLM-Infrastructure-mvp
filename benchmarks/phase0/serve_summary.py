@@ -4,7 +4,8 @@
 Prints one line, "<tag> {json}", with throughput and the TTFT/TPOT/ITL
 percentiles, and rewrites the result file without its per-request arrays
 (--keep-raw first copies the full file to <name>.raw.json). ok means every
-request completed with exactly output_len tokens (the runs use --ignore-eos).
+request completed with exactly output_len tokens (the runs use --ignore-eos);
+with --variable-output (requests may stop at EOS) only that all completed.
 
   serve_summary.py result.json vllm sweep_c16 64 256 --tag P0_SERVE
 """
@@ -26,6 +27,12 @@ def main() -> None:
     parser.add_argument("output_len", type=int)
     parser.add_argument("--tag", default="P0_SERVE")
     parser.add_argument("--keep-raw", action="store_true")
+    parser.add_argument(
+        "--variable-output",
+        action="store_true",
+        help="requests may stop at EOS: ok only needs every request completed, "
+        "and the line reports the token totals",
+    )
     args = parser.parse_args()
 
     try:
@@ -39,14 +46,18 @@ def main() -> None:
     args.result.write_text(json.dumps(slim, indent=2))
 
     n = args.num_prompts
+    full = slim.get("total_output_tokens") == n * args.output_len
     summary = {
         "engine": args.engine,
         "run": args.label,
-        "ok": slim.get("completed") == n and slim.get("total_output_tokens") == n * args.output_len,
+        "ok": slim.get("completed") == n and (full or args.variable_output),
         "completed": slim.get("completed"),
         "req_s": round(slim.get("request_throughput", 0), 3),
         "out_tok_s": round(slim.get("output_throughput", 0), 1),
     }
+    if args.variable_output:
+        summary["in_tok"] = slim.get("total_input_tokens")
+        summary["out_tok"] = slim.get("total_output_tokens")
     for metric in ("ttft", "tpot", "itl", "e2el"):
         for stat in ("median", "p90", "p99", "p99.9", "p100"):
             value = slim.get(f"{stat}_{metric}_ms")

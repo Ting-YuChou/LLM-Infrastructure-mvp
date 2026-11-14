@@ -173,18 +173,22 @@ start_server() {  # name port ready_path command...: own process group, wait unt
 
 # BENCH_TEMPERATURE, BENCH_TOP_P: sent with every request when set. vllm bench
 # serve 0.19 sends none by default, so each server applies its own default
-# (vLLM: the model's generation_config).
+# (vLLM: the model's generation_config). BENCH_IGNORE_EOS=0 (phase 3: real
+# prompts) lets a request stop at EOS, so output_len is only its max_tokens.
 bench_serve() {  # name port label num_prompts output_len [vllm bench serve args...]
   local name=$1 port=$2 label=$3 n=$4 out_len=$5; shift 5
+  local eos=(--ignore-eos) variable=()
+  if [[ "${BENCH_IGNORE_EOS:-1}" == 0 ]]; then eos=(); variable=(--variable-output); fi
   timeout "${BENCH_TIMEOUT:-1200}" "${VENVS}/vllm/bin/vllm" bench serve \
     --backend vllm --base-url "http://127.0.0.1:${port}" --model "${MODEL}" \
-    --ignore-eos --num-prompts "${n}" --seed 0 ${BENCH_TEMPERATURE:+--temperature "${BENCH_TEMPERATURE}"} \
-    ${BENCH_TOP_P:+--top-p "${BENCH_TOP_P}"} \
+    ${eos[@]+"${eos[@]}"} --num-prompts "${n}" --seed 0 \
+    ${BENCH_TEMPERATURE:+--temperature "${BENCH_TEMPERATURE}"} ${BENCH_TOP_P:+--top-p "${BENCH_TOP_P}"} \
     --percentile-metrics ttft,tpot,itl,e2el --metric-percentiles 50,90,99 \
     --save-result --result-dir "${OUT}/serve" --result-filename "${name}_${label}.json" "$@"
   local rc=$?
   "${PY}" "${LIB_DIR}/serve_summary.py" "${OUT}/serve/${name}_${label}.json" "${name}" "${label}" \
-    "${n}" "${out_len}" --tag "${SERVE_TAG:-P0_SERVE}" ${SERVE_KEEP_RAW:+--keep-raw} >&3
+    "${n}" "${out_len}" --tag "${SERVE_TAG:-P0_SERVE}" ${SERVE_KEEP_RAW:+--keep-raw} \
+    ${variable[@]+"${variable[@]}"} >&3
   return "${rc}"
 }
 

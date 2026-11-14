@@ -47,6 +47,29 @@ engine:
   async_scheduling: true
   # Seeds the sampler: each draw comes from (seed, sequence id, position).
   seed: 0
+  # Speculative decoding: the path of a DFlash drafter checkpoint (for
+  # example z-lab/LLaMA3.1-8B-Instruct-DFlash-UltraChat, downloaded); null is
+  # off. The output stays the target's own.
+  speculative_model: null
+  speculative_method: "dflash"
+  # Drafts per cycle; 0: the drafter's block size - 1.
+  num_speculative_tokens: 0
+  # "w4a16": quantize the drafter's projections to 4 bits at load.
+  speculative_weight_quant: "none"
+  # A sampled request's drafts are drawn with the target's noise for the same
+  # positions at this fraction of the request's temperature (1: coupled
+  # sampling; 0: the drafter's argmax). The output is the same for any value.
+  speculative_draft_temperature: 0.25
+  # "adaptive": each step picks the verify length (a decode row's anchor plus
+  # drafts) from speculative_verify_lens that yields the most tokens per
+  # millisecond, from the CUDA graphs' step times measured at startup and the
+  # drafts' acceptance so far; 1 is a plain decode step. "fixed": always the
+  # whole block. The output is the same.
+  speculative_policy: "adaptive"
+  speculative_verify_lens: [1, 2, 3, 4, 6, 10]
+  # With async_scheduling: launch each cycle behind the one still running
+  # (higher throughput; a new request's first token comes up to a cycle later).
+  speculative_chain: true
   # Engine core (scheduler + model) in its own process; this one keeps
   # tokenization, detokenization and HTTP off the model steps' GIL.
   multiprocess: false

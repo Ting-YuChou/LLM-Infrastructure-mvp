@@ -23,6 +23,13 @@ def _optional_str(value: Any) -> Optional[str]:
     return value
 
 
+def _int_tuple(value: Any) -> tuple[int, ...]:
+    """A YAML list, or "1,2,4" from the environment."""
+    if isinstance(value, str):
+        value = [part for part in value.replace(",", " ").split() if part]
+    return tuple(int(item) for item in value)
+
+
 def _bool_value(value: Any, default: bool = False) -> bool:
     if value is None:
         return default
@@ -96,6 +103,42 @@ class NanoVLLMConfig:
     # Seeds the sampler's random draws (each comes from this seed, the
     # sequence id and the token's position), like vLLM's --seed.
     seed: int = 0
+    # Speculative decoding (spec.py): the path of a drafter checkpoint; None
+    # is off. The output is the target's own, whatever the drafter proposes.
+    speculative_model: Optional[str] = None
+    # "dflash": a DFlash block-diffusion drafter (dflash.py).
+    speculative_method: str = "dflash"
+    # Drafts per cycle; 0: the drafter's block size - 1.
+    num_speculative_tokens: int = 0
+    # "w4a16": quantize the drafter's projections to 4 bits at load.
+    speculative_weight_quant: str = "none"
+    # A sampled request's drafts are drawn like the target's tokens, with the
+    # noise of the position each one proposes (seed, sequence id, position),
+    # at this fraction of the request's temperature. 1: the request's own
+    # temperature (coupled sampling: a draft matches whenever the two models'
+    # logits agree closely enough); 0: the drafter's argmax, whatever the
+    # request samples with; in between, the noise decides only where the
+    # drafter's leading tokens are close. The output is the same for any value.
+    # Measured with the public Llama 3.1 8B DFlash drafter at temperature 0.7
+    # (benchmarks/phase3, M5): 1 loses 2-7% of the tokens per cycle to the
+    # argmax, 0.25 and 0.5 are level with it (-0.3% to +1.0%).
+    speculative_draft_temperature: float = 0.25
+    # "adaptive": every step picks the verify length Q (a decode row's anchor
+    # and Q - 1 drafts) from speculative_verify_lens that yields the most
+    # tokens per millisecond, from each CUDA graph's step time measured at
+    # startup and the drafts' acceptance rates so far (spec.SpecPolicy);
+    # "fixed": every cycle runs the whole block. The output is the same.
+    speculative_policy: str = "adaptive"
+    # The verify lengths "adaptive" chooses from; the whole block
+    # (num_speculative_tokens + 1) always is one, longer ones are dropped.
+    # 1 is a plain decode step: with many sequences a pass over the weights
+    # is no longer shared by enough rows for drafts to pay.
+    speculative_verify_lens: tuple[int, ...] = (1, 2, 3, 4, 6, 10)
+    # With async_scheduling: launch a cycle behind the one still running, so
+    # the host's work between two cycles overlaps the GPU's (more tokens per
+    # second; a new request waits for both cycles, so its first token comes
+    # up to a cycle later). False: each cycle is collected before the next.
+    speculative_chain: bool = True
     # Run the engine core (scheduler + model) in its own process; the server
     # process keeps tokenization, detokenization, stop strings and HTTP.
     multiprocess: bool = False
@@ -136,6 +179,19 @@ class NanoVLLMConfig:
             raise ValueError("kv_cache_dtype must be one of: auto, fp8")
         if self.kv_cache_dtype == "fp8" and self.attention_backend == "flash_attn":
             raise ValueError("kv_cache_dtype fp8 needs the triton or torch attention backend")
+        if self.speculative_method not in {"dflash"}:
+            raise ValueError("speculative_method must be: dflash")
+        if self.num_speculative_tokens < 0:
+            raise ValueError("num_speculative_tokens must be 0 (the drafter's block) or positive")
+        if self.speculative_weight_quant not in {"none", "w4a16"}:
+            raise ValueError("speculative_weight_quant must be one of: none, w4a16")
+        if not 0.0 <= self.speculative_draft_temperature <= 1.0:
+            raise ValueError("speculative_draft_temperature must be between 0 (argmax drafts) and 1")
+        if self.speculative_policy not in {"adaptive", "fixed"}:
+            raise ValueError("speculative_policy must be one of: adaptive, fixed")
+        self.speculative_verify_lens = tuple(int(length) for length in self.speculative_verify_lens)
+        if any(length < 1 for length in self.speculative_verify_lens):
+            raise ValueError("speculative_verify_lens must be positive")
 
     @classmethod
     def from_yaml(cls, config_path: str | None) -> "NanoVLLMConfig":
@@ -255,6 +311,49 @@ class NanoVLLMConfig:
                 default=cls.async_scheduling,
             ),
             seed=int(_env("SEED", engine.get("seed", cls.seed))),
+            speculative_model=_optional_str(
+                _env("SPECULATIVE_MODEL", engine.get("speculative_model"))
+            ),
+            speculative_method=str(
+                _env(
+                    "SPECULATIVE_METHOD",
+                    engine.get("speculative_method", cls.speculative_method),
+                )
+            ),
+            num_speculative_tokens=int(
+                _env(
+                    "NUM_SPECULATIVE_TOKENS",
+                    engine.get("num_speculative_tokens", cls.num_speculative_tokens),
+                )
+            ),
+            speculative_weight_quant=str(
+                _env(
+                    "SPECULATIVE_WEIGHT_QUANT",
+                    engine.get("speculative_weight_quant", cls.speculative_weight_quant),
+                )
+            ),
+            speculative_draft_temperature=float(
+                _env(
+                    "SPECULATIVE_DRAFT_TEMPERATURE",
+                    engine.get("speculative_draft_temperature", cls.speculative_draft_temperature),
+                )
+            ),
+            speculative_policy=str(
+                _env(
+                    "SPECULATIVE_POLICY",
+                    engine.get("speculative_policy", cls.speculative_policy),
+                )
+            ),
+            speculative_verify_lens=_int_tuple(
+                _env(
+                    "SPECULATIVE_VERIFY_LENS",
+                    engine.get("speculative_verify_lens", cls.speculative_verify_lens),
+                )
+            ),
+            speculative_chain=_bool_value(
+                _env("SPECULATIVE_CHAIN", engine.get("speculative_chain")),
+                default=cls.speculative_chain,
+            ),
             multiprocess=_bool_value(
                 _env("ENGINE_MULTIPROCESS", engine.get("multiprocess")),
                 default=cls.multiprocess,

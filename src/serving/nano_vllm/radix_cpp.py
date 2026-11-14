@@ -151,11 +151,11 @@ class CppBlockManager:
         seq.num_shared_blocks = 0
         seq.num_cached_tokens = 0
 
-    def can_append(self, seq: Sequence) -> bool:
-        return self.num_free_blocks >= self._blocks_to_append(seq)
+    def can_append(self, seq: Sequence, lookahead: int = 0) -> bool:
+        return self.num_free_blocks >= self._blocks_to_append(seq, lookahead)
 
-    def may_append(self, seq: Sequence) -> None:
-        count = self._blocks_to_append(seq)
+    def may_append(self, seq: Sequence, lookahead: int = 0) -> None:
+        count = self._blocks_to_append(seq, lookahead)
         if count:
             seq.block_table.extend(self._impl.take_blocks(count))
 
@@ -212,6 +212,6 @@ class CppBlockManager:
     def path_blocks(self, node) -> list[int]:
         return [] if node is None else list(self._impl.path_blocks(node))
 
-    def _blocks_to_append(self, seq: Sequence) -> int:
-        needed = -(-seq.num_logical_tokens // self.block_size)
+    def _blocks_to_append(self, seq: Sequence, lookahead: int = 0) -> int:
+        needed = -(-(seq.num_logical_tokens + lookahead) // self.block_size)
         return max(0, needed - len(seq.block_table))

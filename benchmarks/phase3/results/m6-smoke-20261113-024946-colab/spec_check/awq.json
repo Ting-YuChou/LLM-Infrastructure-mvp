@@ -1,0 +1,131 @@
+[
+  {
+    "label": "awq",
+    "mode": "plain",
+    "batch": 1,
+    "tokens": 3035,
+    "not_argmax": 13,
+    "max_margin": 0.25,
+    "margins_over_0.5": 0,
+    "margins_over_1": 0,
+    "tokens_per_cycle": null,
+    "rows_by_len": {},
+    "accept_rates": null,
+    "extra_ms": null,
+    "out_tok_s": 193.51680663896025,
+    "steps": 3019,
+    "step_ms_median": 4.9908480000340205,
+    "step_ms_mean": 4.993661203045718,
+    "step_ms_median_by_dataset": {
+      "alpaca": 4.981068000006417,
+      "humaneval": 4.991893500005062,
+      "gsm8k": 4.979069499995603,
+      "long": 5.032449000054839
+    }
+  },
+  {
+    "label": "awq",
+    "mode": "plain",
+    "batch": 16,
+    "tokens": 3037,
+    "not_argmax": 10,
+    "max_margin": 0.25,
+    "margins_over_0.5": 0,
+    "margins_over_1": 0,
+    "tokens_per_cycle": null,
+    "rows_by_len": {},
+    "accept_rates": null,
+    "extra_ms": null,
+    "out_tok_s": 1972.7613557863215,
+    "steps": 255,
+    "step_ms_median": 6.280754000044908,
+    "step_ms_mean": 5.938087282350477,
+    "step_ms_median_by_dataset": {}
+  },
+  {
+    "label": "awq",
+    "mode": "spec",
+    "batch": 1,
+    "tokens": 3003,
+    "not_argmax": 15,
+    "max_margin": 0.25,
+    "margins_over_0.5": 0,
+    "margins_over_1": 0,
+    "tokens_per_cycle": 4.004005340453938,
+    "rows_by_len": {
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "6": 0,
+      "10": 749
+    },
+    "accept_rates": [
+      0.786,
+      0.666,
+      0.592,
+      0.729,
+      0.682,
+      0.679,
+      0.718,
+      0.704,
+      0.629
+    ],
+    "extra_ms": {
+      "1 cycle": 0.573,
+      "2 cycle": 0.425
+    },
+    "out_tok_s": 472.90031545782176,
+    "steps": 749,
+    "step_ms_median": 7.742653999912363,
+    "step_ms_mean": 7.776288890519113,
+    "step_ms_median_by_dataset": {
+      "alpaca": 7.726704500100823,
+      "humaneval": 7.736975000170787,
+      "gsm8k": 7.714673999998922,
+      "long": 7.878838999886284
+    }
+  },
+  {
+    "label": "awq",
+    "mode": "spec",
+    "batch": 16,
+    "tokens": 3059,
+    "not_argmax": 9,
+    "max_margin": 0.25,
+    "margins_over_0.5": 0,
+    "margins_over_1": 0,
+    "tokens_per_cycle": 3.113936927772126,
+    "rows_by_len": {
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 892,
+      "6": 83,
+      "10": 8
+    },
+    "accept_rates": [
+      0.831,
+      0.829,
+      0.812,
+      0.789,
+      0.681,
+      0.679,
+      0.718,
+      0.704,
+      0.629
+    ],
+    "extra_ms": {
+      "1 cycle": 0.545,
+      "2 cycle": 0.425,
+      "4 cycle": 0.638,
+      "8 cycle": 0.991,
+      "16 cycle": 1.665
+    },
+    "out_tok_s": 2760.341211380701,
+    "steps": 86,
+    "step_ms_median": 13.6770939999451,
+    "step_ms_mean": 12.588886325581138,
+    "step_ms_median_by_dataset": {}
+  }
+]

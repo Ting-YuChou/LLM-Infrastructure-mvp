@@ -1,0 +1,30 @@
+{
+  "target": "/content/p0/models/Meta-Llama-3.1-8B-Instruct",
+  "drafter": "/content/p0/models/LLaMA3.1-8B-Instruct-DFlash-UltraChat",
+  "drafter_revision": null,
+  "dtype": "bfloat16",
+  "kv_cache_dtype": "auto",
+  "drafter_weight_quant": "none",
+  "blocks": 200,
+  "blocks_requested": 200,
+  "draft_positions": 1800,
+  "top1_agreement": 0.9888888888888889,
+  "top1_agreement_by_position": [
+    0.995,
+    0.99,
+    1.0,
+    1.0,
+    0.99,
+    0.99,
+    0.98,
+    0.98,
+    0.975
+  ],
+  "blocks_identical": 0.9,
+  "max_logit_diff": 0.25,
+  "disagreements": 20,
+  "max_reference_margin_at_disagreement": 0.25,
+  "reference_mean_accepted_per_cycle": 3.65,
+  "gate": 0.99,
+  "passed": false
+}

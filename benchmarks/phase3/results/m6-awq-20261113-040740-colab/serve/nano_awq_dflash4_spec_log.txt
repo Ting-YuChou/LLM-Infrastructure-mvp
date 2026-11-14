@@ -1,0 +1,2 @@
+INFO:src.serving.nano_vllm.model_runner:nano-vLLM compiled the speculative step's kernels for 1-64 verify rows of [2, 3, 4, 6, 10] tokens in 9.5 s
+INFO:src.serving.nano_vllm.model_runner:nano-vLLM captured speculative-cycle CUDA graphs for [1, 2, 4, 8, 16, 24, 32, 48, 64] sequences, verify rows of [2, 3, 4, 6, 10] tokens, in 2.8 s

@@ -24,7 +24,12 @@ from serving.nano_vllm.kernels.sampler import (  # noqa: E402
     sampler_extension,
     sampler_state,
 )
-from serving.nano_vllm.sampling import Sampler, SamplingOptions, keep_mask  # noqa: E402
+from serving.nano_vllm.sampling import (  # noqa: E402
+    Sampler,
+    SamplingOptions,
+    keep_mask,
+    philox_log_exponential,
+)
 
 VOCAB = 128256
 SLACK = 1e-4
@@ -183,6 +188,33 @@ def test_draws_are_deterministic_per_seed_sequence_and_position():
     assert alone[0] == first[10]
 
 
+@pytest.mark.parametrize("setting", ["plain", "p0.9", "k50_p0.9", "hot_p0.5"])
+def test_draws_are_the_pytorch_references_draws(setting):
+    """sampling.philox_log_exponential is the draw kernel's noise: racing
+    the tokens the kernels kept with it picks the kernels' token, and the
+    sampler's PyTorch path (where fp32 logits go) draws the same tokens."""
+    rows = 64
+    logits = _logits("peaked", rows)
+    option = SETTINGS[setting]
+    seq_ids = [3 + (row << 30) for row in range(rows)]  # some past 32 bits
+    positions = [7 * row for row in range(rows)]
+    out, cut = _run(logits, [option] * rows, seed=5, positions=positions, seq_ids=seq_ids)
+
+    ids = torch.tensor(seq_ids, device="cuda")
+    noise = philox_log_exponential(
+        5, ids & 0xFFFFFFFF, ids >> 32, torch.tensor(positions, device="cuda"), VOCAB
+    )
+    keys = _keys(logits)
+    kept = torch.where(cut.view(-1, 1) >= 0, keys >= cut.view(-1, 1), torch.ones_like(keys, dtype=torch.bool))
+    scores = (logits.float() * (1.0 / option.temperature)).masked_fill(~kept, float("-inf")) - noise
+    # The kernel may fuse the multiply and subtract: a race decided in the
+    # last bit can go the other way.
+    assert (scores.argmax(dim=-1) != out).sum() <= 1
+
+    fallback, _ = _run(logits.float(), [option] * rows, seed=5, positions=positions, seq_ids=seq_ids)
+    assert (fallback != out).sum() <= 3  # its top-p cutoff sums in another order
+
+
 def _chi_square_pvalue(counts, probs):
     expected = probs * counts.sum()
     big = expected >= 5
@@ -237,10 +269,13 @@ def test_sampler_replays_in_a_cuda_graph():
         run()
     torch.cuda.current_stream().wait_stream(stream)
     graph = torch.cuda.CUDAGraph()
-    with torch.cuda.graph(graph):
-        run()
-    out.fill_(-1)
-    graph.replay()
+    # In inference mode, as the model runner captures and replays (see
+    # ModelRunner.capture_decode_graphs): another test's graph may be alive.
+    with torch.inference_mode():
+        with torch.cuda.graph(graph):
+            run()
+        out.fill_(-1)
+        graph.replay()
     torch.cuda.synchronize()
     assert torch.equal(out, eager)
 
