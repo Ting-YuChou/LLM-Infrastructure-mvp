@@ -348,7 +348,7 @@ by 10% to run in its place. After them (run `m7-fix-20261113-120835`):
 | a measured gain | 1.02x to 1.04x in one process; 1.01x to 1.09x serving, but for AWQ alpaca c=64 before the policy changes |
 | never below 0.98x nano without a drafter (M6's gate) | AWQ: 16 of 16 (lowest 0.99x, alpaca c=64); 4-bit drafter 12 of 12 (lowest 1.00x). BF16: all |
 | above both DFlash baselines (M6's gate) | AWQ: 16 of 16 (1.09x to 2.02x). BF16: above SGLang everywhere; against vLLM 0.98x to 1.02x where the policy keeps the whole block (alpaca c=4, humaneval c=4 and c=16, gsm8k c=16: 13 to 16 of 16 "above" over four runs), 1.04x to 1.56x elsewhere |
-| tests/gpu + nano unit tests | 1402 passed in the checks run; 98 passed (the spec and warm-up GPU tests and the two new unit files) after the policy changes; 411 unit tests on the CPU |
+| tests/gpu + nano unit tests | 1407 passed, none skipped, after the policy changes (run `m7-full-20261114-022935-colab`); 1402 in the checks run before them; 411 unit tests on the CPU |
 
 Costs and what is left:
 

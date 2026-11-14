@@ -3,13 +3,68 @@
 An LLM inference engine written from scratch, with its own Triton and CUDA
 kernels. It serves Llama 3.1 8B Instruct behind an OpenAI-compatible API, and
 on one A100 it decodes faster than vLLM 0.19.1 in BF16, with an FP8 KV cache,
-and with 4-bit weights, greedy or sampled.
+and with 4-bit weights, greedy or sampled. With the public DFlash drafter it
+does lossless speculative decoding, and on the AWQ checkpoint it serves more
+tokens per second than vLLM 0.33.0 with the same drafter at every load measured.
 
 All numbers below come from a Google Colab A100-SXM4-40GB with Llama 3.1 8B
-Instruct. Each comparison was measured in a single run on a single VM. Nothing
-has been measured on other GPUs.
+Instruct. Each comparison was measured in a single run on a single VM, except
+the speculative decoding baselines, which come from an earlier VM of the same
+type. Nothing has been measured on other GPUs.
 
 ## Results
+
+### Speculative decoding (DFlash drafter)
+
+nano loads `z-lab/LLaMA3.1-8B-Instruct-DFlash-UltraChat`, the drafter vLLM and
+SGLang load: 5 layers that draft a block of 9 tokens in one forward. The
+target verifies the block in one step and keeps the drafts up to its first
+disagreement, so the output is the target's own. Real prompts sent to
+`/v1/completions`, requests stop at EOS or 256 tokens, output tok/s at
+temperature 0 (vLLM 0.33.0, SGLang 0.5.23):
+
+| workload | AWQ: nano + DFlash | nano, no drafter | vLLM + DFlash | BF16: nano + DFlash | vLLM + DFlash | SGLang + DFlash |
+|---|---:|---:|---:|---:|---:|---:|
+| alpaca c=1 | **455** | 207 | 380 | **224** | 220 | 196 |
+| alpaca c=16 | **3252** | 2538 | 2084 | **2041** | 1910 | 1652 |
+| alpaca c=64 | 5946 | **5978** | 2943 | **5190** | 3327 | 2915 |
+| humaneval c=1 | **677** | 206 | 589 | **344** | 322 | 295 |
+| humaneval c=16 | **3607** | 2523 | 2950 | 2772 | **2806** | 2456 |
+| humaneval c=64 | **5697** | 5150 | 4204 | **5537** | 4576 | 4168 |
+| gsm8k c=1 | **511** | 206 | 434 | **259** | 256 | 222 |
+| long context c=1 | **304** | 177 | 245 | **174** | 161 | 157 |
+
+- **AWQ target**: above vLLM + DFlash at all 16 (workload, load) points, by
+  1.09× to 2.02×, and never below 0.99× of nano without a drafter. With the
+  drafter's weights quantized to 4 bits at load, c=1 rises to 512 / 764 / 576
+  / 333 tok/s.
+- **BF16 target**: above SGLang everywhere. Against vLLM it is level (0.98× to
+  1.02×) where every step verifies the whole block, and 1.04× to 1.56× ahead
+  elsewhere.
+- **Sampled requests** (temperature 0.7, top-p 0.9) give the tokens of the same
+  seed without a drafter: the drafter draws with the target's noise for the
+  same position. AWQ c=1: 436 tok/s on alpaca against vLLM's 371, 667 on
+  humaneval against 556.
+- **High load**: at c=64 a plain decode step yields as many tokens per
+  millisecond as a cycle, and nano runs plain steps there. vLLM keeps
+  drafting and falls below its own server without a drafter (AWQ alpaca
+  c=64: 2943 with DFlash, 5092 without).
+- **Cost**: with a drafter, TTFT p50 on alpaca (AWQ) is 9.6 / 28.4 / 41.7 /
+  56.6 ms at c=1/4/16/64, against 9.7 / 15.9 / 18.9 / 47.5 without one (vLLM
+  AWQ + DFlash: 24.1 / 31.0 / 71.8 / 214.3).
+
+Where it comes from:
+
+- A cycle (draft, draw, verify, draw, accept) is one CUDA graph: 7.19 ms for
+  one AWQ sequence with 10 verify rows, against 4.80 ms for a plain decode step.
+- Verify attention reads a sequence's KV once for all of its rows and query
+  heads (`kernels/block_attention.py`).
+- Each step picks its verify length (1, 3, 5 or 10 rows per sequence) from the
+  graphs' step times measured at startup and the acceptance at each draft
+  depth so far; a length of 1 is a plain decode step.
+- A cycle computes its positions, KV slots and next anchor on the device, so
+  the next cycle is launched before the one in flight reaches the host
+  (1.01× to 1.09× serving).
 
 ### 4-bit weights: the same AWQ checkpoint as vLLM
 
@@ -115,6 +170,10 @@ Engine:
   launches before step N's tokens reach the host (`core.py`, `engine.py`)
 - CUDA graphs: full graphs for decode, and piecewise graphs for prefill and
   mixed steps, with attention run eagerly between the pieces (`model_runner.py`)
+- Lossless speculative decoding with a DFlash drafter: the drafter and its
+  own KV pool (`dflash.py`), cycle graphs chained behind the cycle in flight
+  (`model_runner.py`), and the policy that picks each step's verify length
+  (`spec.py`)
 - An OpenAI-compatible server (`server.py`)
 
 Kernels (`kernels/`):
@@ -131,6 +190,8 @@ Kernels (`kernels/`):
   radix histograms over 16-bit logit keys, and tokens are drawn with an
   exponential race keyed by (seed, sequence, position).
 - `paged_attention.py`: paged decode attention (split-KV) and prefill attention, in Triton
+- `block_attention.py`: attention for a block of rows per sequence, causal for
+  the target's verify rows and bidirectional for the drafter, in Triton
 - `fp8.py`: the FP8 (e4m3) KV cache codec for A100
 - `rope_cache.py`, `rmsnorm.py`, `silu_mul.py`: fused RoPE + KV write, fused
   residual add + RMSNorm, and SiLU-and-mul
@@ -145,7 +206,10 @@ python -m src.serving.nano_vllm.server --config config/nano_vllm_config.yaml
 Point `model.name` at a Llama checkpoint. An AutoAWQ checkpoint (4 bits, groups
 of 128, GEMM format) is detected and loaded as such; `engine.weight_quant: w4a16`
 quantizes a BF16 checkpoint to 4 bits at load instead. `engine.kv_cache_dtype:
-fp8` turns on the FP8 KV cache.
+fp8` turns on the FP8 KV cache. `engine.speculative_model` (a DFlash drafter,
+for example `z-lab/LLaMA3.1-8B-Instruct-DFlash-UltraChat`) turns on speculative
+decoding; `engine.speculative_weight_quant: w4a16` quantizes the drafter to 4
+bits at load.
 
 The benchmarks run on Colab through a single driver script, which starts a VM,
 runs the steps and downloads the results:
@@ -153,6 +217,7 @@ runs the steps and downloads the results:
 ```bash
 BENCH_PHASE=phase1 bash benchmarks/phase0/colab_phase0.sh   # kernels, offline decode
 BENCH_PHASE=phase2 bash benchmarks/phase0/colab_phase0.sh   # online serving
+BENCH_PHASE=phase3 bash benchmarks/phase0/colab_phase0.sh   # speculative decoding
 ```
 
 Tests: `pytest tests/unit/test_nano_vllm_*.py` runs on CPU; `pytest tests/gpu`
@@ -162,6 +227,8 @@ needs a GPU.
 
 | result | data | write-up |
 |---|---|---|
+| Speculative decoding: nano with DFlash | [m7-fix summary](../../../benchmarks/phase3/results/m7-fix-20261113-120835-colab/summary.md) | [phase3 README](../../../benchmarks/phase3/README.md), M7 |
+| Speculative decoding: vLLM and SGLang baselines | [m0 summary](../../../benchmarks/phase3/results/m0-20261111-074458-colab/summary.md) | [phase3 README](../../../benchmarks/phase3/README.md), M0 |
 | AWQ decode and per-layer GEMMs | [awq-a3 summary](../../../benchmarks/phase1/results/awq-a3-20261030-054204-colab/summary.md) | [phase1 README](../../../benchmarks/phase1/README.md), round 6 |
 | AWQ quality (nano, vLLM, RTN) | [awq-a1 quality](../../../benchmarks/phase1/results/awq-a1-20261030-034248-colab/quality/quality.md) | same |
 | int8 lm_head quality | [awq-a2 quality](../../../benchmarks/phase1/results/awq-a2-20261030-045241-colab/quality/quality.md) | same |
