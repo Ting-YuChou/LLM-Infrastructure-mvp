@@ -1114,3 +1114,28 @@ results/<run_id>/.
   of vLLM's M0 numbers: level, as in M6.
 - 48 minutes of VM, 4.5 CU (363.63 -> 359.15). The VM is stopped. M7 in
   all: five VMs, 24.7 CU (383.85 -> 359.15).
+
+### Run m7-full-20261114-003352-colab (new VM: the whole test suite after the policy changes) — did not run
+
+- `colab exec` lost its connection 40 seconds after the upload
+  (`RuntimeError: Connection was lost.`) and then never exited, so the
+  driver neither failed nor fetched, and no notification came. Nothing had
+  started on the VM (no `/content/p0/console.log`).
+- The VM stayed up idle for 1 hour 55 minutes until the user asked:
+  12.3 CU (359.15 -> 346.81) for nothing.
+- From here on a run started in the background has a watchdog next to
+  it: once the launcher log holds `Connection was lost`, it ends
+  `colab exec`, the driver exits 1 and the notification arrives.
+
+### Run m7-full-20261114-022935-colab (the same VM: installs, the whole test suite, spec_check on AWQ)
+
+- tests/gpu and the nano unit tests: 1407 passed, none skipped, 17 minutes
+  (1402 in the checks run before the policy changes; the 5 more are the
+  tests those changes added).
+- spec_check, AWQ target, BF16 drafter: not-argmax share 0.29% to 0.50%
+  with a drafter against 0.33% to 0.43% without, largest margin 0.25 in
+  all, none above 0.5. Chained against collected: 490 against 474 tok/s
+  one at a time (1.03x, 16 of 16 requests with the same tokens), 2877
+  against 2749 at 16 (1.05x, 6 of 16 the same, the rest split at
+  near-ties as before).
+- 29 minutes of VM, 3.35 CU (346.81 -> 343.46). The VM is stopped.
