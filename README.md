@@ -29,6 +29,7 @@ A complete end-to-end infrastructure for large language model training and deplo
   - ✅ Streaming Generation Support
   - ✅ Model Quantization (INT8/INT4)
   - ✅ [nano_vllm](src/serving/nano_vllm/README.md): an engine written from scratch, with its own Triton/CUDA kernels; decodes faster than vLLM 0.19.1 on A100 (BF16, FP8 KV, W4A16)
+  - ✅ Lossless speculative decoding in nano_vllm with the public DFlash drafter: on the AWQ checkpoint it serves 1.09× to 2.02× the tokens per second of vLLM 0.33.0 with the same drafter ([results](#nano_vllm-speculative-decoding))
 
 - **Production-Ready Infrastructure**
   - ✅ API Gateway (Authentication, Rate Limiting, Routing)
@@ -500,6 +501,48 @@ Production serving runtime matrix:
 | FastAPI / Pydantic | `0.136.1` / `2.13.3` |
 
 CI enforces this matrix with `python scripts/check_serving_runtime_matrix.py`.
+
+### nano_vllm: Speculative Decoding
+
+[nano_vllm](src/serving/nano_vllm/README.md) loads the public DFlash drafter
+(`z-lab/LLaMA3.1-8B-Instruct-DFlash-UltraChat`, the one vLLM and SGLang load):
+5 layers draft a block of 9 tokens in one forward, the target verifies the
+block in one step and keeps the drafts up to its first disagreement. The
+output is the target's own, greedy or sampled with the same seed.
+
+Llama 3.1 8B Instruct on one Colab A100 40GB, real prompts, requests stop at
+EOS or 256 tokens, output tok/s at temperature 0 (vLLM 0.33.0, SGLang 0.5.23;
+c is the number of concurrent clients):
+
+| workload | AWQ: nano + DFlash | nano, no drafter | vLLM + DFlash | BF16: nano + DFlash | vLLM + DFlash | SGLang + DFlash |
+|---|---:|---:|---:|---:|---:|---:|
+| alpaca c=1 | **455** | 207 | 380 | **224** | 220 | 196 |
+| alpaca c=16 | **3252** | 2538 | 2084 | **2041** | 1910 | 1652 |
+| alpaca c=64 | 5946 | **5978** | 2943 | **5190** | 3327 | 2915 |
+| humaneval c=1 | **677** | 206 | 589 | **344** | 322 | 295 |
+| humaneval c=64 | **5697** | 5150 | 4204 | **5537** | 4576 | 4168 |
+
+- **AWQ (4-bit weights)**: above vLLM + DFlash at all 16 points measured, and
+  never below 0.99× of nano without a drafter.
+- **BF16 (original precision)**: above SGLang everywhere; level with vLLM
+  (0.98× to 1.02×) where every step verifies the whole block, 1.04× to 1.56×
+  ahead elsewhere.
+- **Cost**: TTFT is longer with a drafter under concurrency (alpaca, AWQ,
+  c=16: 42 ms against 19 ms without one).
+- The vLLM and SGLang numbers come from an earlier VM of the same type.
+
+What makes it fast: verify attention reads a sequence's KV once for all of
+its rows, a whole cycle (draft, verify, accept) is one CUDA graph, each step
+picks how many tokens to verify from measured step times and acceptance, and
+the next cycle is launched before the one in flight reaches the host.
+
+```bash
+# engine.speculative_model in the config turns it on
+python -m src.serving.nano_vllm.server --config config/nano_vllm_config.yaml
+```
+
+Details: [nano_vllm README](src/serving/nano_vllm/README.md) and
+[benchmarks/phase3](benchmarks/phase3/README.md).
 
 ### Start Inference Server
 
